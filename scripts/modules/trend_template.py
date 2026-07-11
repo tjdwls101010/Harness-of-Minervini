@@ -93,6 +93,13 @@ PROVENANCE = {
 	"rs_fallback": "Harness spec Implementation rulings; [TL] 12M eligibility versus short-lookback timing separation",
 }
 
+# [M] Locked Trend Template distance boundaries — methodology floors, not tunables.
+# Named here (rather than inline in the criteria) so the number and its authority
+# are visible where a maintainer would question them, matching the named-constant
+# discipline in vcp.py / base_count.py.
+MIN_PCT_ABOVE_52W_LOW = 1.30   # [M] criterion 6: price must sit >=30% above the 52-week low
+MAX_PCT_BELOW_52W_HIGH = 0.75  # [M] criterion 7: price must sit within 25% of the 52-week high
+
 
 def _configure_cache(no_cache=False):
 	"""Configure the shared cache without making parser construction network-active."""
@@ -212,7 +219,7 @@ def cmd_check(args):
 	))
 
 	# 6. Price >= 52-week low * 1.30 (at least 30% above)
-	low_threshold = week52_low * 1.30
+	low_threshold = week52_low * MIN_PCT_ABOVE_52W_LOW
 	c6_pass = current_price >= low_threshold
 	pct_above_low = ((current_price / week52_low) - 1) * 100 if week52_low > 0 else 0
 	criteria.append(_criterion(
@@ -224,7 +231,7 @@ def cmd_check(args):
 	))
 
 	# 7. Price within 25% of 52-week high (>= 75% of high)
-	high_threshold = week52_high * 0.75
+	high_threshold = week52_high * MAX_PCT_BELOW_52W_HIGH
 	c7_pass = current_price >= high_threshold
 	pct_from_high = ((current_price / week52_high) - 1) * 100 if week52_high > 0 else 0
 	criteria.append(_criterion(

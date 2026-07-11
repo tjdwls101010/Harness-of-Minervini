@@ -88,7 +88,7 @@ Do not load `.claude/harness-spec.md` for market analysis; it records harness de
 - Obtain precise prices, earnings, financials, dates, breadth, and RS values only from `scripts/` modules. Never supply missing market numbers from memory or WebSearch.
 - Use WebSearch only for current narrative, catalyst, industry, and company context; it may explain deterministic evidence but cannot replace it.
 - On module failure, retry once, then declare that evidence unavailable. Never fabricate a substitute or silently convert missing evidence into a pass or fail.
-- Read the weekly timeframe before the daily, treat moving averages as zones rather than exact pixels, and look left for the stock’s demonstrated character; this prevents lower-timeframe noise and false precision from becoming doctrine.
+- `[TL]` Read the weekly timeframe before the daily, treat moving averages as zones rather than exact pixels, and look left for the stock’s demonstrated character; this prevents lower-timeframe noise and false precision from becoming doctrine.
 - Numbers decide and eyes corroborate. Rendered charts may resolve qualitative ambiguity, but visual opinion never overrides a deterministic gate.
 
 ## Module invocation contract
@@ -116,7 +116,7 @@ scripts/.venv/bin/python scripts/modules/<module>.py <subcommand> [flags]
 ## Trigger rules
 
 - For market, sector, industry, breadth, regime, screening, leader-finding, or watchlist intent, use `market-scan`.
-- For one named US ticker’s buy, sell, hold, timing, or diagnosis intent, use `ticker-analysis`.
+- For one or a few named US tickers’ buy, sell, hold, timing, diagnosis, or head-to-head comparison intent, use `ticker-analysis`.
 - For grading, reviewing, or post-morteming the user’s own completed trade log, use `trade-review`.
 
 ## Runtime facts

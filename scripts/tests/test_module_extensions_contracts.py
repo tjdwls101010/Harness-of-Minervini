@@ -114,7 +114,11 @@ class VolumeQuantifierTests(unittest.TestCase):
 			self.assertNotIn(forbidden, result)
 		self.assertNotIn("heavy_dist_days", result["volume_direction_summary_20d"])
 		self.assertNotIn("heavy_acc_days", result["volume_direction_summary_20d"])
-		self.assertIn("up_down_volume_ratio_50d", result)
+		self.assertIn("up_down_volume_ratio_primary", result)
+		self.assertIn("up_down_volume_ratio_primary_lookback_days", result)
+		# The window-named legacy key must NOT reappear: it mislabeled a tunable
+		# window as canonical "50d" (a --lookback 120 value emitted as "over 50d").
+		self.assertNotIn("up_down_volume_ratio_50d", result)
 		self.assertIn("recent_up_volume_evidence", result)
 		self.assertIsNone(result["breakout_volume_confirmation"])
 		self.assertNotIn("climactic_volume", result)

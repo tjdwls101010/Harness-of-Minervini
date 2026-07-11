@@ -1,6 +1,6 @@
 ---
 name: market-scan
-description: Analyze the US market regime, breadth, sector or industry strength, leadership, screening results, stock discovery, breakouts, and watchlists. Use whenever the user asks how the market is, what areas are strong, to find stocks or leaders, or to build or refresh a watchlist, even if Minervini is not named. Do not use for a buy, sell, hold, or timing judgment about one named ticker; route that to ticker-analysis. Do not use to grade the user's completed trades; route that to trade-review. Portfolio sizing is out of scope.
+description: Analyze the US market regime, breadth, sector or industry strength, leadership, screening results, stock discovery, breakouts, and watchlists. Use whenever the user asks how the market is, what areas are strong, to find stocks or leaders, or to build or refresh a watchlist, even if Minervini is not named. Do not use for a buy, sell, hold, timing, condition, or diagnosis judgment about one or a few named tickers; route that to ticker-analysis. Do not use to grade the user's completed trades; route that to trade-review. Portfolio sizing is out of scope.
 allowed-tools: Bash(scripts/.venv/bin/python *), Bash(bash scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
 ---
 

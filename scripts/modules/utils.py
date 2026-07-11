@@ -75,17 +75,37 @@ def _record_cache_event(event):
 
 
 def cache_metadata(reset=False):
-	"""Return process-local hit/miss/bypass evidence suitable for JSON output."""
+	"""Return process-local hit/miss/bypass evidence suitable for JSON output.
+
+	The `_cache` block rides on EVERY module payload, so it stays lean: the
+	analyst needs to know whether a value was live or cached (``status``/``counts``)
+	and that it belongs to the current market session (``session_dates``) — the
+	rest (``params_hash``, cache ``key``, ``age_seconds``) is cache-internal
+	plumbing, not interpretation, and only inflates every repeated call. Full
+	per-event detail is available for debugging via ``MINERVINI_CACHE_DEBUG=1``.
+	"""
 	with _CACHE_EVENTS_LOCK:
 		events = [dict(event) for event in _CACHE_EVENTS]
 		if reset:
 			_CACHE_EVENTS.clear()
 	counts = {name: sum(event.get("status") == name for event in events) for name in ("hit", "miss", "bypass", "error")}
+	session_dates = sorted({event["session_date"] for event in events if event.get("session_date")})
+	verbose = os.environ.get("MINERVINI_CACHE_DEBUG", "").strip() not in ("", "0", "false", "False")
+	if verbose:
+		compact_events = events[-50:]
+	else:
+		# Keep the interpretation-bearing fields; drop the debug plumbing.
+		keep = ("source", "symbol", "function", "status", "session_date", "reason")
+		compact_events = [
+			{k: event[k] for k in keep if k in event}
+			for event in events[-50:]
+		]
 	return {
 		"status": events[-1]["status"] if events else "unused",
 		"enabled": not _CACHE_DISABLED,
 		"counts": counts,
-		"events": events[-50:],
+		"session_dates": session_dates,
+		"events": compact_events,
 	}
 
 

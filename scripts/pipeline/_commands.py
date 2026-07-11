@@ -93,6 +93,12 @@ def cmd_qualify(args):
 			"AVOID": "a hard gate failed — structurally disqualified; stop here, do not deepen",
 			"INCOMPLETE": "required gate evidence is unavailable and no known gate failed — retry once, then report unavailable",
 		},
+		"doctrine": (
+			"[M] These two gates are deterministic and non-negotiable, and that is ALL they are: eligibility, not a trade. "
+			"There is deliberately no composite score — a single number invites deference instead of reasoning. Read each gate's "
+			"basis (stage structural reads; the 8 Trend Template criteria with measured-vs-required values) and judge convergence "
+			"yourself. A failed gate is structural disqualification; unavailable evidence is INCOMPLETE and must never be flattened into AVOID."
+		),
 		"metadata": {"execution_time_seconds": elapsed},
 	})
 

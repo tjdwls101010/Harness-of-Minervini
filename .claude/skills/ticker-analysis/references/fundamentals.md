@@ -36,6 +36,7 @@ The first fundamental decision is one of six categories. State the category, the
 - Look for an industry sales-and-profit rank near the top one to three, expanding share, and a defensible advantage in a market large enough to support continued scaling.
 - EPS growth of at least 20% is the baseline; the best leaders can sustain roughly 35-45% or more during their strongest years.
 - Ask what the competitive advantage is and whether the business model can be replicated at much larger scale.
+- For a cookie-cutter retail or restaurant leader, apply the store-economics sub-model, because store-count growth outrunning demand marks the end of the growth curve: same-store-sales comps around 10%+ are healthy while 25-30%+ is unsustainable and deceleration below the band is a topping tell; more than roughly 100 net new stores per year is an over-expansion red flag; validate scalability by demonstrated success across regions and compare sales per square foot with peers; and discount franchise-heavy new-store earnings as lower quality. Starbucks in 2006 opened about 1,102 more stores than the prior year, topped, and fell roughly 82% over the next two years.
 
 ### 2. Top competitor
 
@@ -66,6 +67,7 @@ The first fundamental decision is one of six categories. State the category, the
 - A former leader in Stage 4 is not made investable by a large decline or low P/E. Price may be discounting future deterioration that reported numbers have not revealed.
 - A low-multiple laggard within a strong group is usually lagging for a reason; late catch-up rallies are not equivalent to leadership.
 - Ask what sellers may know that has not yet appeared in public results, and require renewed price and fundamental leadership rather than reputation.
+- Read a fresh brokerage upgrade or raised price target on such a name as a red flag rather than support — often a short-candidate marker, because institutions distribute before the sell-side turns cautious. See `sell.md` for the dated rule and the CMG 2012 precedent.
 
 Categories can change as a company matures. Record the current category and the evidence that would move it to another category.
 
@@ -106,7 +108,7 @@ The operating chain is surprise, upward estimate revisions, higher institutional
 - Smooth noisy sequences with two-quarter rolling averages across four, six, and eight quarters. The desired signal is persistent improvement, not one flattering comparison.
 - Compare current quarterly and annual growth with the company's own three- and five-year rates to find a genuine step-change.
 - Require strong annual EPS and look for a breakout above the prior two-to-four-year earnings range, with evidence that acceleration can continue over the next one or two quarters and the next fiscal year.
-- Treat roughly +5% estimate revisions as meaningful positive change and roughly -5% as meaningful negative change. Check whether current-quarter and fiscal-year estimates improved over the last 30 days.
+- Treat roughly +5% estimate revisions as meaningful positive change and roughly -5% as meaningful negative change. Check whether current-quarter and fiscal-year estimates improved over the last 30 days. The direction is asymmetric: the absence of an upward revision is weaker evidence, not an automatic disqualification, whereas a meaningful downward revision (roughly -5% or more) is an affirmative red flag. Under the harness's no-trade default, do not let flat or missing upgrades read as a failed fundamental leg.
 - Use ROE near or above 15-17% as supporting evidence within the same industry, not as a substitute for growth, margins, or price confirmation.
 - Evaluate how much earnings are growing, how long that growth can persist, and how certain the path is.
 
@@ -156,7 +158,7 @@ Place the company in the sequence from value, to surprise, to upward revisions, 
 
 Buy analysis belongs in the technically eligible portion where growth is strong and accelerating. Once the story is universally recognized, institutions may distribute shares before reported growth looks weak.
 
-Measure deceleration against the company's own prior trend. The first material slowdown matters more than the first formal miss; a move from 50-60% growth to 20-30% can be severe despite still-positive headlines.
+Measure deceleration against the company's own prior trend. The first material slowdown matters more than the first formal miss; a move from 50-60% growth to 20-30% can be severe despite still-positive headlines. Dell stepped down from roughly 80% EPS growth in 1995-97 to 65% in 1998 to 28% in 1999 — still a respectable absolute rate, yet the deceleration relative to its own trend preceded the 2000 top and a subsequent decline of about 80%.
 
 Price can lead earnings in both directions. Respect abnormal weakness before waiting for the public explanation or a later negative report.
 

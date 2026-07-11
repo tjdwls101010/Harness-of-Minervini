@@ -1,6 +1,6 @@
 ---
 name: trade-review
-description: Grade, review, or post-mortem the user's own completed US-stock trades or trade log, including winners, losers, entries, exits, rule adherence, R-multiples, batting average, hold-time asymmetry, post-exit behavior, and the Loss Adjustment Exercise. Use whenever the user supplies past trades or asks what their trading record reveals. Do not use for a prospective single-ticker decision, a live position, market screening, or portfolio sizing.
+description: Grade, review, or post-mortem the user's own completed US-stock trades or trade log, including winners, losers, entries, exits, rule adherence, R-multiples, batting average, hold-time asymmetry, post-exit behavior, and the Loss Adjustment Exercise. Use whenever the user supplies past trades or asks what their trading record reveals. Do not use for a prospective single-ticker decision or a live position (route those to ticker-analysis), market screening or leader-finding (route to market-scan), or portfolio sizing.
 allowed-tools: Bash(scripts/.venv/bin/python *), Read, Grep, Glob
 ---
 

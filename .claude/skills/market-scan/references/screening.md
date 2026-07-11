@@ -44,7 +44,7 @@ TIGERS can order manual attention among otherwise eligible candidates. Theme pro
 
 ## Portable field vocabulary
 
-- **Closing range (CR):** `(close - low) / (high - low) * 100`; above 50 means the bar finished in its upper half, and above 70 is a stronger close. A zero-range bar is unavailable, not 0 or 100.
+- **Closing range (CR) `[TL]`:** `(close - low) / (high - low) * 100`; above 50 means the bar finished in its upper half, and above 70 is a stronger close. A zero-range bar is unavailable, not 0 or 100.
 - **Volume run rate:** projected regular-session volume divided by the selected average volume. For a completed daily bar, use actual volume divided by the same average. It is demand evidence, not an intraday entry tactic.
 - **Average dollar volume:** the lookback average of each session's daily price multiplied by daily volume; keep the lookback and currency explicit.
 - **ADR%:** use the value emitted by the volume module. Do not invent a replacement formula when the module cannot produce it.
@@ -122,7 +122,7 @@ scripts/.venv/bin/python scripts/modules/rs_ranking.py compare TICKER_A TICKER_B
 - `score` resolves one ticker in order: cached or live package rating, then the labelled `local_rs_line_proxy`, then `unavailable`.
 - The local proxy uses the stock/SPY RS line, RS-day share, and self-historical 1-month, 3-month, 6-month, and 12-month percentiles. It is explicitly not a cross-sectional rank.
 - Only the local proxy's 12-month historical percentile may provisionally carry the `RS >= 70` eligibility criterion. The shorter percentiles are timing evidence only.
-- An RS-day share above 60% is corroboration only when its selected window is a documented market correction; it is not a standalone gate.
+- `[TL]` An RS-day share above 60% is corroboration only when its selected window is a documented market correction; it is not a standalone gate.
 - Never rank multiple stocks by local proxy percentiles as though they shared a cross-sectional universe. If neither source is available, report RS and the affected qualification as unavailable.
 
 `scripts/.venv/bin/python scripts/pipeline discover` supplies the backend's top RS names, five-day movers, sector ranks, and industry leaders alongside breadth evidence. Use these as candidate sources, preserve each source label, and retry once before declaring a section unavailable.

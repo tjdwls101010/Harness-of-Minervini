@@ -1,6 +1,6 @@
 ---
 name: ticker-analysis
-description: Analyze one named US-listed stock for a prospective buy, entry timing, setup diagnosis, existing-position sell or hold judgment, re-entry, earnings risk, or chart condition. Use whenever the user asks what to do with a specific ticker, even if they do not name Minervini or SEPA. Do not use for market-wide, sector, screening, leader-finding, or watchlist requests; route those to market-scan. Do not use to grade, review, or post-mortem any completed trade, whether one ticker or a trade log; route that to trade-review. Never provide portfolio sizing.
+description: Analyze one or a few named US-listed stocks for a prospective buy, entry timing, setup diagnosis, existing-position sell or hold judgment, re-entry, earnings risk, or chart condition — including a head-to-head comparison of two or a few named tickers (gate each ticker, then compare). Use whenever the user asks what to do with a specific US-listed ticker, even if they do not name Minervini or SEPA. Do not use for market-wide, sector, screening, leader-finding, or watchlist requests; route those to market-scan. Do not use to grade, review, or post-mortem any completed trade, whether one ticker or a trade log; route that to trade-review. Crypto and non-US listings are out of scope; state the scope boundary instead of analyzing them. Never provide portfolio sizing.
 allowed-tools: Bash(scripts/.venv/bin/python *), Bash(bash scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
 ---
 
@@ -18,7 +18,7 @@ allowed-tools: Bash(scripts/.venv/bin/python *), Bash(bash scripts/bootstrap.sh)
 ## Reference routing
 
 - For a prospective buy, re-entry, setup diagnosis, or chart-condition diagnosis, read `references/entry.md` before interpreting the gate, setup, pivot, or price/volume behavior.
-- For a deep prospective review, read `references/fundamentals.md` after the hard gate passes and read `references/cases.md` for the closest evidence pattern without forcing an analogy.
+- For a deep prospective review, read `references/fundamentals.md` after the hard gate passes.
 - Read `references/sell.md` before defining a prospective exit plan and before every existing-position sell or hold verdict.
 - The references are a chain, not a menu that lets favorable material bypass an unfavorable gate. `[M]` controls; explicitly requested `[TL]` tactics remain opt-in and tagged.
 

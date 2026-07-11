@@ -331,12 +331,6 @@ def resolve_rs_score(
 		}
 
 
-def compute_rs_score(symbol, *, no_cache=False, details=False):
-	"""Compatibility API used by Trend Template and external callers."""
-	result = resolve_rs_score(symbol, no_cache=no_cache)
-	return result if details else result.get("score")
-
-
 def _backend_context(ticker, no_cache=False, client=None):
 	"""Fetch optional history/reference context without changing eligibility."""
 	history = None

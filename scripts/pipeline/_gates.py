@@ -66,6 +66,12 @@ def compute_hard_gates(results):
 	}
 	if stage_reason:
 		stage_gate["unavailable"] = stage_reason
+	# Ship the classification's basis WITH the verdict: the structural reads that
+	# drove the stage (price-vs-200, MA stack, trend structure) let the analyst
+	# read WHY, not just the number. A gate that hides its basis invites the model
+	# to anchor on the label instead of reasoning about the evidence.
+	if isinstance(stage, dict) and isinstance(stage.get("structural_reads"), dict):
+		stage_gate["basis"] = stage["structural_reads"]
 	hard_gates.append(stage_gate)
 
 	# Gate 2 — Trend Template (all 8 criteria; no in-between)
@@ -103,6 +109,14 @@ def compute_hard_gates(results):
 	}
 	if tt_reason:
 		tt_gate["unavailable"] = tt_reason
+	# Ship the per-criterion basis WITH the verdict. Trend Template is an 8-of-8
+	# AND gate; "7/8" alone cannot tell the analyst WHICH criterion failed or by
+	# how much, and the child already computed exactly that (id, description,
+	# measured value vs required threshold). Propagate the full criteria array so
+	# a 7/8 near-miss is distinguishable from a 2/8 wreck, and so a screening
+	# scout carries the failing criterion forward instead of an opaque count.
+	if isinstance(tt, dict) and isinstance(tt.get("criteria"), list):
+		tt_gate["criteria"] = tt["criteria"]
 	hard_gates.append(tt_gate)
 
 	statuses = {gate["status"] for gate in hard_gates}

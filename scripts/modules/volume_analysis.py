@@ -251,6 +251,18 @@ def cmd_analyze(args):
 	if args.no_cache:
 		configure_cache(True)
 	symbol = args.symbol.upper()
+	# Lookback windows feed pandas .tail(n); a non-positive n silently returns a
+	# wrong slice (tail(-5) drops the FIRST 5 bars) and would emit a confident but
+	# mislabeled ratio. Refuse it, matching the lower-bound guards on the other
+	# tunable modules (stage --swing-bars, base_count --min-base-weeks, tight_closes).
+	for flag, value in (
+		("--lookback", args.lookback),
+		("--short-lookback", args.short_lookback),
+		("--up-volume-window", args.up_volume_window),
+		("--pullback-window", args.pullback_window),
+	):
+		if value < 1:
+			error_json(f"{flag} must be >= 1 session (got {value}).")
 	ticker = yf.Ticker(symbol)
 	data = ticker.history(period=args.period, interval="1d")
 	# yfinance appends a partial in-session bar whose OHLC can be NaN; that NaN
@@ -315,11 +327,15 @@ def cmd_analyze(args):
 		"date": str(data.index[-1].date()),
 		"current_price": round(current_price, 2),
 		"accumulation_distribution_rating": grade,
-		"up_down_volume_ratio_50d": ratio_50,
-		"up_down_volume_ratio_50d_status": "available" if ratio_50 is not None else "no_down_volume",
-		"up_down_volume_ratio_50d_unit": "sum(up-day vol) / sum(down-day vol) over 50d",
-		"up_down_volume_ratio_20d": ratio_20,
-		"up_down_volume_ratio_20d_status": "available" if ratio_20 is not None else "no_down_volume",
+		"accumulation_distribution_lookback_days": args.lookback,
+		"up_down_volume_ratio_primary": ratio_50,
+		"up_down_volume_ratio_primary_status": "available" if ratio_50 is not None else "no_down_volume",
+		"up_down_volume_ratio_primary_lookback_days": args.lookback,
+		"up_down_volume_ratio_primary_unit": f"sum(up-day vol) / sum(down-day vol) over the primary {args.lookback}-session window",
+		"up_down_volume_ratio_short": ratio_20,
+		"up_down_volume_ratio_short_status": "available" if ratio_20 is not None else "no_down_volume",
+		"up_down_volume_ratio_short_lookback_days": args.short_lookback,
+		"up_down_volume_ratio_short_unit": f"sum(up-day vol) / sum(down-day vol) over the short {args.short_lookback}-session window",
 		"volume_vs_50day_avg_pct": vol_vs_50avg_pct,
 		"volume_vs_50day_avg_pct_unit": "current vol / 50d avg vol * 100",
 		"current_volume": int(current_vol),
@@ -346,14 +362,14 @@ def cmd_analyze(args):
 		"pullback_status": pullback_status,
 		"volume_direction_summary_20d": vol_summary,
 		"thresholds": {
-			"A+": "[heuristic] up_down_volume_ratio_50d > 1.8",
-			"A": "[heuristic] up_down_volume_ratio_50d > 1.5",
-			"B+": "[heuristic] up_down_volume_ratio_50d > 1.3",
-			"B": "[heuristic] up_down_volume_ratio_50d > 1.15",
-			"C": "[heuristic] up_down_volume_ratio_50d 0.85-1.15 (neutral)",
-			"D": "[heuristic] up_down_volume_ratio_50d 0.7-0.85 (slight distribution)",
-			"E": "[heuristic] up_down_volume_ratio_50d < 0.7 (heavy distribution)",
-			"grade_input": "[heuristic] up_down_volume_ratio_50d only; no distribution-day count",
+			"A+": "[heuristic] primary up/down volume ratio > 1.8",
+			"A": "[heuristic] primary up/down volume ratio > 1.5",
+			"B+": "[heuristic] primary up/down volume ratio > 1.3",
+			"B": "[heuristic] primary up/down volume ratio > 1.15",
+			"C": "[heuristic] primary up/down volume ratio 0.85-1.15 (neutral)",
+			"D": "[heuristic] primary up/down volume ratio 0.7-0.85 (slight distribution)",
+			"E": "[heuristic] primary up/down volume ratio < 0.7 (heavy distribution)",
+			"grade_input": f"[heuristic] primary up/down volume ratio over the {args.lookback}-session window only; no distribution-day count",
 			"recent_up_volume": "[MM-Ryan] up-day volume >=25% above 50d average; participation evidence only, not pivot-breakout confirmation",
 			"closing_range": "[TL] CR=(Close-Low)/(High-Low)*100; >50% means buyers won the bar",
 			"volume_band": "[TL] 20d/50d volume average ±25%",
@@ -375,11 +391,12 @@ def cmd_analyze(args):
 	# Compressed view for pipeline consumption
 	full_result["compressed"] = {
 		"accumulation_distribution_rating": full_result.get("accumulation_distribution_rating"),
-		"up_down_volume_ratio_50d": full_result.get("up_down_volume_ratio_50d"),
-		"up_down_volume_ratio_50d_status": full_result.get("up_down_volume_ratio_50d_status"),
-		"up_down_volume_ratio_50d_unit": full_result.get("up_down_volume_ratio_50d_unit"),
-		"up_down_volume_ratio_20d": full_result.get("up_down_volume_ratio_20d"),
-		"up_down_volume_ratio_20d_status": full_result.get("up_down_volume_ratio_20d_status"),
+		"accumulation_distribution_lookback_days": full_result.get("accumulation_distribution_lookback_days"),
+		"up_down_volume_ratio_primary": full_result.get("up_down_volume_ratio_primary"),
+		"up_down_volume_ratio_primary_status": full_result.get("up_down_volume_ratio_primary_status"),
+		"up_down_volume_ratio_primary_unit": full_result.get("up_down_volume_ratio_primary_unit"),
+		"up_down_volume_ratio_short": full_result.get("up_down_volume_ratio_short"),
+		"up_down_volume_ratio_short_status": full_result.get("up_down_volume_ratio_short_status"),
 		"volume_vs_50day_avg_pct": full_result.get("volume_vs_50day_avg_pct"),
 		"recent_up_volume_evidence": full_result.get("recent_up_volume_evidence"),
 		"breakout_volume_confirmation": None,
@@ -397,7 +414,7 @@ def cmd_analyze(args):
 	# Recheck view: minimal fields for recheck command
 	full_result["recheck"] = {
 		"grade": full_result.get("accumulation_distribution_rating"),
-		"weighted_ratio_50d": full_result.get("up_down_volume_ratio_50d"),
+		"up_down_volume_ratio_primary": full_result.get("up_down_volume_ratio_primary"),
 		"recent_up_volume_evidence": full_result.get("recent_up_volume_evidence"),
 		"breakout_volume_confirmation": None,
 		"breakout_volume_confirmation_status": full_result.get("breakout_volume_confirmation_status"),

@@ -43,8 +43,12 @@ const requestedMax = rawArgumentText
 const parsedMax = requestedMax === undefined || requestedMax === null || requestedMax === ''
   ? undefined
   : Number(requestedMax)
-const maxCandidates = Number.isInteger(parsedMax)
-  ? Math.max(1, Math.min(parsedMax, 30))
+// 30 is the DEFAULT, not a hard ceiling: an explicit higher request is honored
+// (the reference promises to "honor the requested maximum"), bounded only by a
+// fan-out safety cap so a typo can't spawn hundreds of scouts.
+const FANOUT_SAFETY_CAP = 60
+const maxCandidates = Number.isInteger(parsedMax) && parsedMax >= 1
+  ? Math.min(parsedMax, FANOUT_SAFETY_CAP)
   : 30
 
 const REGIME_SCHEMA = {
@@ -86,20 +90,47 @@ Build candidates from the user-supplied ticker data plus discover's RS leaders, 
   { label: 'screen:regime', phase: 'Regime', schema: REGIME_SCHEMA },
 )
 
+const TICKER_RE = /^[A-Z0-9][A-Z0-9.-]{0,11}$/
 const candidateByTicker = new Map()
-for (const value of regime.candidates || []) {
-  const ticker = String(value && value.ticker ? value.ticker : '').trim().toUpperCase()
-  if (!/^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(ticker)) continue
-  const origins = Array.isArray(value.origins)
-    ? value.origins.map(origin => String(origin).trim()).filter(Boolean)
-    : []
+const upsertCandidate = (rawTicker, origins, recurrence) => {
+  const ticker = String(rawTicker || '').trim().toUpperCase()
+  if (!TICKER_RE.test(ticker)) return null
   const current = candidateByTicker.get(ticker) || { ticker, origins: [], recurrence: 0 }
-  current.origins = [...new Set([...current.origins, ...origins])]
-  const suppliedRecurrence = Number.isFinite(value.recurrence) ? Math.max(0, value.recurrence) : 0
+  current.origins = [...new Set([...current.origins, ...origins.filter(Boolean)])]
+  const suppliedRecurrence = Number.isFinite(recurrence) ? Math.max(0, recurrence) : 0
   current.recurrence = Math.max(current.recurrence, suppliedRecurrence, current.origins.length)
   candidateByTicker.set(ticker, current)
+  return ticker
 }
-const candidates = [...candidateByTicker.values()].slice(0, maxCandidates)
+// Mechanically guarantee every user-requested ticker is a candidate. Inclusion
+// must NOT depend on the regime agent voluntarily echoing it back — that channel
+// silently drops a user's own ticker with no trace in the funnel counts.
+const userOrdered = []
+for (const raw of userTickers) {
+  const norm = upsertCandidate(raw, ['user'], 1)
+  if (norm && !userOrdered.includes(norm)) userOrdered.push(norm)
+}
+const invalidUserTickers = userTickers.filter(
+  raw => !TICKER_RE.test(String(raw || '').trim().toUpperCase()),
+)
+for (const value of regime.candidates || []) {
+  upsertCandidate(
+    value && value.ticker,
+    Array.isArray(value.origins) ? value.origins.map(origin => String(origin).trim()) : [],
+    value && value.recurrence,
+  )
+}
+// User tickers first (protected from the cap), then discovery names by recurrence.
+const userSet = new Set(userOrdered)
+const discovered = [...candidateByTicker.values()]
+  .filter(candidate => !userSet.has(candidate.ticker))
+  .sort((a, b) => b.recurrence - a.recurrence)
+const ordered = [...userOrdered.map(ticker => candidateByTicker.get(ticker)), ...discovered]
+const candidates = ordered.slice(0, maxCandidates)
+const droppedByCap = ordered.slice(maxCandidates).map(candidate => candidate.ticker)
+
+// Nothing lost silently: names cut by the cap or rejected as malformed surface here.
+const dropped = { by_cap: droppedByCap, invalid_user_tickers: invalidUserTickers }
 
 if (regime.hostile) {
   return {
@@ -107,6 +138,7 @@ if (regime.hostile) {
     regime,
     funnel: { requested: userTickers.length, candidates: candidates.length, qualified: 0 },
     buckets: { proceed: [], watch: candidates, avoid: [] },
+    dropped,
     note: 'Hostile-regime gate stopped qualification fan-out. These names are observations only, not buy-ready candidates.',
   }
 }
@@ -117,18 +149,31 @@ if (candidates.length === 0) {
     regime,
     funnel: { requested: userTickers.length, candidates: 0, qualified: 0 },
     buckets: { proceed: [], watch: [], avoid: [] },
+    dropped,
     note: 'No valid candidate ticker survived discovery and input validation.',
   }
 }
 
 const QUALIFY_SCHEMA = {
   type: 'object',
-  required: ['ticker', 'verdict', 'failedGates', 'unavailableGates', 'rs', 'stage', 'evidence'],
+  required: ['ticker', 'verdict', 'failedGates', 'unavailableGates', 'trendTemplateScore', 'failedCriteria', 'rs', 'stage', 'evidence'],
   properties: {
     ticker: { type: 'string' },
     verdict: { type: 'string', enum: ['PROCEED', 'AVOID', 'INCOMPLETE'] },
     failedGates: { type: 'array', items: { type: 'string' } },
     unavailableGates: { type: 'array', items: { type: 'string' } },
+    trendTemplateScore: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    failedCriteria: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { anyOf: [{ type: 'number' }, { type: 'string' }, { type: 'null' }] },
+          description: { type: 'string' },
+          value: { type: 'string' },
+        },
+      },
+    },
     rs: {
       type: 'object',
       required: ['status', 'source'],
@@ -152,16 +197,51 @@ for (let start = 0; start < candidates.length; start += 16) {
       agent(
         `Qualify exactly this delegated ticker as a read-only screening scout: ${candidate.ticker}. Run from the repository root:
 scripts/.venv/bin/python scripts/pipeline qualify ${candidate.ticker}
-Validate the single JSON document and retry the identical command once on command failure or malformed output. Preserve PROCEED, AVOID, or INCOMPLETE exactly; missing evidence is INCOMPLETE, never an invented failure. Return the required schema exactly: ticker; verdict; failedGates copied from failed_gates; unavailableGates copied from unavailable_gates; rs as {status, rating, date, source} copied from the corresponding rs_* fields; stage; and one evidence line using only returned fields. PROCEED means only that the hard gate earned deeper review, not that the ticker is a buy. Do not edit, search the web, run a deep dive, or supply missing values from memory.`,
+Validate the single JSON document and retry the identical command once on command failure or malformed output. Preserve PROCEED, AVOID, or INCOMPLETE exactly; missing evidence is INCOMPLETE, never an invented failure. Return the required schema exactly: ticker; verdict; failedGates copied from failed_gates; unavailableGates copied from unavailable_gates; trendTemplateScore copied from trend_template_score (or null); failedCriteria copied from the trend_template hard_gate's criteria entries whose status is FAIL, each as {id, description, value} (empty array when nothing failed) — this carries WHICH criterion failed and by how much, so a 7/8 near-miss is not confused with a 2/8 wreck; rs as {status, rating, date, source} copied from the corresponding rs_* fields; stage; and one evidence line using only returned fields. PROCEED means only that the hard gate earned deeper review, not that the ticker is a buy. Do not edit, search the web, run a deep dive, or supply missing values from memory.`,
         { agentType: 'ticker-scout', label: `screen:${candidate.ticker}`, phase: 'Qualify', schema: QUALIFY_SCHEMA },
       ),
     ),
   )
-  for (const result of results.filter(Boolean)) {
-    const ticker = String(result.ticker || '').trim().toUpperCase()
-    const metadata = candidateByTicker.get(ticker) || { ticker, origins: [], recurrence: 0 }
-    qualified.push({ ...result, origins: metadata.origins, recurrence: metadata.recurrence })
-  }
+  results.forEach((result, index) => {
+    const delegated = batch[index]
+    if (!result) {
+      qualified.push({
+        ticker: delegated.ticker,
+        verdict: 'INCOMPLETE',
+        failedGates: [],
+        unavailableGates: ['scout_no_result'],
+        trendTemplateScore: null,
+        failedCriteria: [],
+        rs: { status: 'unavailable', source: 'scout' },
+        stage: null,
+        evidence: 'Scout returned no result after retry.',
+        origins: delegated.origins,
+        recurrence: delegated.recurrence,
+      })
+      return
+    }
+    // Pair by delegation, not by the scout's self-reported ticker: qualify accepts
+    // any symbol, so a scout mix-up (delegated GOOG, returned GOOGL) must not
+    // silently attribute one ticker's gate evidence to another.
+    const returned = String(result.ticker || '').trim().toUpperCase()
+    if (returned !== delegated.ticker) {
+      qualified.push({
+        ticker: delegated.ticker,
+        verdict: 'INCOMPLETE',
+        failedGates: [],
+        unavailableGates: ['scout_ticker_mismatch'],
+        trendTemplateScore: null,
+        failedCriteria: [],
+        rs: { status: 'unavailable', source: 'scout' },
+        stage: null,
+        evidence: `Scout returned ${returned} for delegated ${delegated.ticker}; evidence discarded as unattributable.`,
+        origins: delegated.origins,
+        recurrence: delegated.recurrence,
+      })
+      return
+    }
+    qualified.push({ ...result, origins: delegated.origins, recurrence: delegated.recurrence })
+  })
 }
 
 const SYNTHESIS_SCHEMA = {
@@ -208,4 +288,8 @@ Build three disjoint buckets: PROCEED results in proceed, INCOMPLETE or malforme
   { label: 'screen:synthesize', phase: 'Synthesize', schema: SYNTHESIS_SCHEMA },
 )
 
-return synthesis
+// Surface anything the cap or input validation removed, so a dropped user ticker
+// is never invisible in the final report.
+return (droppedByCap.length || invalidUserTickers.length)
+  ? { ...synthesis, dropped }
+  : synthesis

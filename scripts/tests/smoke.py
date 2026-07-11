@@ -301,8 +301,9 @@ def _validate_vcp(test: unittest.TestCase, payload: dict) -> None:
 def _validate_volume(test: unittest.TestCase, payload: dict) -> None:
 	_require(test, payload, "symbol", str)
 	_require(test, payload, "accumulation_distribution_rating", str)
-	_require(test, payload, "up_down_volume_ratio_50d", "optional_number")
-	_require(test, payload, "up_down_volume_ratio_50d_status", str)
+	_require(test, payload, "up_down_volume_ratio_primary", "optional_number")
+	_require(test, payload, "up_down_volume_ratio_primary_status", str)
+	_require(test, payload, "up_down_volume_ratio_primary_lookback_days", int)
 	_require(test, payload, "recent_up_volume_evidence", bool)
 	_require(test, payload, "breakout_volume_confirmation", "optional_bool")
 	test.assertNotIn("climactic_volume", payload)

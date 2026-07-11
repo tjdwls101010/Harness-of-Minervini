@@ -41,7 +41,7 @@ Supply a prior-high anchor and tolerance to `cascade` only when the chart or use
 ### Treat behavior and time as evidence
 
 - Define expected behavior before entry. A correctly selected leader should act promptly; failure to make the expected progress can justify an exit even before the price stop is touched.
-- Treat profits as principal, not house money. An appreciated position receives no extra downside allowance merely because part of the value is an unrealized gain.
+- Treat profits as principal, not house money. An appreciated position receives no extra downside allowance merely because part of the value is an unrealized gain. This is why an exit plan is not optional: superperformance stocks give back roughly 50–70% of the advance on average, about a third surrender the entire gain, and bubble names can retrace 80–90% and take years to recover — an unrealized profit left undefended is a loss waiting to be realized.
 - Detect the involuntary-investor error: if the original short- or intermediate-term reason no longer holds, do not rename the position a long-term investment to avoid realizing a loss. Ask whether the position would be initiated today with the same evidence and risk.
 - A stop-out does not blacklist the ticker. Re-entry requires a fresh valid setup, a new risk/reward assessment, and price confirmation; it is not permission to chase the old thesis.
 
@@ -50,6 +50,8 @@ Supply a prior-high anchor and tolerance to `cascade` only when the chart or use
 - Run `stage_analysis.py risk` for the largest completed daily and weekly decline since the Stage 2 advance proxy began. A new maximum decline is a sell signal in most cases, even when it occurs immediately after apparently good earnings.
 - Respect abnormal price deterioration before the public explanation arrives. Reported fundamentals and reassuring management language cannot overrule a major Stage 2 break.
 - Do not duplicate or visually approximate this drawdown test in prose; `stage_analysis risk` is its single deterministic owner.
+- `[M]` Before the max-decline day confirms the top, read the Stage 3 distribution signature — the hand-off from strong hands to weak hands: expanding day-to-day volatility, erratic wide swings, the 200-day line beginning to flatten, and heavy-volume down days outnumbering up days. This qualitative read usually precedes the deterministic max-drawdown and corroborates it; treat it as a reason to tighten and prepare the exit, not as a replacement for the `stage_analysis risk` signal.
+- `[M]` A brokerage upgrade or raised price target arriving on a Stage 3/4 or already-broken leader is a red flag, not reassurance — often a short-candidate marker. Institutions distribute before the sell-side turns cautious, so the tape is the verdict, not the analyst rating (CMG in 2012 was upgraded near $400 shortly before roughly a 40% three-month decline). Never let a fresh upgrade or target convert an abnormal price break into a reason to hold.
 
 ## Daily audit and contingency rehearsal `[M]`
 
@@ -72,6 +74,7 @@ These instruments fill a mechanical gap in the Minervini corpus. They are observ
 
 - `[TL]` A price roughly 20–25% above the relevant base top or pivot enters a common pause/consolidation zone. Treat it as a prompt to evaluate selling into strength, not an automatic full exit and not a generic distance-from-any-MA threshold.
 - `[TL]` Relative Measured Extension near 100 is an overextension warning relative to the stock's own moving-average history. Use it only when an approved deterministic source supplies it; do not invent or hand-calculate a missing RME value.
+- `[M]` Read the climax / blow-off signature as a distinct `[M]` sell-into-strength trigger, not a variant of the `[TL]` RME above: after a long advance, a sharp parabolic acceleration extended far above the 50-day MA with expanding daily ranges is exhaustion, not strength. Take it from the `climax_extension` block that `sell_signals.py extension` and `stage_analysis.py risk` emit (percent above the 50-day MA, weeks of advance, range expansion); the measured `heuristic_climactic` flag surfaces the pattern, but the exhaustion judgment — a sharp late-stage run versus early post-breakout power — is yours.
 - Early power immediately after a breakout is not the same as late, exhausted extension. Combine distance with lifecycle, velocity, volume, and reversal evidence.
 
 ### Six-item key-reversal checklist
@@ -87,11 +90,11 @@ Run `sell_signals.py reversal` and evaluate confluence. One item alone is not a 
 
 More aligned items after meaningful extension strengthen the sell-into-strength case. Use a rendered chart only to resolve the qualitative items; deterministic numbers remain controlling.
 
-## Tagged moving-average management `[TL-Kell]`
+## Tagged moving-average management `[TL]` / `[TL-Kell]`
 
-- `[TL-Kell]` The mechanical baseline is two completed closes below the selected management average. Use the 21-day EMA for a swing-management horizon and the 50-day SMA for a position-management horizon.
-- `[TL-Kell]` Treat the first close below the line as a warning and the second qualifying close as the baseline trigger. Report the dated sequence and close quality instead of relying on a current-chart snapshot.
-- `[TL-Kell]` The 21 EMA and 50 SMA manage an already eligible trade; they never replace the 50/150/200 SMA stack used for SEPA eligibility and Stage analysis.
+- `[TL]` The mechanical baseline is two completed closes below the selected management average. Use the 21-day EMA for a swing-management horizon; the `[TL-Kell]` 50-day SMA is the approved position-management trail — the one explicit exception that reuses an eligibility-stack average for trade management.
+- `[TL]` Treat the first close below the line as a warning and the second qualifying close as the baseline trigger. Report the dated sequence and close quality instead of relying on a current-chart snapshot.
+- `[TL]` The 21 EMA and the `[TL-Kell]` 50 SMA manage an already eligible trade; they never replace the 50/150/200 SMA stack used for SEPA eligibility and Stage analysis.
 - `[M]` A hard price stop and the 3R breakeven rule remain controlling. The two-close convention cannot delay an already-triggered hard stop.
 
 ## Failure cascade `[TL]`

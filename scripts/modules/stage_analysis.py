@@ -97,19 +97,11 @@ STAGE_NAMES = {
 # They are named here, with their reason, rather than buried as bare literals so
 # the number — and why it is what it is — is visible where a reader would
 # question it. The conviction multipliers encode what a signal MEANS (what counts
-# as volume "expanding", ranges "widening"), which is canonical to the method and
-# constant across stocks; the lookbacks are short diagnostic windows that rarely
-# need per-run tuning. The one number an analyst genuinely re-defines per stock —
-# how long an advance must run before a parabolic move reads as a climax — is a
-# CLI arg (--min-advance-weeks) below.
-_SMA50_SLOPE_LOOKBACK = 20      # bars to read the 50-day MA's slope (short-trend re-engagement)
-_VOL_AVG_LOOKBACK = 50          # baseline volume window — a "normal" session's volume
-_VOL_RECENT_LOOKBACK = 5        # recent window compared against that baseline
-_VOL_EXPANSION_MULT = 1.25      # [TL] The +/-25% volume band supplies this practice-layer default.
-_UD_LOOKBACK = 30               # up/down-volume accumulation window
-_UD_RATIO_BULLISH = 1.15        # Implementation heuristic, not a canonical [M] threshold.
-_FLATTENING_FLOOR = -0.5        # Implementation heuristic for a near-flat 200 SMA.
-_RS_LOOKBACK_DAYS = 63          # ~3 months — the relative-strength comparison window vs SPY
+# as ranges "widening", volatility "expanding"), which is canonical to the method
+# and constant across stocks; the lookbacks are short diagnostic windows that
+# rarely need per-run tuning. The one number an analyst genuinely re-defines per
+# stock — how long an advance must run before a parabolic move reads as a climax —
+# is a CLI arg (--min-advance-weeks) below.
 _ADR_FAST = 5                   # Implementation window for the [TL] ADR% diagnostic.
 _ADR_SLOW = 60                  # Implementation baseline for the [TL] ADR% diagnostic.
 _RANGE_EXPANSION_MULT = 1.3     # Implementation heuristic for widening ranges, not canon.

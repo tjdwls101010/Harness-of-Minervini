@@ -28,16 +28,17 @@ scripts/.venv/bin/python scripts/modules/volume_analysis.py runrate SYMBOL
 - Bases four and five are late-stage warnings because abrupt failures become more common as the advance matures.
 - Base count supplies context rather than a verdict by itself. Combine it with price and volume, fundamentals when required, and current market evidence.
 - A stock can terminate through a parabolic climax without completing a neat late base, so do not force every mature leader into the count sequence.
+- The flat base is a distinct constructive shape: roughly four to seven weeks sideways, correcting only about 10–15%, with the buy trigger a move above the base high. It refuses to give ground while time passes, which is itself supply-absorption evidence.
 
 ## VCP: read the supply footprint
 
 - Write a VCP footprint as `<weeks>W <maximum-depth%>/<final-contraction%> <contraction-count>T`; `40W 31/3 4T` means forty weeks, a 31% maximum correction, a 3% final contraction, and four contractions.
 - Read the three footprint dimensions as time, price, and contraction symmetry. A pattern name without those dimensions is not sufficient evidence.
-- A valid VCP normally contains two to six contractions, most often two to four, with each contraction roughly half the preceding one within a reasonable range; `25% → 15% → 8%` is the canonical model.
+- A valid VCP normally contains two to six contractions, most often two to four, with each contraction roughly half the preceding one within a reasonable range; `25% → 15% → 8%` is the canonical model, and VIVO's actual `31% → 17% → 8% → 3%` four-contraction series (footprint `40W 31/3 4T`, $18 pivot) is a real instance of the same halving character.
 - Shrinking price volatility must be accompanied by drying supply. The final contraction must show volume below the 50-day average, including one or two exceptionally quiet sessions.
 - The contraction sequence represents strong hands absorbing weak-hand supply. As available stock diminishes, less demand is needed to move price through the line of least resistance.
-- A constructive ordinary base is generally 10–35% deep and three to sixty-five weeks long. Reject a correction of 60% or more; depth near 50% is reserved for an exceptional broad bear-market context, not normalized.
-- Compare the stock with the market over the same interval. Avoid a candidate that declines more than roughly two to three times the market.
+- A constructive ordinary base is generally 10–35% deep and three to sixty-five weeks long. Reject a correction of 60% or more; depth near 50% is reserved for an exceptional broad bear-market context, not normalized. The reason deep bases fail is overhead supply: a deeper correction traps more break-even sellers waiting above and invites dip-buyers to take profits into any bounce, so the eventual breakout must chew through two seller cohorts. That is why ~50% is tolerable only when a broad bear market forced the depth on an otherwise resilient name.
+- Compare the stock with the market over the same interval. Avoid a candidate that declines more than roughly two to three times the market. CRUS's 23% correction against a 10% market decline (2.3:1) sat at the tolerable inclusive edge of that band before it resolved into a valid 3C turn.
 - Time is part of supply absorption. A V-shaped or time-compressed right side is not ready merely because price returned to resistance; strong hands have not had enough time to replace weak holders.
 - Do not anticipate the unfinished pattern. The default entry is a completed VCP pivot breakout or a VCP-anchored cheat whose own turn has resolved upward.
 
@@ -57,6 +58,7 @@ scripts/.venv/bin/python scripts/modules/volume_analysis.py runrate SYMBOL
 - `volume_analysis.py runrate` extrapolates current regular-session volume from elapsed session time and is deliberately cache-exempt. Treat it as a pace estimate, not completed volume.
 - `[TL]` The default chase ceiling is 1.5% above the pivot. If price is already farther extended, decline the entry and wait for a new low-risk structure instead of converting momentum into poor asymmetry.
 - Never let an attractive breakout waive the Stage 2 and Trend Template gate, market alignment, or the planned failure level.
+- Adapt the entry tactic to the market's character: in a strong, trending regime, buy the pivot breakout as it happens; in a choppy, whipsaw regime, prefer a pullback or undercut-reclaim entry into a defined level, because raw breakouts fail more often when the broad tape is not carrying them.
 
 ## Breakout response: squat, tennis ball, and reset
 
