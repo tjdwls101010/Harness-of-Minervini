@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(/.tmp/**)"
+    ],
+    "allow": [
+      "Bash(scripts/.venv/bin/python *)",
+      "Bash(bash scripts/bootstrap.sh)",
+      "Bash(git status)",
+      "Bash(git diff *)"
+    ]
+  }
+}
