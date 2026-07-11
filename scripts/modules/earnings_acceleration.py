@@ -1520,7 +1520,7 @@ def main():
 	sp.set_defaults(func=cmd_surprise)
 
 	# revisions
-	sp = sub.add_parser("revisions", help="[M] Track analyst estimate revisions (5% reference)")
+	sp = sub.add_parser("revisions", help="[M] Track analyst estimate revisions (5%% reference)")
 	sp.add_argument("symbol", help="Ticker symbol")
 	add_no_cache_arg(sp)
 	sp.set_defaults(func=cmd_revisions)

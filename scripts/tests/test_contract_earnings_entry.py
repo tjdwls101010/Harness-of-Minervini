@@ -40,6 +40,9 @@ class CliContractTests(unittest.TestCase):
 		for module, subcommands in commands.items():
 			root_help = self.run_cli(module, "--help")
 			self.assertEqual(root_help.returncode, 0, root_help.stderr)
+			self.assertNotIn("{'option_strings'", root_help.stdout)
+			if module == "earnings_acceleration.py":
+				self.assertIn("revisions           [M] Track analyst estimate revisions (5% reference)", root_help.stdout)
 			for command in subcommands:
 				result = self.run_cli(module, command, "--help")
 				self.assertEqual(result.returncode, 0, result.stderr)
