@@ -132,7 +132,7 @@ Author fresh (current file is empty; AGENTS.md symlinks to it — leave the syml
 3. **Module invocation facts** (~15): the canonical shapes from §0, verbatim; JSON contract; `--no-cache` exists.
 4. **Trigger rules** (~6): condition → skill for market-scan / ticker-analysis / trade-review (compaction insurance).
 5. **Repo layout + bootstrap** (~10).
-6. **Authoring policy** (~4): paraphrase-first; book DBs never committed.
+6. **Runtime facts only** (~4): bootstrap recovery and `.tmp/` as non-runtime raw material. Per the user's 2026-07-11 clarification, developer-facing status synchronization and methodology-authoring policy stay in the harness spec, not in analyst CLAUDE.md.
 
 Anti-pattern check: no component inventory prose; no generic advice; every line passes "would removing it cause a mistake?"
 
@@ -179,7 +179,7 @@ After all three exist, read the descriptions against each other: no trigger over
 
 ## 7. Phase 5 — Validation (consented plan)
 
-1. **Structural (free, mandatory)**: `python3 ~/.claude/skills/harness-creator/scripts/validate_harness.py --path . --strict` → 0 errors; line budgets (CLAUDE.md ≤180 physical lines, each skill body ≤120 excluding frontmatter, each reference ≤350 physical lines); cross-skill reference paths resolve; smoke suite green; fixed-input hard-gate tests distinguish fail from unavailable; tracked-file and sampled-content checks confirm no `.tmp/` artifact or book text is committed; **deny-rule live probe** (attempt an Edit on a `.tmp/` file with cwd ≠ repo root; confirm the deny fires — no structural check covers deny efficacy).
+1. **Structural (free, mandatory)**: `python3 ~/.claude/skills/harness-creator/scripts/validate_harness.py --path . --strict` → 0 errors; line budgets (CLAUDE.md ≤180 physical lines, each skill body ≤120 excluding frontmatter, each reference ≤350 physical lines); cross-skill reference paths resolve; smoke suite green; fixed-input hard-gate tests distinguish fail from unavailable; tracked-file and sampled-content checks confirm no `.tmp/` artifact or book text is committed; **deny-rule live probe** (attempt an Edit on a `.tmp/` file with cwd ≠ repo root; confirm the deny fires — no structural check covers deny efficacy). Implementation adjudication: the stock validator checks Dynamic Workflow bodies as raw ESM, while installed Claude Code 2.1.207 wraps them in an async function and requires top-level `return`; for that known mismatch, require 0 non-workflow findings plus async-wrapper syntax and a real workflow run, and record the false positive in the binding spec.
 2. **E2E (consented)**: the 6 scenarios in spec Validation (V1-V6) via `run_e2e.py` (`~/.claude/skills/harness-creator/scripts/`; read references/e2e-testing.md first — headless permission handling is a documented best guess; the first real run is the confirmation). Evidence-cited grading; surface compliance without evidence = FAIL. V3 (sell question actually Reads sell.md) and V5 (numbers from modules only) are the designated weak-point probes.
 3. **Repair routing**: trigger miss → description; wrong behavior → strengthen the why; reference skip → routing persuasion, then Plan B (promote that reference to a skill); re-run failed scenarios only.
 4. Record outcomes in spec Validation; advance inventory statuses `approved → generated → validated` per component.
