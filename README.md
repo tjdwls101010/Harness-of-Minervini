@@ -106,13 +106,13 @@ flowchart TD
 - **`ticker-scout` agent** isolates screening fan-out; the **`/screen` workflow** freezes the one fixed-shape orchestration.
 - **The module substrate** (`scripts/`) is 16 parameterized CLI modules + a 2-command pipeline, each emitting one JSON document with its verdict, full basis, interpretation `doctrine`, and provenance tags. A transparent same-session cache keeps iterative re-analysis fast and reproducible.
 
-A deeper tour lives in the **[Wiki](docs/wiki/Home.md)**: [Architecture](docs/wiki/Architecture.md) · [The Minervini Method](docs/wiki/The-Minervini-Method.md) · [Design Principles](docs/wiki/Design-Principles.md) · [The Module Substrate](docs/wiki/The-Module-Substrate.md).
+A deeper tour lives in the **[Wiki](docs/wiki/README.md)**: [Architecture](docs/wiki/Architecture.md) · [The Minervini Method](docs/wiki/The-Minervini-Method.md) · [Design Principles](docs/wiki/Design-Principles.md) · [The Module Substrate](docs/wiki/The-Module-Substrate.md).
 
 ## Documentation
 
 | Doc | What's in it |
 |---|---|
-| **[Wiki: Home](docs/wiki/Home.md)** | Full guided documentation and navigation |
+| **[Wiki: Home](docs/wiki/README.md)** | Full guided documentation and navigation |
 | [Installation](docs/wiki/Installation.md) | Setup, requirements, data sources, troubleshooting |
 | [Quickstart](docs/wiki/Quickstart.md) | Your first analysis, worked example prompts |
 | [Architecture](docs/wiki/Architecture.md) | Every harness layer and why it lives where it does |
