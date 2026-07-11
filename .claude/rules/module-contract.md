@@ -27,7 +27,7 @@ This is developer-facing maintenance guidance for `scripts/**`, not analyst doct
 
 ## Live-source cache
 
-- Route every eligible live read through the shared read-through layer for all three sources: yfinance through the cached ticker proxy, the Finviz homepage scrape through `utils.cached_call` with source `finviz`, and `ibd-rs-rating`/Supabase through `rs_ranking.call_backend` with source `ibd-rs-rating`. Never instantiate `RS` elsewhere, because a direct package path silently bypasses the shared snapshot.
+- Route every eligible live read through the shared read-through layer for all three sources: yfinance through the cached ticker proxy, the Finviz homepage scrape through `utils.cached_call` with source `finviz`, and `ibd-rs-rating`/Neon through `rs_ranking.call_backend` with source `ibd-rs-rating`. Never instantiate `RS` elsewhere, because a direct package path silently bypasses the shared snapshot.
 - Preserve the cache identity `(source, symbol, function, params-hash, last-completed-US-session)` and the user-scoped root `${MINERVINI_CACHE_DIR:-~/.cache/minervini-harness}`. The completed New York session, rather than the local calendar day, keeps a KST user’s repeated analysis on one coherent market snapshot.
 - During the regular session, price endpoints must bypass the cache or use a TTL of at most 15 minutes; non-price data keeps the completed-session lifetime. `volume_analysis.py runrate` is deliberately cache-exempt because stale cumulative volume would corrupt its purpose.
 - `--no-cache` must disable both reads and writes for every source for the rest of the process; use the monotonic `utils.configure_cache` state so a later helper cannot accidentally re-enable caching.

@@ -72,7 +72,7 @@ Why this shape (full rationale in spec): the constitution is never-miss content 
 
 ### 3.1 Cache layer (utils.py) — all three live sources
 
-Read-through cache wrapping **yfinance fetches, the finviz scrape, AND ibd-rs-rating/Supabase lookups** (`rs_ranking` and pipeline's `from rs_rating import RS` path) — the /screen fan-out re-queries RS for dozens of tickers, exactly the rate-limit-fragile path the cache was approved for.
+Read-through cache wrapping **yfinance fetches, the finviz scrape, AND ibd-rs-rating/Neon lookups** (`rs_ranking` and pipeline's `from rs_rating import RS` path) — the /screen fan-out re-queries RS for dozens of tickers, where the cache preserves a consistent same-session snapshot and isolates transient source failures.
 
 - Key: `(source, symbol, function, params-hash, session-date)` where **session-date = the last completed US trading session in America/New_York** (roll back over weekends/holidays) — NOT the local calendar date (the user runs from KST; KST midnight falls mid-US-session).
 - While the US market is **open**, OHLCV/price endpoints bypass the cache (or use a short TTL ≤15min); financials/info/earnings-dates keep the session TTL. Reuse `market_clock` (§3.5) for open/closed and session-date logic.

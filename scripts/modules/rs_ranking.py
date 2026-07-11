@@ -2,7 +2,7 @@
 """Relative-strength ranking with an explicit source fallback chain.
 
 ``score`` first reads the authoritative IBD-style rating published by the
-project's ``ibd-rs-rating`` Supabase backend. It must not be described as a
+project's ``ibd-rs-rating`` Neon backend. It must not be described as a
 proprietary IBD feed. If that source is unavailable, the module computes a
 clearly labelled local proxy from the stock/SPY RS line.
 
