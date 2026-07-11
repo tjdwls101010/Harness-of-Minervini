@@ -1,2 +1,5 @@
 .DS_Store
 .tmp/
+scripts/.venv/
+__pycache__/
+*.py[cod]

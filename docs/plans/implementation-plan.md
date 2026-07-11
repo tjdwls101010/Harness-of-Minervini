@@ -62,11 +62,11 @@ Why this shape (full rationale in spec): the constitution is never-miss content 
 
 ## 2. Phase 0 — Environment & migration substrate
 
-1. Copy `.tmp/Minervini/Scripts/modules/*.py` and `Scripts/pipeline/*.py` into `scripts/modules/`, `scripts/pipeline/` (drop `__pycache__`; never copy `.venv`).
+1. Copy `.tmp/Minervini/Scripts/modules/*.py` and `.tmp/Minervini/Scripts/pipeline/*.py` into `scripts/modules/`, `scripts/pipeline/` (drop `__pycache__`; never copy `.venv`).
 2. `scripts/requirements.txt`: keep `yfinance>=0.2.36, pandas, numpy, lxml, requests, ibd-rs-rating`; add `mplfinance`; drop the 6 dead deps (`fredapi, python-dotenv, finvizfinance, finviz, sec-edgar-downloader, sec-analyzer`). Do not carry over `.env` (all 4 keys unused).
 3. `scripts/bootstrap.sh`: resolve venv dir (`${MINERVINI_VENV:-scripts/.venv}`), create if missing, `pip install -r`, import-smoke each module. Idempotent.
 4. Add `scripts/.venv/` to `.gitignore`.
-5. **Acceptance**: `bash scripts/bootstrap.sh` exits 0 on a clean checkout; both canonical shapes (§0) return valid JSON **from the repo root**; second invocation of the same fetch hits the cache (Phase 1 §3.1 — verify with timing or a cache log line, including one `rs_ranking score` call).
+5. **Acceptance**: `bash scripts/bootstrap.sh` exits 0 on a clean checkout; both canonical shapes (§0) return valid JSON **from the repo root**. The second-invocation cache checks depend on Phase 1 §3.1 and are completed at the Phase 1 gate, including one `rs_ranking score` call.
 
 ## 3. Phase 1 — Code substrate refactors & new modules
 
@@ -108,7 +108,7 @@ Thresholds from M-map cluster H + TL-map cluster E; TL items origin-tagged. Subc
 - Closing-range % (`CR=(C-L)/(H-L)`), ±25% volume bands, ADR% — add where natural (TL cluster A quantifiers).
 - `actions.py get-earnings-dates --days-until` — earnings-event policy needs days-to-next-report.
 - **`market_breadth.py`**: add the QQQ-vs-21EMA switch state with the **asymmetric** definition (TL-map cluster F(d) — its #1 flagged gotcha): ON = one QQQ close above the 21 EMA; OFF = two consecutive closes below the 21 EMA **and** the second close below the prior day's low. Not a symmetric boolean.
-- **`rs_ranking.py` proxy hardening** (B20): add the harness's own RS-proxy computation — RS line vs SPY, RS-days >60%, AS-style 1M/3M/6M/12M percentile ranks (TL-map §4-4 spec) — as a documented fallback when the ibd-rs-rating backend is unavailable, tagged as proxy (IBD RS is proprietary).
+- **`rs_ranking.py` proxy hardening** (B20): treat the user's `ibd-rs-rating` package score as the primary cross-sectional source without reimplementing its formula; add the harness's own RS proxy — RS line vs SPY, RS-days >60%, AS-style 1M/3M/6M/12M historical percentiles (TL-map §4-4 spec) — only as a documented, explicitly non-cross-sectional fallback when the package score is unavailable. Never describe the package as the proprietary official IBD feed.
 
 ### 3.6 Tests
 
@@ -123,7 +123,7 @@ Author fresh (current file is empty; AGENTS.md symlinks to it — leave the syml
 1. **Identity & purpose** (~10): what this harness is; pointer to `.claude/harness-spec.md` as the binding design record; the three trigger rules below are the only component mentions.
 2. **Analyst constitution** (≤95) — distilled from the maps' (b)-buckets, each item with its compact why:
    - Persona & risk spine: conservative-aggressive opportunist; risk-first question order; no-trade strong default; ~50% win-rate calibration; decision quality ≠ outcome. [M-map I]
-   - Funnel + probability convergence: Trend Template/Stage-2 gates fundamentals; cheap gate first, earn each deeper look; no trade without fundamentals × price/volume × market alignment. [M-map A/C]
+   - Funnel + probability convergence: Trend Template/Stage-2 gates fundamentals; run the low-cost technical gate first and earn each deeper look; no trade without fundamentals × price/volume × market alignment, except the M-map-authorized VCP-qualified Power Play may omit fundamentals without waiving the other three legs. [M-map A/C/D]
    - Anti-default corrections (one line + why each): lockout rally; anti-ATR; ultra-low P/E + 52wk low = red flag; cheap-trap ban; broken-leader ban; price leads earnings both ways; no bottom fishing / no averaging down. [M-map B/C/F/H]
    - Two-tier doctrine: SEPA immutable / TL tunable+tagged / Minervini-first; MA-vocabulary role separation (50/150/200 SMA = eligibility; 10/21 EMA = trade management; never mixed); Momentum Masters speaker rule.
    - Scope guards: US only; long + cash; never portfolio %-allocations (ticker-level sell/hold in scope); daily/weekly TF.
@@ -138,7 +138,7 @@ Anti-pattern check: no component inventory prose; no generic advice; every line 
 
 ## 5. Phase 3 — Skills and references
 
-Order: references first (from the maps), then bodies, then descriptions (tuned against each other + near-misses). **Frontmatter for all three skills**: `allowed-tools` with qualified Bash grants matching settings.json shapes — `Bash(scripts/.venv/bin/python *)`, `Bash(bash scripts/bootstrap.sh)` — plus `Read, Grep, Glob` and (analysis skills only) `WebSearch, WebFetch`; `model` unset. Blanket `Bash` is forbidden (it would dead-weight the narrow allow rules exactly when they matter).
+Order: references first (from the maps), then bodies, then descriptions (tuned against each other + near-misses). **Frontmatter for both analysis skills**: `allowed-tools` with qualified Bash grants matching settings.json shapes — `Bash(scripts/.venv/bin/python *)`, `Bash(bash scripts/bootstrap.sh)` — plus `Read, Grep, Glob, WebSearch, WebFetch`; `model` unset. `trade-review` uses its narrower §5.3 grant. Blanket `Bash` is forbidden (it would dead-weight the narrow allow rules exactly when they matter).
 
 **Preprocessing blocks** (both analysis skills, first element of each body): `` !`scripts/.venv/bin/python scripts/modules/market_clock.py` `` — one command supplying date, ET clock, market open/closed, last completed session, cache state. Ship its exact shape in permissions.allow (Phase 4).
 
@@ -155,7 +155,7 @@ Order: references first (from the maps), then bodies, then descriptions (tuned a
 - **references/fundamentals.md** (≤350): M-map clusters **A(c)**+E+F+G — the **12-item manual review checklist** as the final-candidate scoring instrument and the **catalyst detective-work guide** (catalyst narrative may use WebSearch per data doctrine) [both from A(c) — Catalyst is one of SEPA's five mandatory elements]; earnings screen (EPS ≥20-25% YoY, bull-market 40-100%+, acceleration, 2-quarter rolling smoothing), Code 33, surprise/drift/cockroach, guidance forensics (lowered-bar beat, flip-flop tell, spin rule), inventory/receivables 2x screen, valuation de-biasing (P/E expansion tracker 2x/2.5-3x; no P/E ceiling; Crocs pair), 6-category classification mandatory-first + cyclical inverse-P/E, leader/group rules.
 - **references/sell.md** (≤350): M-map cluster H spine (stop = min(half realized avg gain, 10%) with the feedback-loop logic; 2:1-3:1 ratio integrity at 40-50% win rates; 3R breakeven; bad-market tightening; time-based exit; profit = principal; involuntary-investor detector; Stage-2 max-drawdown sell even after good earnings; slippage = next tick; **daily position audit + the 4-plan contingency template with pre-market rehearsal** [H(c)]) + TL gap-fillers tagged (extension zone +20-25%; RME; key-reversal 6-item; MA-trail 2-close baseline 21e/50s; failure cascade **ending in downside reversal at/near the prior high, 200 SMA terminal** — see §3.3; earnings policy: no new entry right before a report [hard], pre-report trim as beginner default with cushion-based discretion as M-mode) + §4-5 referee (R-multiple beats +5% when they disagree) + §4-24 (repeated stop-outs → entry quality or regime, never wider stops).
 - **references/cases.md** (≤350): 10-14 worked examples, few-shot format (setup → decision → outcome → lesson), source-tagged: PCYC 2010, Amgen 1990, VIVO 2006-07, MELI 2007, CRUS 2010, TASR 2004, SWN reset, Crocs P/E pair, Dell deceleration top, NFLX 2010 resilience, FB 2012 disqualification, IRBT 2006 clean loss, U.S. Surgical 1990.
-- **SKILL.md body** (≤120): **preprocessing (same block as market-scan)**; funnel procedure (qualify gate → earn deeper looks: entry → fundamentals → sell plan → convergence verdict including market context via `market-scan` doctrine or a fresh `discover`); chart corroboration; mandatory persuasion-framed reference routing; output conventions (evidence-cited verdict, watchlist states, no sizing).
+- **SKILL.md body** (≤120): **preprocessing (same block as market-scan)**; prospective-buy funnel (qualify gate → on PROCEED earn deeper looks: entry → fundamentals → sell plan → convergence verdict including market context via `market-scan` doctrine or a fresh `discover`); existing-position sell/hold branch (qualify for context but always read sell.md and run sell diagnostics even when a buy gate fails); chart corroboration; mandatory persuasion-framed reference routing; output conventions (evidence-cited verdict, watchlist states, no sizing).
 - **description**: single named US ticker buy/sell/hold/diagnosis + near-misses (market-level → market-scan; own trades → trade-review; sizing never).
 
 ### 5.3 `trade-review`
@@ -170,8 +170,8 @@ After all three exist, read the descriptions against each other: no trigger over
 ## 6. Phase 4 — Agent, workflow, rules, settings
 
 - **`.claude/agents/ticker-scout.md`**: `name: ticker-scout`; description (screening fan-out only); `tools: Read, Grep, Glob, Bash`; model unset. Body self-contained (agents get NO default system prompt): canonical invocation recipe (§0), qualify JSON contract, return format (verdict + failed gates + RS + stage + 1-line evidence, ≤10 lines), prohibitions (no deep dive, no edits, no WebSearch, never fill data from memory; declare unavailable on module failure).
-- **`.claude/workflows/screen.js`**: thin, per harness-creator references/workflows.md (pure-literal meta; no Date.now()/Math.random(); judgment only in prompt strings): Phase Regime (one agent runs `discover`) → hostile-regime early return → Phase Fan-out (one agent per candidate, `qualify`, schema-validated) → Phase Synthesize (ranked watchlist, funnel-count discipline).
-- **`.claude/rules/module-contract.md`**: frontmatter `paths: ["scripts/**"]`; content = §3.2 contract with whys.
+- **`.claude/workflows/screen.js`**: thin, per harness-creator references/workflows.md (pure-literal meta; no Date.now()/Math.random(); judgment only in prompt strings): optional ticker-list argument plus `max-candidates` defaulting near 30; Phase Regime (one agent runs `discover`) → hostile-regime early return → Phase Fan-out (one agent per candidate, `qualify`, schema-validated) → Phase Synthesize (ranked watchlist with PROCEED/watch/avoid buckets and funnel-count discipline).
+- **`.claude/rules/module-contract.md`**: frontmatter `paths: ["scripts/**"]`; content = §3.2 contract with whys, the cache read-through obligation for all three live sources, and a no-network-in-`--help` requirement.
 - **`.claude/settings.json`**:
   - `permissions.deny`: **`Edit(/.tmp/**)`** — single leading slash = project-root anchored. The bare form `Edit(.tmp/**)` resolves against cwd and silently stops protecting the book DBs whenever cwd ≠ repo root.
   - `permissions.allow` (narrow; exact strings tested against real invocations — note the trailing space before `*` enforces a word boundary): `Bash(scripts/.venv/bin/python *)`, `Bash(bash scripts/bootstrap.sh)`, `Bash(git status)`, `Bash(git diff *)`. This set also covers the skill preprocessing command and everything screen.js's agents run (workflow agents cannot answer permission prompts mid-run) — ship in the same commit as screen.js.
@@ -179,7 +179,7 @@ After all three exist, read the descriptions against each other: no trigger over
 
 ## 7. Phase 5 — Validation (consented plan)
 
-1. **Structural (free, mandatory)**: `python3 ~/.claude/skills/harness-creator/scripts/validate_harness.py --path . --strict` → 0 errors; line budgets (≤180/≤120/≤350, all-inclusive); cross-skill reference paths resolve; smoke suite green; **deny-rule live probe** (attempt an Edit on a `.tmp/` file with cwd ≠ repo root; confirm the deny fires — no structural check covers deny efficacy).
+1. **Structural (free, mandatory)**: `python3 ~/.claude/skills/harness-creator/scripts/validate_harness.py --path . --strict` → 0 errors; line budgets (CLAUDE.md ≤180 physical lines, each skill body ≤120 excluding frontmatter, each reference ≤350 physical lines); cross-skill reference paths resolve; smoke suite green; fixed-input hard-gate tests distinguish fail from unavailable; tracked-file and sampled-content checks confirm no `.tmp/` artifact or book text is committed; **deny-rule live probe** (attempt an Edit on a `.tmp/` file with cwd ≠ repo root; confirm the deny fires — no structural check covers deny efficacy).
 2. **E2E (consented)**: the 6 scenarios in spec Validation (V1-V6) via `run_e2e.py` (`~/.claude/skills/harness-creator/scripts/`; read references/e2e-testing.md first — headless permission handling is a documented best guess; the first real run is the confirmation). Evidence-cited grading; surface compliance without evidence = FAIL. V3 (sell question actually Reads sell.md) and V5 (numbers from modules only) are the designated weak-point probes.
 3. **Repair routing**: trigger miss → description; wrong behavior → strengthen the why; reference skip → routing persuasion, then Plan B (promote that reference to a skill); re-run failed scenarios only.
 4. Record outcomes in spec Validation; advance inventory statuses `approved → generated → validated` per component.
