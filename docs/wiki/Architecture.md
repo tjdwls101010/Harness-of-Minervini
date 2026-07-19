@@ -43,7 +43,7 @@ The three skills partition the work by **what the user is trying to do**, not by
 - **`ticker-analysis`** — buy / sell / hold / entry-timing / setup-diagnosis / re-entry / earnings-risk / chart-condition of one *or a few named* tickers, including a head-to-head comparison (gate each ticker, then compare). See [`.claude/skills/ticker-analysis/SKILL.md`](../../.claude/skills/ticker-analysis/SKILL.md).
 - **`trade-review`** — grading, reviewing, or post-morteming the user's own *completed* trade log. See [`.claude/skills/trade-review/SKILL.md`](../../.claude/skills/trade-review/SKILL.md).
 
-Intent is a clean disambiguator: the presence of a named ticker, market-level scope, or an own-trades log tells the router which skill to load, and each skill's description names its near-miss siblings explicitly to seal the boundaries (a single-ticker judgment routes out of `market-scan`; a completed-trade grade routes out of `ticker-analysis`; and all three refuse portfolio sizing). Because the shared constitution is already ambient in `CLAUDE.md`, duplication across the three bodies is near zero, and each body shrinks to a ~100-line procedural shell (the bodies are 56 / 89 / and the trade-review body). Deep methodology lives in each skill's `references/` files, routed in only when a branch needs it.
+Intent is a clean disambiguator: the presence of a named ticker, market-level scope, or an own-trades log tells the router which skill to load, and each skill's description names its near-miss siblings explicitly to seal the boundaries (a single-ticker judgment routes out of `market-scan`; a completed-trade grade routes out of `ticker-analysis`; and all three refuse portfolio sizing). Because the shared constitution is already ambient in `CLAUDE.md`, duplication across the three bodies is near zero, and each body shrinks to a procedural shell of roughly a hundred lines (61 for `market-scan`, 73 for `ticker-analysis`, 94 for `trade-review`, against a ≤120-line budget). Deep methodology lives in each skill's `references/` files, routed in only when a branch needs it.
 
 The `market-scan` and `ticker-analysis` skills grant the same qualified tool set (`Bash(scripts/.venv/bin/python *)`, `Bash(bash scripts/bootstrap.sh)`, `Read`, `Grep`, `Glob`, `WebSearch`, `WebFetch`) — never a blanket `Bash`. `trade-review` narrows further to `Bash(scripts/.venv/bin/python *)`, `Read`, `Grep`, `Glob` (it needs the interpreter for post-exit history reconstruction but no bootstrap and no web). All three inherit the session's model.
 
@@ -98,6 +98,24 @@ The `allow` list is intentionally narrow — the exact command shapes the skills
 The Python lives at [`scripts/`](../../scripts) — `scripts/modules/` (16 modules: `actions`, `base_count`, `chart_render`, `earnings_acceleration`, `entry_patterns`, `info`, `market_breadth`, `market_clock`, `rs_ranking`, `sell_signals`, `stage_analysis`, `tight_closes`, `trend_template`, `utils`, `vcp`, `volume_analysis`), `scripts/pipeline/` (the orchestration exposing two commands, `qualify` and `discover`), plus `scripts/bootstrap.sh`, `scripts/requirements.txt`, and `scripts/tests/`.
 
 It sits at the repo root, not inside any one skill's directory, because it is a **shared substrate**: all three skills, the `ticker-scout` agent, and the `/screen` workflow invoke the same modules. Nesting it under one skill would misstate ownership. Placement is also **plugin-symmetric** — at pluginization the whole directory moves to `${CLAUDE_PLUGIN_ROOT}/scripts` unchanged, and every consumer keeps invoking it through the same canonical root-relative path. Crucially, this code is never auto-loaded into context; it enters only as JSON produced by an explicit invocation, which is what keeps precise numbers deterministic instead of remembered. Its internals are covered in [The Module Substrate](The-Module-Substrate.md).
+
+## `AGENTS.md` and `.codex/` — the same harness, a second front door
+
+Clone the repository and you will find two things the layer table above does not mention: an `AGENTS.md` at the root, and a `.codex/` directory beside `.claude/`. Neither is a second copy of the harness. Both are **symlinks that re-expose the existing harness under the filenames other agent tooling looks for.**
+
+```text
+AGENTS.md      -> CLAUDE.md            # the vendor-neutral convention
+.codex/skills  -> ../.claude/skills    # the same three skills, same files
+.codex/agents/ticker-scout.toml        # a real file — see below
+```
+
+`AGENTS.md` is a symlink to `CLAUDE.md`, so tooling that follows the vendor-neutral `AGENTS.md` convention loads the identical analyst constitution. `.codex/skills` symlinks into `.claude/skills`, so a Codex-family CLI reading `.codex/` gets literally the same `SKILL.md` files and the same `references/` — not a fork that can drift. Git tracks these as symlink entries, so they survive a clone.
+
+The one thing that **cannot** be symlinked is the agent definition, because the two formats genuinely differ: Claude Code uses YAML frontmatter with a Markdown body, while the Codex form is TOML with a `developer_instructions = """…"""` block. So `.codex/agents/ticker-scout.toml` is a real file whose prose is a transcode of [`.claude/agents/ticker-scout.md`](../../.claude/agents/ticker-scout.md) — same canonical command, same required-field list, same single-retry rule, same prohibitions.
+
+**That one file is the maintenance hazard in this design.** Everything else is a symlink and therefore cannot fall out of sync; the TOML agent can, and will, if you edit the Markdown agent without making the matching edit. Treat the pair as a single unit when you touch either.
+
+> There is no `.codex/hooks`. Earlier revisions carried a `.codex/hooks -> ../.claude/hooks` symlink that pointed at nothing, because — as the next section explains — this harness deliberately ships zero hooks. It was removed rather than left dangling.
 
 ## Zero hooks, by eligibility
 

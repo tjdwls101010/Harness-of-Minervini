@@ -8,7 +8,7 @@ For where this layer sits in the whole system, see the [architecture overview](A
 
 ## The module contract in plain terms
 
-Every public CLI under `scripts/` honours one contract, spelled out for maintainers in [`.claude/rules/module-contract.md`](Architecture.md). It exists so skills, the [ticker-scout agent](Architecture.md), and the `/screen` workflow can compose these tools from structured output with no human standing by to interpret an ambiguous reply. The rules that matter to you as a reader:
+Every public CLI under `scripts/` honours one contract, spelled out for maintainers in [`.claude/rules/module-contract.md`](../../.claude/rules/module-contract.md). It exists so skills, the [ticker-scout agent](Architecture.md#ticker-scout--read-only-screening-fan-out-isolation), and the `/screen` workflow can compose these tools from structured output with no human standing by to interpret an ambiguous reply. The rules that matter to you as a reader:
 
 - **One JSON document to stdout.** A normal invocation writes exactly one JSON object through `utils.output_json` — never mixed with prose or debug text, because downstream consumers parse the whole stream.
 - **One public failure shape.** Parser, validation, and runtime failures route through `utils.JsonArgumentParser` / `utils.error_json` to `{"error": "..."}` with exit code 1. A missing datum *inside* an otherwise useful result is reported as a section-level `unavailable` rather than crashing the whole command.
@@ -63,6 +63,15 @@ scripts/.venv/bin/python scripts/pipeline discover
 | `discover` | Market environment and RS leadership: breadth (new-high vs new-low), the QQQ 21-EMA information switch, RS leaders (top 20), sector/industry rankings, the leadership board, and movers. It reports *evidence readiness* (`evidence_ready` / `partial` / `incomplete`); the [market-scan skill](Skills-and-Usage.md) makes the bottom-up regime judgment. |
 
 The two hard gates that `qualify` reads — **Stage 2 AND Trend Template 8-of-8** (all AND, RS ≥ 70 floor) — are the only thing the tools decide on their own: binary and non-negotiable. Convergence, entry timing, leadership, and risk are read by the analyst from the raw module outputs, not collapsed into a number.
+
+### How the pipeline runs its children, and where "retry once" actually lives
+
+The pipeline invokes modules as **subprocesses, not imports** — `sys.executable` plus the module path, which keeps every child on the same interpreter the parent is running. `qualify` runs its two children (`trend_template check` and `stage_analysis classify`) concurrently in a two-worker pool; `discover` uses a twenty-worker pool and deliberately overlaps its slowest call, firing the per-industry leader lookups while the ~20–30 second Finviz scrape is still in flight.
+
+Two details are worth knowing before you extend this layer, because they are easy to assume wrongly:
+
+- **A child's JSON is preserved even on exit code 1.** The runner parses and returns the child's document rather than discarding it as a failure, because the child's own `error`, provenance, and section-level `unavailable` fields *are* the contract. Only unparseable or empty stdout is replaced with a synthesized `{"error": …}`. Every failure shape the runner can produce is a dict with an `error` key, which is exactly what the gate logic reads as `UNAVAILABLE`.
+- **There is no retry in the pipeline, and a hard 60-second timeout per child.** The harness's "retry once, then report unavailable" doctrine is real, but it lives in the *prompts* — the skill bodies, the `ticker-scout` agent, and the `/screen` workflow each instruct a retry of the identical command. The Python layer runs a child exactly once. If you are calling the pipeline programmatically rather than through Claude, you get no retry unless you write one.
 
 ## The 16 modules
 

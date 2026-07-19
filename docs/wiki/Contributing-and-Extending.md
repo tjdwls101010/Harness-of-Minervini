@@ -76,7 +76,7 @@ Contributions are licensed under the project's [MIT License](../../LICENSE).
 
 ## The maintenance model
 
-This harness was authored with the [`harness-creator`](../../CLAUDE.md) methodology, and its **binding design record lives in [`.claude/harness-spec.md`](../../.claude/harness-spec.md)**. That file — not this repo's analyst-facing layers — is where maintenance rationale, component status, and authoring policy belong. Keep it in sync when you change a component.
+This harness was authored with the `harness-creator` methodology, and its **binding design record lives in [`.claude/harness-spec.md`](../../.claude/harness-spec.md)**. That file — not this repo's analyst-facing layers — is where maintenance rationale, component status, and authoring policy belong. Keep it in sync when you change a component.
 
 The split is intentional and load-bearing: during *analysis*, methodology content is live instruction (persona, doctrine); during *maintenance*, it is data (files being edited). So maintenance instructions, status synchronization, and authoring policy stay in `harness-spec.md` or in paths-gated rules, where their analysis-time token cost is zero. `CLAUDE.md` carries only facts and behavior the analyst actually needs. Do not migrate developer notes into the constitution or the skills — that would tax every analysis session for no analytical gain.
 

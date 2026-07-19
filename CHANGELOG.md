@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`SECURITY.md`** — private vulnerability reporting via GitHub's Security tab, a supported-versions table, and an explicit attack-surface description (pinned dependencies, untrusted live-source parsing, the local cache, chart output paths, the permission allowlist) plus what is out of scope, so nobody files "the verdict was wrong" as a security issue.
+- **`NOTICE.md`** — methodology ownership, third-party data-source terms, and trademark attribution, split out of `LICENSE`.
+- **Architecture: the `AGENTS.md` and `.codex/` layer.** Documented for the first time — both re-expose the same harness under the filenames other agent tooling looks for, why `.codex/agents/ticker-scout.toml` is the one file that cannot be a symlink, and that it is therefore the design's one drift hazard.
+- **Module substrate: the pipeline's subprocess model.** How children are invoked, why a child's JSON is preserved even on exit code 1, the 60-second per-child timeout, and the clarification that "retry once" lives in the *prompts* rather than in the Python layer.
+- **Design principles: the one scoped 0–100 score.** `vcp.py detect` emits a `setup_readiness.score`; the docs now name it and explain why a pattern-scoped ranking that cannot outvote a hard gate is not the "master score" the design refuses.
+
+### Changed
+
+- **`LICENSE` is now unmodified MIT.** The appended methodology note prevented GitHub from detecting the license, which displayed as "Other"; it moved to `NOTICE.md` with its content preserved.
+- Repository description, homepage, and topics set (previously all empty).
+
+### Fixed
+
+- Five wiki links whose text named a source file but whose target was an unrelated wiki page — they now point at the actual files.
+- `Architecture.md`: an unfinished sentence about skill-body sizes, which also carried stale line counts (now 61 / 73 / 94 against the ≤120-line budget).
+- Removed `.codex/hooks`, a tracked symlink pointing at a `.claude/hooks` directory that does not exist — this harness deliberately ships zero hooks.
+- Committed `.codex/agents/ticker-scout.toml`, which was untracked, leaving the Codex mirror incomplete on clone.
+
 ## [1.0.0] — 2026-07-11
 
 First public release. A complete, validated Claude Code harness that makes Claude behave as a disciplined Minervini SEPA momentum-stock analyst for US equities.

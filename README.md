@@ -124,6 +124,8 @@ A deeper tour lives in the **[Wiki](docs/wiki/README.md)**: [Architecture](docs/
 | [FAQ & Disclaimer](docs/wiki/FAQ-and-Disclaimer.md) | Scope, limits, and the fine print |
 | [CHANGELOG](CHANGELOG.md) | Release history |
 | [CONTRIBUTING](CONTRIBUTING.md) | How to propose changes |
+| [SECURITY](SECURITY.md) | Reporting a vulnerability, and what the real attack surface is |
+| [NOTICE](NOTICE.md) | Methodology ownership, data-source terms, trademarks |
 
 ## Scope and boundaries
 
@@ -145,4 +147,6 @@ The **Minervini SEPA** methodology and the **TraderLion** materials referenced h
 
 ## License
 
-Released under the [MIT License](LICENSE). The methodology content it paraphrases remains the intellectual property of its original authors, as noted in the disclaimer.
+Released under the [MIT License](LICENSE), which covers this project's code and documentation only. The investment methodologies it paraphrases remain the intellectual property of their original authors — see [NOTICE.md](NOTICE.md) for methodology ownership, third-party data-source terms, and trademark attribution.
+
+Security issues go through [private vulnerability reporting](SECURITY.md), not public issues.
