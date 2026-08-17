@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.minervini.cache import ProviderCache
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.ledger import Ledger
 from scripts.minervini.operations import Runtime, execute
@@ -87,6 +88,32 @@ def classification_snapshot() -> ProviderSnapshot[dict[str, str]]:
 
 
 class OperationCompositionTests(unittest.TestCase):
+    def test_no_cache_bypasses_both_operation_cache_reads_and_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            calls = {"price": 0, "rs": 0}
+
+            def prices(ticker: str, as_of: str) -> ProviderSnapshot[pd.DataFrame]:
+                calls["price"] += 1
+                return price_snapshot()
+
+            def rating(ticker: str, as_of: str) -> ProviderSnapshot[dict[str, object]]:
+                calls["rs"] += 1
+                return rs_snapshot()
+
+            runtime = Runtime(
+                price_history=prices,
+                rs_rating=rating,
+                cache=ProviderCache(root=Path(temporary)),
+            )
+
+            first = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+            cached = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+            bypassed = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF, "no_cache": True}, runtime=runtime)
+            restored = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+            self.assertEqual([item["status"] for item in (first, cached, bypassed, restored)], ["ok", "ok", "ok", "ok"])
+            self.assertEqual(calls, {"price": 2, "rs": 2})
+
     def test_market_snapshot_composes_independent_sources_and_requires_trade_traction_for_regime(self) -> None:
         finviz = Path(__file__).resolve().parents[1] / "fixtures" / "market_evidence" / "finviz_partial.html"
         runtime = Runtime(

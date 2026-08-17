@@ -12,6 +12,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from .cache import ProviderCache
 from .clock import AnalysisClock, resolve_as_of
 from .chart import render_chart_artifacts
 from .contracts import RequestError, envelope
@@ -163,6 +164,7 @@ class Runtime:
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
+    cache: ProviderCache | None = None
 
 
 def _clock(value: Any) -> AnalysisClock:
@@ -179,6 +181,31 @@ def _as_of(clock: AnalysisClock) -> dict[str, Any]:
         "timezone": clock.timezone,
         "completed_session": clock.completed_session,
     }
+
+
+def _cached_provider(
+    runtime: Runtime,
+    request: Mapping[str, Any],
+    clock: AnalysisClock,
+    *,
+    capability: str,
+    provider: str,
+    operation: str,
+    params: Mapping[str, Any],
+    fetch: Callable[[], ProviderSnapshot[Any]],
+    ttl_seconds: float | None = None,
+) -> ProviderSnapshot[Any]:
+    if runtime.cache is None:
+        return fetch()
+    return runtime.cache.call(
+        provider,
+        f"{capability}:{operation}",
+        {**params, "as_of": clock.date.isoformat()},
+        clock.date,
+        fetch,
+        ttl_seconds=ttl_seconds,
+        no_cache=request.get("no_cache") is True,
+    )
 
 
 def _clean_request(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -279,7 +306,16 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     clock = _clock(request.get("as_of"))
     requested_as_of = clock.date.isoformat()
     try:
-        prices = runtime.price_history(ticker, requested_as_of)
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.qualify",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, requested_as_of),
+        )
     except ProviderUnavailable as error:
         return envelope(
             "ticker.qualify",
@@ -296,7 +332,16 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     rating: int | None = None
     rating_date: str | None = None
     try:
-        rs = runtime.rs_rating(ticker, requested_as_of)
+        rs = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.qualify",
+            provider="ibd-rs-rating",
+            operation="rating",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.rs_rating(ticker, requested_as_of),
+        )
     except ProviderUnavailable as error:
         missing.append(_missing_provider(error))
     else:
@@ -339,7 +384,16 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     try:
-        prices = runtime.price_history(ticker, clock.date.isoformat())
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.setup",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
     except ProviderUnavailable as error:
         return envelope(
             "ticker.setup",
@@ -393,7 +447,16 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     if power_play is not None and not isinstance(power_play, Mapping):
         raise RequestError("power_play must be an object", "power_play")
     try:
-        snapshot = runtime.fundamentals_evidence(ticker, clock.date.isoformat(), cik)
+        snapshot = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.fundamentals",
+            provider="sec",
+            operation="filed_facts",
+            params={"ticker": ticker, "cik": cik},
+            fetch=lambda: runtime.fundamentals_evidence(ticker, clock.date.isoformat(), cik),
+        )
     except ProviderUnavailable as error:
         return envelope(
             "ticker.fundamentals",
@@ -451,10 +514,39 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
     sources: list[dict[str, Any]] = []
     try:
-        classification = runtime.current_classification(ticker)
-        master = runtime.security_master(None)
+        classification = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.peers",
+            provider="yfinance",
+            operation="current_classification",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.current_classification(ticker),
+            ttl_seconds=900,
+        )
+        master = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.peers",
+            provider="nasdaq",
+            operation="current_security_master",
+            params={},
+            fetch=lambda: runtime.security_master(None),
+            ttl_seconds=900,
+        )
         industry = str(classification.data["industry"])
-        industry_rows = runtime.industry_top(industry, clock.date.isoformat(), limit + 1)
+        industry_rows = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.peers",
+            provider="ibd-rs-rating",
+            operation="industry_top",
+            params={"industry": industry, "limit": limit + 1},
+            fetch=lambda: runtime.industry_top(industry, clock.date.isoformat(), limit + 1),
+        )
     except ProviderUnavailable as error:
         return envelope(
             "ticker.peers",
@@ -469,7 +561,16 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     provider_missing: list[dict[str, Any]] = []
     target_rating: Mapping[str, Any] | int | float = {}
     try:
-        rating = runtime.rs_rating(ticker, clock.date.isoformat())
+        rating = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.peers",
+            provider="ibd-rs-rating",
+            operation="rating",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.rs_rating(ticker, clock.date.isoformat()),
+        )
     except ProviderUnavailable as error:
         provider_missing.append(_missing_provider(error))
     else:
@@ -484,7 +585,16 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     completed_prices: dict[str, Any] = {}
     for symbol in symbols:
         try:
-            prices = runtime.price_history(symbol, clock.date.isoformat())
+            prices = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="ticker.peers",
+                provider="yfinance",
+                operation="daily_bars",
+                params={"ticker": symbol},
+                fetch=lambda symbol=symbol: runtime.price_history(symbol, clock.date.isoformat()),
+            )
         except ProviderUnavailable as error:
             missing = _missing_provider(error, required=symbol == ticker)
             missing["ticker"] = symbol
@@ -586,7 +696,18 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise RequestError("limit must be a positive integer", "limit")
     try:
-        snapshot = runtime.security_master(request.get("as_of"))
+        historical = request.get("as_of") is not None and clock.date != resolve_as_of().date
+        snapshot = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.candidates",
+            provider="nasdaq",
+            operation="historical_security_master" if historical else "current_security_master",
+            params={"historical": historical},
+            fetch=lambda: runtime.security_master(request.get("as_of")),
+            ttl_seconds=None if historical else 900,
+        )
     except ProviderUnavailable as error:
         return envelope(
             "market.candidates",
@@ -679,11 +800,67 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         sources.append(_source(snapshot.meta))
         return snapshot
 
-    qqq = collect(lambda: runtime.price_history("QQQ", as_of))
-    finviz = collect(lambda: runtime.finviz_breadth(as_of))
-    sectors = collect(lambda: runtime.sector_ranking(as_of))
-    industries = collect(lambda: runtime.industry_ranking(as_of))
-    leaders = collect(lambda: runtime.market_leaders(as_of, leader_limit))
+    qqq = collect(
+        lambda: _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": "QQQ"},
+            fetch=lambda: runtime.price_history("QQQ", as_of),
+        )
+    )
+    finviz = collect(
+        lambda: _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="finviz",
+            operation="raw_snapshot",
+            params={},
+            fetch=lambda: runtime.finviz_breadth(as_of),
+            ttl_seconds=900,
+        )
+    )
+    sectors = collect(
+        lambda: _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="ibd-rs-rating",
+            operation="sector_ranking",
+            params={},
+            fetch=lambda: runtime.sector_ranking(as_of),
+        )
+    )
+    industries = collect(
+        lambda: _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="ibd-rs-rating",
+            operation="industry_ranking",
+            params={},
+            fetch=lambda: runtime.industry_ranking(as_of),
+        )
+    )
+    leaders = collect(
+        lambda: _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="ibd-rs-rating",
+            operation="top",
+            params={"limit": leader_limit},
+            fetch=lambda: runtime.market_leaders(as_of, leader_limit),
+        )
+    )
 
     sector_rows = _ranked_groups(sectors.data, "sector", as_of) if sectors is not None else None
     industry_rows = _ranked_groups(industries.data, "industry", as_of) if industries is not None else None
@@ -745,7 +922,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
     if mode == "active" and evidence.get("current_price") is None and has_position_anchors:
         try:
-            prices = runtime.price_history(ticker, clock.date.isoformat())
+            prices = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="ticker.risk",
+                provider="yfinance",
+                operation="daily_bars",
+                params={"ticker": ticker},
+                fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+            )
         except ProviderUnavailable as error:
             provider_missing.append(_missing_provider(error))
         else:
@@ -777,7 +963,16 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     try:
-        prices = runtime.price_history(ticker, clock.date.isoformat())
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.chart",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
     except ProviderUnavailable as error:
         return envelope(
             "ticker.chart",
@@ -899,7 +1094,7 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
 
     if not isinstance(request, Mapping):
         raise RequestError("request must be an object", "request")
-    runtime = runtime or Runtime()
+    runtime = runtime if runtime is not None else Runtime(cache=ProviderCache())
     if operation == "clock":
         return _clock_operation(request)
     if operation == "health":
