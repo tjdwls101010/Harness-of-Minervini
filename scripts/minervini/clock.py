@@ -2,12 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
 from scripts.modules.market_clock import last_completed_session
-
-
-ET = ZoneInfo("America/New_York")
 
 
 @dataclass(frozen=True)
