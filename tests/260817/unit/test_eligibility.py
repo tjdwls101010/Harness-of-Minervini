@@ -61,6 +61,17 @@ class EligibilityTruthTableTests(unittest.TestCase):
             ["eligibility.standard_stage2", "eligibility.standard_trend_template", "eligibility.recent_ipo_primary_base"],
         )
 
+    def test_primary_base_is_not_considered_when_standard_history_is_sufficient(self) -> None:
+        payload = json.loads((FIXTURES / "standard_missing_critical.json").read_text())
+        primary_base = json.loads((FIXTURES / "recent_ipo_primary_base_eligible.json").read_text())["primary_base"]
+        payload["primary_base"] = primary_base
+
+        result = evaluate_eligibility(EligibilityEvidence.from_mapping(payload)).to_dict()
+
+        self.assertEqual(result["route"], "standard")
+        self.assertEqual(result["eligibility_state"], "incomplete")
+        self.assertNotIn("eligibility.recent_ipo_primary_base", result["doctrine_ids"])
+
     def test_recent_ipo_cannot_bypass_a_known_standard_failure(self) -> None:
         result = evaluate_fixture("recent_ipo_known_standard_failure")
 
