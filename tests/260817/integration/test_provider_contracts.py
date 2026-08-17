@@ -122,6 +122,35 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 17))
         self.assertEqual(snapshot.meta.content_sha256, "0c4e35e3e294803c44616d1e617c78034790a41448819f488b7d2b5204a747ca")
 
+    def test_finviz_uses_the_new_york_session_date_across_utc_midnight(self) -> None:
+        html = FIXTURES.joinpath("finviz.html").read_text()
+
+        snapshot = raw_snapshot(
+            fetch=lambda: html,
+            as_of="2026-08-17",
+            retrieved_at=datetime(2026, 8, 18, 0, 30, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 17))
+
+    def test_finviz_refuses_to_label_an_intraday_page_as_the_prior_completed_session(self) -> None:
+        calls = 0
+
+        def fetch() -> str:
+            nonlocal calls
+            calls += 1
+            return "unused"
+
+        with self.assertRaises(ProviderUnavailable) as raised:
+            raw_snapshot(
+                fetch=fetch,
+                as_of="2026-08-14",
+                retrieved_at=datetime(2026, 8, 17, 15, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(raised.exception.reason, "historical_snapshot_unavailable")
+        self.assertEqual(calls, 0)
+
     def test_external_provider_retries_once_before_returning_a_snapshot(self) -> None:
         html = FIXTURES.joinpath("finviz.html").read_text()
         attempts = 0
