@@ -1,0 +1,5 @@
+ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|Nasdaq Traded
+IBM|International Business Machines Corporation Common Stock|N|IBM|N|100|N|N
+BABA|Alibaba Group Holding Limited American Depositary Shares each representing eight Ordinary share|N|BABA|N|100|N|N
+SPY|SPDR S&P 500 ETF Trust|P|SPY|Y|100|N|N
+File Creation Time: 08172026|
