@@ -56,6 +56,7 @@ class DoctrineRegistryTests(unittest.TestCase):
         result = doctrine.get_claim("eligibility.recent_ipo_primary_base")
 
         self.assertIn("no known standard gate failure", result["claim"]["rule"]["conditions"])
+        self.assertIn("breakout is to an all-time high", result["claim"]["rule"]["conditions"])
         self.assertEqual(result["claim"]["missing"]["effect"], "incomplete")
 
     def test_power_play_exception_is_limited_to_fundamentals_policy(self) -> None:
@@ -72,6 +73,10 @@ class DoctrineRegistryTests(unittest.TestCase):
                 "going_concern_risk",
                 "excessive_dilution",
             ],
+        )
+        self.assertIn(
+            "advance is at least 100 percent in under eight weeks",
+            result["claim"]["rule"]["conditions"],
         )
 
     def test_early_entry_requires_confirmation_debt_and_exact_invalidation(self) -> None:
@@ -93,6 +98,7 @@ class DoctrineRegistryTests(unittest.TestCase):
         cascade = doctrine.get_claim("quarantine.ch12_failure_cascade")
 
         self.assertEqual(management["claim"]["rule"]["roles"]["ema_21"], "default trade management")
+        self.assertEqual(management["claim"]["rule"]["trigger"], "two completed closes below the selected management average")
         self.assertTrue(cascade["claim"]["quarantine"]["is_quarantined"])
 
     def test_risk_spine_defends_breakeven_after_three_r(self) -> None:
