@@ -19,7 +19,7 @@ _HARD_GATE_STATES = frozenset({"pass", "fail", "unavailable"})
 _STAGE_2_DOCTRINE_ID = "eligibility.standard_stage2"
 _TREND_TEMPLATE_DOCTRINE_ID = "eligibility.standard_trend_template"
 _PRIMARY_BASE_DOCTRINE_ID = "eligibility.recent_ipo_primary_base"
-_TREND_TEMPLATE_CRITERIA = (
+TREND_TEMPLATE_CRITERIA = (
     "trend_template.price_above_150_and_200",
     "trend_template.sma_150_above_sma_200",
     "trend_template.sma_200_rising",
@@ -50,11 +50,17 @@ class EligibilitySignal:
     id: str
     state: str
     doctrine_id: str
+    basis: Mapping[str, Any] | None = None
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any], *, hard_gate: bool) -> "EligibilitySignal":
         try:
-            signal = cls(id=value["id"], state=value["state"], doctrine_id=value["doctrine_id"])
+            signal = cls(
+                id=value["id"],
+                state=value["state"],
+                doctrine_id=value["doctrine_id"],
+                basis=dict(value["basis"]) if isinstance(value.get("basis"), Mapping) else None,
+            )
         except KeyError as error:
             raise ValueError(f"eligibility signal is missing {error.args[0]}") from error
         if not all(isinstance(item, str) and item for item in (signal.id, signal.state, signal.doctrine_id)):
@@ -65,8 +71,11 @@ class EligibilitySignal:
             raise ValueError(f"unsupported {gate_kind} state: {signal.state}")
         return signal
 
-    def to_dict(self) -> dict[str, str]:
-        return {"id": self.id, "state": self.state, "doctrine_id": self.doctrine_id}
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"id": self.id, "state": self.state, "doctrine_id": self.doctrine_id}
+        if self.basis is not None:
+            result["basis"] = dict(self.basis)
+        return result
 
 
 @dataclass(frozen=True)
@@ -119,7 +128,7 @@ class EligibilityEvidence:
         if stage_2_signal.doctrine_id != _STAGE_2_DOCTRINE_ID:
             raise ValueError("stage_2 must use its canonical doctrine id")
         signals = tuple(EligibilitySignal.from_mapping(item, hard_gate=True) for item in trend_template)
-        if tuple(signal.id for signal in signals) != _TREND_TEMPLATE_CRITERIA:
+        if tuple(signal.id for signal in signals) != TREND_TEMPLATE_CRITERIA:
             raise ValueError("trend_template must contain the canonical eight criteria in source-map order")
         if any(signal.doctrine_id != _TREND_TEMPLATE_DOCTRINE_ID for signal in signals):
             raise ValueError("trend_template must use its canonical doctrine id")
