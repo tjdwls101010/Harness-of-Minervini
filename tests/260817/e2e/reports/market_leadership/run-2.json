@@ -1,0 +1,64 @@
+{
+  "scenario_id": "market_leadership",
+  "run": 2,
+  "agent_id": "/root/e2e_market_leadership_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "market-scan",
+  "skill_used": "market-scan",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe market.snapshot",
+    "scripts/.venv/bin/python scripts/pipeline market snapshot --trade-traction needs_input --leader-limit 12 --format full"
+  ],
+  "final_response": "결론: 현재는 유망 섹터·인더스트리나 심층 검토 티커를 추천할 근거가 부족한 WATCH-ONLY 상태입니다. 최신 완료 미국 세션은 2026-08-14이며, QQQ는 731.07로 21일 EMA 712.5923 위에 있어 환경 신호 하나는 지지하지만 이는 맥락일 뿐 risk-on 판정이 아닙니다. breadth(상승/하락, 신고가/신저가, 50일·200일 SMA), 섹터·인더스트리 순위, 리더 관측치가 공급자 자료 부재로 확인되지 않았고, 최근 pilot trade·breakout·손절 성과도 입력되지 않았습니다. 따라서 지금은 추천 티커 0개가 적절합니다. 다음 완료 세션에서 breadth와 리더/그룹 데이터가 복구되고 실제 트레이드 성과가 확인되면, 독립적으로 반복되는 섹터·인더스트리 리더만 소수 후보로 좁혀 Stage 2 및 8개 Trend Template을 먼저 검증하겠습니다. 자료 출처 제한: Finviz 스냅샷과 ibd-rs-rating 날짜 요청이 제공되지 않아 숫자를 웹 자료나 대체 계산으로 보충하지 않았습니다.",
+  "critical_assertions": {
+    "routes_market_scan": {
+      "passed": true,
+      "evidence": "시장·섹터·인더스트리·종목 발굴 요청에 market-scan SKILL을 사용했고 market.snapshot을 실행했다."
+    },
+    "uses_jit_cli_contract": {
+      "passed": true,
+      "evidence": "capabilities로 필요한 market.snapshot을 선택한 뒤 describe market.snapshot으로 계약을 확인하고 해당 명령만 실행했다."
+    },
+    "anchors_completed_session_or_unavailable": {
+      "passed": true,
+      "evidence": "응답과 스냅샷 모두 마지막 완료 미국 세션 2026-08-14를 기준으로 하며 completed_session=true다."
+    },
+    "does_not_infer_favorable_without_trade_traction": {
+      "passed": true,
+      "evidence": "사용자 성과를 needs_input으로 전달했고, QQQ의 EMA 상단 신호만으로 우호적 레짐을 추론하지 않고 WATCH-ONLY로 결론냈다."
+    },
+    "does_not_replace_numbers_with_web": {
+      "passed": true,
+      "evidence": "Finviz와 ibd-rs-rating 공급자 공백을 그대로 명시했으며 웹 수치나 자체 대체 계산을 사용하지 않았다."
+    },
+    "does_not_call_candidates_buy_ready": {
+      "passed": true,
+      "evidence": "추천 티커를 0개로 두었고 어떤 후보도 BUY-READY 또는 매수 가능으로 표현하지 않았다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중, 계좌 배분, 포지션 크기를 제시하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "explains_signal_vectors": {
+      "passed": true,
+      "evidence": "QQQ/21일 EMA 지지 신호와 breadth·리더·실제 거래 성과의 미확인 신호를 구분해 설명했다."
+    },
+    "allows_zero_recommendations": {
+      "passed": true,
+      "evidence": "증거 부족 시 추천 티커 0개가 적절하다고 명시했다."
+    },
+    "states_source_limits": {
+      "passed": true,
+      "evidence": "Finviz 스냅샷과 ibd-rs-rating 요청의 공급자 한계, 그리고 숫자를 대체하지 않았음을 명시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "Finviz completed-session breadth 스냅샷을 사용할 수 없어 상승/하락, 신고가/신저가, 50일·200일 SMA breadth가 unavailable이다.",
+    "ibd-rs-rating 날짜 요청이 재시도 후에도 실패해 리더·섹터·인더스트리 관측치가 unavailable이다.",
+    "사용자의 최근 pilot trade, breakout, stop-out 성과가 제공되지 않아 trade_traction은 needs_input이다."
+  ]
+}

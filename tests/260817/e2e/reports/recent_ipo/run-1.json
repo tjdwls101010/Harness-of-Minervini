@@ -1,0 +1,60 @@
+{
+  "scenario_id": "recent_ipo",
+  "run": 1,
+  "agent_id": "/root/e2e2_ipo_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "rg --files -g 'SKILL.md' -g '*recent_ipo*' -g '*recent-ipo*' .claude tests | sed -n '1,120p'",
+    "sed -n '1,260p' .claude/skills/ticker-analysis/SKILL.md",
+    "jq '.scenarios[] | select(.id == \"recent_ipo\")' tests/260817/e2e/scenarios.json"
+  ],
+  "final_response": "판정: INCOMPLETE (needs_chart)입니다. 증거 품질은 가상 폐쇄형 프롬프트에 한정됩니다. NIPO는 IPO 후 7주여서 200일선 이력이 없으므로, 이를 표준 Trend Template의 통과나 실패로 판정하지 않습니다. 장기 이동평균 이력이 진정으로 부족한 최근 IPO에 허용되는 prospective eligibility 경로는 Primary Base뿐입니다.\n\n다만 ‘첫 Primary Base처럼 보인다’는 설명만으로는 통과가 아닙니다. 차트에서 Primary Base의 기간, 깊이, 전고점(ATH) 조건 및 베이스 품질을 확인해야 하며, 제공되지 않은 항목은 missing으로 남습니다. 베이스 품질도 아직 사람이 차트로 검토하지 않았으므로 needs_chart가 해소되지 않았습니다.\n\n현재 알려진 표준 게이트 실패는 없지만, 그 부재가 통과를 뜻하지도 않습니다. 만약 알려진 표준 게이트 실패가 확인되면 Primary Base 예외로 면제할 수 없습니다. 승격 조건은 주간 차트를 먼저 검토해 Primary Base의 필요한 정량 조건과 품질을 확인하고, 알려진 하드 게이트 실패가 없음을 확인하는 것입니다. 시장 수치나 누락된 Primary Base 수치는 만들지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "가상 미국 상장 보통주 NIPO 한 종목의 prospective eligibility 질문으로 분류해 ticker-analysis를 사용했다."
+    },
+    "does_not_treat_insufficient_history_as_standard_pass_or_fail": {
+      "passed": true,
+      "evidence": "IPO 후 7주 및 200일선 이력 부재를 표준 Trend Template의 통과나 실패로 판정하지 않는다고 명시했다."
+    },
+    "uses_only_primary_base_route": {
+      "passed": true,
+      "evidence": "장기 이동평균 이력이 진정으로 부족한 최근 IPO의 허용 경로가 Primary Base뿐이라고 명시했다."
+    },
+    "keeps_needs_chart_incomplete": {
+      "passed": true,
+      "evidence": "베이스 품질의 미검토와 기간·깊이·ATH 조건의 미제공을 이유로 INCOMPLETE (needs_chart)로 결론냈다."
+    },
+    "does_not_waive_known_failure": {
+      "passed": true,
+      "evidence": "프롬프트에는 알려진 표준 게이트 실패가 없음을 구분했고, 이후 확인되는 알려진 실패는 Primary Base 예외로 면제할 수 없다고 명시했다."
+    },
+    "does_not_fabricate_data": {
+      "passed": true,
+      "evidence": "시장 수치와 제공되지 않은 Primary Base 수치를 만들지 않았고, 누락 항목을 missing으로 보존했다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_primary_base_quantitative_checks": {
+      "passed": true,
+      "evidence": "Primary Base의 기간, 깊이, 전고점(ATH) 조건을 확인 항목으로 열거했다."
+    },
+    "states_promotion_condition": {
+      "passed": true,
+      "evidence": "주간 차트 우선 검토로 필요한 정량 조건과 베이스 품질을 확인하고 알려진 하드 게이트 실패가 없음을 확인해야 한다고 제시했다."
+    },
+    "distinguishes_hypothetical_evidence": {
+      "passed": true,
+      "evidence": "증거 품질이 가상 폐쇄형 프롬프트에 한정된다고 명시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "프롬프트가 제공한 가상 증거만 사용했으며 라이브 시세, 공급자, 웹 또는 다른 픽스처를 사용하지 않았다.",
+    "Primary Base 기간·깊이·ATH 조건 및 차트 품질은 미제공 또는 미검토이므로 eligibility 통과 여부를 확정할 수 없다.",
+    "시장 정렬과 기타 prospective entry 증거는 이 eligibility 질문의 제공 증거에 포함되지 않는다."
+  ]
+}

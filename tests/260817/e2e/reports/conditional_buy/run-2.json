@@ -1,0 +1,61 @@
+{
+  "scenario_id": "conditional_buy",
+  "run": 2,
+  "agent_id": "/root/e2e_conditional_buy_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL --format full"
+  ],
+  "final_response": "결론: AAPL은 현재 AVOID이며 BUY-READY가 아닙니다. 근거 품질은 부분적입니다. 완료된 미국 세션은 2026-08-14입니다. 표준 자격 심사에서 Stage 2 confirmed advance가 실패했고, 종가 305.93은 50일 SMA 309.1908 아래라 8개 Trend Template AND 게이트도 실패했습니다. 150일·200일 평균 위, 150일>200일, 200일 상승, 52주 저점 대비 36.0293%, 52주 고점 대비 10.0418%는 통과했지만 이를 매수 신호로 승격할 수 없습니다. BUY-READY 검토의 최소 승격 조건은 완료 봉 기준으로 50일 SMA 위 회복, 확인된 Stage 2, 그리고 RS 70 이상을 모두 확인하는 것입니다. 현재 RS provider 요청은 두 번 실패해 RS 값 자체는 unavailable입니다. 그 뒤에야 주봉 우선으로 베이스·공급 수축·완료된 피벗과 정확한 진입/무효화 가격을 별도로 검증할 수 있습니다. 따라서 지금은 매수 계획의 정확한 손절·구조 무효화 가격도 정의되지 않았습니다. 현재의 명확한 무효화 상태는 완료 종가가 50일 SMA 아래인 동안 표준 진입 자격이 없다는 것입니다. 가격 데이터는 yfinance의 완료 일봉이며, RS 공백을 웹 수치나 추정치로 대체하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "AAPL 한 종목의 조건부 매수·무효화 요청이므로 ticker-analysis SKILL.md를 적용했다."
+    },
+    "qualifies_before_deepening": {
+      "passed": true,
+      "evidence": "ticker.qualify를 먼저 실행했고 Stage 2 및 Trend Template의 알려진 실패 뒤 setup·fundamentals·peers·risk를 실행하지 않았다."
+    },
+    "does_not_promote_qualification_to_buy_ready": {
+      "passed": true,
+      "evidence": "최종 응답은 AVOID와 BUY-READY 아님을 명시하며, 일부 이동평균·52주 조건 통과를 매수 신호로 승격하지 않았다."
+    },
+    "gives_exact_condition_or_incomplete": {
+      "passed": true,
+      "evidence": "최소 승격 조건을 완료 봉의 50일 SMA 위, 확인된 Stage 2, RS 70 이상이라는 AND 조건으로 제시했고, 피벗·손절 가격은 자격 실패로 아직 정의 불가라고 구분했다."
+    },
+    "separates_failure_from_missing": {
+      "passed": true,
+      "evidence": "알려진 실패는 Stage 2와 종가 305.93 < 50일 SMA 309.1908로, 별도 missing은 ibd-rs-rating 요청 2회 실패로 인한 RS unavailable로 구분했다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중, 수량, 계좌 배분을 제시하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "reads_weekly_before_daily": {
+      "passed": true,
+      "evidence": "자격 실패가 알려져 있어 차트 단계로 진행하지 않았으며, 응답에서 후속 검증 순서를 주봉 우선으로 명시했다."
+    },
+    "earns_deeper_evidence": {
+      "passed": true,
+      "evidence": "알려진 표준 자격 실패 뒤에는 심화 증거를 수집하지 않고 중단했다."
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "완료된 미국 세션 2026-08-14와 yfinance 완료 일봉, ibd-rs-rating provider 요청 실패를 명시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "ibd-rs-rating provider 요청이 두 번 실패하여 RS rating과 날짜는 unavailable이다.",
+    "AAPL은 알려진 Stage 2 및 50일 SMA 자격 실패이므로 setup, fundamentals, peers, market alignment, risk reducer를 실행하지 않았다.",
+    "현재는 유효한 완료 피벗과 진입가가 없어 정확한 거래 손절·구조 무효화 가격을 산출할 수 없다."
+  ]
+}

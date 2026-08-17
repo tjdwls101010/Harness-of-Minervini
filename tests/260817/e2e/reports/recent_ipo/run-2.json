@@ -1,0 +1,61 @@
+{
+  "scenario_id": "recent_ipo",
+  "run": 2,
+  "agent_id": "/root/e2e2_ipo_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .claude/skills/ticker-analysis/SKILL.md",
+    "jq '.scenarios[] | select((.id // .name // \"\") | test(\"recent_ipo|NIPO\"; \"i\"))' tests/260817/e2e/scenarios.json",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify"
+  ],
+  "final_response": "INCOMPLETE — NIPO는 IPO 후 7주라 200일선 이력이 없으므로, 표준 Stage 2·8개 Trend Template을 통과했다고도 실패했다고도 판정할 수 없습니다. 이 상황에서 검토 가능한 유일한 예외 경로는 최근 IPO의 Primary Base 경로입니다. 그러나 프롬프트의 ‘첫 Primary Base처럼 보인다’는 표현은 사람의 주간 차트 확인을 대체하지 않으며, 제공된 Primary Base 품질은 `needs_chart`입니다.\n\n알려진 실패: 제공되지 않았습니다. 다만 이후 표준 게이트의 알려진 실패가 확인되면 Primary Base 경로가 이를 면제하지 않습니다.\n\n미확인: Primary Base의 실제 기간, 깊이, 그리고 사상 최고가/유효 피벗 트리거가 제공되지 않았습니다. 따라서 이들을 충족한다고 주장할 수 없고, 현재 prospective eligibility를 ELIGIBLE 또는 BUY-READY로 승격할 수 없습니다.\n\n승격 조건: 사람이 주간 차트에서 Primary Base의 기간·깊이와 사상 최고가를 향한 유효한 트리거를 확인해 품질을 `supports`로 바꾸어야 합니다. 그 전까지는 차트 품질 `needs_chart`인 INCOMPLETE 상태를 유지합니다.\n\n완료된 미국 장과 시장 수치는 이 가상 폐쇄형 프롬프트에 제공되지 않았으므로 주장하지 않았습니다. 라이브 시세·공급자·다른 fixture는 사용하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "명명된 미국 상장 보통주 NIPO의 prospective eligibility 질문으로 분류해 ticker-analysis를 사용했다."
+    },
+    "does_not_treat_insufficient_history_as_standard_pass_or_fail": {
+      "passed": true,
+      "evidence": "IPO 후 7주의 200일선 이력 부재를 표준 Trend Template의 통과나 실패가 아닌 미충족 이력으로 명시했다."
+    },
+    "uses_only_primary_base_route": {
+      "passed": true,
+      "evidence": "장기 이동평균 이력이 실제로 부족한 최근 IPO에 적용 가능한 유일한 예외 경로를 Primary Base로 한정했다."
+    },
+    "keeps_needs_chart_incomplete": {
+      "passed": true,
+      "evidence": "사람의 주간 차트 확인이 없다는 제공 사실을 `needs_chart`로 유지하고 verdict를 INCOMPLETE로 냈다."
+    },
+    "does_not_waive_known_failure": {
+      "passed": true,
+      "evidence": "현재 알려진 실패는 없다고 분리했으며, 이후 확인되는 표준 게이트의 알려진 실패는 Primary Base 경로로 면제할 수 없다고 밝혔다."
+    },
+    "does_not_fabricate_data": {
+      "passed": true,
+      "evidence": "제공되지 않은 시장 수치, 완료 세션, 기간, 깊이, 사상 최고가 또는 피벗 수치를 만들지 않았고 라이브 ticker/provider를 호출하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_primary_base_quantitative_checks": {
+      "passed": true,
+      "evidence": "Primary Base의 기간, 깊이, 사상 최고가/유효 피벗 트리거를 필요한 정량 확인 항목으로 열거했다."
+    },
+    "states_promotion_condition": {
+      "passed": true,
+      "evidence": "주간 차트가 Primary Base의 기간·깊이·사상 최고가 트리거를 확인해 품질을 `supports`로 바꾸는 것을 승격 조건으로 제시했다."
+    },
+    "distinguishes_hypothetical_evidence": {
+      "passed": true,
+      "evidence": "NIPO를 가상 폐쇄형 프롬프트로 명시하고 제공되지 않은 완료 세션·시장 데이터와 외부 데이터 사용을 구분했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "폐쇄형 가상 시나리오에는 사람이 확인한 주간 차트 또는 Primary Base 기간·깊이·사상 최고가 트리거가 없다.",
+    "완료된 미국 장, 시장 정렬, 라이브 가격 및 공급자 데이터는 의도적으로 사용하지 않았다.",
+    "이 보고서는 prospective eligibility만 다루며 진입·손절·BUY-READY 판단을 제공하지 않는다."
+  ]
+}

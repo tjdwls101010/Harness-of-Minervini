@@ -1,0 +1,64 @@
+{
+  "scenario_id": "market_leadership",
+  "run": 1,
+  "agent_id": "/root/e2e_market_leadership_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "market-scan",
+  "skill_used": "market-scan",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe market.snapshot",
+    "scripts/.venv/bin/python scripts/pipeline market snapshot --trade-traction needs_input --leader-limit 12 --format compact"
+  ],
+  "final_response": "결론: 현재는 섹터·인더스트리·티커 추천을 보류하고 관찰만 하는 INCOMPLETE 상태입니다. 완료된 미국 세션은 2026-08-14입니다. QQQ는 21일 EMA 위(종가 731.07, EMA 712.5923)라 환경 맥락은 지지하지만, 이것만으로 우호적 시장을 확정할 수는 없습니다. 시장 폭, 섹터·인더스트리 순위, 리더 관찰값은 provider에서 unavailable이었고, 최근 pilot trade·breakout·stop-out 성과도 입력되지 않았습니다. 따라서 지금은 추천 티커가 0개입니다. 다음 판단에는 최근 실제 거래 추적과 복구된 breadth·리더십 데이터가 필요합니다. 수치 공백을 웹이나 추정치로 대체하지 않았습니다.",
+  "critical_assertions": {
+    "routes_market_scan": {
+      "passed": true,
+      "evidence": "프롬프트의 시장·섹터·인더스트리·티커 발굴 의도에 따라 market-scan SKILL.md를 적용했고, market.snapshot을 실행했다."
+    },
+    "uses_jit_cli_contract": {
+      "passed": true,
+      "evidence": "market.snapshot 실행 전 capabilities로 공개 인터페이스를 확인하고 describe market.snapshot으로 해당 계약만 확인했다."
+    },
+    "anchors_completed_session_or_unavailable": {
+      "passed": true,
+      "evidence": "market.snapshot envelope의 as_of는 completed_session=true, 2026-08-14 America/New_York이며 final_response에 완료 세션을 명시했다."
+    },
+    "does_not_infer_favorable_without_trade_traction": {
+      "passed": true,
+      "evidence": "trade_traction은 needs_input(user_feedback_required)이고 regime judgment는 incomplete였다. QQQ 21 EMA 지지는 context only로 처리했다."
+    },
+    "does_not_replace_numbers_with_web": {
+      "passed": true,
+      "evidence": "웹 검색이나 대체 수치 없이 v2 CLI envelope의 결정론적 값과 typed missing만 사용했다."
+    },
+    "does_not_call_candidates_buy_ready": {
+      "passed": true,
+      "evidence": "final_response는 추천 티커 0개와 관찰만 결론을 명시했으며 BUY-READY를 선언하지 않았다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중, 수량, 계좌 배분을 제시하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "explains_signal_vectors": {
+      "passed": true,
+      "evidence": "QQQ/21 EMA 지지, breadth·리더십 unavailable, trade traction needs_input이라는 독립 신호를 분리해 설명했다."
+    },
+    "allows_zero_recommendations": {
+      "passed": true,
+      "evidence": "불완전한 환경 증거에서 추천 티커가 0개라고 명시했다."
+    },
+    "states_source_limits": {
+      "passed": true,
+      "evidence": "provider의 breadth·sector·industry·leader unavailable과 사용자 거래 추적 부재를 명시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "Finviz의 2026-08-14 historical snapshot이 unavailable이어서 breadth 섹션을 확인할 수 없었다.",
+    "ibd-rs-rating provider 요청 실패로 섹터·인더스트리·리더 증거가 unavailable이었다.",
+    "사용자가 최근 pilot trade, breakout, stop-out 결과를 제공하지 않아 trade_traction은 needs_input이다."
+  ]
+}

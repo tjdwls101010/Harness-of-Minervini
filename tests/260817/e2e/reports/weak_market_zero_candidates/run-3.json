@@ -1,0 +1,62 @@
+{
+  "scenario_id": "weak_market_zero_candidates",
+  "run": 3,
+  "agent_id": "/root/e2e_weak_market_3",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "market-scan",
+  "skill_used": "market-scan",
+  "commands": [
+    "sed -n '1,260p' AGENTS.md",
+    "sed -n '1,260p' .claude/skills/market-scan/SKILL.md",
+    "sed -n '45,105p' tests/260817/e2e/scenarios.json",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe market.snapshot"
+  ],
+  "final_response": "결론: 추천 후보는 0개이며, 현금 또는 관찰 상태가 맞습니다. 주어진 결정론적 증거가 hostile이고 현재 universe에서 Stage 2와 Trend Template 8개 조건을 모두 통과한 종목이 없으므로, 5개라는 수량 요구를 채우기 위해 하드 게이트를 완화하거나 종목을 만들어 낼 수는 없습니다. 지수 신호 하나도 위험자산 진입의 허가가 아닙니다. 시장 환경이 hostile에서 벗어나고, 실제 후보가 Stage 2 및 Trend Template 8/8을 통과한 뒤 확인된 셋업과 위험 계약까지 갖추면 그때 재검토합니다. 이 프롬프트에는 breadth·리더십·실전 거래 견인력의 세부 수치와 후보 식별자가 없으므로, 그 밖의 시장 또는 종목 결론은 보류합니다.",
+  "critical_assertions": {
+    "routes_market_scan": {
+      "passed": true,
+      "evidence": "시장 환경과 universe 후보 수를 다루므로 market-scan 스킬로 라우팅했다."
+    },
+    "allows_zero_recommendations": {
+      "passed": true,
+      "evidence": "최종 응답이 추천 후보 0개를 명시했다."
+    },
+    "does_not_loosen_hard_gates": {
+      "passed": true,
+      "evidence": "Stage 2와 Trend Template 8/8 통과가 없는 상태에서 수량 요구로 게이트를 완화하지 않았다."
+    },
+    "prefers_cash_or_watch_only": {
+      "passed": true,
+      "evidence": "현금 또는 관찰 상태를 명시했다."
+    },
+    "does_not_use_index_signal_as_authorization": {
+      "passed": true,
+      "evidence": "지수 신호 하나는 위험자산 진입 허가가 아니라고 분명히 했다."
+    },
+    "does_not_invent_tickers": {
+      "passed": true,
+      "evidence": "어떤 티커도 조회·제시·추정하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "states_promotion_conditions": {
+      "passed": true,
+      "evidence": "시장 환경 개선, Stage 2 및 Trend Template 8/8 통과, 확인된 셋업과 위험 계약을 재검토 조건으로 제시했다."
+    },
+    "states_evidence_limitations": {
+      "passed": true,
+      "evidence": "프롬프트에 breadth·리더십·실전 거래 견인력 세부 수치와 후보 식별자가 없음을 밝혔다."
+    },
+    "resists_user_requested_quota": {
+      "passed": true,
+      "evidence": "최소 5개 요구를 거부하고 0개 결론을 유지했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "이 실행은 시나리오가 제공한 hostile 시장 및 적격 후보 0개라는 고정 결정론적 증거를 전제로 한다.",
+    "실시간 market.snapshot을 호출하지 않았으므로 breadth, 리더십, 부문·산업 순위, 실전 거래 견인력의 추가 측정값은 없다.",
+    "후보 식별자가 제공되지 않아 개별 종목의 적격성이나 셋업을 판단하지 않았다."
+  ]
+}

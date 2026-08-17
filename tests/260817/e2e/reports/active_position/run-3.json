@@ -1,0 +1,64 @@
+{
+  "scenario_id": "active_position",
+  "run": 3,
+  "agent_id": "/root/e2e2_active_3",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk NVDA --mode active --entry-price 100 --entry-date 2025-01-02 --stop-price 90 --no-cache"
+  ],
+  "final_response": "결론: SELL입니다. 증거 품질은 완료 일봉 경로가 전 구간을 포괄하므로 완전합니다. 사용자가 준 매수 기준은 2025-01-02, $100이며 hard stop은 $90입니다. 완료된 미국 장세션 2026-08-14까지 해당 stop이 유효했던 405개 일봉의 저가를 점검한 결과, 2025-04-07 저가가 $86.62로 $90을 하회했습니다. 따라서 이 날 hard stop이 발동했으며, 이후 최신 가격이 $225.16으로 회복한 사실은 과거의 stop 이탈을 무효화하지 않습니다. 시장지수 의견이나 수량·계좌 규모는 이 판단에 사용하지 않았습니다. 1R은 $10이고 3R 기준은 $130이지만, 이 포지션은 그 이전에 stop으로 종료됐으므로 3R 수익 방어 판단은 적용되지 않습니다. 재진입을 검토하려면 기존 보유를 HOLD하는 것이 아니라, 새 prospective 판단으로 자격·셋업·시장 정렬·명확한 무효화 가격을 다시 검증해야 합니다. 자료는 yfinance 완료 일봉이며, --no-cache로 실행했습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "NVDA 단일 미국 상장 종목의 실제 보유분 HOLD/SELL 질문으로 ticker-analysis의 active-position 절차를 적용했다."
+    },
+    "uses_active_branch": {
+      "passed": true,
+      "evidence": "canonical CLI를 `ticker risk NVDA --mode active`로 실행해 active reducer의 단일 verdict를 사용했다."
+    },
+    "uses_user_anchors": {
+      "passed": true,
+      "evidence": "사용자 앵커인 entry_date=2025-01-02, entry_price=100, stop_price=90을 그대로 CLI 입력으로 사용했다."
+    },
+    "uses_completed_price_or_declares_unavailable": {
+      "passed": true,
+      "evidence": "yfinance가 2025-01-02부터 완료 세션 2026-08-14까지 405개 completed daily low를 제공했고, 2025-04-07 low $86.62000274658203를 확인했다."
+    },
+    "hard_stop_controls": {
+      "passed": true,
+      "evidence": "완료 일봉 저가가 $90 hard stop을 하회한 2025-04-07에 SELL로 판정했으며, 이후 $225.16000366210938 회복 가격으로 stop 이탈을 상쇄하지 않았다."
+    },
+    "returns_active_verdict": {
+      "passed": true,
+      "evidence": "CLI envelope status=ok, data.mode=active, data.verdict=SELL을 반환했다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "응답은 수량, 계좌 규모, 비중 또는 포지션 크기를 묻거나 제시하지 않았고 ticker-level stop 판정만 다뤘다."
+    }
+  },
+  "noncritical_assertions": {
+    "mentions_three_r_defense_when_applicable": {
+      "passed": true,
+      "evidence": "1R=$10 및 3R=$130을 명시하고, 2025-04-07 hard-stop SELL이 선행하므로 이 포지션에는 3R 수익 방어가 적용되지 않는다고 밝혔다."
+    },
+    "does_not_sell_by_index_opinion_alone": {
+      "passed": true,
+      "evidence": "시장지수 또는 시장 상태를 매도 근거로 사용하지 않았으며, NVDA의 완료 일봉 저가 hard-stop breach만으로 SELL을 결정했다."
+    },
+    "states_next_decision_condition": {
+      "passed": true,
+      "evidence": "재진입은 새 prospective 판단으로 자격, 셋업, 시장 정렬, 명확한 무효화를 재검증할 때만 검토한다고 조건을 제시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "결정적 가격 근거는 yfinance의 완료 일봉이며, 이번 실행은 --no-cache로 provider cache를 읽거나 쓰지 않았다.",
+    "구조적 무효화 조건은 사용자가 제공하지 않았으므로 hard stop breach만을 매도 근거로 사용했다."
+  ]
+}

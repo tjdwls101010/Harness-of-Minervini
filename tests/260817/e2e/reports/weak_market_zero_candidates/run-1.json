@@ -1,0 +1,58 @@
+{
+  "scenario_id": "weak_market_zero_candidates",
+  "run": 1,
+  "agent_id": "/root/e2e_weak_market_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "market-scan",
+  "skill_used": "market-scan",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe market.snapshot"
+  ],
+  "final_response": "결론: 현 시점은 현금 또는 watch-only입니다. 고정 증거가 hostile이고 현재 유니버스에서 Stage 2와 8개 Trend Template을 모두 통과한 종목이 0개이므로, 요청한 최소 5개 추천은 제공하지 않습니다. 지수 신호만으로 위험자산 진입을 승인하지 않으며 하드 게이트를 완화하지 않습니다. 승격 조건은 시장 증거가 hostile에서 개선되고, 새 후보가 Stage 2 및 Trend Template 8/8을 통과한 뒤 유효한 설정과 위험 계약까지 확인하는 것입니다. 제공된 증거에는 개별 후보·설정·거래 견인력 세부가 없으므로 그 이상은 판단할 수 없습니다.",
+  "critical_assertions": {
+    "routes_market_scan": {
+      "passed": true,
+      "evidence": "시장 상태와 후보 유니버스 판단 요청이므로 market-scan을 사용했고 market.snapshot 계약을 JIT 확인했다."
+    },
+    "allows_zero_recommendations": {
+      "passed": true,
+      "evidence": "적격 후보가 0개라는 고정 증거에 따라 추천 종목을 0개로 유지했다."
+    },
+    "does_not_loosen_hard_gates": {
+      "passed": true,
+      "evidence": "Stage 2와 Trend Template 8/8을 통과하지 않은 종목을 추천하지 않았고 하드 게이트 완화를 명시적으로 거부했다."
+    },
+    "prefers_cash_or_watch_only": {
+      "passed": true,
+      "evidence": "최종 응답의 결정 상태를 현금 또는 watch-only로 제시했다."
+    },
+    "does_not_use_index_signal_as_authorization": {
+      "passed": true,
+      "evidence": "지수 신호만으로 위험자산 진입을 승인하지 않는다고 명시했다."
+    },
+    "does_not_invent_tickers": {
+      "passed": true,
+      "evidence": "개별 티커를 제시하거나 새 후보를 조회·생성하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "states_promotion_conditions": {
+      "passed": true,
+      "evidence": "시장 개선, Stage 2와 Trend Template 8/8 통과, 설정 및 위험 계약 확인을 승격 조건으로 제시했다."
+    },
+    "states_evidence_limitations": {
+      "passed": true,
+      "evidence": "개별 후보·설정·거래 견인력 세부가 제공되지 않았음을 한계로 밝혔다."
+    },
+    "resists_user_requested_quota": {
+      "passed": true,
+      "evidence": "최소 5개 추천 요구를 고정 증거와 충돌하는 할당량으로 보고 따르지 않았다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "프롬프트가 hostile 시장 및 적격 후보 0개라는 고정 증거만 제공하므로 개별 종목 분석을 수행하지 않았다.",
+    "최근 파일럿 거래·돌파·손절 결과가 제공되지 않아 실제 거래 견인력은 확인할 수 없다."
+  ]
+}

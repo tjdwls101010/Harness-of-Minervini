@@ -1,0 +1,64 @@
+{
+  "scenario_id": "active_position",
+  "run": 1,
+  "agent_id": "/root/e2e2_active_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk NVDA --mode active --entry-price 100 --entry-date 2025-01-02 --stop-price 90 --no-cache"
+  ],
+  "final_response": "SELL입니다. 증거 품질은 충분합니다. 2026-08-14 완료 미국 장 기준으로, 제공자 감사가 2025-01-02부터 2026-08-14까지 완료 일봉 405개를 전수 확인했고, 2025-04-07 저가 $86.62가 hard stop $90를 하향 돌파했습니다. 현재 완료 종가 $225.16가 stop 위로 회복된 사실은 이전의 stop 위반을 되돌리지 않습니다. 따라서 협상 없이 보유분을 매도해야 하며, stop을 넓히거나 물타기해서는 안 됩니다. 이번 거래는 3R 수익 방어 단계에 도달하기 전에 hard stop이 먼저 발동했으므로 3R 방어는 적용되지 않습니다. 이후 재진입을 고려한다면 기존 보유의 연장이 아니라 신규 진입으로 보고, 자격·셋업·시장·위험 조건을 다시 검증해야 합니다. 수량이나 계좌 규모에 관한 처방은 하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Named ticker NVDA의 보유분 HOLD/SELL 판단이므로 ticker-analysis 스킬을 사용했다."
+    },
+    "uses_active_branch": {
+      "passed": true,
+      "evidence": "ticker.risk를 --mode active로 실행했고 반환 data.mode가 active였다."
+    },
+    "uses_user_anchors": {
+      "passed": true,
+      "evidence": "사용자 앵커 entry_date=2025-01-02, entry_price=100, stop_price=90을 그대로 전달했다."
+    },
+    "uses_completed_price_or_declares_unavailable": {
+      "passed": true,
+      "evidence": "완료 일봉 경로 상태가 breached였고 2025-01-02~2026-08-14, 405개 bars_checked, completed_daily_low 기준을 반환했다."
+    },
+    "hard_stop_controls": {
+      "passed": true,
+      "evidence": "2025-04-07 completed low $86.62000274658203가 $90 hard stop을 하향 돌파해 completed_stop_breach fail 및 SELL verdict가 반환됐다."
+    },
+    "returns_active_verdict": {
+      "passed": true,
+      "evidence": "active reducer의 최종 verdict가 SELL이고 최종 응답도 SELL로 시작한다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "최종 응답은 수량·계좌 규모·포트폴리오 비중을 제시하지 않는다."
+    }
+  },
+  "noncritical_assertions": {
+    "mentions_three_r_defense_when_applicable": {
+      "passed": true,
+      "evidence": "반환값의 breakeven_protection_required=false와, hard stop이 먼저 발동했으므로 3R 방어가 적용되지 않는다는 최종 응답을 명시했다."
+    },
+    "does_not_sell_by_index_opinion_alone": {
+      "passed": true,
+      "evidence": "시장·지수 의견을 사용하지 않았고, 완료 일봉의 명시적 ticker-level hard-stop breach만으로 SELL을 판단했다."
+    },
+    "states_next_decision_condition": {
+      "passed": true,
+      "evidence": "최종 응답은 재진입 시 신규 진입으로서 자격·셋업·시장·위험 조건을 다시 검증해야 한다고 제시한다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "yfinance 제공자 완료 일봉 데이터에 의존했으며, 이 실행에서는 yfinance가 2026-08-14까지의 경로를 완전하게 제공했다.",
+    "구조적 무효화 가격·조건은 사용자가 제공하지 않아 별도 판단하지 않았지만, hard stop 위반만으로 SELL이 결정됐다.",
+    "세션 경계는 CLI가 반환한 2026-08-14 마지막 완료 미국 정규장이다."
+  ]
+}

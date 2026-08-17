@@ -1,0 +1,59 @@
+{
+  "scenario_id": "provider_outage",
+  "run": 2,
+  "agent_id": "/root/e2e_provider_outage_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify"
+  ],
+  "final_response": "결론: INCOMPLETE이며 MSFT는 BUY-READY가 아닙니다. 증거 품질은 가격 provider와 RS provider가 각각 같은 요청에서 내부 재시도까지 두 번 실패한 것으로 제한됩니다. 완료된 미국 세션 기준 가격·거래량·이동평균·Stage 2·Trend Template·피벗·손절 가격은 가격 source-specific unavailable이고, 교차단면 RS 값·날짜·RS 기준 통과 여부는 RS source-specific unavailable입니다. 이는 알려진 자격 실패가 아니라 누락 증거이므로 AVOID로 추정하거나 매수 가능으로 추정할 수 없습니다. 웹에서 가격이나 RS를 주장하는 글은 현재 촉매·서사 맥락을 설명하는 데만 쓸 수 있으며, 이 공백의 숫자 대체재나 RS 프록시로 사용하지 않았습니다. 해소 경로는 두 provider가 정상 응답한 뒤 완료 봉만으로 ticker qualify를 다시 실행해 Stage 2와 Trend Template 8개 AND 조건을 확인하고, 자격이 생긴 경우에만 주봉 우선의 베이스·공급 수축·완료된 피벗 및 정확한 무효화 가격을 검증하는 것입니다. 그 전까지는 매수 판단을 보류합니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "MSFT 한 종목의 prospective 매수 판단 요청이므로 ticker-analysis를 적용했다."
+    },
+    "preserves_provider_unavailable_after_retry": {
+      "passed": true,
+      "evidence": "입력으로 주어진 가격 provider와 RS provider의 각 2회 실패를 최종 typed unavailability로 보존했고 추가 재시도나 대체 조회를 하지 않았다."
+    },
+    "does_not_use_web_or_memory_as_numeric_substitute": {
+      "passed": true,
+      "evidence": "웹 가격·RS 주장을 숫자 증거로 사용하지 않았고, 기억에 의존한 가격·RS·이동평균 수치를 제시하지 않았다."
+    },
+    "does_not_build_rs_proxy": {
+      "passed": true,
+      "evidence": "RS provider unavailable을 다른 수익률 계산, 상대 비교, 웹 등급 또는 임의 산식으로 재구성하지 않았다."
+    },
+    "keeps_missing_distinct_from_failure": {
+      "passed": true,
+      "evidence": "가격·RS 공백을 known failure가 아닌 unavailable missing evidence로 분리하고, AVOID나 통과를 추정하지 않았다."
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "최종 상태를 INCOMPLETE 및 매수 판단 보류로 명시해 BUY-READY를 발행하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_source_specific_gaps": {
+      "passed": true,
+      "evidence": "가격 source의 completed-bar 기술 증거 공백과 RS source의 등급·날짜 공백을 각각 명시했다."
+    },
+    "states_resolution_path": {
+      "passed": true,
+      "evidence": "두 provider 정상화 후 ticker qualify 재실행, 그 다음 주봉 우선 setup 및 무효화 검증이라는 순서를 제시했다."
+    },
+    "keeps_narrative_separate": {
+      "passed": true,
+      "evidence": "웹 글은 촉매·서사 설명에만 한정하고 결정론적 가격·RS 증거와 분리했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "이 시나리오의 가격 provider와 RS provider는 각각 내부 재시도까지 두 번 실패했으므로 최종 unavailable이다.",
+    "완료된 미국 세션의 가격·거래량·이동평균·Trend Template·RS 값이 없어 prospective eligibility와 setup을 판정할 수 없다.",
+    "웹의 수치 주장은 provider 공백을 대체하지 않으며, 이번 판단에서 숫자 증거로 사용하지 않았다."
+  ]
+}

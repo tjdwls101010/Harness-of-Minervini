@@ -1,0 +1,59 @@
+{
+  "scenario_id": "web_module_conflict",
+  "run": 2,
+  "agent_id": "/root/e2e_web_conflict_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify"
+  ],
+  "final_response": "결론: INCOMPLETE이며 TSLA는 BUY-READY가 아닙니다. 증거 품질은 RS에 관한 결정론적 source가 stale coverage로 unavailable인 탓에 불완전합니다. 블로그의 ‘오늘 RS 99’는 결정론적 RS와 충돌하는 검증되지 않은 웹 주장으로 분류하며, 그 숫자로 빈칸을 채우거나 자체 RS를 재구성하지 않습니다. 다른 기술 조건이 좋다는 가정은 가격·구조 쪽의 보조 증거로 보존할 수 있지만, 독립적인 RS 증거의 unavailable을 통과로 바꾸지는 못합니다. 따라서 해당 블로그는 현재 촉매·서사 맥락에만 쓸 수 있고 prospective 매수 결론의 수치 근거로는 쓰지 않습니다. 완료된 미국 세션은 2026-08-14입니다. 정확한 해소 조건은 ibd-rs-rating 0.5.0 기반 RS coverage가 최신 상태로 복구된 뒤 완료 봉 기준으로 ticker qualify를 다시 실행하여 RS 값·날짜와 Stage 2 및 Trend Template 8개 AND 조건을 확인하는 것입니다. 그 결과 자격이 확인된 경우에만 주봉 우선으로 베이스, 공급 수축, 완료된 피벗, 정확한 무효화 가격과 risk reducer를 검증할 수 있습니다. 그 전까지 매수 판단은 보류합니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "TSLA 한 종목의 prospective 매수 판단과 RS 증거 충돌 요청이므로 ticker-analysis를 적용했다."
+    },
+    "keeps_deterministic_source_authoritative": {
+      "passed": true,
+      "evidence": "ticker.qualify 계약의 RS는 ibd-rs-rating 0.5.0만 사용하고 근사하지 않는다는 제한을 따랐으며, stale coverage unavailable을 최종 증거 상태로 보존했다."
+    },
+    "uses_web_only_for_narrative": {
+      "passed": true,
+      "evidence": "블로그의 RS 99 주장은 현재 촉매·서사 맥락에만 가능한 웹 주장으로 한정하고 매수 판단의 수치 증거로 사용하지 않았다."
+    },
+    "treats_stale_rs_as_incomplete": {
+      "passed": true,
+      "evidence": "RS stale coverage unavailable을 알려진 실패나 통과가 아닌 missing evidence로 분리하고 최종 상태를 INCOMPLETE로 판정했다."
+    },
+    "does_not_reconstruct_rs": {
+      "passed": true,
+      "evidence": "웹 등급, 기억, 수익률 비교 또는 임의 산식으로 RS를 대체하거나 재구성하지 않았다."
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "최종 응답에서 TSLA는 BUY-READY가 아니며 매수 판단을 보류한다고 명시했다."
+    }
+  },
+  "noncritical_assertions": {
+    "labels_conflicting_web_claim": {
+      "passed": true,
+      "evidence": "블로그의 ‘오늘 RS 99’를 결정론적 source와 충돌하는 검증되지 않은 웹 주장으로 명시했다."
+    },
+    "states_exact_resolution": {
+      "passed": true,
+      "evidence": "ibd-rs-rating 0.5.0 coverage 복구 후 완료 봉 기준 ticker qualify 재실행으로 RS 값·날짜와 자격 게이트를 확인해야 한다고 제시했다."
+    },
+    "preserves_other_supporting_evidence": {
+      "passed": true,
+      "evidence": "사용자가 가정한 다른 양호한 기술 조건은 보조 증거로 보존하되 RS unavailable을 면제하지 않는다고 구분했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "결정론적 RS source는 stale coverage 때문에 unavailable이며, RS 값과 기준일을 확인할 수 없다.",
+    "블로그의 RS 99 주장은 충돌하는 웹 서사일 뿐 결정론적 RS의 대체 수치가 아니다.",
+    "다른 기술 조건은 시나리오에서 양호하다고 가정됐지만, RS 공백이 남아 prospective BUY-READY와 후속 risk 판정을 완료할 수 없다."
+  ]
+}
