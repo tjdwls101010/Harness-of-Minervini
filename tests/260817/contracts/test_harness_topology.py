@@ -51,6 +51,22 @@ class SharedHarnessTopologyTests(unittest.TestCase):
             self.assertNotIn("trade-review", text)
             self.assertNotIn("references/", text)
 
+    def test_ticker_analysis_keeps_fixed_evidence_prompts_closed_world(self) -> None:
+        text = (SKILLS / "ticker-analysis" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("closed world", text.casefold())
+        self.assertIn("unrelated fixture, live ticker, or web number", text.casefold())
+        self.assertIn("Primary Base duration, depth, or all-time-high trigger is not supplied", text)
+        self.assertIn("keep it missing", text.casefold())
+
+    def test_ticker_analysis_requires_the_completed_stop_path_for_hold(self) -> None:
+        text = (SKILLS / "ticker-analysis" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("every completed daily low", text.casefold())
+        self.assertIn("recovered latest price cannot establish HOLD", text)
+        self.assertIn("incomplete path coverage means INCOMPLETE", text)
+        self.assertIn("actual effective date", text)
+
     def test_settings_have_no_hooks_and_allow_only_the_canonical_runtime_boundary(self) -> None:
         settings = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
 

@@ -188,6 +188,14 @@ class PublicCliContractTests(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertIn("completed_stop_breach", payload["data"]["failed"])
 
+    def test_active_risk_help_documents_the_full_stop_path_contract(self) -> None:
+        help_text = command_parser("ticker", "risk").format_help()
+
+        self.assertIn("--stop-effective-date", help_text)
+        self.assertIn("completed daily Low", help_text)
+        self.assertIn("cannot establish HOLD", help_text)
+        self.assertIn("defaults to --entry-date", help_text)
+
     def test_help_is_plain_text_and_does_not_emit_json(self) -> None:
         completed = run_pipeline("ticker", "risk", "--help")
 

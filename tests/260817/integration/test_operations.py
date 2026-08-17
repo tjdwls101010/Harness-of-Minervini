@@ -270,7 +270,7 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertEqual(set(payload["data"]["missing"]), {"entry_date", "stop_or_invalidation", "current_price"})
 
-    def test_active_risk_uses_the_latest_completed_close_for_hold_or_stop_breach(self) -> None:
+    def test_active_risk_audits_the_completed_price_path_for_hold_or_stop_breach(self) -> None:
         runtime = Runtime(price_history=lambda ticker, as_of: price_snapshot())
         common = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-10-01", "as_of": AS_OF}
 
@@ -279,9 +279,91 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(hold["data"]["verdict"], "HOLD")
         self.assertEqual(hold["data"]["current_price"], 150.0)
+        self.assertEqual(hold["data"]["completed_price_path"]["state"], "clear")
+        self.assertEqual(hold["data"]["completed_price_path"]["from"], "2025-10-01")
         self.assertEqual(hold["sources"][0]["provider"], "fixture-prices")
         self.assertEqual(sell["data"]["verdict"], "SELL")
+        self.assertEqual(sell["data"]["completed_price_path"]["state"], "breached")
         self.assertIn("completed_stop_breach", sell["data"]["failed"])
+
+    def test_active_risk_detects_a_recovered_historical_stop_breach(self) -> None:
+        snapshot = price_snapshot()
+        frame = snapshot.data.copy()
+        breach_date = frame.loc["2025-10-01":].index[5]
+        frame.loc[breach_date, "Low"] = 90.0
+        recovered = ProviderSnapshot(frame, snapshot.meta)
+        runtime = Runtime(price_history=lambda ticker, as_of: recovered)
+
+        payload = execute(
+            "ticker.risk",
+            {
+                "ticker": "TEST",
+                "mode": "active",
+                "entry_price": 100.0,
+                "entry_date": "2025-10-01",
+                "stop_price": 94.0,
+                "as_of": AS_OF,
+            },
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["current_price"], 150.0)
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "breached")
+        self.assertEqual(payload["data"]["completed_price_path"]["breach_date"], breach_date.date().isoformat())
+        self.assertEqual(payload["data"]["completed_price_path"]["breach_low"], 90.0)
+
+    def test_active_risk_is_incomplete_when_provider_history_starts_after_the_stop(self) -> None:
+        snapshot = price_snapshot()
+        truncated = ProviderSnapshot(snapshot.data.loc["2025-11-03":], snapshot.meta)
+        runtime = Runtime(price_history=lambda ticker, as_of: truncated)
+
+        payload = execute(
+            "ticker.risk",
+            {
+                "ticker": "TEST",
+                "mode": "active",
+                "entry_price": 100.0,
+                "entry_date": "2025-10-01",
+                "stop_price": 94.0,
+                "as_of": AS_OF,
+            },
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "unavailable")
+        self.assertIn("completed_price_path", payload["data"]["missing"])
+        path_gap = next(item for item in payload["missing"] if item["id"] == "completed_price_path")
+        self.assertEqual(path_gap["provider"], "fixture-prices")
+        self.assertEqual(path_gap["reason"], "history_starts_after_stop_effective_date")
+
+    def test_active_risk_applies_a_changed_stop_only_from_its_effective_date(self) -> None:
+        snapshot = price_snapshot()
+        frame = snapshot.data.copy()
+        prior_breach_date = frame.loc["2025-10-01":"2025-10-31"].index[5]
+        frame.loc[prior_breach_date, "Low"] = 93.0
+        changed_stop = ProviderSnapshot(frame, snapshot.meta)
+        runtime = Runtime(price_history=lambda ticker, as_of: changed_stop)
+
+        payload = execute(
+            "ticker.risk",
+            {
+                "ticker": "TEST",
+                "mode": "active",
+                "entry_price": 100.0,
+                "entry_date": "2025-10-01",
+                "stop_price": 94.0,
+                "stop_effective_date": "2025-11-03",
+                "as_of": AS_OF,
+            },
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "clear")
+        self.assertEqual(payload["data"]["completed_price_path"]["from"], "2025-11-03")
 
     def test_fundamentals_consumes_only_normalized_filed_sec_evidence(self) -> None:
         fixture = Path(__file__).resolve().parents[1] / "fixtures" / "fundamentals" / "filed_evidence.json"

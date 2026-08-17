@@ -185,10 +185,14 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
     current = _number(payload.get("current_price"))
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or (current is not None and stop is not None and current <= stop)
+    completed_price_path = _mapping(payload.get("completed_price_path"))
+    path_state = str(completed_price_path.get("state", "")).strip().lower()
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_state in {"triggered", "breached"} or (current is not None and stop is not None and current <= stop)
     invalidation_triggered = _triggered(invalidation)
     if current is None and not (live_triggered or completed_stop or invalidation_triggered):
         missing.append("current_price")
+    if stop is not None and not (live_triggered or completed_stop or invalidation_triggered) and path_state != "clear":
+        missing.append("completed_price_path")
 
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
     if missing:
@@ -209,6 +213,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         "mode": "active",
         "verdict": verdict,
         "risk_controls": controls,
+        "completed_price_path": completed_price_path or None,
         "failed": reasons if not missing else [],
         "missing": missing,
         "waiting": [],

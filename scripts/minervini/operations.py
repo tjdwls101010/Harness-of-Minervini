@@ -5,12 +5,15 @@ from __future__ import annotations
 import re
 import os
 import sys
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Callable, Mapping
+
+import pandas as pd
 
 from .cache import ProviderCache
 from .clock import AnalysisClock, resolve_as_of
@@ -908,6 +911,78 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     )
 
 
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_price: float) -> tuple[dict[str, Any], float | None]:
+    if not isinstance(frame, pd.DataFrame) or frame.empty or not {"Low", "Close"}.issubset(frame.columns):
+        return {"state": "unavailable", "reason": "completed_ohlc_path_unavailable"}, None
+    timestamps = pd.to_datetime(frame.index, errors="coerce")
+    if timestamps.isna().any():
+        return {"state": "unavailable", "reason": "invalid_completed_bar_date"}, None
+    if timestamps.tz is not None:
+        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    ordered = frame.copy()
+    ordered.index = timestamps
+    ordered = ordered.sort_index()
+    dated_rows = [(timestamp.date(), row) for timestamp, row in ordered.iterrows() if timestamp.date() <= as_of]
+    if not dated_rows:
+        return {"state": "unavailable", "reason": "no_completed_bars_through_as_of"}, None
+
+    latest_date, latest_row = dated_rows[-1]
+    try:
+        current_price = float(latest_row["Close"])
+    except (TypeError, ValueError):
+        current_price = None
+    if current_price is not None and (not math.isfinite(current_price) or current_price <= 0):
+        current_price = None
+
+    first_available = dated_rows[0][0]
+    if first_available > effective_date:
+        return {
+            "state": "unavailable",
+            "reason": "history_starts_after_stop_effective_date",
+            "requested_from": effective_date.isoformat(),
+            "first_available": first_available.isoformat(),
+            "through": latest_date.isoformat(),
+        }, current_price
+    if latest_date < as_of:
+        return {
+            "state": "unavailable",
+            "reason": "history_ends_before_as_of",
+            "requested_from": effective_date.isoformat(),
+            "last_available": latest_date.isoformat(),
+            "requested_through": as_of.isoformat(),
+        }, current_price
+
+    path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date]
+    if not path_rows:
+        return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
+    for bar_date, row in path_rows:
+        try:
+            low = float(row["Low"])
+        except (TypeError, ValueError):
+            return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
+        if not math.isfinite(low) or low <= 0:
+            return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
+        if low <= stop_price:
+            return {
+                "state": "breached",
+                "basis": "completed_daily_low",
+                "from": effective_date.isoformat(),
+                "through": latest_date.isoformat(),
+                "bars_checked": len(path_rows),
+                "stop_price": stop_price,
+                "breach_date": bar_date.isoformat(),
+                "breach_low": low,
+            }, current_price
+    return {
+        "state": "clear",
+        "basis": "completed_daily_low",
+        "from": effective_date.isoformat(),
+        "through": latest_date.isoformat(),
+        "bars_checked": len(path_rows),
+        "stop_price": stop_price,
+    }, current_price
+
+
 def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -920,7 +995,35 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     provider_missing: list[dict[str, Any]] = []
     has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(evidence.get("invalidation"), Mapping)
     has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
-    if mode == "active" and evidence.get("current_price") is None and has_position_anchors:
+    stop_price = evidence.get("stop_price")
+    stop_effective_date: date | None = None
+    if mode == "active" and stop_price is not None and has_position_anchors:
+        raw_effective_date = evidence.get("stop_effective_date") or evidence.get("entry_date")
+        try:
+            stop_effective_date = date.fromisoformat(str(raw_effective_date))
+            entry_date = date.fromisoformat(str(evidence["entry_date"]))
+        except ValueError as error:
+            field = "stop_effective_date" if evidence.get("stop_effective_date") is not None else "entry_date"
+            raise RequestError(f"{field} must be an ISO date", field) from error
+        if stop_effective_date < entry_date:
+            raise RequestError("stop_effective_date cannot precede entry_date", "stop_effective_date")
+        if stop_effective_date > clock.date:
+            raise RequestError("stop_effective_date cannot be after as_of", "stop_effective_date")
+        evidence["stop_effective_date"] = stop_effective_date.isoformat()
+
+    explicit_current = evidence.get("current_price")
+    explicit_completed_breach = isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool) and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= float(stop_price)
+    if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
+        evidence["completed_price_path"] = {
+            "state": "breached",
+            "basis": "explicit_completed_price",
+            "from": stop_effective_date.isoformat(),
+            "through": clock.date.isoformat(),
+            "stop_price": float(stop_price),
+            "breach_date": clock.date.isoformat(),
+            "breach_price": float(explicit_current),
+        }
+    if mode == "active" and has_position_anchors and not explicit_completed_breach and not isinstance(evidence.get("completed_stop"), Mapping):
         try:
             prices = _cached_provider(
                 runtime,
@@ -935,15 +1038,38 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         except ProviderUnavailable as error:
             provider_missing.append(_missing_provider(error))
         else:
-            current_price = float(prices.data["Close"].iloc[-1])
-            evidence["current_price"] = current_price
+            if stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool):
+                price_path, current_price = _completed_stop_path(
+                    prices.data,
+                    effective_date=stop_effective_date,
+                    as_of=clock.date,
+                    stop_price=float(stop_price),
+                )
+                evidence["completed_price_path"] = price_path
+                if price_path.get("state") == "unavailable":
+                    provider_missing.append(
+                        {
+                            "id": "completed_price_path",
+                            "provider": prices.meta.provider,
+                            "reason": price_path.get("reason", "completed_price_path_unavailable"),
+                            "required": True,
+                            "attempts": 1,
+                            "retryable": False,
+                        }
+                    )
+            else:
+                price_path = None
+                try:
+                    current_price = float(prices.data["Close"].iloc[-1])
+                except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+                    current_price = None
+            if current_price is not None:
+                evidence["current_price"] = current_price
             sources.append(_source(prices.meta))
-            stop_price = evidence.get("stop_price")
-            if isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool) and current_price <= float(stop_price):
-                evidence["completed_stop"] = {"state": "triggered", "price": current_price, "stop_price": float(stop_price)}
     result = reduce_risk(evidence)
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
-    missing = [*provider_missing, *({"id": item, "reason": "evidence_required", "required": True} for item in result["missing"])]
+    provider_missing_ids = {item["id"] for item in provider_missing}
+    missing = [*provider_missing, *({"id": item, "reason": "evidence_required", "required": True} for item in result["missing"] if item not in provider_missing_ids)]
     return envelope(
         "ticker.risk",
         request=_clean_request({**request, "ticker": ticker}),

@@ -156,6 +156,7 @@ def build_parser() -> JsonArgumentParser:
     for field in ("entry_price", "stop_price", "upside_price", "current_price", "average_gain_pct", "invalidation_price"):
         risk.add_argument(f"--{field.replace('_', '-')}", type=float, metavar="NUMBER", help=_input_help("ticker.risk", field))
     risk.add_argument("--entry-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "entry_date"))
+    risk.add_argument("--stop-effective-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "stop_effective_date"))
     risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))
     risk.add_argument("--eligibility-state", choices=("eligible", "avoid", "incomplete"), help=_input_help("ticker.risk", "eligibility_state"))
     risk.add_argument("--setup-state", choices=("ready", "wait", "avoid", "incomplete"), help=_input_help("ticker.risk", "setup_state"))

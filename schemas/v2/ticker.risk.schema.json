@@ -50,7 +50,7 @@
         "type": "boolean"
       },
       "current_price": {
-        "description": "Optional explicit latest completed price; it participates in hard-stop and 3R checks. Active mode otherwise fetches the latest completed close once anchors are complete.",
+        "description": "Optional explicit latest completed price. A value at or below the stop can trigger SELL, but a value above it cannot establish HOLD without the provider-audited completed price path.",
         "required": false,
         "type": "number"
       },
@@ -155,8 +155,13 @@
         "required": false,
         "type": "enum"
       },
+      "stop_effective_date": {
+        "description": "First completed session governed by --stop-price in active mode; defaults to --entry-date. Supply the actual date when a raised or replaced stop became effective.",
+        "required": false,
+        "type": "date"
+      },
       "stop_price": {
-        "description": "Positive hard-stop price.",
+        "description": "Positive hard-stop price. In active mode, every completed daily Low is audited from the stop's effective date through --as-of.",
         "required": false,
         "type": "number"
       },
@@ -174,19 +179,21 @@
     "limitations": [
       "This capability never recommends portfolio allocation or position size.",
       "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.",
-      "--current-price means a completed price and can trigger the hard stop; a partial-session breach must instead use the explicit live-stop flags.",
+      "A completed current price above the stop cannot establish HOLD: the provider must cover every completed daily Low from --stop-effective-date through --as-of; a recovered price does not erase an earlier breach.",
+      "--stop-effective-date defaults to --entry-date. When a stop was raised or replaced later, supply its actual effective date so the newer stop is not applied retroactively.",
+      "An explicit --current-price at or below the stop can trigger SELL; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
       "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."
     ],
-    "output": "The sole final ticker verdict with component states, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context.",
+    "output": "The sole final ticker verdict with component states, completed stop-path evidence, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context.",
     "prerequisites": [
       "Prospective mode should consume market.snapshot, ticker.qualify, ticker.setup, and ticker.fundamentals verdicts."
     ],
     "side_effects": [],
     "status_meanings": {
       "needs_input": "Required evidence is missing, so the domain verdict is INCOMPLETE.",
-      "ok": "A complete BUY-READY, WAIT, AVOID, HOLD, or SELL verdict was produced.",
-      "partial": "Active anchors were complete but the completed-price provider was unavailable.",
+      "ok": "A complete BUY-READY, WAIT, AVOID, HOLD, or SELL verdict was produced; active HOLD includes a clear completed stop path.",
+      "partial": "The completed-price provider failed or could not cover the full active stop window.",
       "unavailable": "An internal required capability cannot be evaluated."
     },
     "summary": "Reduce converged prospective evidence to BUY-READY, WAIT, AVOID, or INCOMPLETE, or active-position evidence to HOLD, SELL, or INCOMPLETE."

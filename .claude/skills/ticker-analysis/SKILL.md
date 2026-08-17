@@ -12,6 +12,7 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 - If the needed capability is uncertain, run the capability-catalog command declared in the root constitution.
 - Before invoking a selected capability for the first time, inspect only `describe <capability>` or that leaf command's `--help`. The CLI owns syntax, defaults, time limits, status meanings, and side effects; do not duplicate them here.
 - Decide whether the request is prospective, active-position, re-entry, or comparison. Collect only evidence that can change that decision.
+- Treat a virtual or fixed-evidence prompt as a closed world: use only its supplied evidence, never an unrelated fixture, live ticker, or web number. If a Primary Base duration, depth, or all-time-high trigger is not supplied, keep it missing; do not infer it.
 
 ## Prospective entry
 
@@ -28,9 +29,9 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 ## Active position or re-entry
 
 - Use the user's actual entry date, entry price, hard stop, and structural invalidation. If anchors are missing, report INCOMPLETE and ask only for information that can change HOLD or SELL.
-- Let the latest completed close test an ordinary hard stop. Use a partial-session breach only when the user explicitly requests a live stop check.
+- Audit every completed daily low from the stop's effective date through the analysis session. A recovered latest price cannot establish HOLD after an earlier breach; incomplete path coverage means INCOMPLETE. Use a partial-session breach only when the user explicitly requests a live stop check.
 - A breached hard stop or triggered invalidation means SELL without negotiation. Never widen the stop, average down, or defend the position with valuation or hope.
-- For HOLD, require current completed-price evidence or an explicit non-triggered live check. At 3R, call out the requirement to protect at least breakeven.
+- For HOLD, require both current completed-price evidence and a clear completed stop path. If the stop changed after entry, use its actual effective date rather than applying it retroactively. At 3R, call out the requirement to protect at least breakeven.
 - Broad-market weakness informs defense but does not sell an exceptional ticker by index opinion alone. Ticker price and invalidation evidence remain controlling.
 - A re-entry is a new prospective decision. Re-run qualification, setup, market, and risk rather than treating a prior win or loss as permission.
 
