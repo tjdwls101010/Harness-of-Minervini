@@ -1,0 +1,19 @@
+{
+  "dates": {"first": "2026-08-01", "last": "2026-08-14"},
+  "sector_ranking": [
+    {"sector": "Technology", "avg_rs": 92.4, "count": 18},
+    {"sector": "Healthcare", "avg_rs": 81.2, "count": 11}
+  ],
+  "industry_ranking": [
+    {"industry": "Semiconductors", "sector": "Technology", "avg_rs": 96.1, "count": 7},
+    {"industry": "Software", "sector": "Technology", "avg_rs": 89.5, "count": 11}
+  ],
+  "industry_top": [
+    {"ticker": "ACME", "rs_rating": 99, "rs_raw": 18.2},
+    {"ticker": "CHIP", "rs_rating": 97, "rs_raw": 16.7}
+  ],
+  "top": [
+    {"ticker": "LEAD", "rs_rating": 99, "rs_raw": 19.4},
+    {"ticker": "ACME", "rs_rating": 99, "rs_raw": 18.2}
+  ]
+}

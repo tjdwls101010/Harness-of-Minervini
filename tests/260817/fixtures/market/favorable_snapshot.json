@@ -1,0 +1,13 @@
+{
+  "breadth": {"state": "supports", "advance_decline_ratio": 2.4},
+  "qqq_21ema": {"state": "on", "definition": "one completed close above 21 EMA"},
+  "sectors": [
+    {"name": "Technology", "price_momentum": "supports", "breadth": "supports", "high_proximity": "supports", "rs_concentration": "supports", "stage2_candidates": 11, "leader_behavior": "supports"},
+    {"name": "Energy", "price_momentum": "supports", "breadth": "mixed", "high_proximity": "mixed", "rs_concentration": "mixed", "stage2_candidates": 4, "leader_behavior": "mixed"}
+  ],
+  "industries": [
+    {"name": "Semiconductors", "price_momentum": "supports", "breadth": "supports", "high_proximity": "supports", "rs_concentration": "supports", "stage2_candidates": 8, "leader_behavior": "supports"}
+  ],
+  "leaders": [{"ticker": "NVDA", "behavior": "supports"}, {"ticker": "AVGO", "behavior": "supports"}],
+  "trade_traction": {"state": "positive", "closed_pilot_outcomes": "constructive"}
+}

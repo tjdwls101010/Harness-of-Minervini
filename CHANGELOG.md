@@ -6,23 +6,24 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
-- **`SECURITY.md`** — private vulnerability reporting via GitHub's Security tab, a supported-versions table, and an explicit attack-surface description (pinned dependencies, untrusted live-source parsing, the local cache, chart output paths, the permission allowlist) plus what is out of scope, so nobody files "the verdict was wrong" as a security issue.
-- **`NOTICE.md`** — methodology ownership, third-party data-source terms, and trademark attribution, split out of `LICENSE`.
-- **Architecture: the `AGENTS.md` and `.codex/` layer.** Documented for the first time — both re-expose the same harness under the filenames other agent tooling looks for, why `.codex/agents/ticker-scout.toml` is the one file that cannot be a symlink, and that it is therefore the design's one drift hazard.
-- **Module substrate: the pipeline's subprocess model.** How children are invoked, why a child's JSON is preserved even on exit code 1, the 60-second per-child timeout, and the clarification that "retry once" lives in the *prompts* rather than in the Python layer.
-- **Design principles: the one scoped 0–100 score.** `vcp.py detect` emits a `setup_readiness.score`; the docs now name it and explain why a pattern-scoped ranking that cannot outvote a hard gate is not the "master score" the design refuses.
+- **Composable v2 interface.** Eighteen capabilities expose market, ticker, doctrine, clock, health, chart, and explicit watchlist operations through one versioned JSON envelope, machine-readable `describe`, immutable-ID schemas, and detailed offline leaf help.
+- **Point-in-time provider layer.** Completed Yahoo bars, exact-date `ibd-rs-rating==0.5.0`, filed-as-of SEC facts, current Nasdaq security identity, current Yahoo classification, and captured Finviz breadth now retain typed availability, coverage, retrieval time, version, and content hashes.
+- **Doctrine-aware decision engines.** Standard Stage 2 and eight-of-eight qualification, bounded recent-IPO Primary Base eligibility, setup and VCP supply evidence, filed fundamentals and the narrow Power Play exception, current same-industry peers, market vectors, and prospective or active-position risk remain separate auditable axes.
+- **Explicit local research state.** A non-creating SQLite ledger records or annotates research only through explicit watchlist write capabilities; the provider cache and chart artifacts use ignored paths and disclose their side effects.
+- **V2 verification suite.** Public-seam doctrine, unit, contract, integration, provider-fixture, topology, behavioral, and baseline tests live under `tests/260817`.
 
 ### Changed
 
-- **`LICENSE` is now unmodified MIT.** The appended methodology note prevented GitHub from detecting the license, which displayed as "Other"; it moved to `NOTICE.md` with its content preserved.
-- Repository description, homepage, and topics set (previously all empty).
+- **Principle over rail.** The always-loaded constitution now carries compact decision invariants while two intent skills adaptively select only the evidence the question needs; no fixed workflow, scout, batch size, or monolithic score controls the analysis.
+- **Interface over document.** Command syntax, defaults, limits, statuses, side effects, and examples moved into the executable registry and detailed CLI help. Human documentation teaches discovery instead of duplicating a flag catalog.
+- **Claude and Codex share literal files.** `AGENTS.md -> CLAUDE.md` and `.agents/skills -> ../.claude/skills` remove host-specific prompt copies and drift.
+- **Point-in-time and missing-evidence semantics are release gates.** Incomplete bars, post-cutoff filings, mutable current taxonomy, stale or withheld RS, transport failures, and successful no-data responses cannot be silently promoted to usable historical evidence.
+- **Active HOLD audits the whole stop window.** A recovered latest price cannot hide an earlier completed-daily-low breach; changed stops carry an effective date, incomplete path coverage stays `INCOMPLETE`, and leaf help explains the distinction from an explicit live check.
+- **Candidate transport stays dense.** Discovery pagination returns complete exclusion counts by reason with at most `min(limit, 20)` representative records instead of dumping thousands of excluded instruments into every response.
 
-### Fixed
+### Removed
 
-- Five wiki links whose text named a source file but whose target was an unrelated wiki page — they now point at the actual files.
-- `Architecture.md`: an unfinished sentence about skill-body sizes, which also carried stale line counts (now 61 / 73 / 94 against the ≤120-line budget).
-- Removed `.codex/hooks`, a tracked symlink pointing at a `.claude/hooks` directory that does not exist — this harness deliberately ships zero hooks.
-- Committed `.codex/agents/ticker-scout.toml`, which was untracked, leaving the Codex mirror incomplete on clone.
+- The v1 module tree, pipeline implementation, test suite, wiki, build plans, fixed agent and workflow, path rule, topic reference library, completed-trade skill, and duplicate Codex layout. V1 remains recoverable from the `harness-v1-final` tag and release; no compatibility shim or `legacy/` copy remains in v2.
 
 ## [1.0.0] — 2026-07-11
 

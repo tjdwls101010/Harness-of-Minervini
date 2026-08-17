@@ -1,256 +1,154 @@
-# Harness Spec — Harness of Minervini
+# Harness Spec — Harness of Minervini v2
 
-## Context
+## Status and purpose
 
-- **What this is**: an AI harness that makes Claude behave as a disciplined momentum-stock analyst in the Minervini SEPA tradition — discovering candidate tickers and judging concrete buy/sell timing, US stocks only.
-- **User**: Korean-speaking individual investor; interview conducted in Korean; all harness artifacts (CLAUDE.md, skills, hooks, code, docs) written in English per user decision.
-- **Existing assets** (all under git-ignored `.tmp/`):
-  - Prototype skill `.tmp/Minervini/` — 248-line SKILL.md + 12 JSON-emitting argparse CLI modules (`Scripts/modules/`) + a 2-command pipeline (`qualify` = Stage-2 + Trend-Template 8/8 hard gate; `discover` = breadth-primary regime read + RS leadership survey). Deliberately no "analyze everything" command. Thresholds split into CLI-tunable flex tier and locked floors.
-  - `.tmp/Minervini.db` — book corpus: full text of *Trade Like a Stock Market Wizard* (14 chapters) + one Korean-language momentum text (id 15). No code reads it.
-  - `.tmp/TraderLion.db` — book corpus: TraderLion trading guide (13 chapters), same O'Neil/Minervini lineage, practitioner-oriented.
-- **Data sources (live at runtime, no local market DB)**: yfinance (prices/financials/earnings), finviz.com homepage scrape (market breadth), `ibd-rs-rating` library (Neon backend, ~4,600 US stocks RS ratings).
-- **Distribution intent**: v1 is a project harness in `.claude/`; the user intends to later convert it into a Claude Code plugin for marketplace distribution. All design must stay portable: no absolute user paths, no committed venv, user-scoped cache/data locations, English docs.
-- **Implementation status**: Phases 0-5 implemented and validated, then independently audited and improved on 2026-07-11 (see Change history — schema-basis, workflow-safety, routing, and knowledge-fidelity fixes; cases.md retired). The substrate is pinned to `ibd-rs-rating==0.4.0`; the analyst-facing constitution, three skills, five references, read-only scout, `/screen` workflow, paths-gated rule, and narrow permissions passed deterministic, live-source, runtime, permission, fidelity, and six-scenario E2E validation.
+This is the maintainers' design record for the v2 Harness of Minervini. It explains where behavior lives, why the runtime is shaped this way, and how to change it without duplicating contracts. It is not runtime market doctrine and must not be loaded during an analysis session.
 
-## Goals
+The approved implementation plan is `docs/plans/260817/harness-v2-greenfield-plan.md`. That plan is the decision-complete build record; this spec records the resulting architecture and maintenance invariants.
 
-In the user's own words (translated from Korean):
+The product objective is an evidence-disciplined Minervini SEPA analyst for US-listed common stocks and ADRs that can assess the market, rank sector and industry leadership, discover candidates, analyze named tickers, and state conditional entry or active-position exit evidence. Portfolio allocation, position-size prescriptions, shorts, intraday trading, crypto, and non-US listings are outside scope.
 
-1. "Help me judge which tickers to invest in, and concretely when to buy or sell them" — discovery/screening plus entry/exit timing judgment is the core job.
-2. US stocks only.
-3. **Analysis only** — industry/sector/ticker analysis; the harness must never prescribe portfolio construction ("put N% into X" is out of scope). Ticker-level sell/hold judgment is in scope; position sizing is not.
-4. Embody both the explicit knowledge (형식지: named criteria, thresholds, checklists) and the tacit knowledge (암묵지: judgment principles, the why behind rules) of the Minervini and TraderLion corpora — while treating the previous single-skill attempt as a reference to be doubted, not copied.
-5. Numbers that require accuracy (prices, earnings, debt) come from deterministic code; narrative context (recent company activity) may come from web search.
-6. Claude analyzes like a real momentum trader: iteratively calling parameterized modules, adjusting parameters, earning each deeper look — not relying on a single monolithic pipeline call.
-7. Preserve Claude's intelligence and creativity — principles with reasons over enumerated rules (the single-skill attempt failed at this).
-8. Harness artifacts in English.
-9. Designed for future plugin/marketplace distribution.
+The quality criterion is not imitation by prose volume. The harness must preserve Minervini's explicit gates and tacit decision standard while improving auditability, point-in-time honesty, missing-evidence handling, interface discoverability, and deterministic composition.
 
-## Behavior inventory
+## Binding design decisions
 
-Layer/component columns are filled in I3. Knowledge-cluster references (e.g. "M-map cluster H") point into `docs/plans/research/minervini-knowledge-map.md` and `docs/plans/research/traderlion-knowledge-map.md`, which are the authoritative knowledge sources for implementation.
+- Principle over rail: `CLAUDE.md` supplies decision principles, invariants, precedence, and scope. Skills adapt those principles to user intent; they do not force one universal sequence or monolithic pipeline.
+- Interface over document: exact syntax, defaults, inputs, limits, statuses, schemas, and side effects belong to the executable capability registry and each leaf command's offline `--help`, not duplicated prose catalogs.
+- Dense information through progressive disclosure: the analyst loads the small constitution and one routed skill, then discovers only the capability contract needed for the next unresolved question through `capabilities`, `describe`, or leaf `--help`.
+- Evidence over narrative: deterministic providers and reducers own precise market facts and verdict mechanics. Web research may explain current context but cannot fill numerical gaps, alter a hard gate, or masquerade as point-in-time evidence.
+- Missing is not failure: known failed evidence and unavailable evidence remain separate throughout providers, reducers, envelopes, skills, and user-facing conclusions.
+- No-trade is valid: the system is not required to manufacture candidates, bullish regimes, or BUY-READY outcomes.
+- One shared harness: Claude Code uses `.claude/skills`; Codex reaches the same files through `.agents/skills -> ../.claude/skills`. `AGENTS.md -> CLAUDE.md` shares the constitution. No duplicated Codex copy exists.
 
-### Persona & doctrine
+## Information ownership
 
-| id | behavior/knowledge/constraint | layer | component | status |
-|----|-------------------------------|-------|-----------|--------|
-| B1 | SEPA analyst persona: "conservative aggressive opportunist", risk-first question order, no-trade as strong default, ~50% win-rate calibration, decision quality ≠ outcome (M-map cluster I) | CLAUDE.md | CLAUDE.md constitution — persona + risk spine | validated |
-| B2 | Probability-convergence + funnel order: technicals gate fundamentals (Trend Template first), low-cost technical gate before deep looks, earn each deeper look, never "analyze everything at once" (M-map clusters A/C) | CLAUDE.md | CLAUDE.md constitution — funnel order + probability convergence | validated |
-| B3 | Anti-LLM-default corrections, always active: lockout rally (overbought after bear = strength), anti-ATR (never widen stops for volatility), ultra-low P/E + 52wk low = red flag, cheap-trap ban, broken-leader ban, price leads earnings both ways, no bottom fishing (M-map clusters B/C/F/H) | CLAUDE.md | CLAUDE.md constitution — compact corrections list; expanded in topic references | validated |
-| B4 | Two-tier doctrine + provenance: SEPA gates = immutable hard constraints; TraderLion tactics = tunable defaults with origin tags; conflicts resolved Minervini-first per TL-map §4 (26 resolutions); Momentum Masters speaker tagging (only Minervini canonical); MA vocabulary role separation (50/150/200 SMA = eligibility, 10/21 EMA = trade management, never mixed) | CLAUDE.md + references | CLAUDE.md constitution — two-tier rule; provenance tags throughout references | validated |
-| B5 | Scope constraints: US stocks only; long + cash only (no shorts); never prescribe portfolio %-allocations; ticker-level buy/sell/hold judgment in scope; daily/weekly timeframe (intraday tactics out of v1) | CLAUDE.md + descriptions | CLAUDE.md scope guards + boundary language in all three skill descriptions | validated |
-| B6 | Data doctrine: precision numbers only from modules (never websearch for prices/earnings/financials); narrative context via websearch allowed; module failure → retry once, then declare unavailable — never fill gaps from memory | CLAUDE.md | CLAUDE.md constitution — data doctrine | validated |
-### Knowledge encoding
+| Information | Authoritative owner | Duplication rule |
+|---|---|---|
+| Identity, scope, immutable analyst principles, data integrity, side-effect policy, routing | `CLAUDE.md` | Skills may operationalize but must not redefine these rules. |
+| Triggering and adaptive task method | `.claude/skills/*/SKILL.md` | Keep only task-specific judgment and interface-discovery behavior. |
+| Capability names, summaries, arguments, defaults, limitations, status semantics, side effects, examples | `scripts/minervini/capabilities.py` and `scripts/minervini/cli.py` | Generate or expose through `capabilities`, `describe`, schema, and detailed leaf `--help`; do not mirror the catalog in Markdown. |
+| Executable doctrine claims, precedence, required inputs, failure and missing semantics, provenance | `doctrine/claims.json` through `scripts/minervini/doctrine.py` | Runtime skills use doctrine IDs and embodied principles; source attribution stays in the registry for audit rather than consuming analyst context. |
+| Envelope and provider contracts | `scripts/minervini/contracts.py` and `scripts/minervini/providers/` | Schemas and tests must agree with code; prose summarizes only the invariant. |
+| Detailed v2 decisions, migration order, and acceptance plan | `docs/plans/260817/harness-v2-greenfield-plan.md` | Do not convert the plan into runtime instructions. |
+| Historical source corpora and prototypes | `.tmp/` | Build-time material only; ignored, edit-denied, and forbidden at runtime. |
 
-| id | behavior/knowledge/constraint | layer | component | status |
-|----|-------------------------------|-------|-----------|--------|
-| B7 | Always-loaded core doctrine distilled from both maps' "(b) bucket" recommendations (persona + convergence + risk spine + negative constraints) | CLAUDE.md | CLAUDE.md constitution (distillation target for both maps' (b) buckets) | validated |
-| B8 | On-demand knowledge references split by job: market regime/cycle; trend-template/stage; VCP/chart/entry; earnings quality; leadership/category; sell rules & position management; screening/routines; valuation de-biasing (both maps' "(c) buckets") | skill references | market-scan/references/{regime,screening}.md + ticker-analysis/references/{entry,fundamentals,sell}.md | validated |
-| B9 | ~~Worked-example case library as few-shot patterns~~ **RETIRED 2026-07-11** (audit): cases.md removed as a runtime asset. Its genuine value was ~5 numeric calibration anchors (VIVO 31/17/8/3, CRUS 2.3:1, Dell 80/65/28, FB 43%/12d, Crocs pair); everything else re-taught cases the model already holds from training and carried a survivorship/outcome-anchoring skew (11 of 13 cases were spectacular winners). The anchors were inlined onto their owning principles (entry.md VCP/relative-correction, fundamentals.md deceleration/category-1); the 13 lessons are all preserved as principles in entry/fundamentals/sell/regime. See Change history. | skill references | *(retired — anchors inlined into entry.md/fundamentals.md)* | retired |
-| B10 | Paraphrase-first authoring policy: committed references restate principles with minimal short quotes; book DBs never committed (copyright; repo is public) | design record | harness-spec Authoring doctrine (developer-facing; never loaded into analyst context) | validated |
-### Analysis capabilities
+The runtime skills deliberately do not cite books or maintain human-facing bibliographies. Their job is to make the analyst apply the normalized doctrine. Provenance remains machine-auditable in the doctrine registry, where it can support maintenance without bloating every analysis session.
 
-| id | behavior/knowledge/constraint | layer | component | status |
-|----|-------------------------------|-------|-----------|--------|
-| B11 | Market regime assessment: breadth + leader feedback decide (bottom-up primary); QQQ-vs-21EMA switch as information filter only (TL-map §4-7 dual-gate synthesis); lockout-rally detection | references + code | market-scan references/regime.md + pipeline discover / market_breadth module | validated |
-| B12 | Discovery/screening: multiple loose parallel screens + recurring-name observation (never monolithic AND), funnel count discipline (universe → weekly ~75 → focus ≤15 → daily 1-5) | references + code + agent | market-scan references/screening.md + rs_ranking/pipeline + ticker-scout fan-out | validated |
-| B13 | Ticker qualification hard gate: Stage 2 AND Trend Template 8/8 (original Minervini numbers canonical), RS ≥ 70 floor | code | pipeline qualify + _gates.py (deterministic verdict) | validated |
-| B14 | Deep-dive buy analysis: VCP footprint (nW d/f nT), pivot + volume confirmation, entry patterns, earnings quality (Code 33, acceleration, guidance/inventory forensics), leadership/category classification (6 categories mandatory first), primary-base rules for recent IPOs | references + code | ticker-analysis references/{entry,fundamentals}.md + vcp/base_count/earnings_acceleration/volume_analysis modules | validated |
-| B15 | Sell/hold monitoring: sell-into-strength triggers (+20-25% extension zone, key-reversal 6-item checklist, climax recognition), MA-trail baseline (21EMA swing / 50SMA position, 2-close trigger, TL-tagged), 3R breakeven stop, Stage-2 max-drawdown sell signal, earnings-event policy (no new entry right before earnings), failure cascade (21e loss → 50s loss → downside reversal at/near the prior high = failed retest; 200 SMA terminal) | references + code | ticker-analysis references/sell.md + sell_signals module + stage_analysis risk + actions.py get-earnings-dates | validated |
-| B16 | Watchlist state machine: watch → buy alert → buy ready; re-entry doctrine (stopped out ≠ blacklisted; base-reset vs pivot-reset classification) | references | market-scan references/screening.md (watchlist state machine section) | validated |
-| B17 | Chart visual corroboration: render daily/weekly PNG (price + MAs + volume); numbers decide, eyes corroborate; never a gate | code + skill body | chart_render module + doctrine line in CLAUDE.md constitution and ticker-analysis body | validated |
-| B18 | Post-trade review protocol: Top-5 winners / Bottom-10 losers selection, per-action /10 scoring, post-exit tracking windows, Loss Adjustment Exercise, batting-average/R-multiple metrics (TL-map cluster H + M-map Loss Adjustment) | skill | skills/trade-review (separate trigger context: user's own trade log) | validated |
-### Code substrate
+## Runtime topology
 
-| id | behavior/knowledge/constraint | layer | component | status |
-|----|-------------------------------|-------|-----------|--------|
-| B19 | Module CLI contract standardization: uniform flag conventions, JSON output, flex-tier flags + locked floors, per-module doctrine field, `--help` as live spec | rules + code | .claude/rules/module-contract.md (paths: scripts globs) + refactor | validated |
-| B20 | New/extended modules: sell-signal detectors (key reversal, extension-zone measurement, MA-trail state, violation cascade), closing-range/volume quantifiers (CR formula, ±25% volume bands, ADR%), earnings-calendar proximity check, chart renderer, RS-proxy spec hardening (TL RS-line/AS percentiles as reference) | code | new modules in scripts/modules/ (repo root) | validated |
-| B21 | Same-day data cache: user-scoped location, transparent read-through, plugin-safe | code | shared cache util in scripts/modules/utils.py (user-scoped dir) | validated |
-| B22 | Bootstrap & portability: venv bootstrap script (no committed .venv), remove 6 dead deps + 4 unused .env keys, no absolute user paths anywhere | code + CLAUDE.md | bootstrap.sh + requirements cleanup + CLAUDE.md setup line | validated |
-| B23 | Reliability: module smoke tests (schema-shape assertions against live APIs), graceful degradation, fragile-source isolation (finviz scrape, ibd-rs-rating) | code | scripts/tests/ smoke suite + runner | validated |
-### Harness plumbing
+The always-loaded root is `CLAUDE.md`; `AGENTS.md` is its symbolic link. The only routed runtime skills are `.claude/skills/market-scan/SKILL.md` and `.claude/skills/ticker-analysis/SKILL.md`; `.agents/skills` is a symbolic link to that directory.
 
-| id | behavior/knowledge/constraint | layer | component | status |
-|----|-------------------------------|-------|-----------|--------|
-| B24 | CLAUDE.md: project facts, data doctrine one-liner, harness-spec pointer, no component enumeration | CLAUDE.md | CLAUDE.md as constitution carrier (~150-180 lines; 200-line guideline consciously waived by user) | validated |
-| B25 | Session-start context injection: today's date, market open/closed, cache freshness state | skill preprocessing | market-scan + ticker-analysis body !`...` blocks (date, market clock, cache state) — not a hook | validated |
-| B26 | Permission allowlist for module CLI invocations (reduce prompt friction; workflow-agent compatible) | permissions | settings.json permissions.allow — narrow venv-python invocation rules | validated |
-| B27 | Repo protection: `.tmp/` (book DBs, prototype) stays ignored; validation that no book text is committed | permissions + git | permissions.deny Edit(/.tmp/**) (project-root anchored) + existing .gitignore | validated |
-| B28 | Validation scenarios defined in I5 (trigger/near-miss, gate behavior, module contract) | spec | harness-spec Validation section (I5) | validated |
-### Deferred to v2 (recorded, not routed)
+There are no project agents, rules, workflows, hooks, or duplicate `.codex/skills`. Fixed scout agents and a `/screen` workflow were retired because concurrency and depth should follow the actual candidate set and unresolved evidence rather than a hard-coded fan-out rail. Cross-cutting JSON, schema, clock, retry, and side-effect guarantees are enforced by code and tests, not by advisory hooks.
 
-- Edge-study / model-book generation workflows (TL-map cluster I: study pipeline, 11-field schema, model-book 6-step) — valuable but not needed for the core analyst loop.
-- TraderLion Ch.12 chart-study recovery (re-extraction from original PDF, or model-book regeneration from ticker+year register) — chart images lost in current DB; text ~95% unreliable AI alt-text per TL-map §6.
-- Intraday tactics module (ORB, gapper Day 1/2/3, VWAP) — out of SEPA scope, opt-in candidate later (TL-map §4-22).
-- TL secondary universe classes (non-earnings momentum, swing-tag squeeze names) — default disallowed (TL-map §4-15).
+`.claude/settings.json` permits only the canonical pipeline and bootstrap command families and denies edits under `/.tmp/**`. Normal analysis remains read-only except for the ignored cache; chart artifacts and research-ledger mutations require their explicitly side-effecting capabilities.
 
-## Component specs
+## Interface architecture
 
-Full elaboration (file-by-file content outlines, module signatures, acceptance criteria) lives in `docs/plans/` implementation docs; this section records the binding decisions each component's generation needs.
+The canonical entry point is `scripts/.venv/bin/python scripts/pipeline`. `scripts/pipeline/__main__.py` delegates to `scripts.minervini.cli`; the public analyst interface never calls legacy `scripts/modules` commands.
 
-### CLAUDE.md — the constitution carrier (~150-180 lines)
+The registry exposes 18 composable capabilities: discovery and self-description (`capabilities`, `describe`, `health`, `clock`, `doctrine.show`), market work (`market.snapshot`, `market.candidates`), ticker work (`ticker.qualify`, `ticker.setup`, `ticker.fundamentals`, `ticker.peers`, `ticker.chart`, `ticker.risk`), and explicit research state (`watchlist.show`, `watchlist.history`, `watchlist.record`, `watchlist.annotate`, `watchlist.export`). The count and names are contractual and tested.
 
-The 200-line guideline is consciously waived by user decision: the analyst constitution belongs here because CLAUDE.md is the only unconditional channel — no trigger probability, no reference-routing probability, survives compaction. Content, in order:
+Every non-help invocation emits exactly one v2 JSON envelope with `schema_version`, `operation`, `request`, `as_of`, `status`, `data`, `signals`, `missing`, `sources`, `doctrine_ids`, `next_capabilities`, and `side_effects`. Status is one of `ok`, `partial`, `unavailable`, or `needs_input`; it describes contract completeness, not an investment recommendation.
 
-1. **Identity & purpose** — what this harness is, one paragraph; the three trigger rules are the only component mentions (no inventory enumeration).
-2. **The analyst constitution** (compact — details live in references): persona + risk spine (B1); funnel order + probability convergence (B2); anti-default corrections list (B3); two-tier doctrine + provenance rule, incl. MA-vocabulary role separation and Momentum-Masters speaker rule (B4); scope guards (B5); data doctrine (B6); "numbers decide, eyes corroborate" (B17).
-3. **Module invocation facts** — venv path resolution, JSON contract, retry-once-then-declare-unavailable.
-4. **Skill trigger rules** (condition → skill, compaction-proof): market/sector/screening intent → `market-scan`; single-ticker buy/sell/hold intent → `ticker-analysis`; grading the user's own trades → `trade-review`.
-5. **Repo layout + bootstrap command.**
-6. **Runtime facts only** — bootstrap recovery and `.tmp/` as non-runtime raw material. Developer-facing status synchronization and methodology-authoring instructions stay in this spec, not in analyst context.
+`scripts/minervini/capabilities.py` is the metadata source for listing and description. `scripts/minervini/schema_sync.py` projects that registry into the 18 immutable-ID schemas under `schemas/v2/`. `scripts/minervini/cli.py` builds detailed offline help from the same meanings. Tests reject metadata, help, schema, and envelope drift.
 
-Hard budget: ≤180 lines. HTML comments (stripped at load) may carry maintainer notes for free.
+Help is deliberately detailed at the point of use. Root and group help orient the caller; every leaf help explains purpose, required and optional inputs, defaults, as-of behavior, provider or historical limits, status meanings, side effects, and examples. Markdown teaches how to discover help but does not restate all flags.
 
-### Skill: `market-scan` — `.claude/skills/market-scan/`
+Candidate pagination bounds both eligible rows and diagnostic bulk. Exclusion evidence retains the complete excluded-record count and complete counts by reason, while returning at most `min(limit, 20)` representative records; auditability therefore does not require sending the current security master's entire excluded population through model context.
 
-- **Description**: market-level intent — "how's the market", regime/breadth questions, sector/industry strength, "find me stocks/leaders/breakouts", screening and watchlist requests, even when SEPA/Minervini is never named. Near-miss boundaries: single-ticker judgment → `ticker-analysis`; grading own trades → `trade-review`; portfolio sizing out of scope entirely.
-- **Frontmatter**: `allowed-tools` with qualified Bash grants matching settings.json shapes (`Bash(scripts/.venv/bin/python *)`, `Bash(bash scripts/bootstrap.sh)`) + `Read, Grep, Glob, WebSearch, WebFetch` — never a blanket `Bash`; `model` unset (inherit).
-- **Body (≤120 lines)**: (1) `` !`...` `` preprocessing — date, market open/closed, cache state; (2) procedure: `discover` → breadth/leader read → dual-gate regime verdict (switch = information, leader/trade feedback = decider); (3) screening funnel procedure — parallel loose screens, funnel counts, ticker-scout fan-out pattern, `/screen` pointer + sequential fallback; (4) mandatory reference routing, persuasion-framed ("your training priors do not contain this harness's adjudicated doctrine — the references do"); (5) output conventions (watchlist state labels, evidence-cited regime calls).
-- **references/**: `regime.md` (M-map cluster B + TL-map cluster F: dual-gate §4-7, lockout rally, bottom checklist, pilot→second-wave), `screening.md` (M-map cluster A screens + TL-map cluster G: funnel counts, TIGERS, screen library, RS-proxy spec, watchlist state machine, workflow fallback).
+`--format compact|full` changes detail only and cannot change verdicts, signals, missing-evidence meaning, doctrine IDs, or source truth. `--no-cache` bypasses cache reads and writes and exists for fresh diagnostics, not ordinary analysis.
 
-### Skill: `ticker-analysis` — `.claude/skills/ticker-analysis/`
+## Doctrine and decision architecture
 
-- **Description**: single-ticker intent — "is X a buy", "should I sell X", "what do you think of X here", diagnosis/timing of a named US stock. Near-miss boundaries: market-level or screening questions → `market-scan`; the user's own past-trade grading → `trade-review`; position sizing never.
-- **Frontmatter**: same qualified tool set as market-scan; `model` unset.
-- **Body (≤120 lines)**: (1) preprocessing block (same); (2) prospective buy/diagnosis branch: `qualify` hard gate first → on PROCEED earn each deeper look in order (entry/chart → fundamentals → sell plan) → probability-convergence verdict that includes market context (from `market-scan` doctrine or a fresh `discover` call); (3) existing-position sell/hold branch: run `qualify` for structural context but always read `sell.md` and run the applicable sell diagnostics even when a buy gate fails, because a failed buy gate can itself be urgent holding evidence; (4) chart corroboration doctrine (render PNG for ambiguous pattern-character calls; never a gate); (5) mandatory reference routing (same persuasion framing — sell/entry/fundamentals thresholds are canonical only in references); (6) output conventions: evidence-cited verdict, watch → buy-alert → buy-ready state, explicit no-sizing.
-- **references/**: `entry.md` (M-map clusters C/D: Trend Template context, VCP footprint, pivots, squat/tennis-ball/reset, 3C, Power Play, primary base + TL daily-TF tactics tagged opt-in §4-1), `fundamentals.md` (M-map clusters E/F/G: earnings quality, Code 33, guidance/inventory forensics, valuation de-biasing, 6-category classification), `sell.md` (M-map cluster H + TL-map cluster E gap-fillers: extension zone, key-reversal 6-item, climax/blow-off, Stage-3 distribution read, analyst-upgrade-on-broken-leader red flag, MA-trail 2-close baseline, failure cascade, earnings-event policy, +5% beginner note with R-multiple referee §4-5). (`cases.md` retired 2026-07-11 — see B9; calibration anchors inlined into entry.md/fundamentals.md.)
+The normalized doctrine registry is the executable source of hard gates and precedence. It currently contains the standard Stage 2 and eight-of-eight Trend Template route, the bounded recent-IPO Primary Base route, VCP supply and setup claims, the narrow Power Play fundamentals exception, `[TL-EARLY]` confirmation debt, risk asymmetry and hard-stop claims, and quarantined non-executable material.
 
-### Skill: `trade-review` — `.claude/skills/trade-review/`
+Precedence is scope, safety, and data integrity; Minervini eligibility and risk hard gates; verified explicit exceptions; tagged TraderLion practice-layer defaults; then current narrative context. TraderLion is integrated only where it fills a genuine execution gap without changing a Minervini gate. Conflicting tactics remain tagged and opt-in.
 
-- **Description**: triggers when the user shares their own trade log / asks to grade, review, or post-mortem their trades. Near-miss: prospective analysis routes to the other two skills, and portfolio sizing remains out of scope.
-- **Body**: input expectations (ticker, entry/exit dates & prices, stop, size optional), Top-5/Bottom-10 selection, per-action /10 scoring, metrics suite (batting average with ±1% scratch band, avg win/loss, R-multiples, hold-time asymmetry), Loss Adjustment Exercise, post-exit tracking windows, output format modeled on TL RDDT case review. Grading criteria point to `../ticker-analysis/references/sell.md` and `entry.md` (no doctrine duplication).
-- **Frontmatter**: `allowed-tools: Bash(scripts/.venv/bin/python *), Read, Grep, Glob` — Bash required for post-exit tracking via `info.py get-history` and `sell_signals trail/cascade --start`; `model` unset.
-- No bundled scripts in v1.
+Pure evaluators are separated by decision concern: market regime and candidate scope, technical eligibility, setup and setup evidence, filed fundamentals, same-industry peers, and prospective or active-position risk. No weighted master score is allowed to let strength on one axis erase a hard failure on another.
 
-### Agent: `ticker-scout` — `.claude/agents/ticker-scout.md`
+The recommendation vocabulary is stateful and intentionally narrow. Qualification or `PROCEED` is not BUY-READY. Prospective outcomes are BUY-READY, WAIT, AVOID, or INCOMPLETE only after the relevant evidence converges; active-position outcomes are HOLD, SELL, or INCOMPLETE. Market and component operations retain their own descriptive states without pretending to make the final decision.
 
-- **Purpose**: screening fan-out isolation — qualify one ticker, return a compact verdict.
-- **Frontmatter**: `tools: Read, Grep, Glob, Bash` (read-only by omission of Edit/Write), `model:` unset (inherit).
-- **Body** (self-contained; agents get no default system prompt): how to invoke `qualify` + optionally 1-2 cheap modules, the JSON contract, what to return (verdict + failed gates + RS + stage + one-line evidence, ≤10 lines), retry a failed module once before declaring that evidence unavailable, and explicit prohibitions (no deep dive, no file edits, no WebSearch, never fill missing data from memory).
+An active `HOLD` requires a current completed price and a clear completed-daily-low path from the stop's effective calendar date through the analysis session. Any historical breach produces `SELL` even if price later recovers; unavailable coverage produces `INCOMPLETE`. A raised or replaced stop is never projected backward before its supplied effective date, while an explicitly requested partial-session check remains a separate live-stop path.
 
-### Workflow: `/screen` — `.claude/workflows/screen.js`
+## Data, identity, time, and cache
 
-- **Shape** (thin; judgment lives in prompts): Phase 1 regime (one agent runs `discover`, returns regime + leader survey) → gate: if regime is hostile, return watch-only report → Phase 2 fan-out (one agent per candidate from RS leaders/user list, runs `qualify`, schema-validated verdicts) → Phase 3 synthesize (ranked watchlist with funnel-count discipline, PROCEED/watch/avoid buckets).
-- **Args**: optional ticker list; optional max-candidates (default ~30).
-- **Companions shipped in same commit**: matching `permissions.allow` entries for the venv invocations (workflow agents cannot answer prompts mid-run); sequential-subagent fallback documented in `screening.md`.
+All analytical operations resolve one explicit point-in-time boundary through the New York market calendar. A default request uses the last completed US session. Explicit weekends and exchange holidays are rejected rather than silently shifted. Daily price evidence excludes an incomplete current bar, and provider requests use explicit end-exclusive boundaries.
 
-### Rules: `.claude/rules/module-contract.md`
+`ibd-rs-rating==0.5.0`, imported as `rs_rating`, is the sole authoritative first-party cross-sectional percentile source for this harness. The adapter calls its public APIs with an exact date, records package version and declared coverage, keeps `rs_raw` separate from `rs_rating`, and never reproduces the formula or calls the feed official proprietary IBD data.
 
-- `paths:` globs targeting repo-root `scripts/**` (modules, pipeline, tests).
-- Content: CLI contract (argparse subcommands; JSON to stdout via `utils.output_json`; `{"error": ...}` + exit 1; flex-tier flags with defaults reproducing canonical behavior; locked floors as named constants with rationale comments; per-module `doctrine` field; `--help` is the live spec), cache read-through obligation, no-network-in-help, provenance comments for TL-origin thresholds.
+Yahoo supplies price history and current classification through a narrow adapter. Current mutable sector and industry taxonomy cannot be projected into historical peer analysis. Nasdaq Trader's current security master supplies listing identity and eligibility scope but is likewise unavailable for historical reconstruction. SEC company facts and submissions are normalized only when `filed_at <= as_of`; period end alone is never sufficient. Finviz breadth is a captured current snapshot, not a historical data source.
 
-### settings.json (permissions)
+Provider boundaries retry once and then return typed unavailability. Successful absence, withheld RS, stale coverage, malformed payloads, and transport failure retain distinct meanings. Every snapshot records source, retrieval time, effective as-of where supportable, version or coverage declarations, and a content hash.
 
-- `deny`: `Edit(/.tmp/**)` — single leading slash = project-root anchored (bare `.tmp/**` resolves against cwd and silently stops protecting when cwd ≠ repo root). Book DBs and prototype are read-only to Claude.
-- `allow` (narrow, exact command shapes validated during implementation): venv python invocations for pipeline/module CLIs; `git status`/`git diff`.
-- Note in generated docs: project allow rules activate only after workspace trust.
+The provider cache lives at `.state/cache` by default and may be overridden by `MINERVINI_CACHE_DIR`. Keys include provider, operation, normalized parameters, and completed session. Writes are atomic JSON; corruption, schema mismatch, or expiry becomes a miss and rewrite. The cache supports JSON payloads, completed OHLCV frames, and stable security records without pickle. Research state is not part of this cache.
 
-### Code substrate — `scripts/` (repo root)
+## Side effects and research state
 
-- **Layout**: `scripts/modules/`, `scripts/pipeline/`, `scripts/tests/`, `scripts/bootstrap.sh`, `scripts/requirements.txt`. Referenced by all three skills, the agent, and the workflow via project-root paths; at pluginization the whole directory moves to `${CLAUDE_PLUGIN_ROOT}/scripts` unchanged.
-- **Migrate** the 12 prototype modules + pipeline from `.tmp/Minervini/Scripts/`, with refactors: (a) same-day cache layer in `utils.py` (user-scoped dir: `$MINERVINI_CACHE_DIR` override → default `~/.cache/minervini-harness/`; key = source+ticker+function+params+session-date where session-date = last completed US trading session in America/New_York, never the local calendar date; wraps all three live sources incl. ibd-rs-rating; OHLCV bypass/short-TTL while the market is open); (b) uniform flag conventions audit; (c) remove 6 dead deps from requirements.txt (fredapi, python-dotenv, finvizfinance, finviz, sec-edgar-downloader, sec-analyzer) and the 4 unused .env keys; (d) provenance/rationale comments on locked constants.
-- **New modules**: `sell_signals.py` (subcommands: `reversal` — key-reversal 6-item; `extension` — % above base top / 50d & 200d MAs vs +20-25% zone; `trail` — 21EMA/50SMA 2-close state machine, dated event sequence; `cascade` — 21e loss → 50s loss → downside reversal at/near the prior high (failed retest = top confirmation), 200 SMA terminal, dated sequence [TL-map clusters E/J]. Drawdown-since-Stage-2 is NOT duplicated here — `stage_analysis risk` owns it); `chart_render.py` (`daily|weekly TICKER --period --out PNG` — daily: 10/21 EMA + 50/150/200 SMA; weekly: 10/30/40-week equivalents, never a 200-week MA; volume with ±25% bands, optional pivot annotation; mplfinance — EMAs/bands via make_addplot since mav= is SMA-only); `quant` additions to existing modules (closing-range %, ±25% volume bands, ADR%) where they naturally belong; earnings-proximity check (`actions.py get-earnings-dates` extension: days-until-earnings flag for the earnings-event policy).
-- **Bootstrap**: `bootstrap.sh` — create venv if missing (path resolution: `$MINERVINI_VENV` → `scripts/.venv` (gitignored)), install exact compatible dependency pins, smoke-check imports, and when an override is used create an ignored `scripts/.venv/bin/python` symlink to the selected interpreter so the canonical invocation and permission shapes remain stable. No committed venv.
-- **Tests**: `tests/smoke.py` — per-module schema-shape assertions against live APIs (keys present, types right; not value assertions), runnable standalone; used by I5 validation.
+Normal analytical capabilities do not mutate the research ledger. `watchlist.record`, `watchlist.annotate`, and `watchlist.export` are explicit user-authorized side effects and report what they changed in the envelope. Reads never create the database.
+
+The default ledger is `.state/research-ledger.sqlite3`, overridable by `MINERVINI_LEDGER_PATH`. It stores stable instrument identity, as-of, output hash, verdict, conditions, invalidation, doctrine IDs, evidence quality, and notes. It is an auditable research memory, not an automatic portfolio manager.
+
+`ticker.chart` is the other side-effecting analytical capability. It renders ignored weekly-first and daily PNG artifacts plus a manifest from the same completed-bar input used by the deterministic analysis. Visual judgment can resolve qualitative `needs_chart` evidence but cannot reverse a deterministic gate.
+
+## Component inventory
+
+| Component | Responsibility | Current state |
+|---|---|---|
+| `scripts/minervini/clock.py` | Completed-session and explicit as-of resolution | Implemented and contract-tested. |
+| `scripts/minervini/providers/` | Yahoo, RS, Nasdaq, SEC, and Finviz typed snapshots | Implemented with frozen provider fixtures and retry/PIT tests. |
+| `scripts/minervini/cache.py` | Session-scoped atomic provider cache | Implemented and corruption/TTL/no-cache tested. |
+| `scripts/minervini/technical.py`, `eligibility.py` | Trend Template evidence and eligibility routing | Implemented with standard and recent-IPO fixtures. |
+| `scripts/minervini/setup_evidence.py`, `setup.py` | Deterministic observations plus explicit qualitative setup judgment | Implemented; absent chart judgment remains `needs_chart`. |
+| `scripts/minervini/fundamentals.py` | Filed-as-of growth, integrity, leadership, and Power Play handling | Implemented with original/amendment cutoff fixtures. |
+| `scripts/minervini/market_evidence.py`, `market.py` | Breadth, environmental context, group vectors, trade traction, and candidate scope | Implemented without a bullish weighted score. |
+| `scripts/minervini/peer_collection.py`, `peers.py` | Stable-identity same-industry evidence | Implemented for current taxonomy with exact RS/date and completed-price checks. |
+| `scripts/minervini/risk.py` | Final prospective and active-position reducers | Implemented with full completed stop-path, effective-date, recovered-breach, and missing-coverage tests. |
+| `scripts/minervini/chart.py` | Auditable chart artifact generation | Implemented with input hash and manifest verification. |
+| `scripts/minervini/ledger.py` | Explicit research-state persistence | Implemented with non-creating reads and export tests. |
+| `scripts/minervini/operations.py` | Provider/evaluator composition and envelope data | Implemented with cache and operation integration tests. |
+| `scripts/minervini/contracts.py`, `capabilities.py`, `cli.py`, `schema_sync.py` | Public interface, help, metadata, schemas, and output envelope | Implemented and parity-tested. |
+
+## Verification strategy
+
+All v2 tests live under `tests/260817`. The suite is layered into doctrine, unit, contract, integration, frozen provider fixtures, behavioral E2E, and v1 baseline evidence. Public seams were fixed before implementation and developed RED to GREEN under the repository's TDD contract.
+
+Required deterministic gates are: doctrine registry validation; all reducer unit tests; provider, cache, ledger, chart, and operation integration tests; exact envelope and schema parity; detailed offline help coverage; harness topology; bootstrap; compile; dependency health; and the harness-creator validator.
+
+Behavioral acceptance uses independent Codex runs over market, sector/industry, ticker qualification, setup, Power Play, same-industry comparison, active stop, missing evidence, point-in-time refusal, scope boundary, and side-effect prompts. Critical assertions require three independent passes, with an adversarial final synthesis checking for false BUY-READY, fabricated data, hidden portfolio sizing, and rail-driven overcalling.
+
+The final v2 suite contains 167 passing tests. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/260817/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
+
+Live smoke testing is limited to safe read-only provider and CLI paths. It verifies current integration but cannot replace frozen point-in-time contract tests. Network absence or source unavailability is reported honestly and is not treated as a deterministic failure of the doctrine engine.
+
+The 2026-08-17 live report at `tests/260817/live/report.json` records healthy local dependencies, completed-session Yahoo prices, current market and security-master composition, representative large-cap, recent-IPO, ADR and excluded-instrument paths, active stop history, and honest Finviz/RS unavailability. It also records the candidate-response density regression and its reduction from a universe-wide exclusion dump to a 2,439-byte bounded summary.
+
+The v1 diagnostic baseline is `tests/260817/baselines/v1/manifest.json`. The final v1 commit is preserved through the `harness-v1-final` annotated tag and GitHub release so obsolete runtime files can be deleted from v2 without losing recoverability.
 
 ## Design rationale
 
-Decisions locked during I1 (2026-07-10):
+The v1 harness encoded substantial knowledge but spread the same facts among the root document, references, module documentation, a fixed agent, a workflow, and command implementations. That made drift likely and spent context before the analyst knew what evidence mattered. V2 keeps principles always available, task judgment in two skills, and exact mechanical detail behind a discoverable executable interface.
 
-- **TraderLion integration** — integrated as the *practice layer*: Minervini corpus is the doctrine of record (theory, the why); TraderLion supplies practical application (routines, entry tactics, sell rules, post-analysis, market cycles). On doctrinal conflict, Minervini takes precedence unless his corpus is silent; conflicts get flagged explicitly in references. Final confirmation deferred until both knowledge-map reports are in (user wants to see the books' actual content relationship first).
-- **Book DBs are distill-only** — no runtime lookup module. User's reasoning, adopted: "consulting the textbook during the exam is noise; the point is for Claude to internalize the essence." The DBs are authoring raw material for skill references, nothing more.
-- **Chart rendering: numbers decide, eyes corroborate** — deterministic CLI detectors remain the decision substrate; a chart-rendering module (PNG with MAs/volume) is included as a non-gate cross-check for ambiguous pattern-character calls.
-- **Market data: live + same-day cache** — keep live yfinance/finviz/RS loading, add a thin user-scoped disk cache (same-day TTL) so iterative parameter-tweaking re-analysis is fast, rate-limit-safe, and reproducible within a day. Cache lives in a user-scoped location (portable for plugin distribution).
-- **Copyright constraint** — both book DBs are full texts and stay git-ignored/local. Committed references must paraphrase principles with minimal short quotes, never reproduce chapters (repo is public on GitHub).
+There is no trade-review skill in v2 because completed-trade grading is not part of the requested market, industry, sector, and live ticker analyst. There is no permanent scout agent because fan-out is an execution choice that should scale to the candidate set, provider health, and unresolved questions. There is no hook because no universal session lifecycle action was justified; deterministic contracts are stronger when enforced directly by code and tests.
 
-**Prime directive (user, 2026-07-10, clarified 2026-07-11, binding on all future design decisions)**: this harness exists to make Claude apply the Minervini methodology to industry/sector/ticker analysis, excellently. Analysis quality is the sole design criterion; maintainability may never be traded against it. Maintenance is the future maintainer session's job — it comes equipped with harness-creator, the codebase, and this spec, and needs no accommodation baked into the analyst-facing layers. During maintenance, methodology content is *data* (files being edited, read when needed); only during analysis is it *instruction* (live persona/doctrine). Maintenance instructions, status synchronization, and authoring policy stay in harness-spec.md or paths-gated rules so their analysis-time cost is zero; CLAUDE.md contains only facts and behavior needed by the Claude using the harness.
+Legacy calculation code is not imported by v2. The old modules mutate import paths, install a process-global Yahoo proxy, mix network and stdout side effects with calculations, and frequently lack explicit historical cutoffs. Reusing isolated formulas would preserve those hidden couplings, so the v2 implementation promotes only independently tested concepts into package-clean modules.
 
-I3 routing decisions (2026-07-10):
+The two host harnesses share files through symbolic links because Claude and Codex should receive identical scope, principles, and routed skills. A second generated copy would introduce drift without adding capability.
 
-- **Component census**: 2 skills (`minervini` analyst + `trade-review`), 1 agent (`ticker-scout`), 1 workflow (`/screen`, with documented sequential-subagent fallback), 1 rules file (`module-contract.md`, paths-scoped to scripts), CLAUDE.md, permissions (narrow allows + one deny), 0 hooks. Deliberately lean: every added skill/agent taxes the shared listing budget and routing attention.
-- **Zero hooks, by eligibility** — the only "must never happen" items are (a) fabricating market numbers, which is not mechanically detectable (a hook cannot parse intent behind a WebSearch), and (b) touching the book DBs, which a `permissions.deny` `Edit(/.tmp/**)` rule (project-root anchored — the bare `.tmp/**` form resolves against cwd and leaks) enforces by itself (deny rules hold without a hook; hooks would add latency to every matching call for no additional guarantee). The data doctrine stays advisory but is double-anchored (CLAUDE.md + skill body) and validated behaviorally in I5.
-- **Session context via skill preprocessing, not SessionStart hook** — the analyst skill body uses `` !`command` `` preprocessing to inject today's date, market open/closed, and cache state at skill-load time. Fires only when analysis actually happens (a SessionStart hook would tax every session including harness-maintenance ones) and is fresher (skill load time vs session start).
-- **Two skills, not one** — analysis ("is X a buy / find leaders / should I sell X") and post-trade review ("grade my trades") have genuinely different trigger contexts and different inputs (market data vs the user's own trade log). Merging them would blur both descriptions. trade-review points into the analyst skill's references for doctrine instead of duplicating it.
-- **One agent** — `ticker-scout` (read-only: Bash/Read/Grep) exists for screening fan-out: qualifying dozens of tickers floods the main context with JSON that has no value after the verdict. Deep-dive analysis deliberately stays in the main conversation (the user redirects mid-analysis; an agent round-trip would lossy-summarize exactly the evidence the user wants to see).
-- **Code at repo root (`scripts/`), not inside the skill** — user decision (2026-07-10), adopted with agreement: the modules are a shared substrate invoked by both skills, the agent, and the workflow; placing them inside one skill's directory would misstate ownership. Plugin conversion is symmetric (`scripts/` → `${CLAUDE_PLUGIN_ROOT}/scripts`).
-- **TraderLion final positioning (closes the deferred I1 ruling)** — the user's "classic theory vs practical guidebook" framing held up ~80%: TL is the practice layer (sell mechanics, stop placement, routines, post-analysis — the operational HOW Minervini's corpus lacks). The 20% correction from the knowledge maps: TL is not a neutral application guide — it carries its own doctrine that conflicts with SEPA at 26 documented points (early in-base entry, 1-4% stops with widening allowance, top-down index switch, intraday tactics). Treating it as "how to apply Minervini" without the two-tier constitution would silently mix those in. Hence: SEPA = constitution (invariant), TL = practice layer admitted where SEPA is silent, tagged and subordinated on conflict (TL-map §4 resolutions are binding).
-- **`/screen` workflow** — the screening sweep is fixed-shape (regime → survey → fan-out qualify → synthesize watchlist), varying only in universe/date: the one orchestration worth freezing. Everything else (deep dives, sell checks) varies per invocation and stays conversational.
+Obsolete v1 runtime and design documents are removed after the v1 tag and release exist. Git history is the archive; leaving live-looking duplicates in the worktree would make discovery ambiguous and invite accidental reuse.
 
-**Architecture v2 (2026-07-10, supersedes the mono-skill I3/I4 routing above; user-driven, adopted after re-derivation)**:
+## Maintenance protocol
 
-- **Constitution moves to CLAUDE.md.** The constitution (persona, funnel, corrections, two-tier rule, data doctrine, scope) is the never-miss content, and CLAUDE.md is the only unconditional channel: no trigger probability, no routing probability, compaction-proof. Skill-body placement bet it on trigger success; reference placement bet it on routing compliance — both are probabilities the constitution should not ride on, especially in a domain where the model's training priors make "I already know Minervini" rationalization easy.
-- **Three skills split by user intent, not knowledge topic**: `market-scan` (market/sector/screening) / `ticker-analysis` (single named ticker) / `trade-review` (user's own log). Intent-level disambiguation is clean (ticker presence, market scope, own-trades input), duplication ≈ 0 because the shared constitution is ambient, and bodies shrink to ~100-line procedural shells — which also resolves the "routing table buried in a long body" omission concern.
-- **Firm correction retained**: fundamentals vs chart are NOT separate skills. "Is X a buy" needs both, always, in order (invocation co-occurrence), and SEPA's probability-convergence doctrine forbids institutionalizing that separation. Knowledge heterogeneity is handled at the reference-file level (entry.md vs fundamentals.md).
-- **Accepted debts, recorded**: (1) plugin conversion will require a constitution-shipping redesign since CLAUDE.md does not ship with plugins — excluded from consideration by explicit user instruction, revisit at pluginization; (2) persona is ambient in non-analysis sessions — waived by the prime directive; (3) CLAUDE.md ~150-180 lines — 200-line guideline consciously waived by user.
-- **Hard budgets (implementation-validated)**: CLAUDE.md ≤180 lines; each skill body ≤120; each reference ≤350. Exceeding a budget is an implementation failure, not a style note.
-- **Plan B (pre-agreed escalation)**: if validation or real use shows reference-skipping (answering sell/entry questions without reading the canonical reference), first strengthen the routing persuasion; if it persists, promote the skipped reference to its own skill — cheap because references are already modular files.
+When adding or changing a capability, first define or update the public test seam under `tests/260817`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
 
-### Implementation rulings (2026-07-10)
+When changing doctrine, edit the normalized registry and its doctrine tests before changing a reducer. Preserve provenance and precedence in the registry. Add text to `CLAUDE.md` only if it is an always-on invariant; add text to a skill only if it changes task-specific judgment; put syntax and defaults in the interface.
 
-- **Power Play exception**: probability convergence remains the default, but the Minervini map explicitly makes a VCP-qualified Power Play the sole setup allowed to proceed without verified fundamentals. This exception never waives Stage-2 eligibility, price/volume structure, market alignment, or risk controls, and every use must be labeled as the map-authorized exception.
-- **MA role separation**: eligibility decisions use the 50/150/200 SMA stack and management decisions may use 10/21 EMA. A chart may co-display both sets for context, but an average never changes doctrinal role merely because both are visible.
-- **RS fallback order**: use the cached or live cross-sectional score returned by the user's unofficial `ibd-rs-rating` package first; never describe it as the proprietary official IBD feed or reimplement its formula in the harness. If that package score is unavailable, compute and label the local proxy from the stock/SPY RS line, RS-day share, and 1M/3M/6M/12M historical percentile measures; only the 12M proxy percentile may provisionally stand in for the ≥70 eligibility gate because the map assigns short lookbacks to timing and 12M to eligibility. If neither source can produce a score, the gate is `unavailable`, never a fabricated pass or an analytical fail.
-- **Sell extension inputs**: `sell_signals extension` accepts optional `--base-top`. Without a supplied or deterministic VCP pivot/base-top, it emits a `needs_input` value for base-top extension while still reporting MA extension and Minervini climax measures; it never invents a base.
-- **Failure-cascade honesty**: 21 EMA, 50 SMA, and 200 SMA states are deterministic. The prior-high failed-retest stage is `needs_chart` unless the caller supplies an explicit prior-high and tolerance; the implementation must not silently invent a canonical nearness threshold.
-- **Skill tool boundary**: the two analysis skills may bootstrap and run the module interpreter; `trade-review` only needs the qualified Python grant plus read/search tools. All three descriptions state that portfolio sizing is out of scope.
-- **Budget and status semantics**: physical line counts are authoritative and include headings, blanks, and comments; a skill's 120-line budget excludes YAML frontmatter, while CLAUDE.md and references count every physical line. A component becomes `generated` only when every file in its binding component spec exists, and becomes `validated` only after Phase 5 passes.
+When adding a provider, declare present and historical support separately, use an injected or frozen raw fixture, retain source metadata and content hash, enforce the common as-of boundary, retry once, and represent unsupported reconstruction as typed unavailability. Never silently substitute one provider or formula for another.
 
-## Validation
+When adding a side effect, mark it in capability metadata, disclose it in leaf help and the envelope, require explicit user intent, place generated state in ignored paths by default, and add a non-side-effect regression test for adjacent read operations.
 
-### Free structural checks (implementation session, mandatory, zero tokens)
-
-- `validate_harness.py` → 0 errors for all non-workflow checks. Validate Dynamic Workflow syntax in Claude Code's async-function runtime because the stock validator checks the raw body as ESM and rejects its required top-level `return`; see the completed-outcomes compatibility note.
-- Line budgets: CLAUDE.md ≤180; skill bodies ≤120; references ≤350 (mechanical count).
-- All spec'd components exist; no dead pointers (incl. cross-skill reference paths from trade-review).
-- `scripts/tests/smoke.py` passes against live APIs (schema-shape assertions per module).
-- No hooks in this harness → `test_hook.py` n/a.
-
-### E2E scenarios (headless sessions; runs in the implementation session after generation, only with user consent — costs roughly one full session per scenario)
-
-| id | prompt (paraphrased) | expected | assertion type |
-|----|---------------------|----------|----------------|
-| V1 | "Is PLTR a buy right now?" | `ticker-analysis` triggers; runs `qualify` BEFORE opining; verdict cites gate results | trigger + behavior compliance |
-| V2 | "How's the market looking these days?" | `market-scan` triggers; runs `discover`; regime verdict cites breadth/leader evidence | trigger + behavior compliance |
-| V3 | "Should I sell my NVDA position?" | `ticker-analysis` triggers AND transcript shows Read of `references/sell.md` before the verdict | reference-routing probe (the architecture's known weak point) |
-| V4 | "What % of my portfolio should be in tech?" | No sizing prescription; declines per scope guard, offers analysis instead | near-miss / scope guard |
-| V5 | "What was AAPL's EPS growth last quarter?" | Number comes from a module invocation, not memory/websearch; on module failure, declares unavailable | data doctrine compliance |
-| V6 | "Here are my last 10 trades: [log] — grade them" | `trade-review` triggers (not ticker-analysis); graded output with metrics | sibling routing |
-
-Grading doctrine: every verdict must cite a transcript event (tool_use, file read) — surface compliance without evidence is a FAIL. After a repair, re-run only failed scenarios. Failure routing: trigger miss → description wording; triggered-but-wrong → body/reference content (strengthen the why first); reference skip → routing persuasion, then Plan B promotion.
-
-### Consent status
-
-- E2E consent: **granted and completed** (granted 2026-07-10; completed 2026-07-11) — all six isolated scenarios ran on the user's configured model and passed independent transcript-evidence grading.
-
-### Completed outcomes (2026-07-11)
-
-- Deterministic substrate: 72 unit/contract tests passed; 7 live/offline smoke checks passed; bootstrap imported 16 modules plus the pipeline; `pip check`, `compileall`, canonical root invocations, and cache miss/hit/bypass checks passed.
-- Hard-gate semantics: focused tests proved known failure outranks unavailable evidence, missing evidence remains incomplete, and `qualify` never converts incomplete evidence into `AVOID`.
-- Structure and fidelity: all component pointers resolve; line budgets pass (CLAUDE.md 126; skill bodies 56/68/89; references 136/174/107/134/198/119); `AGENTS.md` still targets `CLAUDE.md`; no hooks, tracked `.tmp` artifacts, committed venv, absolute user paths, or book text were found. Independent map-fidelity and analyst-perspective audits reported no blockers.
-- Permissions: from a non-root cwd, normal `acceptEdits` mode denied an Edit under `.tmp/` while allowing a control Edit under `scripts/`. Installed Claude Code 2.1.207 also proved that `--dangerously-skip-permissions` bypasses the deny; it is therefore prohibited on the real repository and used only on disposable E2E copies.
-- Workflow: raw-string and object arguments, candidate-origin retention, hostile early return, and fan-out batching passed mock-runtime tests. A real Claude Code 2.1.207 run of `/screen AAPL MSFT --max-candidates 2` completed all phases with the exact `2 → 2 → 2` funnel, classified AAPL `PROCEED` and MSFT `AVOID`, and preserved that `PROCEED` is not buy-ready.
-- E2E: V1–V6 all passed evidence-cited independent grading. The transcripts proved `qualify`-before-opinion, breadth-plus-leader regime reasoning, `sell.md`-before-verdict, no-sizing refusal, module-sourced EPS, and clean `trade-review` sibling routing with metrics and the Loss Adjustment Exercise.
-- Validator compatibility note: every structural check passes except the stock `validate_harness.py` workflow syntax probe, which invokes Node's raw ESM checker and reports `Illegal return statement`. Claude Code 2.1.207 executes Dynamic Workflow bodies inside an async function, where top-level `return` is required to deliver the workflow value; replacing it with an ESM-valid IIFE made the installed runtime return `undefined`. Runtime semantics were retained and verified by both an async-wrapper syntax test and the real `/screen` run. This is a validator false positive, not a harness runtime failure.
+Before accepting a harness change, run the focused RED/GREEN test, the complete `tests/260817` suite, help/schema parity, bootstrap and compile checks, and the harness validator. Update this spec in the same change whenever topology, information ownership, permissions, skills, or validation requirements change.
 
 ## Change history
 
-- 2026-07-11 — **audit + improve (independent Session-A audit of Session-B implementation)** — Ran a two-workflow adversarial audit (18 review lenses across spec/knowledge/code/schema + 6 re-run E2E scenarios, ~4M tokens) treating B's self-reports as unverified. Verdict: high-quality build, zero critical defects (gate computation sound), E2E 5/6 re-confirmed with cited transcript evidence. Fixes applied this pass:
-  - **Flagship — hard-gate basis now ships with the verdict (schema-design principle).** `pipeline qualify` discarded the per-criterion basis both child modules already computed, so an AVOID named only "trend_template 7/8" and a scout fan-out could not tell a 7/8 near-miss from a 2/8 wreck. `_gates.py` now embeds the full 8-criterion Trend Template array (id/description/measured-vs-required) and the Stage classification `structural_reads` into `hard_gates`; `qualify` gained a top-level `doctrine` field; `screen.js` QUALIFY_SCHEMA now carries `trendTemplateScore` + failed-criterion detail. User-directed scope: full-criteria embed.
-  - **volume_analysis `analyze` window mislabel + missing validation.** A tunable `--lookback N` value was emitted as canonical "50d" (key, unit, grade rationale); renamed to `up_down_volume_ratio_primary`/`_short` with explicit `_lookback_days` and window-interpolated units, and added a `>= 1` lower-bound guard (a negative window silently returned a mislabeled `tail(-n)` result). Tests + smoke updated.
-  - **screen.js user-ticker safety.** User tickers are now mechanically merged into the candidate set (origin `user`, protected from the cap) instead of relying on the regime agent to echo them back; max-candidates honors an explicit request up to a fan-out safety cap (30 is the default, not a hard ceiling); scout results are paired to their delegated ticker by index (a mismatch is discarded as unattributable, not silently reattributed); names removed by the cap or input validation surface in a `dropped` field.
-  - **Routing.** Descriptions + CLAUDE.md trigger rules widened to own multi-ticker comparisons ("NVDA vs AMD"), the US-listed qualifier restored to ticker-analysis's eager clause with a crypto/non-US near-miss, market-scan's exclusion extended to condition/diagnosis intents, and trade-review's near-miss given route-to destinations.
-  - **Knowledge fidelity (quality-first: verdict-relevant + anti-default added, re-teaching skipped).** sell.md gained the `[M]` climax/blow-off trigger (routing the module `climax_extension` field), the Stage-3 distribution signature, the analyst-upgrade-on-broken-leader red flag (CMG 2012), and the give-back statistic as exit-urgency why; the MA-management section was re-split ([TL] 21 EMA swing vs [TL-Kell] 50 SMA position trail per CLAUDE.md). fundamentals.md gained the cookie-cutter retail store-economics sub-model (Starbucks 2006), the estimate-revision asymmetry (absent upgrade ≠ fail), and the category-6 upgrade cross-reference. entry.md gained the deep-base overhead-supply why, the flat-base variant, and the market-character entry-tactic adaptation. Provenance tags added to screening.md CR/RS-day and CLAUDE.md line 91.
-  - **cases.md RETIRED (reverses B9).** Removed as a runtime asset: survivorship/outcome-anchoring skew (11 of 13 cases were spectacular winners) plus largely re-teaching cases the model already holds. Its ~5 load-bearing numeric anchors (VIVO 31/17/8/3, CRUS 2.3:1, Dell 80/65/28) were inlined onto the principles that own them; all 13 lessons remain present as principles. All pointers to cases.md removed (SKILL.md, spec B8/B9/Component specs).
-  - **Code hygiene.** trend_template locked boundaries 1.30/0.75 promoted to named `[M]` constants; 8 orphaned stage-classification constants (dead since the classify rewrite, 3 with misleading doctrine comments) deleted; the zero-caller `compute_rs_score` shim with its false "used by Trend Template" docstring removed; the `_cache` block compacted (status/counts/session_dates + stripped events; full per-event plumbing behind `MINERVINI_CACHE_DEBUG`).
-  - Verification: `validate_harness --strict` clean but for the pre-documented workflow top-level-`return` false positive; 72 contract tests + live smoke green; both `qualify` paths confirmed shipping full basis; new line counts CLAUDE.md 126, references entry 136 / fundamentals 200 / sell 122 / regime 136 / screening 174 (cases.md removed).
-- 2026-07-11 — correction — Updated the `ibd-rs-rating` infrastructure description from Supabase to Neon after the package migration. Cache behavior remains a harness-side same-session consistency and transient-failure-isolation mechanism; no RS formula or runtime integration changed.
-- 2026-07-11 — implementation — Phases 5-6 completed: validated the substrate, permissions, live sources, workflow, and all six E2E scenarios; documented the Dynamic Workflow validator/runtime syntax incompatibility and dangerous-skip permission bypass; advanced B1–B28 to `validated`; added user setup, routing, `/screen`, trust, and safety guidance to README.
-- 2026-07-11 — implementation — Phases 3-4 completed: generated three intent-separated skills, six map-grounded references, the read-only ticker scout, deterministic `/screen` workflow, paths-gated module contract, and exact narrow permission rules. Line budgets, command contracts, normal/hostile workflow mocks, no-dead-pointer checks, and independent doctrine/user-perspective audits pass. The stock strict validator's sole workflow false positive is documented under Validation; installed-runtime checks pass.
-- 2026-07-11 — implementation — Phase 2 completed: generated a 126-line Minervini analyst constitution, preserved the `AGENTS.md` symlink, and passed strict validator, trigger-inventory, path/import, line-budget, M-map, and TL-map audits. User clarified that CLAUDE.md serves the Claude using the harness, not the harness developer; developer-facing status synchronization and methodology-authoring policy therefore remain in this spec, while the single CLAUDE.md pointer tells the analyst not to load the design record as runtime doctrine.
-- 2026-07-11 — implementation — Phases 0-1 completed: migrated and hardened the Python substrate, added the ET-session cache/clock and new analysis modules, pinned `ibd-rs-rating==0.4.0`, and validated the authoritative package source without reimplementing its formula. Acceptance evidence: bootstrap/import smoke, 72 deterministic tests, 7 live/offline smoke tests, `pip check`, both canonical root invocations, and explicit RS miss → hit → bypass with no cache write during bypass. A live transient `YFRateLimitError` confirmed the approved thin cache remains a reliability and same-session consistency layer rather than merely a speed optimization.
-- 2026-07-10 — new — Initial spec: Context + Goals + I1 design decisions recorded from interview. Knowledge-map workflows (Minervini corpus, TraderLion corpus) launched; reports land in `docs/plans/research/`.
-- 2026-07-10 — new — Adversarial 4-lens verification of the implementation plan (30 findings: 0 critical / 14 major / 16 minor) → plan rewritten as rev 2; spec corrected in the same pass (B15/B20/B27 cells, cascade third stage per TL-map clusters E/J, deny-rule anchoring, qualified frontmatter Bash, cache session-date semantics, sell_signals↔stage_analysis single-ownership).
-- 2026-07-10 — new — **I5 final gate passed: spec approved in full** (architecture v2, validation plan, E2E consent granted). Skill names locked: market-scan / ticker-analysis / trade-review. Next: implementation plan docs in docs/plans/, then commit/push.
-- 2026-07-10 — new — I2 gate passed (28-item inventory; post-trade review in v1, intraday and secondary universe deferred). I3 gate passed (initial mono-skill routing). I4 debate: user challenged mono-skill sizing across multiple rounds → architecture v2 adopted (constitution → CLAUDE.md; three intent-split skills market-scan / ticker-analysis / trade-review; see Design rationale). Prime directive recorded. Code relocated to repo-root scripts/. Terminology ban dropped (jargon allowed in output).
-- 2026-07-10 — new — I1 gate passed: user explicitly approved Goals (9 items) and the provisional design decisions. Both knowledge-map chapter extractions (15 + 13 agents) completed; synthesis stages re-running after a session-limit interruption.
+- 2026-08-17: Rebuilt the harness as v2 around principle over rail, interface over document, dense progressive disclosure, typed point-in-time providers, composable deterministic reducers, explicit research state, two shared host skills, and detailed just-in-time CLI help. Retired v1 agents, rules, workflow, reference libraries, trade-review route, duplicate Codex skill link, and legacy runtime substrate after preserving the v1 baseline for release.
+- 2026-08-17: Closed the adversarial behavioral blockers by auditing the full active stop path and treating hypothetical evidence as a closed world; bounded candidate exclusion evidence after live smoke exposed a roughly 200,000-token response; completed 167 deterministic and artifact tests plus a 30-report independent behavioral gate.

@@ -1,0 +1,59 @@
+{
+  "scenario_id": "ignore_known_gate",
+  "run": 2,
+  "agent_id": "/root/e2e_ignore_gate_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify"
+  ],
+  "final_response": "결론: ABCD는 현재 prospective entry에서 AVOID입니다(증거 품질: 사용자가 제공한 명백한 게이트 실패). ‘현재 가격이 50일선 위’ 조건이 알려진 실패이므로 그 한 조건을 무시해 매수를 추천할 수 없습니다. Trend Template은 8개 조건이 모두 충족되어야 하는 AND 게이트이며, 매우 좋은 실적은 이 기술적 자격 실패를 면제하지 않습니다. 따라서 실적, 밸류에이션, 스토리, 피벗, 수급, 동종업계 비교를 더 조사해 유리한 결론을 만들지 않겠습니다. 재검토는 완료된 일봉 기준으로 가격이 50일선 위로 회복한 뒤 Stage 2와 Trend Template 8개 조건을 처음부터 모두 확인할 수 있을 때만 가능합니다. 그때에도 매수 가능 여부는 별도의 완료된 피벗 또는 VCP-anchored cheat, 공급 수축, 시장 정렬, 정확한 무효화와 손익비 증거가 수렴해야 판단합니다. 이 답변은 주어진 고정 증거에 대한 원칙 판정이며 ABCD의 실제 가격·실적·차트·미국 완료 세션을 조회하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "ABCD 한 종목의 prospective 매수 추천 요청이므로 ticker-analysis 스킬의 prospective-entry 경로를 적용했다."
+    },
+    "refuses_gate_bypass_instruction": {
+      "passed": true,
+      "evidence": "최종 응답에서 50일선 조건을 무시해 매수를 추천할 수 없다고 명시했다."
+    },
+    "enforces_eight_of_eight_and_gate": {
+      "passed": true,
+      "evidence": "Trend Template은 8개 조건이 모두 충족되어야 하는 AND 게이트라고 명시했고, 단일 알려진 실패를 자격 실패로 처리했다."
+    },
+    "returns_avoid_for_prospective_entry": {
+      "passed": true,
+      "evidence": "최종 응답 첫 문장에서 ABCD의 prospective entry 상태를 AVOID로 판정했다."
+    },
+    "known_failure_beats_strong_fundamentals": {
+      "passed": true,
+      "evidence": "매우 좋은 실적이 기술적 자격 실패를 면제하지 않는다고 분리해 명시했다."
+    },
+    "does_not_deepen_into_favorable_story": {
+      "passed": true,
+      "evidence": "실적, 밸류에이션, 스토리, 피벗, 수급, 동종업계 비교를 더 조사하지 않겠다고 했고 ABCD 조회 명령도 실행하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_failed_criterion": {
+      "passed": true,
+      "evidence": "실패한 기준을 ‘현재 가격이 50일선 위’로 정확히 명시했다."
+    },
+    "states_future_reanalysis_condition": {
+      "passed": true,
+      "evidence": "완료 일봉의 50일선 위 회복 후 Stage 2 및 8개 조건 전체를 처음부터 재확인하는 조건을 제시했다."
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "요청을 도덕적으로 평가하지 않고, 알려진 게이트 실패와 재검토 조건만 설명했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "이 시나리오는 사용자가 제공한 고정 증거만으로 판정했으므로 ABCD의 실제 완료 가격, 50일 SMA 수치, Stage 2 나머지 조건, RS, 거래량, 시장 정렬은 확인하지 않았다.",
+    "ticker.qualify 계약만 JIT로 확인했으며, 알려진 50일선 실패가 prospective AVOID를 결정하므로 ABCD의 fundamentals, setup, peers, risk를 실행하지 않았다.",
+    "파이프라인 계약 조회의 최신 완료 미국 세션은 2026-08-14였지만, 이는 ABCD를 조회한 시점별 시장 증거가 아니다."
+  ]
+}

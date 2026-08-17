@@ -1,0 +1,91 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/market.snapshot.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "market.snapshot"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 market.snapshot response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline market snapshot --trade-traction mixed",
+      "scripts/.venv/bin/python scripts/pipeline market snapshot --trade-traction supports --leader-limit 40 --no-cache"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "leader_limit": {
+        "default": 20,
+        "description": "Maximum first-party RS leader observations, from 1 through 100.",
+        "required": false,
+        "type": "integer"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "trade_traction": {
+        "choices": [
+          "supports",
+          "contradicts",
+          "mixed",
+          "needs_input"
+        ],
+        "description": "Whether the user's recent pilot trades confirm the observed environment; required for a favorable regime.",
+        "required": false,
+        "type": "enum"
+      }
+    },
+    "limitations": [
+      "QQQ versus 21 EMA is context only and cannot authorize risk-on by itself.",
+      "Finviz breadth is a current completed-session snapshot and cannot reconstruct an uncaptured historical page.",
+      "A missing source remains unavailable; no web or proxy number replaces it."
+    ],
+    "output": "A transparent signal vector, regime judgment, ranked groups, leader observations, missing evidence, and source metadata.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "Trade traction is absent even though provider evidence may exist.",
+      "ok": "All requested evidence is available, including trade traction.",
+      "partial": "Some independent sources or breadth sections are unavailable.",
+      "unavailable": "No market evidence source succeeded."
+    },
+    "summary": "Measure market regime, breadth, sector and industry leadership, and leading-stock evidence without forcing a bullish score."
+  }
+}

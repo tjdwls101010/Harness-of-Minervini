@@ -1,0 +1,83 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.peers.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.peers"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.peers response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker peers NVDA --limit 10"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "limit": {
+        "default": 10,
+        "description": "Maximum ranked peers returned, from 1 through 20.",
+        "required": false,
+        "type": "integer"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "ticker": {
+        "description": "US-listed common-stock or ADR symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "yfinance industry taxonomy and Nasdaq security master are mutable current snapshots; older historical peer reconstruction is unavailable.",
+      "A symbol absent or ambiguous in the security master never receives a synthetic stable ID.",
+      "Peers lacking exact-date RS or completed 3-month/52-week price evidence remain incomplete rather than rankable."
+    ],
+    "output": "Current sector/industry identity, target rank, peer ranks, explicit rank basis, exclusions, missing evidence, and sources.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "The target and all returned peers have complete rank evidence.",
+      "partial": "A usable comparison exists but target, peer, identity, or provider evidence is missing.",
+      "unavailable": "Required current classification, security master, or industry snapshot is unavailable."
+    },
+    "summary": "Compare a ticker with a same-industry leadership set using stable listing identity, exact RS, and completed-price evidence."
+  }
+}

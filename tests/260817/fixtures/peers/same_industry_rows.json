@@ -1,0 +1,73 @@
+{
+  "target": {
+    "instrument_id": "nasdaq:TARGET",
+    "ticker": "TARGET",
+    "industry_id": "semiconductors",
+    "exchange": "NASDAQ",
+    "listing_country": "US",
+    "instrument_type": "common_stock",
+    "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 94},
+    "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 42.0, "distance_from_52_week_high_pct": 3.2}
+  },
+  "candidates": [
+    {
+      "instrument_id": "nyse:LEADER",
+      "ticker": "LEADER",
+      "industry_id": "semiconductors",
+      "exchange": "NYSE",
+      "listing_country": "US",
+      "instrument_type": "common_stock",
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 98},
+      "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 57.0, "distance_from_52_week_high_pct": 1.1}
+    },
+    {
+      "instrument_id": "nyse:ADRPEER",
+      "ticker": "ADRPEER",
+      "industry_id": "semiconductors",
+      "exchange": "NYSE",
+      "listing_country": "US",
+      "instrument_type": "ordinary_share",
+      "is_adr": true,
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 96},
+      "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 45.0, "distance_from_52_week_high_pct": 2.4}
+    },
+    {
+      "instrument_id": "nasdaq:INCOMPLETE",
+      "ticker": "INCOMPLETE",
+      "industry_id": "semiconductors",
+      "exchange": "NASDAQ",
+      "listing_country": "US",
+      "instrument_type": "common_stock",
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 91}
+    },
+    {
+      "instrument_id": "nasdaq:OTHER",
+      "ticker": "OTHER",
+      "industry_id": "software",
+      "exchange": "NASDAQ",
+      "listing_country": "US",
+      "instrument_type": "common_stock",
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 99},
+      "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 71.0, "distance_from_52_week_high_pct": 0.5}
+    },
+    {
+      "instrument_id": "arcx:ETF",
+      "ticker": "ETF",
+      "industry_id": "semiconductors",
+      "exchange": "NYSE Arca",
+      "listing_country": "US",
+      "instrument_type": "etf",
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 99},
+      "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 99.0, "distance_from_52_week_high_pct": 0.0}
+    },
+    {
+      "ticker": "NOID",
+      "industry_id": "semiconductors",
+      "exchange": "NASDAQ",
+      "listing_country": "US",
+      "instrument_type": "common_stock",
+      "rs_evidence": {"provider": "ibd-rs-rating", "as_of": "2026-08-14", "rating": 99},
+      "price_evidence": {"provider": "yfinance", "as_of": "2026-08-14", "return_3m_pct": 99.0, "distance_from_52_week_high_pct": 0.0}
+    }
+  ]
+}

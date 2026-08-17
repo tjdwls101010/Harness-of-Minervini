@@ -1,61 +1,48 @@
 ---
 name: market-scan
-description: Analyze the US market regime, breadth, sector or industry strength, leadership, screening results, stock discovery, breakouts, and watchlists. Use whenever the user asks how the market is, what areas are strong, to find stocks or leaders, or to build or refresh a watchlist, even if Minervini is not named. Do not use for a buy, sell, hold, timing, condition, or diagnosis judgment about one or a few named tickers; route that to ticker-analysis. Do not use to grade the user's completed trades; route that to trade-review. Portfolio sizing is out of scope.
-allowed-tools: Bash(scripts/.venv/bin/python *), Bash(bash scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
+description: Analyze the US market regime, breadth, sector or industry strength, leadership, stock discovery, screening results, and watchlist candidates. Use whenever the user asks how the market is, which areas are strong, what tickers look promising, or to build or refresh a watchlist, even if Minervini is not named. Do not use for a buy, sell, hold, entry condition, or diagnosis judgment about one or a few named tickers; use ticker-analysis. Crypto, non-US listings, completed-trade grading, portfolio sizing, and allocation advice are outside scope.
+allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJECT_DIR}/scripts/pipeline *), Bash(bash ${CLAUDE_PROJECT_DIR}/scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
 ---
-
-!`scripts/.venv/bin/python scripts/modules/market_clock.py`
 
 # Market scan
 
-## Ground the analysis
+## Orient through the interface
 
-- Treat the injected clock output as the current ET session and cache context. Use the last completed US session for daily evidence; do not confuse a KST calendar date with the US market session.
-- Read `references/regime.md` before any market-regime conclusion. Read `references/screening.md` before discovering, filtering, ranking, or changing a watchlist.
-- Your training priors do not contain this harness's Minervini-first adjudications. The references are controlling doctrine, not optional background, and `[TL]` material remains subordinate and tagged.
-- Use WebSearch only for current narrative, catalyst, sector, or industry context. All prices, breadth, RS, dates, and financial values must come from the deterministic modules.
+- Work from the repository root. If the canonical interpreter is missing or imports fail, run the bootstrap command declared in the root constitution once.
+- If the needed capability is uncertain, run the capability-catalog command declared in the root constitution.
+- Before invoking a selected capability for the first time, inspect only `describe <capability>` or that leaf command's `--help`. The CLI owns syntax, defaults, limitations, status meanings, and side effects; do not reconstruct them here.
+- Compose calls around unresolved evidence. Do not execute every capability, preload all help, or force a fixed screening rail.
 
 ## Establish the environment
 
-1. Run `scripts/.venv/bin/python scripts/pipeline discover` from the repository root.
-2. Inspect every section independently: Finviz breadth, QQQ switch, RS leaders and movers, sector ranks, industry leaders, and module provenance. A successful composite can still contain an unavailable section.
-3. Retry a failed module or section once. If it still fails, preserve `unavailable`; never fill the gap from memory, WebSearch, another metric, or a local RS proxy pretending to be a cross-sectional rank.
-4. Apply the dual gate from `references/regime.md`: QQQ-versus-21EMA is `[TL]` environmental information, while `[M]` leader quality and actual trade traction decide whether the regime has earned a stronger conclusion.
-5. State the evidence that would refute the read. A regime label without observable invalidation conditions is an opinion, not an analysis.
+- Start with the market snapshot appropriate to the user's as-of request. Treat each source and breadth section independently; a composite response can be usable while one section is unavailable.
+- Actual trade traction is a separate bottom-up gate. If the user has not supplied recent pilot, breakout, or stop-out feedback, preserve `needs_input` and do not promote QQQ or breadth alone to a favorable regime.
+- QQQ versus 21 EMA is environmental context only. Leaders and real trade behavior decide whether apparent strength has earned confidence.
+- Read persistent overbought action with shallow pullbacks as possible lockout demand, not an automatic sell signal. Also surface leader/index divergence and the evidence that would refute the regime read.
+- If the environment is hostile or evidence is materially incomplete, reduce the discovery depth and return watch-only conditions. Sparse qualified leadership is itself evidence; never loosen hard gates to fill a list.
 
-## Regime conclusion
+## Find leaders without manufacturing a score
 
-- Distinguish `observation`, `probe`, `earned expansion`, `defense`, `cash`, and `incomplete evidence`; do not compress disagreement into a vague bull or bear label.
-- A QQQ `ON` transition alone cannot authorize a favorable exposure verdict. Require qualified leaders, traction, and a second wave of setups.
-- A QQQ `OFF` transition alone cannot force opinion liquidation. Tighten price-based protection and let each position's evidence govern.
-- Treat repeated stop-outs, failed breakouts, and a shrinking unchanged screen as adverse feedback; never respond by widening stops or loosening SEPA gates.
-- Identify lockout-rally evidence and leader/index divergence explicitly because ordinary overbought and index-first heuristics read these turns backward.
+- Use provider-ranked sectors, industries, and leading stocks as observations, not as a weighted master score.
+- Preserve each candidate's discovery origin. Repeated appearance across independent evidence is useful context but cannot erase a failed gate.
+- Use same-industry peer comparison on promising leaders to establish current classification, stable identity, and relative leadership. Current taxonomy must not be projected backward into a historical answer.
+- Treat the candidate-universe capability as scope and pagination, not an automatic recommendation engine.
+- Keep the set small enough to investigate well. When independent qualification calls can run concurrently, parallelize them adaptively; do not depend on a fixed agent, workflow, batch size, or quota.
 
-## Discover and qualify candidates
+## Make every candidate earn depth
 
-1. Use several loose screens and the union of their results. Preserve each ticker's source and recurrence instead of building one monolithic discovery-time AND filter.
-2. Keep the funnel counts visible: candidate universe, first pass, weekly focus, and daily focus. Counts are breadth and workload evidence, not a scoring system.
-3. Deduplicate user tickers and module-supplied RS, mover, sector, and industry candidates. Honor the requested maximum before qualification.
-4. If the regime is hostile, return a watch-only report rather than spending calls on a broad qualification fan-out.
-5. For each retained ticker, run one `ticker-scout` per ticker when parallel subagents are available; each scout executes `scripts/.venv/bin/python scripts/pipeline qualify TICKER`. Prefer the fixed `/screen` workflow for the full sweep. If workflows or parallel agents are unavailable, use the sequential `ticker-scout` or direct qualification fallback in `references/screening.md` without changing the contract.
-6. Validate each compact result before synthesis: verdict, failed or unavailable gates, RS source and score, Stage, and one-line evidence. Retry one malformed or failed result once, then keep it incomplete.
-7. Bucket candidates as `PROCEED`, `watch/incomplete`, or `AVOID`, then apply the watch → buy-alert → buy-ready state machine from `references/screening.md`. `PROCEED` is necessary but never sufficient for buy-ready.
+- Run technical qualification before setup, fundamentals, narrative research, or recommendation language.
+- A known Stage 2 or Trend Template failure ends prospective promotion for that ticker. Missing RS or history remains incomplete and should state how it could be resolved.
+- For finalists that pass qualification, collect only the setup, filed fundamentals, peer, chart, and risk evidence needed by the user's question.
+- A `PROCEED`, eligible, or high-RS state is not BUY-READY. Actionable language requires a completed setup, market alignment, required fundamentals or the explicit Power Play exception, and a valid risk contract.
+- Use web search after deterministic evidence for current catalysts and industry explanation. Cite it as narrative context and never use it to fill a numeric gap or reverse a hard gate.
 
-## Iterate rather than over-call
+## Synthesize
 
-- Use `rs_ranking.py screen`, `score`, or `compare` only for the roles defined in the screening reference. Never rank multiple stocks using self-historical local proxy percentiles.
-- When a loose screen is too broad, tighten that lens or split it into meaningful independent lenses. Do not invent a master score that lets one strong field erase a hard failure.
-- When too few candidates appear, inspect source failures and market breadth before relaxing criteria. A genuinely sparse market is itself information.
-- Keep the main context compact. Preserve detailed JSON only long enough to verify the conclusion; retain the ticker-level evidence summary needed for the watchlist.
+Lead with the completed US session, evidence quality, and the regime state. Then report leading sectors and industries with the supporting vector rather than a naked rank.
 
-## Output contract
+For each candidate, show ticker, current industry identity, discovery origin, eligibility state, exact failed or missing gates, why it merits attention, and the observable condition for promotion or removal. Distinguish ranked leader, watch candidate, setup-ready, and final BUY-READY states.
 
-Return these sections in order:
+When no candidate earns recommendation, say so plainly. Cash and an empty high-quality list are valid outcomes.
 
-1. **Session and source health:** ET session, last completed session, cache state, and unavailable sections.
-2. **Regime evidence:** QQQ information filter, leader gate, trade feedback, dual-gate conclusion, and refutation conditions.
-3. **Funnel:** source counts, deduplicated count, qualification count, and final bucket counts.
-4. **Watchlist:** ticker, state, qualification verdict, RS source and score, Stage, originating screens, one-line evidence, missing evidence, and the next promotion or demotion condition.
-5. **Narrative context:** only sourced current context that explains, but never replaces, module evidence.
-
-Do not prescribe portfolio percentages or position sizes. If asked, explain the scope boundary and offer market, setup, and evidence-quality analysis instead.
+Do not prescribe portfolio percentages or position sizes. Offer market, setup, risk, and evidence-quality analysis instead.

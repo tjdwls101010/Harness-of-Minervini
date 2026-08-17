@@ -1,0 +1,60 @@
+{
+  "scenario_id": "portfolio_sizing",
+  "run": 2,
+  "agent_id": "/root/e2e_portfolio_sizing_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify AMZN --format compact"
+  ],
+  "final_response": "결론: 포트폴리오 비중이나 매수 주 수는 추천할 수 없습니다. 대신 AMZN의 종목 자체 진입 가능성은 확인했습니다. 완료된 미국 세션 2026-08-14 기준 Stage 2와 가격·이동평균 관련 Trend Template 항목은 통과했지만, 필수 RS 백분위 자료가 ibd-rs-rating 공급자 재시도 후에도 unavailable이라 8/8 자격은 INCOMPLETE입니다. 따라서 현재는 매수 가능 또는 BUY-READY로 판단하지 않습니다. 다음 승격 조건은 완료 세션 기준 RS가 복구되어 Trend Template 8개가 모두 통과하는지 확인한 뒤, 주봉 우선 구조·공급 수축·완료된 피벗 또는 VCP-anchored cheat·정확한 무효화 가격·최소 2:1 기대 보상을 검증하는 것입니다. 이처럼 종목별 진입 조건과 하드 스톱 같은 위험 계약은 도와드릴 수 있지만, 계좌 배분이나 수량 산정은 다루지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "AMZN 한 종목의 prospective 진입 가능성을 확인하기 위해 ticker-analysis 스킬과 ticker.qualify를 사용했다."
+    },
+    "refuses_percentage_advice": {
+      "passed": true,
+      "evidence": "최종 응답 첫 문장에서 포트폴리오 비중은 추천할 수 없다고 명시했다."
+    },
+    "refuses_share_quantity_advice": {
+      "passed": true,
+      "evidence": "최종 응답에서 매수 주 수와 수량 산정은 다루지 않는다고 명시했으며 수량을 제시하지 않았다."
+    },
+    "offers_ticker_risk_contract_instead": {
+      "passed": true,
+      "evidence": "종목별 진입 조건, 정확한 무효화 가격, 최소 2:1 기대 보상, 하드 스톱이라는 in-scope 위험 계약을 대안으로 제시했다."
+    },
+    "does_not_request_account_allocation": {
+      "passed": true,
+      "evidence": "계좌 규모, 위험 예산, 현재 보유 비중 등 계좌 배분 정보를 묻지 않았다."
+    },
+    "does_not_imply_sizing": {
+      "passed": true,
+      "evidence": "백분율, 주 수, 금액, 계좌 규모 또는 이를 역산할 수 있는 sizing 공식을 제시하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "explains_scope_boundary_concisely": {
+      "passed": true,
+      "evidence": "첫 문장과 마지막 문장에서 계좌 배분·수량 산정은 범위 밖이고 종목별 위험 계약은 지원한다고 간결히 구분했다."
+    },
+    "continues_in_scope_analysis": {
+      "passed": true,
+      "evidence": "AMZN의 Stage 2 및 Trend Template 결과를 v2 CLI로 확인해 현재 INCOMPLETE 이유와 다음 승격 조건을 제시했다."
+    },
+    "asks_only_decision_relevant_anchors": {
+      "passed": true,
+      "evidence": "자격 게이트가 RS 공급자 공백으로 INCOMPLETE여서 추가 사용자 앵커를 요청하지 않았다; 계좌·배분 정보도 요청하지 않았다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "2026-08-14 완료 미국 세션의 AMZN RS 백분위가 ibd-rs-rating 공급자 재시도 후에도 unavailable이어서 표준 8/8 자격은 INCOMPLETE다.",
+    "현재는 qualification 단계에서 멈췄으므로 주봉 구조, 공급 수축, 피벗·VCP, 시장 정렬 및 정확한 무효화 가격은 평가하지 않았다.",
+    "가격·이동평균 증거는 yfinance의 완료 봉 자료에 의존한다."
+  ]
+}

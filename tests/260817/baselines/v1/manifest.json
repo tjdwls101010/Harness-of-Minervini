@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "baseline": {
+    "name": "v1-main-pre-v2-cutover",
+    "commit_sha": "a11f1b2bdb9fbf82138ea9537047493e500e7029",
+    "tag_candidate": "harness-v1-final",
+    "tag_status": "created_pushed_and_released",
+    "release_url": "https://github.com/tjdwls101010/Harness-of-Minervini/releases/tag/harness-v1-final"
+  },
+  "verification": {
+    "command": "scripts/.venv/bin/python -m unittest discover -s scripts/tests",
+    "result": "passed",
+    "tests_run": 72,
+    "duration_seconds": 11.031
+  },
+  "known_limitations": [
+    "v1 공개 명령과 JSON 출력 계약이 capability registry, describe, versioned schema로 통일되어 있지 않다.",
+    "symbol 문자열 중심 식별과 현재 시점 중심 provider 결과는 v2가 요구하는 security master 및 point-in-time audit을 제공하지 않는다.",
+    "RS historical snapshot, provider freshness/coverage, SEC-FMP discrepancy를 v2 수준으로 구조화해 판정하지 않는다.",
+    "분석 축, evidence missing, chart ambiguity, ledger side effect를 v2 verdict와 audit contract로 분리하지 않는다.",
+    "Claude/Codex 하네스의 단일 실제 파일 및 중복 금지 무결성을 v2 정적 계약으로 검증하지 않는다."
+  ],
+  "v2_diagnostic_purpose": [
+    "v1과 다른 verdict를 오류로 간주하지 않고 데이터 무결성 강화 또는 INCOMPLETE 근거를 평가한다.",
+    "v1 runtime은 Git tag/Release로 보존하고, 이 manifest는 A/B 진단에 필요한 최소 사실만 제공한다.",
+    "v2 deterministic, integration, behavioral E2E의 release gate를 v1 통과 수와 분리해 측정한다."
+  ]
+}

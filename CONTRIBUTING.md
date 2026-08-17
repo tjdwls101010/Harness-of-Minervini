@@ -1,55 +1,52 @@
 # Contributing to Harness of Minervini
 
-Thank you for your interest in improving the harness. This project has a strong, deliberate design spine, so contributions are most useful when they work *with* it. Please read this guide before opening a pull request.
+Thank you for improving the harness. Contributions should preserve the v2 separation between analyst principles, executable doctrine, interface contracts, provider evidence, and model judgment.
 
-## Ground rules that keep the harness coherent
+## Design invariants
 
-1. **Analysis quality is the sole design criterion.** The harness exists to make Claude apply the Minervini methodology excellently. Never trade analysis quality for convenience, brevity, or "maintainability" in the analyst-facing layers.
+1. Analysis quality and evidence honesty govern. A data gap remains missing; it never becomes an inferred pass, failure, remembered value, web substitute, or home-grown proxy.
+2. Minervini eligibility and risk hard gates are immutable. TraderLion material may fill a genuine execution gap only as a tagged subordinate default or opt-in tactic.
+3. Precise prices, dates, financials, breadth, classifications, and RS values come through typed providers. Web research may explain current narrative but cannot replace them.
+4. Point-in-time support must be explicit. Completed bars, `filed_at <= as_of`, exact RS dates, mutable classification limits, retrieval time, source version, coverage, and content hashes are contract data rather than implementation trivia.
+5. Do not introduce a weighted master score. Preserve independent axes and let no favorable signal erase a hard failure.
+6. Do not commit book text. `.tmp/` is ignored build-time source material and is never a runtime dependency.
+7. Keep one source of truth. Always-on judgment belongs in `CLAUDE.md`, task judgment in a routed skill, executable claims in `doctrine/claims.json`, exact usage in capability metadata and CLI help, and behavior in tests.
 
-2. **Numbers are deterministic; judgment is the model's.** Any precise market value (price, earnings, moving average, RS, date) must come from a `scripts/` module. Never add a path that fills a market number from memory or the web. On failure a module reports `unavailable` — it does not guess.
+## Public interface contract
 
-3. **Every verdict ships its basis.** If you add or change a flag, score, grade, or label, expose the measurements it rests on and a `doctrine`/`threshold` field that says how to interpret it and where it is only a heuristic. Do **not** introduce a composite 0–100 "master score" — the design deliberately refuses one.
+The canonical interface is `scripts/.venv/bin/python scripts/pipeline`. Use `capabilities`, `describe <capability>`, and leaf `--help` to inspect the current contract.
 
-4. **Respect the doctrine hierarchy.** Minervini SEPA gates are immutable. TraderLion and other speaker material is a subordinate practice layer and must carry a provenance tag (`[M]`, `[TL]`, `[TL-Kell]`, `[MM-Ryan]`, `[MM-Zanger]`, `[MM-RitchieII]`). A practice-layer number may never be presented as a hard gate, and where the two conflict, Minervini wins.
+Every non-help operation emits exactly one v2 envelope. If a capability changes, update its registry metadata, parser and detailed help, operation implementation, schema projection, and parity tests together. A flag is valid only when code consumes it; compatibility-only decorative flags are prohibited.
 
-5. **Never commit book text.** The source books are copyrighted and live only in the git-ignored `.tmp/` directory. Committed references must *paraphrase* principles, because the repository is public.
+Keep leaf help offline and detailed enough to explain purpose, inputs, defaults, as-of and provider limits, statuses, side effects, and examples. Markdown should teach interface discovery rather than duplicate the flag catalog.
 
-## The module contract
+## Test-driven workflow
 
-Deterministic code under `scripts/` follows a single public contract (see [`.claude/rules/module-contract.md`](.claude/rules/module-contract.md)). In short:
-
-- One JSON document to stdout via the shared output helper; failures emit `{"error": "..."}` and exit 1.
-- Every analysis operation is an explicit `argparse` subcommand; there is deliberately no "analyze everything" command.
-- Tunable thresholds are flex-tier flags whose defaults reproduce canonical behavior; methodology boundaries are named module-level locked constants with a source tag and rationale, never bare inline literals.
-- Every successful result carries a top-level `doctrine` field, and every threshold and emitted doctrine string carries its provenance tag.
-- `--help` is the live spec and must run fully offline; every live source read goes through the shared cache layer.
-- Add a lower-bound guard to any new numeric flag so a nonsensical value errors cleanly instead of returning a mislabeled result.
-
-## Development workflow
+Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under `tests/260817`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
 
 ```bash
-# One-time setup
 bash scripts/bootstrap.sh
-
-# Run the deterministic test suite (contract tests are offline; smoke hits live APIs)
-for t in scripts/tests/test_*.py; do scripts/.venv/bin/python "$t"; done
-scripts/.venv/bin/python scripts/tests/smoke.py
-
-# Validate harness structure (requires the harness-creator scripts if you have them)
-# python3 <harness-creator>/scripts/validate_harness.py --path . --strict
+scripts/.venv/bin/python -m unittest discover -s tests/260817 -p 'test_*.py'
+scripts/.venv/bin/python -m compileall -q scripts/minervini scripts/pipeline
+scripts/.venv/bin/python -m pip check
 ```
 
-When you change a module contract, add or update the tests that cover its success JSON, `doctrine` field, JSON-error/exit-1 behavior, offline `--help`, and cache behavior.
+Provider tests use frozen source-shaped fixtures and injected transports; they do not record live responses during the test run. Historical tests must include a future fact or bar that would expose look-ahead leakage. Side-effecting capabilities need adjacent tests proving that read-only operations do not create or mutate state.
 
-## Proposing changes
+Regenerate capability schemas with `PYTHONPATH=scripts scripts/.venv/bin/python -m minervini.schema_sync`, then run the schema and CLI contract suite. Validate harness topology with the harness-creator validator when `CLAUDE.md`, `.claude/`, `.agents/`, or permissions change.
 
-1. Open an issue first for anything beyond a small fix, so the design implications can be discussed before you invest effort.
-2. Branch from the default branch, and keep commits coherent and well-described.
-3. Make sure the deterministic tests pass, and for methodology changes, cite the source and provenance tag in your description.
-4. Doctrine changes (new rules, changed thresholds) should explain *why* — a rule without its reasoning is a brittle rail, and the harness prefers principles a capable model can re-derive.
+## Doctrine changes
 
-## Maintenance note
+Change the normalized claim and its doctrine test before changing a reducer. Keep the claim's neutral ID, context, required inputs, failure and missing semantics, precedence, provenance, and quarantine status accurate. Runtime skills embody the result; they do not need bibliographic prose or source-database paths.
 
-This harness was authored with the `harness-creator` methodology, and its binding design record lives in `.claude/harness-spec.md`. That file — not this repo's analyst-facing layers — is where maintenance rationale, status, and authoring policy belong. Keep it in sync when you change a component.
+Explain why the change is faithful and which competing interpretation was rejected. A threshold without rationale becomes a brittle rail even when the number happens to be correct.
 
-By contributing, you agree that your contributions are licensed under the project's [MIT License](LICENSE).
+## Provider changes
+
+Declare current and historical support separately. Add source, retrieval timestamp, effective as-of where supportable, version or coverage metadata, and content hash. Retry once at the provider boundary, then return typed unavailability. Never silently fall back to another provider or reconstructed formula.
+
+## Pull requests
+
+Keep commits coherent and surgical. In the pull request, state what changed, why the ownership layer is correct, impact on point-in-time and missing-evidence behavior, and the exact verification commands with result counts. Update `.claude/harness-spec.md` whenever topology, information ownership, permissions, routed skills, or validation requirements change.
+
+By contributing, you agree that your contribution is licensed under the project's [MIT License](LICENSE).

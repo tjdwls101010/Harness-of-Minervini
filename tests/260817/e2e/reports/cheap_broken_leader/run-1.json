@@ -1,0 +1,60 @@
+{
+  "scenario_id": "cheap_broken_leader",
+  "run": 1,
+  "agent_id": "/root/e2e_cheap_broken_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify --help"
+  ],
+  "final_response": "결론: XYZ는 prospective 매수 대상에서 AVOID입니다(증거 품질: 사용자가 확정한 사실). 고점 대비 70% 하락했고 하락 중인 200일선 아래라는 알려진 실패가 있으므로 표준 Trend Template을 통과할 수 없습니다. P/E 4라는 저평가처럼 보이는 점이나 과거 시장 리더라는 이력은 이 하드 게이트를 면제하지 못합니다. 가격 행동이 현재의 판단을 이끌며, 회사의 과거 강점과 지금의 매수 타이밍은 별개입니다. 따라서 바닥 매수도, 하락 시 물타기도 하지 마세요. 물타기는 손실 상태에서 논문을 강화하는 것이 아니라 위험을 키웁니다. 재검토는 완료된 가격 증거로 200일선 위에서 그 평균선이 하락하지 않고, Stage 2와 Trend Template 8개 조건을 모두 새로 충족했을 때부터입니다. 그 뒤에도 주봉 우선 구조, 공급 수축, 완료된 pivot 또는 VCP-anchored cheat, 정확한 무효화와 위험 계획을 별도로 확인해야 합니다. XYZ의 실제 가격·이동평균·RS·거래량·완료 세션은 제공되지 않았으므로 조회하거나 만들지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "XYZ라는 단일 미국 상장 종목의 prospective 매수·물타기 질문이므로 ticker-analysis의 prospective-entry 분기를 적용했다."
+    },
+    "returns_avoid_for_falling_200_day_failure": {
+      "passed": true,
+      "evidence": "확정 입력인 하락 중인 200일선 아래라는 알려진 하드 게이트 실패만으로 AVOID를 명시했다."
+    },
+    "does_not_let_valuation_waive_gate": {
+      "passed": true,
+      "evidence": "P/E 4와 과거 리더 이력이 Trend Template 하드 게이트를 면제하지 못한다고 명시했다."
+    },
+    "rejects_averaging_down": {
+      "passed": true,
+      "evidence": "바닥 매수와 하락 시 물타기를 모두 하지 말라고 했고, 물타기가 위험을 키운다고 설명했다."
+    },
+    "respects_price_leads_narrative": {
+      "passed": true,
+      "evidence": "가격 행동이 현재 판단을 이끌며 과거 회사 강점과 현 매수 타이밍은 별개라고 분리했다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중, 주식 수량, 계좌 배분을 제안하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "states_requalification_condition": {
+      "passed": true,
+      "evidence": "200일선 위에서 평균선 비하락, Stage 2 및 Trend Template 8/8의 새 완료 가격 증거를 재검토 선행 조건으로 제시했다."
+    },
+    "separates_company_from_timing": {
+      "passed": true,
+      "evidence": "과거 시장 리더라는 회사 이력과 현재 매수 타이밍을 명시적으로 구분했다."
+    },
+    "keeps_no_trade_default": {
+      "passed": true,
+      "evidence": "알려진 하드 게이트 실패에서 AVOID와 무매수 결론을 유지했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "사용자가 확정한 사실 외 XYZ의 실제 가격, 200일선 값·기울기, RS, 거래량, 완료 세션 날짜는 제공되지 않아 조회하거나 추정하지 않았다.",
+    "알려진 하드 게이트 실패 때문에 setup, fundamentals, peers, market alignment, risk reducer의 심화 증거를 실행하지 않았다.",
+    "재자격 조건은 미래의 관찰 가능한 조건이며, 현재 BUY-READY 또는 구체적 진입·무효화 가격을 의미하지 않는다."
+  ]
+}

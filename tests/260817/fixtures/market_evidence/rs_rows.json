@@ -1,0 +1,13 @@
+{
+  "sectors": [
+    {"sector": "Technology", "rank": 1, "rating": 91, "as_of": "2026-08-14", "price_momentum": {"state": "supports", "window": "12m"}},
+    {"sector": "Energy", "rank": 2, "rating": 84, "as_of": "2026-08-14"}
+  ],
+  "industries": [
+    {"industry": "Semiconductors", "leadership_rank": 1, "rs_rating": 96, "as_of": "2026-08-14"}
+  ],
+  "leaders": [
+    {"ticker": "NVDA", "rank": 1, "rs_rating": 99, "as_of": "2026-08-14", "behavior": "supports"},
+    {"ticker": "AVGO", "rank": 2, "rs_rating": 97, "as_of": "2026-08-14"}
+  ]
+}

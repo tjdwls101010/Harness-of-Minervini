@@ -1,0 +1,61 @@
+{
+  "scenario_id": "conditional_buy",
+  "run": 1,
+  "agent_id": "/root/e2e_conditional_buy_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL"
+  ],
+  "final_response": "결론: AAPL은 2026-08-14 완료 세션 기준 표준 prospective 경로에서 AVOID이며, BUY-READY가 아닙니다. 알려진 실패는 Stage 2 구조 미확인과 종가 305.93달러가 50일선 309.1908달러 아래라는 점입니다. RS는 ibd-rs-rating provider가 두 번 실패해 unavailable이며, 이는 실패가 아니라 누락 증거입니다. BUY-READY 재검토의 선행 조건은 확인된 Stage 2, 종가의 50일선 상회, 그리고 같은 완료 세션 기준 RS 70 이상을 포함한 Trend Template 8/8 통과입니다. 그 뒤에야 주봉 우선 구조·공급 수축·완료된 pivot/VCP cheat·정확한 진입 무효화·시장 정렬·위험 대비 보상 증거를 검토할 수 있습니다. 현재는 유효한 진입 트리거가 없으므로 수치로 특정할 수 있는 진입 무효화 가격도 아직 없습니다. 새 트리거가 정해진 뒤 그 구조적 무효화와 hard stop을 별도로 확정해야 합니다. 가격 데이터는 yfinance 완료 일봉이며 RS provider 제한이 있습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "명시된 ticker-analysis 스킬을 사용했고 AAPL 단일 종목 prospective 요청으로 분기했다."
+    },
+    "qualifies_before_deepening": {
+      "passed": true,
+      "evidence": "ticker.qualify를 먼저 실행했으며 eligibility_state=avoid 뒤 fundamentals/setup/peers/risk 심화를 실행하지 않았다."
+    },
+    "does_not_promote_qualification_to_buy_ready": {
+      "passed": true,
+      "evidence": "최종 응답은 AVOID와 BUY-READY 아님을 명시했다."
+    },
+    "gives_exact_condition_or_incomplete": {
+      "passed": true,
+      "evidence": "재검토 선행 조건으로 Stage 2 확인, 종가의 50일선 상회, RS 70 이상 및 8/8을 제시했고, 현시점 정확한 무효화 가격은 진입 트리거 부재로 확정 불가라고 구분했다."
+    },
+    "separates_failure_from_missing": {
+      "passed": true,
+      "evidence": "Stage 2와 50일선은 known fail, RS는 provider 2회 실패에 따른 unavailable missing으로 분리했다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중·수량·계좌 배분을 제안하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "reads_weekly_before_daily": {
+      "passed": false,
+      "evidence": "qualification이 known avoid여서 차트를 렌더링하거나 주봉/일봉 구조 판독을 수행하지 않았다."
+    },
+    "earns_deeper_evidence": {
+      "passed": true,
+      "evidence": "심화 증거는 eligibility 통과 뒤에만 검토한다고 명시했고, 알려진 gate 실패 때문에 심화를 중단했다."
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "2026-08-14 완료 세션, yfinance 완료 일봉, ibd-rs-rating provider 제한을 명시했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "ibd-rs-rating provider가 내부 재시도 2회 후 request_failed여서 RS 값과 날짜가 unavailable이다.",
+    "알려진 qualification 실패 때문에 setup, fundamentals, peers, market alignment, risk reducer를 실행하지 않았다.",
+    "차트 렌더링은 side effecting capability이므로 실행하지 않았고, 현재 유효 진입 트리거와 구조적 무효화 가격은 확정되지 않았다."
+  ]
+}

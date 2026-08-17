@@ -1,0 +1,51 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/describe.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "describe"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 describe response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline describe ticker.setup"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "capability": {
+        "description": "Exact capability ID returned by capabilities.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [],
+    "output": "Purpose, inputs, schema ID, prerequisites, limitations, status and exit meanings, side effects, errors, and examples.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "The capability ID is unknown.",
+      "ok": "The capability exists."
+    },
+    "summary": "Return the machine-readable contract for one capability."
+  }
+}

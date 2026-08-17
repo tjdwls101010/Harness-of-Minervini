@@ -1,0 +1,26 @@
+{
+  "review_model": "gpt-5.6-sol",
+  "reviewed_at": "2026-08-17",
+  "verdict": "RELEASE_BLOCKED",
+  "critical_assertions_reviewed": 186,
+  "critical_assertions_passed": 182,
+  "critical_pass_rate": 0.978494623655914,
+  "noncritical_assertions_reviewed": 90,
+  "noncritical_assertions_passed": 85,
+  "noncritical_pass_rate": 0.9444444444444444,
+  "release_blocking_findings": [
+    {
+      "scenario_id": "active_position",
+      "runs": [1, 2, 3],
+      "assertion_id": "hard_stop_controls",
+      "finding": "All three runs inferred HOLD from only the latest completed close and never audited the completed price path from entry through as-of, so an earlier hard-stop breach could be hidden by a recovery."
+    },
+    {
+      "scenario_id": "recent_ipo",
+      "runs": [3],
+      "assertion_id": "does_not_fabricate_data",
+      "finding": "The run imported pass states from an unrelated eligibility fixture into hypothetical NIPO instead of keeping unprovided Primary Base duration, depth, and all-time-high evidence missing."
+    }
+  ],
+  "disposition": "Preserved as the failed behavioral gate that triggered TDD fixes and fresh independent reruns; aggregate.json records the final post-fix review."
+}

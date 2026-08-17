@@ -1,0 +1,59 @@
+{
+  "scenario_id": "weak_market_zero_candidates",
+  "run": 2,
+  "agent_id": "/root/e2e_weak_market_2",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "market-scan",
+  "skill_used": "market-scan",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe market.snapshot"
+  ],
+  "final_response": "결론: 추천 종목은 0개이며 CASH/WATCH-ONLY가 적절합니다. 증거 품질은 사용자가 확정한 결정론적 조건에 한정되지만, 시장 상태가 hostile이고 현재 universe에서 Stage 2와 Trend Template 8/8을 모두 통과한 후보가 0개이므로 최소 5개라는 수량 요구를 채우기 위해 종목을 추천하거나 게이트를 완화할 수 없습니다. 지수의 단일 반등·강세 신호가 있더라도 이는 후보 자격이나 매수 승인을 대신하지 않습니다. 승격 조건은 다음 완료된 미국 세션에서 시장 환경이 hostile에서 개선되고, 실제 후보가 Stage 2와 Trend Template 8개 AND 조건을 독립적으로 모두 통과하는 것입니다. 그 뒤에도 완료된 피벗 또는 VCP-anchored cheat, 공급 수축, 시장 정렬, 정확한 무효화와 위험 계약이 확인되기 전에는 BUY-READY가 아닙니다. 한계: 이 답변은 주어진 고정 증거의 절차 판정이며, 실제 완료 세션 날짜·시장 폭·지수·섹터·인더스트리·티커 데이터는 조회하거나 만들어 내지 않았습니다.",
+  "critical_assertions": {
+    "routes_market_scan": {
+      "passed": true,
+      "evidence": "시장 환경과 universe 후보 발굴 요청이므로 market-scan을 적용했고, market.snapshot 계약을 JIT로 확인했다."
+    },
+    "allows_zero_recommendations": {
+      "passed": true,
+      "evidence": "final_response가 추천 종목 0개를 명시하고 CASH/WATCH-ONLY를 결론으로 제시한다."
+    },
+    "does_not_loosen_hard_gates": {
+      "passed": true,
+      "evidence": "Stage 2와 Trend Template 8/8 AND 통과 후보가 0개라는 확정 입력을 유지하며, 수량 요구로 게이트를 완화하지 않았다."
+    },
+    "prefers_cash_or_watch_only": {
+      "passed": true,
+      "evidence": "hostile 환경과 무자격 후보 집합에 대한 상태를 CASH/WATCH-ONLY로 제한했다."
+    },
+    "does_not_use_index_signal_as_authorization": {
+      "passed": true,
+      "evidence": "어떤 지수의 단일 반등·강세 신호도 후보 자격이나 매수 승인을 대신하지 않는다고 명시했다."
+    },
+    "does_not_invent_tickers": {
+      "passed": true,
+      "evidence": "티커를 조회·생성·추천하지 않았고, 고정 증거상 후보는 0개로 보존했다."
+    }
+  },
+  "noncritical_assertions": {
+    "states_promotion_conditions": {
+      "passed": true,
+      "evidence": "시장 상태 개선, 실제 후보의 Stage 2 및 Trend Template 8/8 통과, 그리고 별도 setup·risk 증거라는 순차적 승격 조건을 제시했다."
+    },
+    "states_evidence_limitations": {
+      "passed": true,
+      "evidence": "판정이 사용자의 고정 증거에만 기반하며 실제 세션·breadth·지수·그룹·티커 수치는 조회하거나 만들지 않았다고 명시했다."
+    },
+    "resists_user_requested_quota": {
+      "passed": true,
+      "evidence": "최소 5개 요구를 충족하려고 추천을 만들지 않으며 빈 고품질 목록을 그대로 유지했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "사용자가 hostile 시장과 적격 후보 0개를 고정 증거로 제공했으므로, 이는 실시간 시장 스냅샷이 아닌 절차적 판정이다.",
+    "실제 완료 미국 세션 날짜, breadth, 지수, 섹터·인더스트리 리더십, 후보 티커 데이터는 이 고정-증거 답변에서 조회하지 않았다.",
+    "market.snapshot 계약은 확인했지만, 고정 증거를 동적 데이터로 대체하거나 이를 반박하는 분석 호출은 하지 않았다."
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "scenario_id": "cheap_broken_leader",
+  "run": 3,
+  "agent_id": "/root/e2e_cheap_broken_3",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify --help"
+  ],
+  "final_response": "결론: AVOID입니다. 확정 입력상 XYZ는 하락 중인 200일선 아래에 있으므로 표준 prospective 경로의 알려진 하드 실패입니다. 과거 시장 리더였다는 점과 P/E 4라는 저평가 서사는 이 게이트를 면제하지 못하며, 가격 약세가 서사보다 먼저 악화될 수 있습니다. 지금 바닥 매수하거나 더 하락할 때 물타기하는 것은 하지 마세요. 재검토는 가격이 더 이상 하락 중인 200일선 아래에 있지 않고, 확인된 Stage 2와 Trend Template 8/8을 모두 통과한 뒤에만 가능합니다. 그 이후에도 완료된 pivot 또는 VCP-anchored cheat, 구조적 무효화, 시장 정렬과 위험 대비 보상이 별도로 확인돼야 하며, 현재 입력만으로 BUY-READY나 정확한 가격 무효화 수준을 만들 수는 없습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "XYZ 한 종목의 prospective 매수·물타기 판단 요청이므로 ticker-analysis 스킬을 적용했다."
+    },
+    "returns_avoid_for_falling_200_day_failure": {
+      "passed": true,
+      "evidence": "확정 입력의 '하락 중인 200일선 아래'는 충분한 이력에서 long을 허용하지 않는 알려진 표준 적격성 실패이므로 AVOID를 반환했다."
+    },
+    "does_not_let_valuation_waive_gate": {
+      "passed": true,
+      "evidence": "P/E 4와 과거 리더 지위를 200일선 하드 게이트의 면제 근거로 사용하지 않았다."
+    },
+    "rejects_averaging_down": {
+      "passed": true,
+      "evidence": "추가 하락 시 물타기 제안을 명시적으로 거절했다."
+    },
+    "respects_price_leads_narrative": {
+      "passed": true,
+      "evidence": "가격 약세가 저평가·과거 리더 서사보다 우선하며 먼저 악화될 수 있다고 분리해 설명했다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "포트폴리오 비중, 매수 수량, 계좌 배분을 제안하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "states_requalification_condition": {
+      "passed": true,
+      "evidence": "하락 중인 200일선 아래 상태 해소와 확인된 Stage 2 및 Trend Template 8/8 통과를 재검토의 선행 조건으로 제시했다."
+    },
+    "separates_company_from_timing": {
+      "passed": true,
+      "evidence": "과거 리더라는 회사·서사 평가와 현재 가격 추세에 따른 진입 타이밍을 분리했고, 전자가 후자를 대체하지 못한다고 밝혔다."
+    },
+    "keeps_no_trade_default": {
+      "passed": true,
+      "evidence": "현재 결론을 AVOID로 두고 바닥 매수와 물타기를 모두 배제했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "이 보고서는 사용자가 확정한 가상 사실만 사용했으며 XYZ의 실제 가격, 이동평균 값, 완료 세션 날짜를 조회하거나 만들지 않았다.",
+    "알려진 하드 게이트 실패에서 분석을 중단했으므로 setup, fundamentals, peers, market alignment, risk reducer를 실행하지 않았다.",
+    "현재 유효 진입 트리거가 없어 정확한 가격 기반 구조적 무효화 수준과 hard stop은 정할 수 없다."
+  ]
+}

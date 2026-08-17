@@ -1,0 +1,65 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/clock.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "clock"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 clock response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline clock",
+      "scripts/.venv/bin/python scripts/pipeline clock --as-of 2026-08-14"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      }
+    },
+    "limitations": [
+      "Future dates, weekends, exchange holidays, and known special exchange closures are rejected.",
+      "The calendar models regular and standard early closes; it is not an intraday trading clock."
+    ],
+    "output": "The latest completed US regular session, or the validated explicit completed session.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "The date is malformed or is not a completed US trading session.",
+      "ok": "A completed session boundary was resolved."
+    },
+    "summary": "Resolve the point-in-time boundary shared by every analytical capability."
+  }
+}

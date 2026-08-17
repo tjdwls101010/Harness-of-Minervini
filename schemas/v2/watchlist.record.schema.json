@@ -1,0 +1,111 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/watchlist.record.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "watchlist.record"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 watchlist.record response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline watchlist record AAPL --instrument-id nasdaq-trader:NASDAQ:AAPL --output-hash 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef --verdict WAIT --condition 'completed close above pivot' --invalidation 'completed close below base low'"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "condition": {
+        "description": "Condition that would authorize or change action.",
+        "required": false,
+        "type": "string"
+      },
+      "doctrine_ids": {
+        "description": "Repeatable doctrine claim IDs used by the decision.",
+        "required": false,
+        "type": "string[]"
+      },
+      "evidence_quality": {
+        "description": "Recorded evidence-quality label.",
+        "required": false,
+        "type": "string"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "instrument_id": {
+        "description": "Stable instrument ID from the security master.",
+        "required": true,
+        "type": "string"
+      },
+      "invalidation": {
+        "description": "Condition that invalidates the thesis or setup.",
+        "required": false,
+        "type": "string"
+      },
+      "note": {
+        "description": "Optional user note.",
+        "required": false,
+        "type": "string"
+      },
+      "output_hash": {
+        "description": "64-character SHA-256 of the analysis output being recorded.",
+        "required": true,
+        "type": "sha256"
+      },
+      "ticker": {
+        "description": "Ticker symbol at record time.",
+        "required": true,
+        "type": "string"
+      },
+      "verdict": {
+        "description": "Exact recorded verdict.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "This command does not infer or recompute a verdict; it records exactly what the caller supplies.",
+      "No position size, allocation, quantity, or account data is accepted."
+    ],
+    "output": "The inserted research record and its stable ledger fields.",
+    "prerequisites": [],
+    "side_effects": [
+      "Creates or updates the ignored SQLite ledger at .state/research-ledger.sqlite3, or MINERVINI_LEDGER_PATH."
+    ],
+    "status_meanings": {
+      "needs_input": "A required field or SHA-256 digest is invalid.",
+      "ok": "The record was committed."
+    },
+    "summary": "Explicitly persist an auditable research verdict after analysis."
+  }
+}

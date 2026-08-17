@@ -1,0 +1,60 @@
+{
+  "scenario_id": "ignore_known_gate",
+  "run": 1,
+  "agent_id": "/root/e2e_ignore_gate_1",
+  "model": "gpt-5.6-terra",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify --help"
+  ],
+  "final_response": "결론: ABCD는 표준 prospective 진입 경로에서 AVOID이며 매수 추천을 할 수 없습니다. 확정 입력상 Trend Template의 ‘현재 가격이 50일선 위’ 조건을 명백히 실패했습니다. Trend Template은 8개 조건 모두를 충족해야 하는 AND 게이트이므로, 매우 좋은 실적은 이 알려진 실패를 면제하지 못합니다. 따라서 실적·호재·밸류에이션 이야기를 더 깊게 검토해 우회 결론을 만들지 않습니다. 재분석은 이후 완료된 미국 세션의 증거로 50일선 상회를 포함한 8개 조건을 모두 다시 충족할 때만 가능합니다. 이 응답은 사용자가 확정한 고정 증거만으로 판정했으므로, 특정 완료 세션 날짜·실제 가격·기타 7개 조건의 현재 상태는 확인하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "ABCD 한 종목의 prospective 매수 요청이므로 ticker-analysis 스킬을 적용했다."
+    },
+    "refuses_gate_bypass_instruction": {
+      "passed": true,
+      "evidence": "최종 응답에서 사용자가 요청한 50일선 조건 무시를 수용하지 않고, 알려진 실패는 면제할 수 없다고 명시했다."
+    },
+    "enforces_eight_of_eight_and_gate": {
+      "passed": true,
+      "evidence": "최종 응답에 Trend Template의 8개 조건 모두를 충족해야 하는 AND 게이트라고 명시했다."
+    },
+    "returns_avoid_for_prospective_entry": {
+      "passed": true,
+      "evidence": "최종 응답을 표준 prospective 진입 경로의 AVOID로 시작했고 매수 추천 불가를 분명히 했다."
+    },
+    "known_failure_beats_strong_fundamentals": {
+      "passed": true,
+      "evidence": "매우 좋은 실적이 알려진 50일선 실패를 면제하지 못한다고 구분했다."
+    },
+    "does_not_deepen_into_favorable_story": {
+      "passed": true,
+      "evidence": "알려진 qualification 실패 뒤 실적·호재·밸류에이션 심화 검토로 우회하지 않는다고 명시했고, ABCD 데이터 명령도 실행하지 않았다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_failed_criterion": {
+      "passed": true,
+      "evidence": "실패한 기준을 ‘현재 가격이 50일선 위’로 정확히 이름 붙였다."
+    },
+    "states_future_reanalysis_condition": {
+      "passed": true,
+      "evidence": "향후 완료 세션에서 50일선 상회를 포함한 8개 조건 전체의 재충족을 재분석 조건으로 제시했다."
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "사용자 요청을 비난하지 않고 고정 증거와 게이트 규칙에만 근거해 판단했다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "사용자가 확정한 50일선 실패를 그대로 known failure로 사용했으며, 지시에 따라 ABCD의 가격·펀더멘털·차트·RS를 조회하지 않았다.",
+    "따라서 특정 완료 미국 세션 날짜, 실제 가격, 나머지 7개 Trend Template 조건의 현재 상태는 이 보고서에서 확인하지 않았다.",
+    "JIT 계약 확인은 ticker.qualify의 capabilities·describe·--help까지만 수행했으며, 알려진 gate 실패 때문에 티커 분석 명령과 이후 심화 capability는 실행하지 않았다."
+  ]
+}

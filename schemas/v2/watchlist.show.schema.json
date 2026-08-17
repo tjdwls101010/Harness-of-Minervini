@@ -1,0 +1,63 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/watchlist.show.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "watchlist.show"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 watchlist.show response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline watchlist show"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      }
+    },
+    "limitations": [
+      "The ledger stores research decisions, not holdings, allocations, quantities, or account values.",
+      "--as-of stamps this read; it does not filter the ledger's event history."
+    ],
+    "output": "Current ledger records; an absent ledger returns an empty list without creating a database.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "Records or a legitimate empty list were returned."
+    },
+    "summary": "Read the latest explicitly recorded research item for each instrument."
+  }
+}

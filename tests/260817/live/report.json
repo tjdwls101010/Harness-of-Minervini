@@ -1,0 +1,122 @@
+{
+  "observed_at": "2026-08-17",
+  "completed_session": "2026-08-14",
+  "mode": "read_only_no_cache",
+  "release_blockers": [],
+  "external_unavailability": [
+    {
+      "provider": "ibd-rs-rating",
+      "operation": "dates",
+      "reason": "request_failed",
+      "attempts": 2,
+      "classification": "nonblocking_external_provider_outage"
+    },
+    {
+      "provider": "finviz",
+      "operation": "raw_snapshot",
+      "reason": "historical_snapshot_unavailable",
+      "attempts": 1,
+      "classification": "nonblocking_external_snapshot_unavailability"
+    }
+  ],
+  "checks": [
+    {
+      "id": "runtime_health",
+      "command": "scripts/.venv/bin/python scripts/pipeline health --format compact",
+      "exit_code": 0,
+      "status": "ok",
+      "evidence": {
+        "python": "3.12.8",
+        "ibd-rs-rating": "0.5.0",
+        "yfinance": "1.5.1",
+        "doctrine_claim_count": 12
+      }
+    },
+    {
+      "id": "current_market",
+      "command": "scripts/.venv/bin/python scripts/pipeline market snapshot --trade-traction needs_input --leader-limit 5 --no-cache --format compact",
+      "exit_code": 0,
+      "status": "needs_input",
+      "evidence": {
+        "regime": "incomplete",
+        "qqq_21ema": "supports_context_only",
+        "trade_traction": "needs_input",
+        "successful_sources": ["yfinance"],
+        "unavailable_sources": ["finviz", "ibd-rs-rating"]
+      }
+    },
+    {
+      "id": "representative_large_cap",
+      "command": "scripts/.venv/bin/python scripts/pipeline ticker qualify NVDA --no-cache --format compact",
+      "exit_code": 0,
+      "status": "partial",
+      "evidence": {
+        "price_provider": "yfinance",
+        "completed_session_count": 756,
+        "eligibility_state": "incomplete",
+        "missing": "authoritative_rs_after_two_attempts"
+      }
+    },
+    {
+      "id": "recent_ipo_known_failure_precedence",
+      "command": "scripts/.venv/bin/python scripts/pipeline ticker qualify SPCX --primary-base-quality needs_chart --no-cache --format compact",
+      "exit_code": 0,
+      "status": "partial",
+      "evidence": {
+        "completed_session_count": 44,
+        "eligibility_state": "avoid",
+        "known_failures": ["trend_template.price_above_52_week_low", "trend_template.price_near_52_week_high"],
+        "missing": "authoritative_rs_after_two_attempts",
+        "listing_context_source": "https://www.nasdaq.com/market-activity/ipos/overview?dealid=1361335-116498"
+      }
+    },
+    {
+      "id": "adr_and_excluded_instrument_scope",
+      "command": "scripts/.venv/bin/python scripts/pipeline market candidates --limit 5 --no-cache --format compact",
+      "exit_code": 0,
+      "status": "ok",
+      "evidence": {
+        "returned_candidates": 5,
+        "eligible_universe_count": 4882,
+        "adr_sample": "AACG",
+        "exclusion_count": 8229,
+        "exclusion_reason_counts": {
+          "etf_context_only": 5612,
+          "unsupported_instrument_type": 2617
+        },
+        "excluded_etf_sample": "AAAP",
+        "encoded_bytes_after_dense_summary": 2439
+      }
+    },
+    {
+      "id": "adr_price_and_rs_boundary",
+      "command": "scripts/.venv/bin/python scripts/pipeline ticker qualify TSM --no-cache --format compact",
+      "exit_code": 0,
+      "status": "partial",
+      "evidence": {
+        "price_provider": "yfinance",
+        "completed_session_count": 756,
+        "eligibility_state": "incomplete",
+        "missing": "authoritative_rs_after_two_attempts"
+      }
+    },
+    {
+      "id": "active_stop_path",
+      "command": "scripts/.venv/bin/python scripts/pipeline ticker risk NVDA --mode active --entry-price 100 --entry-date 2025-01-02 --stop-price 90 --no-cache",
+      "exit_code": 0,
+      "status": "ok",
+      "evidence": {
+        "verdict": "SELL",
+        "completed_bars_checked": 405,
+        "breach_date": "2025-04-07",
+        "breach_low": 86.62,
+        "latest_recovery_did_not_erase_breach": true,
+        "independent_report_paths": [
+          "tests/260817/e2e/reports/active_position/run-1.json",
+          "tests/260817/e2e/reports/active_position/run-2.json",
+          "tests/260817/e2e/reports/active_position/run-3.json"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "source": "sec_filed_facts",
+  "filings": [
+    {
+      "filed_at": "2025-05-01",
+      "accounting_basis": "US-GAAP",
+      "quarterly": [
+        {"period": "2024-Q1", "end": "2024-03-31", "eps": 0.50, "revenue": 100.0, "net_income": 10.0, "diluted_shares": 100.0},
+        {"period": "2024-Q2", "end": "2024-06-30", "eps": 0.60, "revenue": 120.0, "net_income": 13.2, "diluted_shares": 101.0},
+        {"period": "2024-Q3", "end": "2024-09-30", "eps": 0.75, "revenue": 145.0, "net_income": 18.85, "diluted_shares": 102.0}
+      ],
+      "annual": [
+        {"period": "2022", "eps": 1.00, "revenue": 350.0},
+        {"period": "2023", "eps": 1.40, "revenue": 430.0},
+        {"period": "2024", "eps": 1.70, "revenue": 520.0}
+      ],
+      "accounting_integrity": {"status": "clear"},
+      "going_concern": {"status": "clear"},
+      "leader_category": {"category": "market_leader", "status": "supports"}
+    },
+    {
+      "filed_at": "2026-05-01",
+      "accounting_basis": "US-GAAP",
+      "quarterly": [
+        {"period": "2025-Q1", "end": "2025-03-31", "eps": 0.90, "revenue": 180.0, "net_income": 27.0, "diluted_shares": 103.0},
+        {"period": "2025-Q2", "end": "2025-06-30", "eps": 1.20, "revenue": 225.0, "net_income": 40.5, "diluted_shares": 104.0},
+        {"period": "2025-Q3", "end": "2025-09-30", "eps": 1.54, "revenue": 270.0, "net_income": 56.7, "diluted_shares": 105.0},
+        {"period": "2026-Q1", "end": "2026-03-31", "eps": 1.80, "revenue": 324.0, "net_income": 71.28, "diluted_shares": 106.0}
+      ],
+      "annual": [
+        {"period": "2025", "eps": 2.20, "revenue": 650.0}
+      ],
+      "accounting_integrity": {"status": "clear"},
+      "going_concern": {"status": "clear"},
+      "leader_category": {"category": "market_leader", "status": "supports"}
+    },
+    {
+      "filed_at": "2026-07-01",
+      "accounting_basis": "IFRS",
+      "quarterly": [
+        {"period": "2026-Q2", "end": "2026-06-30", "eps": 9.99, "revenue": 999.0, "net_income": 250.0, "diluted_shares": 100.0}
+      ],
+      "accounting_integrity": {"status": "clear"},
+      "going_concern": {"status": "clear"}
+    }
+  ]
+}

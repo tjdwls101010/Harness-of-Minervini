@@ -1,0 +1,44 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/capabilities.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "capabilities"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 capabilities response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline capabilities"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {},
+    "limitations": [],
+    "output": "The registry name, summary, immutable schema ID, and explicit-write marker for every public capability.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "The complete registry was returned."
+    },
+    "summary": "List every composable public capability without running market analysis."
+  }
+}

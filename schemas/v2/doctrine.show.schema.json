@@ -1,0 +1,69 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/doctrine.show.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "doctrine.show"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 doctrine.show response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline doctrine show eligibility.standard_trend_template"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "claim_id": {
+        "description": "Exact doctrine claim ID.",
+        "required": true,
+        "type": "string"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      }
+    },
+    "limitations": [
+      "This is runtime doctrine, not a full book transcript or citation browser.",
+      "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time."
+    ],
+    "output": "The executable claim plus separated provenance metadata.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "The claim ID is unknown.",
+      "ok": "The claim exists."
+    },
+    "summary": "Inspect one normalized doctrine claim used by the deterministic reducers."
+  }
+}

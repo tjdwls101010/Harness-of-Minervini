@@ -1,0 +1,25 @@
+{
+  "source": "sec_filed_facts",
+  "filings": [
+    {
+      "filed_at": "2026-05-01",
+      "accounting_basis": "IFRS",
+      "quarterly": [
+        {"period": "2024-Q1", "end": "2024-03-31", "eps": 0.50, "revenue": 100.0, "net_income": 10.0, "diluted_shares": 100.0},
+        {"period": "2024-Q2", "end": "2024-06-30", "eps": 0.50, "revenue": 100.0, "net_income": 10.0, "diluted_shares": 101.0},
+        {"period": "2024-Q3", "end": "2024-09-30", "eps": 0.50, "revenue": 100.0, "net_income": 10.0, "diluted_shares": 102.0},
+        {"period": "2025-Q1", "end": "2025-03-31", "eps": 0.80, "revenue": 150.0, "net_income": 18.0, "diluted_shares": 103.0},
+        {"period": "2025-Q2", "end": "2025-06-30", "eps": 0.75, "revenue": 145.0, "net_income": 15.95, "diluted_shares": 104.0},
+        {"period": "2025-Q3", "end": "2025-09-30", "eps": 0.64, "revenue": 130.0, "net_income": 11.70, "diluted_shares": 105.0}
+      ],
+      "annual": [
+        {"period": "2022", "eps": 1.00, "revenue": 350.0},
+        {"period": "2023", "eps": 1.50, "revenue": 500.0},
+        {"period": "2024", "eps": 1.90, "revenue": 600.0}
+      ],
+      "accounting_integrity": {"status": "clear"},
+      "going_concern": {"status": "clear"},
+      "leader_category": {"category": "top_competitor", "status": "supports"}
+    }
+  ]
+}
