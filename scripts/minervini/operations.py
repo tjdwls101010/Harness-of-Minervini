@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import re
+import os
 import sys
 from dataclasses import dataclass, field
+from datetime import date
+from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -13,11 +16,13 @@ from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
+from .fundamentals import evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates
 from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, rating_snapshot
+from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars
 from .risk import reduce_risk
 from .setup import evaluate_setup
@@ -29,6 +34,7 @@ PriceHistory = Callable[[str, str | None], ProviderSnapshot[Any]]
 RatingSnapshot = Callable[[str, str | None], ProviderSnapshot[dict[str, Any]]]
 SecurityMaster = Callable[[str | None], ProviderSnapshot[list[SecurityRecord]]]
 LedgerFactory = Callable[[], Ledger]
+FundamentalsEvidence = Callable[[str, str, str | None], ProviderSnapshot[dict[str, Any]]]
 
 
 def _default_price_history(ticker: str, as_of: str | None) -> ProviderSnapshot[Any]:
@@ -55,6 +61,45 @@ def _default_security_master(as_of: str | None) -> ProviderSnapshot[list[Securit
     return current_security_master(request)
 
 
+def _default_fundamentals_evidence(ticker: str, as_of: str, cik: str | None) -> ProviderSnapshot[dict[str, Any]]:
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    if not user_agent:
+        raise ProviderUnavailable("sec", "identifiable_user_agent_required", operation="filed_facts")
+    try:
+        import requests
+    except Exception as error:
+        raise ProviderUnavailable("sec", "requests_package_unavailable", operation="filed_facts") from error
+
+    snapshots: list[ProviderSnapshot[Any]] = []
+    resolved_cik = cik
+    if resolved_cik is None:
+        ticker_lookup = fetch_company_tickers(request_get=requests.get, user_agent=user_agent)
+        snapshots.append(ticker_lookup)
+        record = ticker_lookup.data.get(ticker)
+        if record is None:
+            raise ProviderUnavailable("sec", "ticker_not_found", operation="company_tickers")
+        resolved_cik = record["cik"]
+    facts = fetch_company_facts(resolved_cik, request_get=requests.get, user_agent=user_agent)
+    submissions = fetch_company_submissions(resolved_cik, request_get=requests.get, user_agent=user_agent)
+    snapshots.extend((facts, submissions))
+    evidence = normalize_filed_facts(facts.data, submissions.data, as_of=as_of)
+    content_hashes = [snapshot.meta.content_sha256 for snapshot in snapshots if snapshot.meta.content_sha256]
+    return ProviderSnapshot(
+        evidence,
+        SnapshotMeta(
+            provider="sec",
+            retrieved_at=max(snapshot.meta.retrieved_at for snapshot in snapshots),
+            as_of=date.fromisoformat(as_of),
+            coverage={
+                "kind": "filed_facts_as_of",
+                "cik": resolved_cik,
+                "documents": [dict(snapshot.meta.coverage) for snapshot in snapshots],
+            },
+            content_sha256=sha256("|".join(content_hashes).encode()).hexdigest() if content_hashes else None,
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class Runtime:
     """Replace only external boundaries in deterministic integration tests."""
@@ -62,6 +107,7 @@ class Runtime:
     price_history: PriceHistory = field(default_factory=lambda: _default_price_history)
     rs_rating: RatingSnapshot = field(default_factory=lambda: _default_rs_rating)
     security_master: SecurityMaster = field(default_factory=lambda: _default_security_master)
+    fundamentals_evidence: FundamentalsEvidence = field(default_factory=lambda: _default_fundamentals_evidence)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
 
 
@@ -274,6 +320,53 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     )
 
 
+def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    cik = request.get("cik")
+    if cik is not None and (not isinstance(cik, str) or not cik.isdigit() or len(cik) > 10):
+        raise RequestError("cik must contain at most ten digits", "cik")
+    if request.get("as_of") is not None and cik is None:
+        return envelope(
+            "ticker.fundamentals",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="needs_input",
+            data={"ticker": ticker, "fundamentals_state": "incomplete"},
+            missing=[{"id": "cik", "reason": "stable_historical_identity_required", "required": True}],
+        )
+    power_play = request.get("power_play")
+    if power_play is not None and not isinstance(power_play, Mapping):
+        raise RequestError("power_play must be an object", "power_play")
+    try:
+        snapshot = runtime.fundamentals_evidence(ticker, clock.date.isoformat(), cik)
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.fundamentals",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "fundamentals_state": "incomplete"},
+            missing=[_missing_provider(error)],
+        )
+    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat(), power_play=power_play)
+    missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
+    status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
+    doctrine_ids = ["scope.data_integrity"]
+    if power_play is not None:
+        doctrine_ids.append("fundamentals.power_play_exception")
+    return envelope(
+        "ticker.fundamentals",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        status=status,
+        data={"ticker": ticker, **result},
+        signals=result["signals"],
+        missing=missing,
+        sources=[_source(snapshot.meta)],
+        doctrine_ids=doctrine_ids,
+        next_capabilities=["ticker.peers", "ticker.risk"],
+    )
 def _candidate_row(record: SecurityRecord) -> dict[str, Any]:
     exchange = record.exchange.upper()
     exchange = {
@@ -437,6 +530,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _qualify(request, runtime)
     if operation == "ticker.setup":
         return _setup(request, runtime)
+    if operation == "ticker.fundamentals":
+        return _fundamentals(request, runtime)
     if operation == "ticker.risk":
         return _risk(request)
     if operation == "market.candidates":

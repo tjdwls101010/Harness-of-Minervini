@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
 import unittest
 from datetime import date, datetime, timezone
@@ -123,6 +124,43 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertEqual(set(payload["data"]["missing"]), {"entry_date", "stop_or_invalidation"})
+
+    def test_fundamentals_consumes_only_normalized_filed_sec_evidence(self) -> None:
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "fundamentals" / "filed_evidence.json"
+        sec_evidence = json.loads(fixture.read_text(encoding="utf-8"))
+        snapshot = ProviderSnapshot(
+            sec_evidence,
+            SnapshotMeta(
+                provider="sec",
+                retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+                as_of=date(2026, 5, 10),
+                coverage={"kind": "filed_facts"},
+            ),
+        )
+        runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot)
+
+        payload = execute(
+            "ticker.fundamentals",
+            {"ticker": "TEST", "as_of": "2026-05-10", "cik": "0000123456"},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["ticker"], "TEST")
+        self.assertEqual(payload["data"]["fundamentals_state"], "does_not_support_convergence")
+        self.assertEqual(payload["sources"][0]["provider"], "sec")
+
+    def test_historical_fundamentals_requires_stable_cik_instead_of_current_ticker_identity(self) -> None:
+        runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: self.fail("must not use current identity"))
+
+        payload = execute(
+            "ticker.fundamentals",
+            {"ticker": "TEST", "as_of": "2026-05-10"},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertEqual(payload["missing"][0]["id"], "cik")
 
     def test_ledger_reads_are_side_effect_free_and_record_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

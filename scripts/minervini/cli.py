@@ -67,6 +67,14 @@ def build_parser() -> JsonArgumentParser:
             child.add_argument("--invalidation-price", type=float)
             child.add_argument("--invalidation-condition")
             child.add_argument("--tactic-opt-in", action="store_true")
+        if name == "fundamentals":
+            child.add_argument("--cik", help="Stable SEC CIK; required with historical --as-of.")
+            child.add_argument("--power-play-quality", choices=("textbook", "acceptable"))
+            child.add_argument("--power-play-fundamentals-exception", action="store_true")
+            child.add_argument("--power-play-technical-eligibility", action="store_true")
+            child.add_argument("--power-play-price-volume-structure", action="store_true")
+            child.add_argument("--power-play-market-alignment", action="store_true")
+            child.add_argument("--power-play-risk-controls", action="store_true")
         if name == "chart":
             child.add_argument("--output-dir")
         _common(child)
@@ -166,6 +174,28 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
             state = request.pop(request_name, None)
             if state is not None:
                 request[component_name] = {"state": state}
+    if operation == "ticker.fundamentals":
+        quality = request.pop("power_play_quality", None)
+        exception = request.pop("power_play_fundamentals_exception", False)
+        proof = {
+            name.removeprefix("power_play_"): request.pop(name, False)
+            for name in (
+                "power_play_technical_eligibility",
+                "power_play_price_volume_structure",
+                "power_play_market_alignment",
+                "power_play_risk_controls",
+            )
+        }
+        if quality is not None or exception or any(proof.values()):
+            request["power_play"] = {
+                "detected": quality is not None,
+                "quality": quality,
+                "fundamentals_exception": {
+                    "status": "map_authorized_only_for_this_vcp-qualified_setup" if exception else "not_authorized",
+                    "may_omit": ["verified_fundamentals"] if exception else [],
+                },
+                **{name: "pass" if passed else "unavailable" for name, passed in proof.items()},
+            }
     return request
 
 
