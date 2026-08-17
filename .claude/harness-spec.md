@@ -54,6 +54,8 @@ Every non-help invocation emits exactly one v2 JSON envelope with `schema_versio
 
 Help is deliberately detailed at the point of use. Root and group help orient the caller; every leaf help explains purpose, required and optional inputs, defaults, as-of behavior, provider or historical limits, status meanings, side effects, and examples. Markdown teaches how to discover help but does not restate all flags.
 
+Candidate pagination bounds both eligible rows and diagnostic bulk. Exclusion evidence retains the complete excluded-record count and complete counts by reason, while returning at most `min(limit, 20)` representative records; auditability therefore does not require sending the current security master's entire excluded population through model context.
+
 `--format compact|full` changes detail only and cannot change verdicts, signals, missing-evidence meaning, doctrine IDs, or source truth. `--no-cache` bypasses cache reads and writes and exists for fresh diagnostics, not ordinary analysis.
 
 ## Doctrine and decision architecture
@@ -65,6 +67,8 @@ Precedence is scope, safety, and data integrity; Minervini eligibility and risk 
 Pure evaluators are separated by decision concern: market regime and candidate scope, technical eligibility, setup and setup evidence, filed fundamentals, same-industry peers, and prospective or active-position risk. No weighted master score is allowed to let strength on one axis erase a hard failure on another.
 
 The recommendation vocabulary is stateful and intentionally narrow. Qualification or `PROCEED` is not BUY-READY. Prospective outcomes are BUY-READY, WAIT, AVOID, or INCOMPLETE only after the relevant evidence converges; active-position outcomes are HOLD, SELL, or INCOMPLETE. Market and component operations retain their own descriptive states without pretending to make the final decision.
+
+An active `HOLD` requires a current completed price and a clear completed-daily-low path from the stop's effective calendar date through the analysis session. Any historical breach produces `SELL` even if price later recovers; unavailable coverage produces `INCOMPLETE`. A raised or replaced stop is never projected backward before its supplied effective date, while an explicitly requested partial-session check remains a separate live-stop path.
 
 ## Data, identity, time, and cache
 
@@ -98,7 +102,7 @@ The default ledger is `.state/research-ledger.sqlite3`, overridable by `MINERVIN
 | `scripts/minervini/fundamentals.py` | Filed-as-of growth, integrity, leadership, and Power Play handling | Implemented with original/amendment cutoff fixtures. |
 | `scripts/minervini/market_evidence.py`, `market.py` | Breadth, environmental context, group vectors, trade traction, and candidate scope | Implemented without a bullish weighted score. |
 | `scripts/minervini/peer_collection.py`, `peers.py` | Stable-identity same-industry evidence | Implemented for current taxonomy with exact RS/date and completed-price checks. |
-| `scripts/minervini/risk.py` | Final prospective and active-position reducers | Implemented with hard-stop and current-price completeness tests. |
+| `scripts/minervini/risk.py` | Final prospective and active-position reducers | Implemented with full completed stop-path, effective-date, recovered-breach, and missing-coverage tests. |
 | `scripts/minervini/chart.py` | Auditable chart artifact generation | Implemented with input hash and manifest verification. |
 | `scripts/minervini/ledger.py` | Explicit research-state persistence | Implemented with non-creating reads and export tests. |
 | `scripts/minervini/operations.py` | Provider/evaluator composition and envelope data | Implemented with cache and operation integration tests. |
@@ -112,7 +116,11 @@ Required deterministic gates are: doctrine registry validation; all reducer unit
 
 Behavioral acceptance uses independent Codex runs over market, sector/industry, ticker qualification, setup, Power Play, same-industry comparison, active stop, missing evidence, point-in-time refusal, scope boundary, and side-effect prompts. Critical assertions require three independent passes, with an adversarial final synthesis checking for false BUY-READY, fabricated data, hidden portfolio sizing, and rail-driven overcalling.
 
+The final v2 suite contains 167 passing tests. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/260817/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
+
 Live smoke testing is limited to safe read-only provider and CLI paths. It verifies current integration but cannot replace frozen point-in-time contract tests. Network absence or source unavailability is reported honestly and is not treated as a deterministic failure of the doctrine engine.
+
+The 2026-08-17 live report at `tests/260817/live/report.json` records healthy local dependencies, completed-session Yahoo prices, current market and security-master composition, representative large-cap, recent-IPO, ADR and excluded-instrument paths, active stop history, and honest Finviz/RS unavailability. It also records the candidate-response density regression and its reduction from a universe-wide exclusion dump to a 2,439-byte bounded summary.
 
 The v1 diagnostic baseline is `tests/260817/baselines/v1/manifest.json`. The final v1 commit is preserved through the `harness-v1-final` annotated tag and GitHub release so obsolete runtime files can be deleted from v2 without losing recoverability.
 
@@ -143,3 +151,4 @@ Before accepting a harness change, run the focused RED/GREEN test, the complete 
 ## Change history
 
 - 2026-08-17: Rebuilt the harness as v2 around principle over rail, interface over document, dense progressive disclosure, typed point-in-time providers, composable deterministic reducers, explicit research state, two shared host skills, and detailed just-in-time CLI help. Retired v1 agents, rules, workflow, reference libraries, trade-review route, duplicate Codex skill link, and legacy runtime substrate after preserving the v1 baseline for release.
+- 2026-08-17: Closed the adversarial behavioral blockers by auditing the full active stop path and treating hypothetical evidence as a closed world; bounded candidate exclusion evidence after live smoke exposed a roughly 200,000-token response; completed 167 deterministic and artifact tests plus a 30-report independent behavioral gate.

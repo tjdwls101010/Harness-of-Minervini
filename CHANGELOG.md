@@ -18,6 +18,8 @@ All notable changes to this project are documented here. The format is based on 
 - **Interface over document.** Command syntax, defaults, limits, statuses, side effects, and examples moved into the executable registry and detailed CLI help. Human documentation teaches discovery instead of duplicating a flag catalog.
 - **Claude and Codex share literal files.** `AGENTS.md -> CLAUDE.md` and `.agents/skills -> ../.claude/skills` remove host-specific prompt copies and drift.
 - **Point-in-time and missing-evidence semantics are release gates.** Incomplete bars, post-cutoff filings, mutable current taxonomy, stale or withheld RS, transport failures, and successful no-data responses cannot be silently promoted to usable historical evidence.
+- **Active HOLD audits the whole stop window.** A recovered latest price cannot hide an earlier completed-daily-low breach; changed stops carry an effective date, incomplete path coverage stays `INCOMPLETE`, and leaf help explains the distinction from an explicit live check.
+- **Candidate transport stays dense.** Discovery pagination returns complete exclusion counts by reason with at most `min(limit, 20)` representative records instead of dumping thousands of excluded instruments into every response.
 
 ### Removed
 
