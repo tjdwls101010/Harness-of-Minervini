@@ -95,6 +95,7 @@ class PublicCliContractTests(unittest.TestCase):
                 self.assertIn("Output", help_text)
                 self.assertIn("Time and data limits", help_text)
                 self.assertIn("Envelope status", help_text)
+                self.assertIn("Exit codes", help_text)
                 self.assertIn("Side effects", help_text)
                 self.assertIn("Examples (run from the repository root)", help_text)
                 self.assertIn("scripts/.venv/bin/python scripts/pipeline", help_text)
@@ -163,6 +164,29 @@ class PublicCliContractTests(unittest.TestCase):
         self.assertIn("prerequisites", payload["data"])
         self.assertIn("side_effects", payload["data"])
         self.assertIn("errors", payload["data"])
+        self.assertEqual(set(payload["data"]["exit_codes"]), {"0", "2", "3"})
+
+    def test_explicit_completed_current_price_can_trigger_the_active_hard_stop(self) -> None:
+        completed = run_pipeline(
+            "ticker",
+            "risk",
+            "TEST",
+            "--mode",
+            "active",
+            "--entry-price",
+            "200",
+            "--entry-date",
+            "2026-08-10",
+            "--stop-price",
+            "188",
+            "--current-price",
+            "187",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertIn("completed_stop_breach", payload["data"]["failed"])
 
     def test_help_is_plain_text_and_does_not_emit_json(self) -> None:
         completed = run_pipeline("ticker", "risk", "--help")

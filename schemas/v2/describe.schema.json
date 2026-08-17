@@ -26,6 +26,11 @@
     "examples": [
       "scripts/.venv/bin/python scripts/pipeline describe ticker.setup"
     ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
     "inputs": {
       "capability": {
         "description": "Exact capability ID returned by capabilities.",
@@ -34,7 +39,7 @@
       }
     },
     "limitations": [],
-    "output": "Purpose, inputs, schema ID, prerequisites, limitations, status meanings, side effects, errors, and examples.",
+    "output": "Purpose, inputs, schema ID, prerequisites, limitations, status and exit meanings, side effects, errors, and examples.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {

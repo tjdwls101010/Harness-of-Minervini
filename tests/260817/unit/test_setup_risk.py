@@ -131,6 +131,20 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "HOLD")
         self.assertEqual(result["missing"], [])
 
+    def test_active_completed_current_price_at_or_below_stop_is_sell(self) -> None:
+        result = reduce_risk(
+            {
+                "mode": "active",
+                "entry_price": 100.0,
+                "entry_date": "2026-08-10",
+                "stop_price": 94.0,
+                "current_price": 94.0,
+            }
+        )
+
+        self.assertEqual(result["verdict"], "SELL")
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
     def test_active_completed_stop_or_invalidation_trigger_is_sell(self) -> None:
         evidence = {
             "mode": "active",

@@ -27,6 +27,11 @@
       "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL",
       "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL --as-of 2026-08-14 --cik 0000320193"
     ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
     "inputs": {
       "as_of": {
         "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",

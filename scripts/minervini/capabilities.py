@@ -15,6 +15,7 @@ class Capability:
     errors: list[str]
     limitations: list[str]
     status_meanings: dict[str, str]
+    exit_codes: dict[str, str]
     examples: list[str]
 
     @property
@@ -45,6 +46,7 @@ class Capability:
             "errors": self.errors,
             "limitations": self.limitations,
             "status_meanings": self.status_meanings,
+            "exit_codes": self.exit_codes,
             "examples": self.examples,
         }
 
@@ -52,9 +54,10 @@ class Capability:
         status = "\n".join(f"  {name}: {meaning}" for name, meaning in self.status_meanings.items())
         limits = "\n".join(f"  - {item}" for item in self.limitations) or "  - None beyond the shared v2 envelope contract."
         effects = "\n".join(f"  - {item}" for item in self.side_effects) or "  - No explicit user-visible write. Provider-backed commands may use the ignored local cache unless --no-cache is set."
+        exits = "\n".join(f"  {code}: {meaning}" for code, meaning in self.exit_codes.items())
         examples = "\n".join(f"  {item}" for item in self.examples)
         prerequisites = "\n".join(f"  - {item}" for item in self.prerequisites) or "  - None."
-        return f"Output\n  {self.output}\n\nPrerequisites\n{prerequisites}\n\nTime and data limits\n{limits}\n\nEnvelope status\n{status}\n\nSide effects\n{effects}\n\nExamples (run from the repository root)\n{examples}"
+        return f"Output\n  {self.output}\n\nPrerequisites\n{prerequisites}\n\nTime and data limits\n{limits}\n\nEnvelope status\n{status}\n\nExit codes\n{exits}\n\nSide effects\n{effects}\n\nExamples (run from the repository root)\n{examples}"
 
 
 def _field(kind: str, description: str, *, required: bool = False, default: Any = None, choices: list[str] | None = None) -> dict[str, Any]:
@@ -69,6 +72,11 @@ def _field(kind: str, description: str, *, required: bool = False, default: Any 
 _AS_OF = _field("date", "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.")
 _FORMAT = _field("enum", "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.", default="full", choices=["compact", "full"])
 _NO_CACHE = _field("boolean", "Bypass both provider-cache reads and writes for this invocation.", default=False)
+_EXIT_CODES = {
+    "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+    "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+    "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope.",
+}
 
 
 def _inputs(specific: dict[str, Any] | None = None, *, providers: bool = False, clocked: bool = True) -> dict[str, Any]:
@@ -91,6 +99,7 @@ def _capability(
     errors: list[str] | None = None,
     limitations: list[str] | None = None,
     status_meanings: dict[str, str] | None = None,
+    exit_codes: dict[str, str] | None = None,
     examples: list[str] | None = None,
 ) -> Capability:
     return Capability(
@@ -103,6 +112,7 @@ def _capability(
         errors=errors or ["invalid_request", "provider_unavailable", "internal_error"],
         limitations=limitations or [],
         status_meanings=status_meanings or {"ok": "The requested contract was satisfied."},
+        exit_codes=dict(exit_codes or _EXIT_CODES),
         examples=examples or [],
     )
 
@@ -121,7 +131,7 @@ CAPABILITIES = {
             "describe",
             "Return the machine-readable contract for one capability.",
             inputs={"capability": _field("string", "Exact capability ID returned by capabilities.", required=True)},
-            output="Purpose, inputs, schema ID, prerequisites, limitations, status meanings, side effects, errors, and examples.",
+            output="Purpose, inputs, schema ID, prerequisites, limitations, status and exit meanings, side effects, errors, and examples.",
             status_meanings={"ok": "The capability exists.", "needs_input": "The capability ID is unknown."},
             examples=["scripts/.venv/bin/python scripts/pipeline describe ticker.setup"],
         ),
@@ -268,7 +278,7 @@ CAPABILITIES = {
                     "entry_date": _field("date", "Actual ISO entry date; required in active mode."),
                     "stop_price": _field("number", "Positive hard-stop price."),
                     "upside_price": _field("number", "Positive evidence-based reward reference; required in prospective mode."),
-                    "current_price": _field("number", "Optional explicit current price; active mode otherwise fetches the latest completed close once anchors are complete."),
+                    "current_price": _field("number", "Optional explicit latest completed price; it participates in hard-stop and 3R checks. Active mode otherwise fetches the latest completed close once anchors are complete."),
                     "average_gain_pct": _field("number", "The trader's realized average gain percentage used for the half-average stop cap."),
                     "market_state": _field("enum", "Market verdict from market.snapshot.", choices=["favorable", "cautious", "defensive", "incomplete"]),
                     "eligibility_state": _field("enum", "Eligibility verdict from ticker.qualify.", choices=["eligible", "avoid", "incomplete"]),
@@ -284,7 +294,7 @@ CAPABILITIES = {
             ),
             output="The sole final ticker verdict with component states, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context.",
             prerequisites=["Prospective mode should consume market.snapshot, ticker.qualify, ticker.setup, and ticker.fundamentals verdicts."],
-            limitations=["This capability never recommends portfolio allocation or position size.", "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.", "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.", "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."],
+            limitations=["This capability never recommends portfolio allocation or position size.", "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.", "--current-price means a completed price and can trigger the hard stop; a partial-session breach must instead use the explicit live-stop flags.", "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.", "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."],
             status_meanings={"ok": "A complete BUY-READY, WAIT, AVOID, HOLD, or SELL verdict was produced.", "partial": "Active anchors were complete but the completed-price provider was unavailable.", "needs_input": "Required evidence is missing, so the domain verdict is INCOMPLETE.", "unavailable": "An internal required capability cannot be evaluated."},
             examples=["scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --market-state favorable --eligibility-state eligible --setup-state ready --fundamentals-state supports_convergence --entry-price 200 --stop-price 188 --upside-price 224", "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --mode active --entry-price 200 --entry-date 2026-08-10 --stop-price 188"],
         ),

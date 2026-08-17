@@ -27,6 +27,11 @@
       "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --market-state favorable --eligibility-state eligible --setup-state ready --fundamentals-state supports_convergence --entry-price 200 --stop-price 188 --upside-price 224",
       "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --mode active --entry-price 200 --entry-date 2026-08-10 --stop-price 188"
     ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
     "inputs": {
       "as_of": {
         "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
@@ -45,7 +50,7 @@
         "type": "boolean"
       },
       "current_price": {
-        "description": "Optional explicit current price; active mode otherwise fetches the latest completed close once anchors are complete.",
+        "description": "Optional explicit latest completed price; it participates in hard-stop and 3R checks. Active mode otherwise fetches the latest completed close once anchors are complete.",
         "required": false,
         "type": "number"
       },
@@ -169,6 +174,7 @@
     "limitations": [
       "This capability never recommends portfolio allocation or position size.",
       "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.",
+      "--current-price means a completed price and can trigger the hard stop; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
       "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."
     ],

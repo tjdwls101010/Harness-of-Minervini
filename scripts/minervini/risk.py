@@ -184,9 +184,9 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event"))
-    invalidation_triggered = _triggered(invalidation)
     current = _number(payload.get("current_price"))
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or (current is not None and stop is not None and current <= stop)
+    invalidation_triggered = _triggered(invalidation)
     if current is None and not (live_triggered or completed_stop or invalidation_triggered):
         missing.append("current_price")
 
