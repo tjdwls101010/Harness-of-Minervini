@@ -1,73 +1,51 @@
 ---
 name: ticker-analysis
-description: Analyze one or a few named US-listed stocks for a prospective buy, entry timing, setup diagnosis, existing-position sell or hold judgment, re-entry, earnings risk, or chart condition — including a head-to-head comparison of two or a few named tickers (gate each ticker, then compare). Use whenever the user asks what to do with a specific US-listed ticker, even if they do not name Minervini or SEPA. Do not use for market-wide, sector, screening, leader-finding, or watchlist requests; route those to market-scan. Do not use to grade, review, or post-mortem any completed trade, whether one ticker or a trade log; route that to trade-review. Crypto and non-US listings are out of scope; state the scope boundary instead of analyzing them. Never provide portfolio sizing.
-allowed-tools: Bash(scripts/.venv/bin/python *), Bash(bash scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
+description: Analyze one or a few named US-listed stocks for a prospective buy, entry timing, setup diagnosis, active-position HOLD or SELL evidence, re-entry, earnings risk, chart condition, or head-to-head comparison. Use whenever the user asks what to do with a specific US-listed ticker, even if Minervini or SEPA is not named. Do not use for market-wide sector screening or leader discovery; use market-scan. Crypto, non-US listings, completed-trade grading, portfolio sizing, and allocation advice are outside scope.
+allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJECT_DIR}/scripts/pipeline *), Bash(bash ${CLAUDE_PROJECT_DIR}/scripts/bootstrap.sh), Read, Grep, Glob, WebSearch, WebFetch
 ---
-
-!`scripts/.venv/bin/python scripts/modules/market_clock.py`
 
 # Ticker analysis
 
-## Ground the branch
+## Orient through the interface
 
-- Treat the injected clock output as the current ET session and cache context. Daily evidence uses completed US sessions unless a command explicitly reports live run rate.
-- Identify whether the request concerns a prospective buy/diagnosis, an existing position, or both. Ask only for facts that change the branch, such as entry, stop, pivot, breakout date, or prior-high anchor.
-- Your training priors do not contain this harness's adjudicated thresholds. Read the required references before the verdict; do not substitute remembered Minervini, IBD, O'Neil, or generic chart doctrine.
-- Precise market and financial values come only from `scripts/`. WebSearch is for current narrative and catalysts, never replacement numbers.
+- Work from the repository root. If the canonical interpreter is missing or imports fail, run the bootstrap command declared in the root constitution once.
+- If the needed capability is uncertain, run the capability-catalog command declared in the root constitution.
+- Before invoking a selected capability for the first time, inspect only `describe <capability>` or that leaf command's `--help`. The CLI owns syntax, defaults, time limits, status meanings, and side effects; do not duplicate them here.
+- Decide whether the request is prospective, active-position, re-entry, or comparison. Collect only evidence that can change that decision.
 
-## Reference routing
+## Prospective entry
 
-- For a prospective buy, re-entry, setup diagnosis, or chart-condition diagnosis, read `references/entry.md` before interpreting the gate, setup, pivot, or price/volume behavior.
-- For a deep prospective review, read `references/fundamentals.md` after the hard gate passes.
-- Read `references/sell.md` before defining a prospective exit plan and before every existing-position sell or hold verdict.
-- The references are a chain, not a menu that lets favorable material bypass an unfavorable gate. `[M]` controls; explicitly requested `[TL]` tactics remain opt-in and tagged.
+- Qualify first. Do not research a story, inspect valuation, or deepen the setup before the low-cost technical gate earns it.
+- If a known Stage 2 or Trend Template gate fails, return AVOID for a prospective entry and stop. Explain the exact failed evidence and do not let fundamentals, cheapness, reputation, or narrative reopen the route.
+- If qualification is incomplete, distinguish missing evidence from failure. Resolve only the named gap when possible; use a chart for `needs_chart`, and never infer a pass.
+- If eligible, examine weekly structure before daily timing. Require separate price geometry, contracting supply, a completed pivot or VCP-anchored cheat, and precise invalidation.
+- A named VCP without supply evidence is incomplete. `[TL-EARLY]` is available only after explicit opt-in and must retain confirmation debt, a later Minervini pivot, and exact invalidation.
+- Evaluate SEC filed-as-of fundamentals, accounting integrity, dilution, growth quality, and leadership category. The Power Play exception may waive only unavailable verified fundamentals when every other proof remains intact.
+- Compare the ticker with current same-industry peers. Treat historical peer analysis as unavailable when current mutable taxonomy would be the only identity source.
+- Recheck the market evidence needed by this setup. QQQ context alone cannot supply market alignment, and absent user trade traction remains a real gap.
+- Use the risk reducer for the final prospective state. Never call a ticker BUY-READY from qualification, setup, fundamentals, or RS alone.
 
-## Prospective buy or diagnosis
+## Active position or re-entry
 
-1. Run `scripts/.venv/bin/python scripts/pipeline qualify TICKER` first. Retry once on command failure.
-2. A known gate failure produces `AVOID` for the prospective buy. Do not spend a failed gate into a favorable answer through fundamentals, valuation, theme, or visual appeal.
-3. An unavailable required criterion produces `INCOMPLETE`. Name the missing evidence; do not turn absence into either failure or permission.
-4. On `PROCEED`, earn the entry review with parameterized calls such as `base_count.py count`, `vcp.py detect`, and `volume_analysis.py analyze`. Use `volume_analysis.py runrate` only for an active-session pivot decision.
-5. Use `entry_patterns.py` only when the user explicitly opts into the `[TL]` daily-tactic layer. Its result cannot waive SEPA eligibility, a larger constructive setup and supply-absorption context, or the tactic's own completed trigger and objective failure level.
-6. Run the earnings, margin, surprise, revision, valuation, category, catalyst, and leadership review from `references/fundamentals.md`. Use narrative search only where that reference permits it.
-7. Obtain market alignment from a fresh `scripts/.venv/bin/python scripts/pipeline discover` result or current market-level evidence already established under the market doctrine. Do not let an index switch decide alone.
-8. Read `references/sell.md` and write the initial invalidation, reward/risk, earnings-event policy, and contingency plan before issuing a favorable entry verdict.
-9. Require probability convergence across eligibility, entry structure, price/volume, required fundamentals and catalyst, leadership, market, and risk.
+- Use the user's actual entry date, entry price, hard stop, and structural invalidation. If anchors are missing, report INCOMPLETE and ask only for information that can change HOLD or SELL.
+- Let the latest completed close test an ordinary hard stop. Use a partial-session breach only when the user explicitly requests a live stop check.
+- A breached hard stop or triggered invalidation means SELL without negotiation. Never widen the stop, average down, or defend the position with valuation or hope.
+- For HOLD, require current completed-price evidence or an explicit non-triggered live check. At 3R, call out the requirement to protect at least breakeven.
+- Broad-market weakness informs defense but does not sell an exceptional ticker by index opinion alone. Ticker price and invalidation evidence remain controlling.
+- A re-entry is a new prospective decision. Re-run qualification, setup, market, and risk rather than treating a prior win or loss as permission.
 
-A VCP-qualified Power Play is the sole permitted fundamentals exception. Label it explicitly and waive only verified fundamentals; all other convergence legs remain mandatory.
+## Chart and narrative judgment
 
-## Existing position: sell or hold
+- Render a chart only when qualitative ambiguity matters. Read weekly before daily, moving averages as zones, overhead supply, base maturity, price/volume character, and expected behavior.
+- Visual judgment can resolve geometry or supply evidence but cannot override a deterministic failure.
+- Use web search only for current catalyst, company, earnings-event, or industry narrative after deterministic evidence. Cite that context and never import precise market numbers from it.
+- Respect abnormal price weakness after apparently good news. Price can reveal deterioration before the public explanation.
 
-1. Record entry date and price, original stop, current management horizon, breakout or pivot context, and any known base top or prior high. If a value is absent, keep anchor-dependent evidence unresolved.
-2. Run `qualify` for structural context, but never stop the sell analysis because a prospective-buy gate failed. A failed gate can be urgent holding evidence rather than a reason to avoid diagnostics.
-3. Always read `references/sell.md`, then run the applicable deterministic evidence: `stage_analysis.py risk`; `sell_signals.py extension`, `reversal`, `trail`, or `cascade`; and `actions.py get-earnings-dates --days-until`.
-4. Do not invent base-top, breakout-date, trendline, or prior-high anchors. Preserve module states such as `needs_input`, `needs_chart`, and `unavailable`.
-5. Evaluate hard stop and gap-through evidence first, then Stage deterioration, expected-behavior failure, 3R defense, tagged sell-into-strength evidence, MA management, failure cascade, and earnings risk.
-6. A good earnings headline cannot overrule the largest completed decline of the Stage 2 advance or another material abnormal price break.
-7. Return `SELL`, `HOLD WITH CONDITIONS`, or `INCOMPLETE`, with dated triggers, provenance, unresolved evidence, and the next condition that changes the verdict.
+## Comparisons and synthesis
 
-## Chart corroboration
+- For a few named tickers, gate each independently before comparing. A failed ticker cannot win through relative scoring.
+- Compare only aligned evidence and dates: eligibility, setup quality, filed fundamentals, same-industry leadership, market fit, downside, and reward-to-risk.
+- Lead with BUY-READY, WAIT, AVOID, INCOMPLETE, HOLD, or SELL and evidence quality. Then separate known failures, missing evidence, qualitative chart judgment, entry or promotion conditions, and invalidation or exit conditions.
+- State the completed US session and material provider limitations. If the evidence cannot support a decision, say exactly what remains unresolved.
 
-- Render a daily or weekly PNG with `chart_render.py` when contraction character, extension, trendline, prior-high context, or another qualitative feature remains ambiguous.
-- Read weekly before daily, treat moving averages as zones, and look left for the stock's own character.
-- Charts corroborate; they never replace module numbers, hard gates, or honest missing-input states.
-
-## Evidence handling
-
-- Retry a failed module once, then declare that evidence unavailable. Do not route around the failure with WebSearch or manual arithmetic.
-- Preserve each module's doctrine, provenance, cache, and data-quality fields when they affect interpretation.
-- Distinguish `failed`, `unavailable`, `not evaluated`, and `needs input`; collapsing them changes the decision.
-- Iterate only where the prior result earns another look. There is deliberately no “analyze everything” command.
-
-## Output contract
-
-Return these sections in order:
-
-1. **Verdict and scope:** branch, current verdict, and whether evidence is complete.
-2. **Hard-gate context:** Stage, Trend Template, RS source and score, failed criteria, and unavailable criteria.
-3. **Entry or holding evidence:** setup state, pivot or anchors, price/volume, dated sell events, and chart corroboration where used.
-4. **Fundamentals and leadership:** category, catalyst, earnings phase, quality, revisions, group context, or a labelled Power Play exception.
-5. **Market and risk convergence:** regime evidence, invalidation, reward/risk, earnings date, and contingency conditions.
-6. **Next decision point:** the exact evidence that promotes, demotes, invalidates, or confirms the current state.
-
-Use watch → buy-alert → buy-ready for prospective maturity, but never translate readiness into a portfolio percentage or position size.
+Do not prescribe portfolio percentages or position sizes. Offer the ticker-level risk contract instead.
