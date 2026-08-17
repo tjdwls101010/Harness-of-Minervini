@@ -1,0 +1,5 @@
+{
+  "price_geometry": {"state": "pass", "pivot_price": 100.0, "base_depth_pct": 18.0},
+  "supply_evidence": {"state": "pass", "contractions": [24.0, 12.0, 6.0], "volume_dry_up": true},
+  "entry": {"kind": "completed_pivot", "state": "confirmed", "price": 100.2}
+}

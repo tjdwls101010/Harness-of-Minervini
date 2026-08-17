@@ -1,0 +1,8 @@
+{
+  "mode": "prospective",
+  "market": {"state": "pass"},
+  "eligibility": {"state": "pass"},
+  "setup": {"setup_state": "ready"},
+  "fundamentals": {"state": "pass"},
+  "risk": {"state": "pass", "entry_price": 100.0, "stop_price": 94.0, "upside_price": 112.0}
+}
