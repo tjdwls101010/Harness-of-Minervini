@@ -179,22 +179,25 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     if stop is None and not precise_invalidation:
         missing.append("stop_or_invalidation")
 
+    live_stop = _mapping(payload.get("live_stop"))
+    live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event"))
+    invalidation_triggered = _triggered(invalidation)
+    current = _number(payload.get("current_price"))
+    if current is None and not (live_triggered or completed_stop or invalidation_triggered):
+        missing.append("current_price")
+
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
     if missing:
         verdict = "INCOMPLETE"
         reasons: list[str] = []
     else:
-        live_stop = _mapping(payload.get("live_stop"))
-        live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
-        completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event"))
-        invalidation_triggered = _triggered(invalidation)
         if live_triggered or completed_stop or invalidation_triggered:
             verdict = "SELL"
             reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered"]
         else:
             verdict = "HOLD"
             reasons = []
-            current = _number(payload.get("current_price"))
             if entry is not None and stop is not None and current is not None and stop < entry:
                 initial_risk = entry - stop
                 if initial_risk > 0 and (current - entry) / initial_risk >= 3:

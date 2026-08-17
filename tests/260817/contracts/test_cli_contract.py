@@ -123,7 +123,7 @@ class PublicCliContractTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
-        self.assertEqual({item["id"] for item in payload["missing"]}, {"entry_date", "stop_or_invalidation"})
+        self.assertEqual({item["id"] for item in payload["missing"]}, {"entry_date", "stop_or_invalidation", "current_price"})
 
     def test_invalid_as_of_is_a_request_error_not_an_internal_error(self) -> None:
         completed = run_pipeline("clock", "--as-of", "not-a-date")

@@ -181,7 +181,20 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
-        self.assertEqual(set(payload["data"]["missing"]), {"entry_date", "stop_or_invalidation"})
+        self.assertEqual(set(payload["data"]["missing"]), {"entry_date", "stop_or_invalidation", "current_price"})
+
+    def test_active_risk_uses_the_latest_completed_close_for_hold_or_stop_breach(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: price_snapshot())
+        common = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-10-01", "as_of": AS_OF}
+
+        hold = execute("ticker.risk", {**common, "stop_price": 94.0}, runtime=runtime)
+        sell = execute("ticker.risk", {**common, "stop_price": 155.0}, runtime=runtime)
+
+        self.assertEqual(hold["data"]["verdict"], "HOLD")
+        self.assertEqual(hold["data"]["current_price"], 150.0)
+        self.assertEqual(hold["sources"][0]["provider"], "fixture-prices")
+        self.assertEqual(sell["data"]["verdict"], "SELL")
+        self.assertIn("completed_stop_breach", sell["data"]["failed"])
 
     def test_fundamentals_consumes_only_normalized_filed_sec_evidence(self) -> None:
         fixture = Path(__file__).resolve().parents[1] / "fixtures" / "fundamentals" / "filed_evidence.json"

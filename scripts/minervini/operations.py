@@ -577,7 +577,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     )
 
 
-def _risk(request: Mapping[str, Any]) -> dict[str, Any]:
+def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     mode = request.get("mode", "prospective")
@@ -585,19 +585,36 @@ def _risk(request: Mapping[str, Any]) -> dict[str, Any]:
         raise RequestError("mode must be prospective or active", "mode")
     evidence = {key: value for key, value in request.items() if key not in {"ticker", "as_of", "format", "no_cache"}}
     evidence["mode"] = mode
+    sources: list[dict[str, Any]] = []
+    provider_missing: list[dict[str, Any]] = []
+    has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(evidence.get("invalidation"), Mapping)
+    has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
+    if mode == "active" and evidence.get("current_price") is None and has_position_anchors:
+        try:
+            prices = runtime.price_history(ticker, clock.date.isoformat())
+        except ProviderUnavailable as error:
+            provider_missing.append(_missing_provider(error))
+        else:
+            current_price = float(prices.data["Close"].iloc[-1])
+            evidence["current_price"] = current_price
+            sources.append(_source(prices.meta))
+            stop_price = evidence.get("stop_price")
+            if isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool) and current_price <= float(stop_price):
+                evidence["completed_stop"] = {"state": "triggered", "price": current_price, "stop_price": float(stop_price)}
     result = reduce_risk(evidence)
-    status = "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
-    missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]
+    status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
+    missing = [*provider_missing, *({"id": item, "reason": "evidence_required", "required": True} for item in result["missing"])]
     return envelope(
         "ticker.risk",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        data={"ticker": ticker, **result},
+        data={"ticker": ticker, **result, "current_price": evidence.get("current_price")},
         signals=[
             {"id": item, "state": "fail"} for item in result["failed"]
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],
         missing=missing,
+        sources=sources,
         doctrine_ids=["risk.initial_stop_and_reward", "risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"],
     )
 
@@ -742,7 +759,7 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
     if operation == "ticker.fundamentals":
         return _fundamentals(request, runtime)
     if operation == "ticker.risk":
-        return _risk(request)
+        return _risk(request, runtime)
     if operation == "ticker.chart":
         return _chart(request, runtime)
     if operation == "market.candidates":

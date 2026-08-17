@@ -102,7 +102,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         result = reduce_risk({"mode": "active", "entry_price": 100.0})
 
         self.assertEqual(result["verdict"], "INCOMPLETE")
-        self.assertCountEqual(result["missing"], ["entry_date", "stop_or_invalidation"])
+        self.assertCountEqual(result["missing"], ["entry_date", "stop_or_invalidation", "current_price"])
 
     def test_active_live_stop_breach_requires_explicit_live_check(self) -> None:
         evidence = {
@@ -113,9 +113,23 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
             "live_stop": {"state": "triggered", "partial_session": True},
         }
 
-        self.assertEqual(reduce_risk(evidence)["verdict"], "HOLD")
+        self.assertEqual(reduce_risk(evidence)["verdict"], "INCOMPLETE")
         evidence["live_stop_check"] = True
         self.assertEqual(reduce_risk(evidence)["verdict"], "SELL")
+
+    def test_active_hold_requires_a_completed_current_price(self) -> None:
+        result = reduce_risk(
+            {
+                "mode": "active",
+                "entry_price": 100.0,
+                "entry_date": "2026-08-10",
+                "stop_price": 94.0,
+                "current_price": 98.0,
+            }
+        )
+
+        self.assertEqual(result["verdict"], "HOLD")
+        self.assertEqual(result["missing"], [])
 
     def test_active_completed_stop_or_invalidation_trigger_is_sell(self) -> None:
         evidence = {
