@@ -56,6 +56,9 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(snapshot.data.index[-1].date().isoformat(), "2026-08-14")
         self.assertEqual(list(snapshot.data["Close"]), [10.0, 11.0, 12.0])
         self.assertEqual(ticker.calls[0]["end"], "2026-08-15")
+        self.assertEqual(ticker.calls[0]["start"], "2023-08-10")
+        self.assertFalse(ticker.calls[0]["auto_adjust"])
+        self.assertFalse(ticker.calls[0]["actions"])
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
         self.assertIsInstance(snapshot.meta, SnapshotMeta)
 

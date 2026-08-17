@@ -110,10 +110,11 @@ def completed_daily_bars(
         ticker = yf.Ticker(symbol)
 
     end = (clock.date + timedelta(days=1)).isoformat()
+    start = (clock.date - timedelta(days=1100)).isoformat()
     frame = fetch_with_one_retry(
         "yfinance",
         "daily_bars",
-        lambda: ticker.history(end=end, interval="1d", auto_adjust=False, actions=False),
+        lambda: ticker.history(start=start, end=end, interval="1d", auto_adjust=False, actions=False),
     )
     if not isinstance(frame, pd.DataFrame):
         raise ProviderUnavailable("yfinance", "invalid_daily_bar_response", operation="daily_bars")
@@ -132,6 +133,13 @@ def completed_daily_bars(
             provider="yfinance",
             retrieved_at=observed_at,
             as_of=clock.date,
-            coverage={"interval": "1d", "completed_only": True, "symbol": symbol.upper()},
+            coverage={
+                "interval": "1d",
+                "completed_only": True,
+                "symbol": symbol.upper(),
+                "requested_start": start,
+                "requested_end_exclusive": end,
+                "adjusted": False,
+            },
         ),
     )
