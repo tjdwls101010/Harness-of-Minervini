@@ -16,6 +16,19 @@ EligibilityRoute = Literal["standard", "recent_ipo_primary_base"]
 HistoryState = Literal["sufficient", "insufficient", "unknown"]
 
 _HARD_GATE_STATES = frozenset({"pass", "fail", "unavailable"})
+_STAGE_2_DOCTRINE_ID = "eligibility.standard_stage2"
+_TREND_TEMPLATE_DOCTRINE_ID = "eligibility.standard_trend_template"
+_PRIMARY_BASE_DOCTRINE_ID = "eligibility.recent_ipo_primary_base"
+_TREND_TEMPLATE_CRITERIA = (
+    "trend_template.price_above_150_and_200",
+    "trend_template.sma_150_above_sma_200",
+    "trend_template.sma_200_rising",
+    "trend_template.sma_50_above_150_and_200",
+    "trend_template.price_above_52_week_low",
+    "trend_template.price_near_52_week_high",
+    "trend_template.relative_strength_minimum",
+    "trend_template.price_above_sma_50",
+)
 _QUALITATIVE_STATES = frozenset(
     {
         "supports",
@@ -102,17 +115,28 @@ class EligibilityEvidence:
         trend_template = value.get("trend_template")
         if not isinstance(trend_template, list) or len(trend_template) != 8:
             raise ValueError("trend_template must contain exactly eight criteria")
+        stage_2_signal = EligibilitySignal.from_mapping(stage_2, hard_gate=True)
+        if stage_2_signal.doctrine_id != _STAGE_2_DOCTRINE_ID:
+            raise ValueError("stage_2 must use its canonical doctrine id")
         signals = tuple(EligibilitySignal.from_mapping(item, hard_gate=True) for item in trend_template)
-        if len({signal.id for signal in signals}) != 8:
-            raise ValueError("trend_template criteria must have unique ids")
+        if tuple(signal.id for signal in signals) != _TREND_TEMPLATE_CRITERIA:
+            raise ValueError("trend_template must contain the canonical eight criteria in source-map order")
+        if any(signal.doctrine_id != _TREND_TEMPLATE_DOCTRINE_ID for signal in signals):
+            raise ValueError("trend_template must use its canonical doctrine id")
         primary_base = value.get("primary_base")
         if primary_base is not None and not isinstance(primary_base, Mapping):
             raise ValueError("primary_base must be an object when supplied")
+        primary_base_evidence = PrimaryBaseEvidence.from_mapping(primary_base) if primary_base is not None else None
+        if primary_base_evidence is not None and any(
+            signal.doctrine_id != _PRIMARY_BASE_DOCTRINE_ID
+            for signal in (*primary_base_evidence.quantitative_claims, primary_base_evidence.quality)
+        ):
+            raise ValueError("primary_base must use its canonical doctrine id")
         return cls(
             history_state=history_state,
-            stage_2=EligibilitySignal.from_mapping(stage_2, hard_gate=True),
+            stage_2=stage_2_signal,
             trend_template=signals,
-            primary_base=PrimaryBaseEvidence.from_mapping(primary_base) if primary_base is not None else None,
+            primary_base=primary_base_evidence,
         )
 
 

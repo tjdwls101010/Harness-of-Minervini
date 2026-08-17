@@ -36,11 +36,11 @@ class EligibilityTruthTableTests(unittest.TestCase):
         self.assertEqual(result["route"], "standard")
         self.assertEqual(result["eligibility_state"], "avoid")
         self.assertIn(
-            {"id": "trend_template.rs", "state": "fail", "doctrine_id": "eligibility.standard_trend_template"},
+            {"id": "trend_template.relative_strength_minimum", "state": "fail", "doctrine_id": "eligibility.standard_trend_template"},
             result["signals"],
         )
         self.assertIn(
-            {"id": "trend_template.price_above_50", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+            {"id": "trend_template.price_near_52_week_high", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
             result["signals"],
         )
 
@@ -86,6 +86,20 @@ class EligibilityTruthTableTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             evaluate_eligibility(evidence, power_play=True)  # type: ignore[call-arg]
+
+    def test_standard_route_accepts_only_the_source_map_eight_criteria(self) -> None:
+        payload = json.loads((FIXTURES / "standard_eligible.json").read_text())
+        payload["trend_template"][0]["id"] = "trend_template.unapproved_substitute"
+
+        with self.assertRaisesRegex(ValueError, "canonical eight"):
+            EligibilityEvidence.from_mapping(payload)
+
+    def test_route_evidence_cannot_supply_noncanonical_doctrine_ids(self) -> None:
+        payload = json.loads((FIXTURES / "standard_eligible.json").read_text())
+        payload["stage_2"]["doctrine_id"] = "unapproved.stage_claim"
+
+        with self.assertRaisesRegex(ValueError, "canonical doctrine"):
+            EligibilityEvidence.from_mapping(payload)
 
 
 if __name__ == "__main__":
