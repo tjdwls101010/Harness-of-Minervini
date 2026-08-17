@@ -72,7 +72,11 @@ CAPABILITIES = {
         _capability("health", "Check runtime and provider readiness without making an investment judgment."),
         _capability("clock", "Resolve the last completed US regular session or an explicit as-of date."),
         _capability("doctrine.show", "Return one normalized doctrine claim.", inputs={"claim_id": "string"}),
-        _capability("market.snapshot", "Measure regime, breadth, group leadership, and source completeness."),
+        _capability(
+            "market.snapshot",
+            "Measure regime, breadth, group leadership, and source completeness.",
+            inputs={"trade_traction": ["supports", "contradicts", "mixed", "needs_input"], "leader_limit": "integer 1..100"},
+        ),
         _capability("market.candidates", "Return a filtered, paginated candidate universe with discovery origins."),
         _capability("ticker.qualify", "Evaluate the standard or recent-IPO technical eligibility route.", inputs={"ticker": "US symbol"}),
         _capability("ticker.setup", "Measure base, VCP, entry triggers, confirmation debt, and invalidation.", inputs={"ticker": "US symbol"}),

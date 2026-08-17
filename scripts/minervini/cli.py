@@ -42,6 +42,12 @@ def build_parser() -> JsonArgumentParser:
     market = sub.add_parser("market", help="Market, sector, industry, and candidate evidence.")
     market_sub = market.add_subparsers(dest="market_command", required=True)
     snapshot = market_sub.add_parser("snapshot", help="Measure regime and group leadership.")
+    snapshot.add_argument(
+        "--trade-traction",
+        choices=("supports", "contradicts", "mixed", "needs_input"),
+        help="Report whether the user's recent pilot trades confirm the apparent market environment.",
+    )
+    snapshot.add_argument("--leader-limit", type=int, default=20, help="Maximum first-party RS leader observations to return (1-100).")
     _common(snapshot)
     candidates = market_sub.add_parser("candidates", help="Return a paginated candidate universe.")
     candidates.add_argument("--limit", type=int, default=50)

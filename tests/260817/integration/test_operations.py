@@ -56,7 +56,65 @@ def rs_snapshot() -> ProviderSnapshot[dict[str, object]]:
     )
 
 
+def list_snapshot(provider: str, data: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
+    return ProviderSnapshot(
+        data,
+        SnapshotMeta(
+            provider=provider,
+            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            as_of=date.fromisoformat(AS_OF),
+            provider_version="0.5.0" if provider == "ibd-rs-rating" else None,
+        ),
+    )
+
+
 class OperationCompositionTests(unittest.TestCase):
+    def test_market_snapshot_composes_independent_sources_and_requires_trade_traction_for_regime(self) -> None:
+        finviz = Path(__file__).resolve().parents[1] / "fixtures" / "market_evidence" / "finviz_partial.html"
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: price_snapshot(),
+            finviz_breadth=lambda as_of: ProviderSnapshot(
+                finviz.read_text(encoding="utf-8"),
+                SnapshotMeta(
+                    provider="finviz",
+                    retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                    as_of=date.fromisoformat(AS_OF),
+                    content_sha256="fixture",
+                ),
+            ),
+            sector_ranking=lambda as_of: list_snapshot(
+                "ibd-rs-rating",
+                [
+                    {"sector": "Zeta Technology", "avg_rs": 92.0, "count": 20},
+                    {"sector": "Alpha Energy", "avg_rs": 80.0, "count": 12},
+                ],
+            ),
+            industry_ranking=lambda as_of: list_snapshot(
+                "ibd-rs-rating",
+                [{"industry": "Semiconductors", "sector": "Zeta Technology", "avg_rs": 95.0, "count": 8}],
+            ),
+            market_leaders=lambda as_of, limit: list_snapshot(
+                "ibd-rs-rating",
+                [{"ticker": "LEAD", "rs_rating": 99, "rs_raw": 4.2}],
+            ),
+        )
+
+        payload = execute(
+            "market.snapshot",
+            {"as_of": AS_OF, "trade_traction": "supports", "leader_limit": 10},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["regime"]["judgment"], "cautious")
+        self.assertEqual(payload["data"]["group_ranks"]["sectors"][0]["name"], "Zeta Technology")
+        self.assertEqual(payload["data"]["leaders"][0]["ticker"], "LEAD")
+        self.assertEqual({source["provider"] for source in payload["sources"]}, {"fixture-prices", "finviz", "ibd-rs-rating"})
+
+        without_traction = execute("market.snapshot", {"as_of": AS_OF}, runtime=runtime)
+        self.assertEqual(without_traction["status"], "needs_input")
+        self.assertIn("trade_traction", {item["id"] for item in without_traction["missing"]})
+
     def test_qualify_composes_completed_prices_and_first_party_rs_without_touching_the_ledger(self) -> None:
         runtime = Runtime(
             price_history=lambda ticker, as_of: price_snapshot(),

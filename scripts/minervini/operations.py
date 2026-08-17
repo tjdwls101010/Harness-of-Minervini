@@ -19,10 +19,12 @@ from .doctrine import get_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import evaluate_fundamentals
 from .ledger import Ledger
-from .market import build_market_candidates
+from .market import build_market_candidates, evaluate_market_snapshot
+from .market_evidence import build_market_evidence
 from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
-from .providers.rs import REQUIRED_PACKAGE_VERSION, rating_snapshot
+from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars
 from .risk import reduce_risk
@@ -36,6 +38,9 @@ RatingSnapshot = Callable[[str, str | None], ProviderSnapshot[dict[str, Any]]]
 SecurityMaster = Callable[[str | None], ProviderSnapshot[list[SecurityRecord]]]
 LedgerFactory = Callable[[], Ledger]
 FundamentalsEvidence = Callable[[str, str, str | None], ProviderSnapshot[dict[str, Any]]]
+RankedRows = Callable[[str], ProviderSnapshot[list[dict[str, Any]]]]
+MarketLeaders = Callable[[str, int], ProviderSnapshot[list[dict[str, Any]]]]
+FinvizBreadth = Callable[[str], ProviderSnapshot[str]]
 
 
 def _default_price_history(ticker: str, as_of: str | None) -> ProviderSnapshot[Any]:
@@ -101,6 +106,36 @@ def _default_fundamentals_evidence(ticker: str, as_of: str, cik: str | None) -> 
     )
 
 
+def _default_finviz_breadth(as_of: str) -> ProviderSnapshot[str]:
+    try:
+        import requests
+    except Exception as error:
+        raise ProviderUnavailable("finviz", "requests_package_unavailable", operation="raw_snapshot") from error
+
+    def fetch() -> str:
+        response = requests.get(
+            "https://finviz.com/",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; MinerviniHarness/2.0)"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.text
+
+    return finviz_raw_snapshot(fetch=fetch, as_of=as_of)
+
+
+def _default_sector_ranking(as_of: str) -> ProviderSnapshot[list[dict[str, Any]]]:
+    return sector_ranking_snapshot(as_of)
+
+
+def _default_industry_ranking(as_of: str) -> ProviderSnapshot[list[dict[str, Any]]]:
+    return industry_ranking_snapshot(as_of)
+
+
+def _default_market_leaders(as_of: str, limit: int) -> ProviderSnapshot[list[dict[str, Any]]]:
+    return top_snapshot(as_of, n=limit)
+
+
 @dataclass(frozen=True)
 class Runtime:
     """Replace only external boundaries in deterministic integration tests."""
@@ -109,6 +144,10 @@ class Runtime:
     rs_rating: RatingSnapshot = field(default_factory=lambda: _default_rs_rating)
     security_master: SecurityMaster = field(default_factory=lambda: _default_security_master)
     fundamentals_evidence: FundamentalsEvidence = field(default_factory=lambda: _default_fundamentals_evidence)
+    sector_ranking: RankedRows = field(default_factory=lambda: _default_sector_ranking)
+    industry_ranking: RankedRows = field(default_factory=lambda: _default_industry_ranking)
+    market_leaders: MarketLeaders = field(default_factory=lambda: _default_market_leaders)
+    finviz_breadth: FinvizBreadth = field(default_factory=lambda: _default_finviz_breadth)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
 
 
@@ -421,6 +460,123 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     )
 
 
+def _qqq_rows(frame: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, row in frame.iterrows():
+        timestamp = index.date().isoformat() if hasattr(index, "date") else str(index)
+        rows.append(
+            {
+                "date": timestamp,
+                "open": row.get("Open"),
+                "high": row.get("High"),
+                "low": row.get("Low"),
+                "close": row.get("Close"),
+                "volume": row.get("Volume"),
+                "completed": True,
+            }
+        )
+    return rows
+
+
+def _ranked_groups(rows: list[dict[str, Any]], group_key: str, as_of: str) -> list[dict[str, Any]]:
+    return [
+        {
+            **row,
+            "name": row[group_key],
+            "rank": rank,
+            "rating": row.get("avg_rs"),
+            "as_of": as_of,
+        }
+        for rank, row in enumerate(rows, start=1)
+    ]
+
+
+def _ranked_leaders(rows: list[dict[str, Any]], as_of: str) -> list[dict[str, Any]]:
+    return [
+        {
+            **row,
+            "rank": rank,
+            "rating": row.get("rs_rating"),
+            "as_of": as_of,
+        }
+        for rank, row in enumerate(rows, start=1)
+    ]
+
+
+def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    clock = _clock(request.get("as_of"))
+    as_of = clock.date.isoformat()
+    leader_limit = request.get("leader_limit", 20)
+    if not isinstance(leader_limit, int) or isinstance(leader_limit, bool) or not 1 <= leader_limit <= 100:
+        raise RequestError("leader_limit must be an integer from 1 to 100", "leader_limit")
+    trade_traction = request.get("trade_traction")
+    if trade_traction is not None and trade_traction not in {"supports", "contradicts", "mixed", "needs_input"}:
+        raise RequestError("trade_traction must be supports, contradicts, mixed, or needs_input", "trade_traction")
+
+    sources: list[dict[str, Any]] = []
+    provider_missing: list[dict[str, Any]] = []
+
+    def collect(fetch: Callable[[], ProviderSnapshot[Any]]) -> ProviderSnapshot[Any] | None:
+        try:
+            snapshot = fetch()
+        except ProviderUnavailable as error:
+            provider_missing.append(_missing_provider(error, required=False))
+            return None
+        sources.append(_source(snapshot.meta))
+        return snapshot
+
+    qqq = collect(lambda: runtime.price_history("QQQ", as_of))
+    finviz = collect(lambda: runtime.finviz_breadth(as_of))
+    sectors = collect(lambda: runtime.sector_ranking(as_of))
+    industries = collect(lambda: runtime.industry_ranking(as_of))
+    leaders = collect(lambda: runtime.market_leaders(as_of, leader_limit))
+
+    sector_rows = _ranked_groups(sectors.data, "sector", as_of) if sectors is not None else None
+    industry_rows = _ranked_groups(industries.data, "industry", as_of) if industries is not None else None
+    leader_rows = _ranked_leaders(leaders.data, as_of) if leaders is not None else None
+    evidence = build_market_evidence(
+        qqq_daily_ohlcv=_qqq_rows(qqq.data) if qqq is not None else None,
+        finviz_html=finviz.data if finviz is not None else None,
+        sector_rows=sector_rows,
+        industry_rows=industry_rows,
+        leader_rows=leader_rows,
+        trade_traction={"state": trade_traction} if trade_traction is not None else None,
+    )
+    result = evaluate_market_snapshot(evidence)
+    section_missing = [
+        {
+            "id": f"breadth.{name}",
+            "reason": section.get("reason", "section_unavailable"),
+            "required": False,
+        }
+        for name, section in evidence["breadth"].get("sections", {}).items()
+        if section.get("state") == "unavailable"
+    ]
+    missing = [*provider_missing, *result["missing"], *section_missing]
+    if trade_traction == "needs_input":
+        missing.append({"id": "trade_traction", "reason": "user_feedback_required", "required": True})
+    if not sources:
+        status = "unavailable"
+    elif trade_traction in {None, "needs_input"}:
+        status = "needs_input"
+    elif missing:
+        status = "partial"
+    else:
+        status = "ok"
+    return envelope(
+        "market.snapshot",
+        request=_clean_request(request),
+        as_of=_as_of(clock),
+        status=status,
+        data={**result, "leaders": leader_rows or []},
+        signals=result["signal_vector"],
+        missing=missing,
+        sources=sources,
+        doctrine_ids=["scope.data_integrity"],
+        next_capabilities=["market.candidates", "ticker.qualify"] if sources else [],
+    )
+
+
 def _risk(request: Mapping[str, Any]) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -591,6 +747,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _chart(request, runtime)
     if operation == "market.candidates":
         return _market_candidates(request, runtime)
+    if operation == "market.snapshot":
+        return _market_snapshot(request, runtime)
     if operation.startswith("watchlist."):
         return _watchlist(request, operation, runtime)
     return envelope(
