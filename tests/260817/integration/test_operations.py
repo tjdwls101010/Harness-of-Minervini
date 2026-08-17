@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.ledger import Ledger
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
@@ -19,9 +20,9 @@ from scripts.minervini.providers.nasdaq import SecurityRecord
 AS_OF = "2025-12-31"
 
 
-def price_snapshot(*, rising: bool = True) -> ProviderSnapshot[pd.DataFrame]:
+def price_snapshot(*, rising: bool = True, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
     values = np.linspace(50, 150, 260) if rising else np.linspace(180, 80, 260)
-    index = pd.bdate_range(end=AS_OF, periods=len(values))
+    index = pd.bdate_range(end=as_of, periods=len(values))
     close = pd.Series(values, index=index)
     frame = pd.DataFrame(
         {
@@ -38,19 +39,19 @@ def price_snapshot(*, rising: bool = True) -> ProviderSnapshot[pd.DataFrame]:
         SnapshotMeta(
             provider="fixture-prices",
             retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
+            as_of=date.fromisoformat(as_of),
             coverage={"completed_only": True},
         ),
     )
 
 
-def rs_snapshot() -> ProviderSnapshot[dict[str, object]]:
+def rs_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[dict[str, object]]:
     return ProviderSnapshot(
-        {"ticker": "TEST", "rating": 94, "rating_date": AS_OF},
+        {"ticker": "TEST", "rating": 94, "rating_date": as_of},
         SnapshotMeta(
             provider="fixture-rs",
             retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
+            as_of=date.fromisoformat(as_of),
             provider_version="0.5.0",
         ),
     )
@@ -64,6 +65,23 @@ def list_snapshot(provider: str, data: list[dict[str, object]]) -> ProviderSnaps
             retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
             as_of=date.fromisoformat(AS_OF),
             provider_version="0.5.0" if provider == "ibd-rs-rating" else None,
+        ),
+    )
+
+
+def classification_snapshot() -> ProviderSnapshot[dict[str, str]]:
+    return ProviderSnapshot(
+        {
+            "symbol": "TEST",
+            "sector": "Technology",
+            "industry": "Semiconductors",
+            "industry_id": "yfinance:technology:semiconductors",
+        },
+        SnapshotMeta(
+            provider="yfinance",
+            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            as_of=date(2026, 1, 2),
+            coverage={"kind": "current_classification_only", "historical": False},
         ),
     )
 
@@ -171,6 +189,48 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual([item["ticker"] for item in payload["data"]["candidates"]], ["GOOD"])
         self.assertEqual(payload["data"]["page"]["page_size"], 1)
         self.assertEqual(payload["data"]["page"]["recommendation_count"], 0)
+
+    def test_ticker_peers_composes_current_identity_exact_rs_and_completed_prices(self) -> None:
+        peer_as_of = resolve_as_of().date.isoformat()
+        records = [
+            SecurityRecord("nasdaq-trader:NASDAQ:TEST", "TEST", "NASDAQ", "Test Common Stock", "common_stock", False, True, None),
+            SecurityRecord("nasdaq-trader:NYSE:LEAD", "LEAD", "NYSE", "Lead Common Stock", "common_stock", False, True, None),
+        ]
+        master = ProviderSnapshot(
+            records,
+            SnapshotMeta(
+                provider="nasdaq",
+                retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                as_of=date(2026, 1, 2),
+                coverage={"kind": "current_security_master_only", "historical": False},
+            ),
+        )
+        runtime = Runtime(
+            current_classification=lambda ticker: classification_snapshot(),
+            security_master=lambda as_of: master,
+            industry_top=lambda industry, as_of, limit: list_snapshot(
+                "ibd-rs-rating",
+                [{"ticker": "LEAD", "rs_rating": 98, "rs_raw": 3.1}],
+            ),
+            rs_rating=lambda ticker, as_of: rs_snapshot(as_of=peer_as_of),
+            price_history=lambda ticker, as_of: price_snapshot(as_of=peer_as_of),
+        )
+
+        payload = execute("ticker.peers", {"ticker": "TEST", "limit": 10}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["industry"], "Semiconductors")
+        self.assertEqual(payload["data"]["target"]["ticker"], "TEST")
+        self.assertEqual(payload["data"]["peers"][0]["ticker"], "LEAD")
+        self.assertEqual({source["provider"] for source in payload["sources"]}, {"yfinance", "nasdaq", "ibd-rs-rating", "fixture-prices", "fixture-rs"})
+
+    def test_ticker_peers_refuses_historical_taxonomy_reconstruction(self) -> None:
+        runtime = Runtime(current_classification=lambda ticker: self.fail("current classification must not answer a historical request"))
+
+        payload = execute("ticker.peers", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["missing"][0]["reason"], "historical_classification_unavailable")
 
     def test_active_risk_with_missing_anchors_is_a_domain_needs_input_not_an_internal_error(self) -> None:
         payload = execute(

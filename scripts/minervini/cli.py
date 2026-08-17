@@ -81,6 +81,8 @@ def build_parser() -> JsonArgumentParser:
             child.add_argument("--power-play-price-volume-structure", action="store_true")
             child.add_argument("--power-play-market-alignment", action="store_true")
             child.add_argument("--power-play-risk-controls", action="store_true")
+        if name == "peers":
+            child.add_argument("--limit", type=int, default=10)
         if name == "chart":
             child.add_argument("--output-dir")
         _common(child)

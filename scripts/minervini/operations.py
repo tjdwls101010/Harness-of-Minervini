@@ -21,12 +21,14 @@ from .fundamentals import evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
+from .peer_collection import collect_same_industry_peer_rows
+from .peers import compare_same_industry_peers
 from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
-from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
+from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
-from .providers.yfinance import completed_daily_bars
+from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .risk import reduce_risk
 from .setup import evaluate_setup
 from .setup_evidence import build_setup_evidence
@@ -41,6 +43,8 @@ FundamentalsEvidence = Callable[[str, str, str | None], ProviderSnapshot[dict[st
 RankedRows = Callable[[str], ProviderSnapshot[list[dict[str, Any]]]]
 MarketLeaders = Callable[[str, int], ProviderSnapshot[list[dict[str, Any]]]]
 FinvizBreadth = Callable[[str], ProviderSnapshot[str]]
+CurrentClassification = Callable[[str], ProviderSnapshot[dict[str, str]]]
+IndustryTop = Callable[[str, str, int], ProviderSnapshot[list[dict[str, Any]]]]
 
 
 def _default_price_history(ticker: str, as_of: str | None) -> ProviderSnapshot[Any]:
@@ -136,6 +140,14 @@ def _default_market_leaders(as_of: str, limit: int) -> ProviderSnapshot[list[dic
     return top_snapshot(as_of, n=limit)
 
 
+def _default_current_classification(ticker: str) -> ProviderSnapshot[dict[str, str]]:
+    return current_classification_snapshot(ticker)
+
+
+def _default_industry_top(industry: str, as_of: str, limit: int) -> ProviderSnapshot[list[dict[str, Any]]]:
+    return industry_top_snapshot(industry, as_of, n=limit)
+
+
 @dataclass(frozen=True)
 class Runtime:
     """Replace only external boundaries in deterministic integration tests."""
@@ -148,6 +160,8 @@ class Runtime:
     industry_ranking: RankedRows = field(default_factory=lambda: _default_industry_ranking)
     market_leaders: MarketLeaders = field(default_factory=lambda: _default_market_leaders)
     finviz_breadth: FinvizBreadth = field(default_factory=lambda: _default_finviz_breadth)
+    current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
+    industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
 
 
@@ -407,6 +421,146 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         doctrine_ids=doctrine_ids,
         next_capabilities=["ticker.peers", "ticker.risk"],
     )
+
+
+def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    current_clock = resolve_as_of()
+    limit = request.get("limit", 10)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 20:
+        raise RequestError("limit must be an integer from 1 to 20", "limit")
+    if request.get("as_of") is not None and clock.date != current_clock.date:
+        return envelope(
+            "ticker.peers",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "comparison_state": "incomplete", "target": None, "peers": []},
+            missing=[
+                {
+                    "id": "current_classification",
+                    "provider": "yfinance",
+                    "reason": "historical_classification_unavailable",
+                    "required": True,
+                    "attempts": 0,
+                    "retryable": False,
+                }
+            ],
+        )
+
+    sources: list[dict[str, Any]] = []
+    try:
+        classification = runtime.current_classification(ticker)
+        master = runtime.security_master(None)
+        industry = str(classification.data["industry"])
+        industry_rows = runtime.industry_top(industry, clock.date.isoformat(), limit + 1)
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.peers",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "comparison_state": "incomplete", "target": None, "peers": []},
+            missing=[_missing_provider(error)],
+        )
+    sources.extend((_source(classification.meta), _source(master.meta), _source(industry_rows.meta)))
+
+    provider_missing: list[dict[str, Any]] = []
+    target_rating: Mapping[str, Any] | int | float = {}
+    try:
+        rating = runtime.rs_rating(ticker, clock.date.isoformat())
+    except ProviderUnavailable as error:
+        provider_missing.append(_missing_provider(error))
+    else:
+        target_rating = rating.data
+        sources.append(_source(rating.meta))
+
+    symbols = [ticker]
+    for row in industry_rows.data:
+        symbol = row.get("ticker") if isinstance(row, Mapping) else None
+        if isinstance(symbol, str) and symbol not in symbols:
+            symbols.append(symbol)
+    completed_prices: dict[str, Any] = {}
+    for symbol in symbols:
+        try:
+            prices = runtime.price_history(symbol, clock.date.isoformat())
+        except ProviderUnavailable as error:
+            missing = _missing_provider(error, required=symbol == ticker)
+            missing["ticker"] = symbol
+            provider_missing.append(missing)
+        else:
+            completed_prices[symbol] = prices.data
+            sources.append(_source(prices.meta))
+
+    try:
+        collected = collect_same_industry_peer_rows(
+            classification.data,
+            master.data,
+            industry_rows.data,
+            target_rating,
+            completed_prices,
+            as_of=clock.date.isoformat(),
+        )
+    except ValueError as error:
+        raise RequestError(str(error), "ticker") from error
+    identity_missing = [
+        {
+            "id": f"peer_identity.{item['ticker']}",
+            "ticker": item["ticker"],
+            "reason": item["reason"],
+            "required": item["ticker"] == ticker,
+        }
+        for item in collected["missing"]
+    ]
+    if collected["target"] is None:
+        result = {
+            "comparison_state": "incomplete",
+            "target": None,
+            "peer_count": 0,
+            "peers": [],
+            "rank_basis": [],
+            "missing": [],
+            "exclusions": [],
+        }
+    else:
+        try:
+            result = compare_same_industry_peers(collected["target"], collected["candidates"])
+        except ValueError as error:
+            raise RequestError(str(error), "ticker") from error
+        result["peers"] = result["peers"][:limit]
+        result["peer_count"] = len(result["peers"])
+    evidence_missing = [
+        {
+            "id": f"peer_evidence.{item.get('ticker') or item.get('instrument_id')}",
+            "ticker": item.get("ticker"),
+            "reason": "required_peer_evidence_missing",
+            "fields": item["fields"],
+            "required": item.get("ticker") == ticker,
+        }
+        for item in result["missing"]
+    ]
+    missing = [*provider_missing, *identity_missing, *evidence_missing]
+    status = "ok" if result["comparison_state"] == "complete" and not missing else "partial"
+    return envelope(
+        "ticker.peers",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        status=status,
+        data={
+            "ticker": ticker,
+            "sector": classification.data["sector"],
+            "industry": classification.data["industry"],
+            "industry_id": classification.data["industry_id"],
+            **result,
+        },
+        missing=missing,
+        sources=sources,
+        doctrine_ids=["scope.data_integrity"],
+        next_capabilities=["ticker.risk"],
+    )
+
+
 def _candidate_row(record: SecurityRecord) -> dict[str, Any]:
     exchange = record.exchange.upper()
     exchange = {
@@ -758,6 +912,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _setup(request, runtime)
     if operation == "ticker.fundamentals":
         return _fundamentals(request, runtime)
+    if operation == "ticker.peers":
+        return _peers(request, runtime)
     if operation == "ticker.risk":
         return _risk(request, runtime)
     if operation == "ticker.chart":
