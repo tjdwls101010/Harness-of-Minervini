@@ -107,6 +107,32 @@ class PublicCliContractTests(unittest.TestCase):
         self.assertFalse(payload["data"]["error"]["retryable"])
         self.assertEqual(completed.stderr, "")
 
+    def test_clock_is_a_real_operation_with_an_explicit_completed_cutoff(self) -> None:
+        completed = run_pipeline("clock", "--as-of", "2025-12-31")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["as_of"]["mode"], "explicit")
+        self.assertEqual(payload["as_of"]["date"], "2025-12-31")
+
+    def test_incomplete_active_risk_is_valid_json_with_exit_zero(self) -> None:
+        completed = run_pipeline("ticker", "risk", "TEST", "--mode", "active", "--entry-price", "100")
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual({item["id"] for item in payload["missing"]}, {"entry_date", "stop_or_invalidation"})
+
+    def test_invalid_as_of_is_a_request_error_not_an_internal_error(self) -> None:
+        completed = run_pipeline("clock", "--as-of", "not-a-date")
+
+        self.assertEqual(completed.returncode, 2)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertEqual(payload["data"]["error"]["field"], "as_of")
+
 
 if __name__ == "__main__":
     unittest.main()
