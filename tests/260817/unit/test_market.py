@@ -88,6 +88,22 @@ class MarketSnapshotTests(unittest.TestCase):
         self.assertEqual(ranked[0]["source_basis"], {"rank": 1, "as_of": "2026-08-14"})
         self.assertEqual(ranked[0]["rank_basis"][-1], "provider_source_rank_tiebreaker")
 
+    def test_missing_industry_evidence_uses_the_public_industries_identifier(self) -> None:
+        snapshot = evaluate_market_snapshot(
+            {
+                "breadth": None,
+                "qqq_21ema": None,
+                "sectors": None,
+                "industries": None,
+                "leaders": [],
+                "trade_traction": None,
+            }
+        )
+
+        missing_ids = {item["id"] for item in snapshot["missing"]}
+        self.assertIn("industries", missing_ids)
+        self.assertNotIn("industrys", missing_ids)
+
 
 class CandidateUniverseTests(unittest.TestCase):
     def test_filters_the_recommendation_universe_and_keeps_paging_independent(self) -> None:

@@ -169,11 +169,12 @@ def _leader_signal(leaders: Any, missing: list[dict[str, str]]) -> dict[str, Any
 
 
 def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) -> list[dict[str, Any]]:
+    missing_id = "industries" if group_type == "industry" else f"{group_type}s"
     if groups is None:
-        missing.append({"id": f"{group_type}s", "reason": "provider_evidence_missing"})
+        missing.append({"id": missing_id, "reason": "provider_evidence_missing"})
         return []
     if not isinstance(groups, list):
-        missing.append({"id": f"{group_type}s", "reason": "invalid_provider_shape"})
+        missing.append({"id": missing_id, "reason": "invalid_provider_shape"})
         return []
 
     ranked: list[dict[str, Any]] = []
