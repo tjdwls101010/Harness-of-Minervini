@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import unittest
+
+from scripts.minervini.market import build_market_candidates, evaluate_market_snapshot
+
+
+FIXTURES = Path(__file__).parents[1] / "fixtures" / "market"
+
+
+class MarketSnapshotTests(unittest.TestCase):
+    def test_qqq_switch_without_trade_feedback_cannot_issue_favorable_regime(self) -> None:
+        snapshot = evaluate_market_snapshot(
+            {
+                "breadth": {"state": "supports", "advance_decline_ratio": 2.1},
+                "qqq_21ema": {"state": "on"},
+                "sectors": [
+                    {
+                        "name": "Technology",
+                        "price_momentum": "supports",
+                        "breadth": "supports",
+                        "high_proximity": "supports",
+                        "rs_concentration": "supports",
+                        "stage2_candidates": 8,
+                        "leader_behavior": "supports",
+                    }
+                ],
+                "industries": [],
+                "leaders": [{"ticker": "NVDA", "behavior": "supports"}],
+            }
+        )
+
+        self.assertEqual(snapshot["regime"]["judgment"], "incomplete")
+        self.assertEqual(snapshot["evidence_quality"]["status"], "partial")
+        self.assertIn("trade_traction", {item["id"] for item in snapshot["missing"]})
+        self.assertEqual(
+            next(signal for signal in snapshot["signal_vector"] if signal["id"] == "qqq_21ema_switch")["state"],
+            "supports",
+        )
+
+    def test_convergent_evidence_is_ranked_by_explicit_vectors_not_a_weighted_score(self) -> None:
+        evidence = json.loads((FIXTURES / "favorable_snapshot.json").read_text())
+
+        snapshot = evaluate_market_snapshot(evidence)
+
+        self.assertEqual(snapshot["regime"]["judgment"], "favorable")
+        self.assertEqual(snapshot["evidence_quality"]["status"], "complete")
+        self.assertEqual(snapshot["group_ranks"]["sectors"][0]["name"], "Technology")
+        top_sector = snapshot["group_ranks"]["sectors"][0]
+        self.assertEqual(top_sector["rank_basis"], ["price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior"])
+        self.assertNotIn("score", top_sector)
+        self.assertEqual(
+            {signal["metric"] for signal in top_sector["signal_vector"]},
+            set(top_sector["rank_basis"]),
+        )
+
+
+class CandidateUniverseTests(unittest.TestCase):
+    def test_filters_the_recommendation_universe_and_keeps_paging_independent(self) -> None:
+        instruments = json.loads((FIXTURES / "candidate_universe.json").read_text())
+
+        first_page = build_market_candidates(instruments, limit=1)
+        second_page = build_market_candidates(instruments, limit=1, cursor=first_page["page"]["next_cursor"])
+
+        self.assertEqual(first_page["candidates"][0]["ticker"], "AAPL")
+        self.assertEqual(first_page["candidates"][0]["origins"], ["rs-screen", "base-screen"])
+        self.assertEqual(first_page["page"], {
+            "page_size": 1,
+            "cursor": None,
+            "next_cursor": "offset:1",
+            "returned_count": 1,
+            "candidate_count": 2,
+            "recommendation_count": 1,
+        })
+        self.assertEqual(second_page["candidates"][0]["ticker"], "BABA")
+        self.assertTrue(second_page["candidates"][0]["is_adr"])
+        self.assertIsNone(second_page["page"]["next_cursor"])
+        self.assertEqual(
+            {reason for item in first_page["exclusions"] for reason in item["reasons"]},
+            {"etf_context_only", "spac", "otc", "shell_company", "non_us_listing", "unsupported_exchange", "missing_instrument_id"},
+        )
+
+    def test_zero_candidates_is_a_valid_page(self) -> None:
+        page = build_market_candidates([
+            {"instrument_id": "arcx:1", "ticker": "SPY", "exchange": "NYSE Arca", "listing_country": "US", "instrument_type": "etf"}
+        ])
+
+        self.assertEqual(page["candidates"], [])
+        self.assertEqual(page["page"]["candidate_count"], 0)
+        self.assertEqual(page["page"]["recommendation_count"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
