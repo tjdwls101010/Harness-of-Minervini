@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import unittest
 
@@ -55,7 +56,13 @@ class V1RuntimeRetirementTests(unittest.TestCase):
         self.assertIn("--help", readme)
 
     def test_v1_is_preserved_only_as_a_compact_baseline_and_git_history(self) -> None:
-        self.assertTrue((ROOT / "tests/260817/baselines/v1/manifest.json").is_file())
+        manifest_path = ROOT / "tests/260817/baselines/v1/manifest.json"
+        self.assertTrue(manifest_path.is_file())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["baseline"]["commit_sha"], "a11f1b2bdb9fbf82138ea9537047493e500e7029")
+        self.assertEqual(manifest["baseline"]["tag_candidate"], "harness-v1-final")
+        self.assertEqual(manifest["baseline"]["tag_status"], "created_pushed_and_released")
+        self.assertTrue(manifest["baseline"]["release_url"].endswith("/harness-v1-final"))
         self.assertTrue((ROOT / "docs/plans/260817/harness-v2-greenfield-plan.md").is_file())
         self.assertIn(".tmp/", (ROOT / ".gitignore").read_text(encoding="utf-8"))
 

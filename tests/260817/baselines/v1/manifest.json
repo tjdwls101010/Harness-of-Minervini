@@ -4,7 +4,8 @@
     "name": "v1-main-pre-v2-cutover",
     "commit_sha": "a11f1b2bdb9fbf82138ea9537047493e500e7029",
     "tag_candidate": "harness-v1-final",
-    "tag_status": "planned_not_created"
+    "tag_status": "created_pushed_and_released",
+    "release_url": "https://github.com/tjdwls101010/Harness-of-Minervini/releases/tag/harness-v1-final"
   },
   "verification": {
     "command": "scripts/.venv/bin/python -m unittest discover -s scripts/tests",
