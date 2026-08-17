@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json","title":"Harness of Minervini v2 ticker.chart response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.chart"}},"required":["operation"]}]}

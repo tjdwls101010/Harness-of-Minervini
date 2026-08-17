@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harness.minervini.dev/schemas/v2/envelope.schema.json",
+  "title": "Harness of Minervini v2 envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "operation": {"type": "string"},
+    "request": {"type": "object"},
+    "as_of": {"type": "object"},
+    "status": {"enum": ["ok", "partial", "unavailable", "needs_input"]},
+    "data": {},
+    "signals": {"type": "array", "items": {"type": "object"}},
+    "missing": {"type": "array", "items": {"type": "object"}},
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "doctrine_ids": {"type": "array", "items": {"type": "string"}},
+    "next_capabilities": {"type": "array", "items": {"type": "string"}},
+    "side_effects": {"type": "array", "items": {"type": "object"}}
+  },
+  "required": [
+    "schema_version",
+    "operation",
+    "request",
+    "as_of",
+    "status",
+    "data",
+    "signals",
+    "missing",
+    "sources",
+    "doctrine_ids",
+    "next_capabilities",
+    "side_effects"
+  ]
+}

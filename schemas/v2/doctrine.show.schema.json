@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/doctrine.show.schema.json","title":"Harness of Minervini v2 doctrine.show response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"doctrine.show"}},"required":["operation"]}]}

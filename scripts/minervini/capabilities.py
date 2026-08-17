@@ -18,10 +18,15 @@ class Capability:
     def side_effecting(self) -> bool:
         return bool(self.side_effects)
 
+    @property
+    def schema_id(self) -> str:
+        return f"https://harness.minervini.dev/schemas/v2/{self.name}.schema.json"
+
     def listing(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "summary": self.summary,
+            "schema_id": self.schema_id,
             "side_effecting": self.side_effecting,
         }
 
@@ -29,6 +34,7 @@ class Capability:
         return {
             "name": self.name,
             "summary": self.summary,
+            "schema_id": self.schema_id,
             "inputs": self.inputs,
             "output": self.output,
             "prerequisites": self.prerequisites,
