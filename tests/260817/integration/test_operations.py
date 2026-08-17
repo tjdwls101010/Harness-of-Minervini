@@ -162,6 +162,21 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["missing"][0]["id"], "cik")
 
+    def test_chart_operation_records_each_explicit_artifact_side_effect(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: price_snapshot())
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = execute(
+                "ticker.chart",
+                {"ticker": "TEST", "as_of": AS_OF, "output_dir": temporary},
+                runtime=runtime,
+            )
+
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["data"]["ticker"], "TEST")
+            self.assertEqual([item["timeframe"] for item in payload["data"]["artifacts"]], ["weekly", "daily"])
+            self.assertEqual({item["type"] for item in payload["side_effects"]}, {"chart_artifact", "artifact_manifest"})
+            self.assertTrue(all(Path(item["path"]).exists() for item in payload["side_effects"]))
+
     def test_ledger_reads_are_side_effect_free_and_record_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "ledger.sqlite3"

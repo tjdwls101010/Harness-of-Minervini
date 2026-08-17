@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .clock import AnalysisClock, resolve_as_of
+from .chart import render_chart_artifacts
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
@@ -445,6 +446,58 @@ def _risk(request: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
+def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    try:
+        prices = runtime.price_history(ticker, clock.date.isoformat())
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[_missing_provider(error)],
+        )
+    output_dir = request.get("output_dir")
+    if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
+        raise RequestError("output_dir must be a non-empty path", "output_dir")
+    destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
+    result = render_chart_artifacts(
+        prices.data,
+        ticker=ticker,
+        as_of=clock.date.isoformat(),
+        output_dir=destination,
+    )
+    side_effects = [
+        {
+            "type": "chart_artifact",
+            "path": artifact["path"],
+            "as_of": result["as_of"],
+            "input_sha256": result["input_sha256"],
+        }
+        for artifact in result["artifacts"]
+    ]
+    side_effects.append(
+        {
+            "type": "artifact_manifest",
+            "path": result["manifest_path"],
+            "as_of": result["as_of"],
+            "input_sha256": result["input_sha256"],
+        }
+    )
+    return envelope(
+        "ticker.chart",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        data=result,
+        sources=[_source(prices.meta)],
+        next_capabilities=["ticker.qualify", "ticker.setup"],
+        side_effects=side_effects,
+    )
+
+
 def _watchlist(request: Mapping[str, Any], operation: str, runtime: Runtime) -> dict[str, Any]:
     ledger = runtime.ledger_factory()
     if operation == "watchlist.show":
@@ -534,6 +587,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _fundamentals(request, runtime)
     if operation == "ticker.risk":
         return _risk(request)
+    if operation == "ticker.chart":
+        return _chart(request, runtime)
     if operation == "market.candidates":
         return _market_candidates(request, runtime)
     if operation.startswith("watchlist."):
