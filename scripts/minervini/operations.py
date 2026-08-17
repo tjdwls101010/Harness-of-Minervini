@@ -717,7 +717,7 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
             request=_clean_request(request),
             as_of=_as_of(clock),
             status="unavailable",
-            data={"candidates": [], "exclusions": [], "page": {}},
+            data={"candidates": [], "exclusions": {"total_count": 0, "reason_counts": {}, "samples": [], "sample_limit": 0}, "page": {}},
             missing=[_missing_provider(error)],
         )
     try:

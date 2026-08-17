@@ -156,7 +156,7 @@
         "type": "enum"
       },
       "stop_effective_date": {
-        "description": "First completed session governed by --stop-price in active mode; defaults to --entry-date. Supply the actual date when a raised or replaced stop became effective.",
+        "description": "Calendar date when --stop-price became effective in active mode; defaults to --entry-date. The audit begins with the first completed bar on or after this date.",
         "required": false,
         "type": "date"
       },

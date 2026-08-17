@@ -105,14 +105,18 @@ class CandidateUniverseTests(unittest.TestCase):
             "returned_count": 1,
             "candidate_count": 2,
             "recommendation_count": 1,
+            "exclusion_count": 6,
         })
         self.assertEqual(second_page["candidates"][0]["ticker"], "BABA")
         self.assertTrue(second_page["candidates"][0]["is_adr"])
         self.assertIsNone(second_page["page"]["next_cursor"])
         self.assertEqual(
-            {reason for item in first_page["exclusions"] for reason in item["reasons"]},
+            set(first_page["exclusions"]["reason_counts"]),
             {"etf_context_only", "spac", "otc", "shell_company", "non_us_listing", "unsupported_exchange", "missing_instrument_id"},
         )
+        self.assertEqual(first_page["exclusions"]["total_count"], 6)
+        self.assertEqual(len(first_page["exclusions"]["samples"]), 1)
+        self.assertEqual(first_page["page"]["exclusion_count"], 6)
 
     def test_zero_candidates_is_a_valid_page(self) -> None:
         page = build_market_candidates([
@@ -122,6 +126,26 @@ class CandidateUniverseTests(unittest.TestCase):
         self.assertEqual(page["candidates"], [])
         self.assertEqual(page["page"]["candidate_count"], 0)
         self.assertEqual(page["page"]["recommendation_count"], 0)
+
+    def test_exclusion_evidence_is_bounded_even_for_a_large_provider_universe(self) -> None:
+        instruments = [
+            {
+                "instrument_id": f"arcx:{index}",
+                "ticker": f"ETF{index}",
+                "exchange": "NYSE Arca",
+                "listing_country": "US",
+                "instrument_type": "etf",
+            }
+            for index in range(5000)
+        ]
+
+        page = build_market_candidates(instruments, limit=5)
+        encoded = json.dumps(page)
+
+        self.assertEqual(page["exclusions"]["total_count"], 5000)
+        self.assertEqual(page["exclusions"]["reason_counts"], {"etf_context_only": 5000})
+        self.assertEqual(len(page["exclusions"]["samples"]), 5)
+        self.assertLess(len(encoded), 5000)
 
 
 if __name__ == "__main__":

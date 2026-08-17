@@ -216,6 +216,9 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual([item["ticker"] for item in payload["data"]["candidates"]], ["GOOD"])
         self.assertEqual(payload["data"]["page"]["page_size"], 1)
         self.assertEqual(payload["data"]["page"]["recommendation_count"], 0)
+        self.assertEqual(payload["data"]["exclusions"]["total_count"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["reason_counts"], {"etf_context_only": 1})
+        self.assertEqual(len(payload["data"]["exclusions"]["samples"]), 1)
 
     def test_ticker_peers_composes_current_identity_exact_rs_and_completed_prices(self) -> None:
         peer_as_of = resolve_as_of().date.isoformat()

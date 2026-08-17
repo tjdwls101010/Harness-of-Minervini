@@ -196,6 +196,12 @@ class PublicCliContractTests(unittest.TestCase):
         self.assertIn("cannot establish HOLD", help_text)
         self.assertIn("defaults to --entry-date", help_text)
 
+    def test_market_candidates_help_documents_bounded_exclusion_evidence(self) -> None:
+        help_text = command_parser("market", "candidates").format_help()
+
+        self.assertIn("bounded exclusion summary", help_text)
+        self.assertIn("at most min(limit, 20) representative records", help_text)
+
     def test_help_is_plain_text_and_does_not_emit_json(self) -> None:
         completed = run_pipeline("ticker", "risk", "--help")
 

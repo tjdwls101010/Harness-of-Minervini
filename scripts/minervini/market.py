@@ -96,10 +96,17 @@ def build_market_candidates(
     offset = _cursor_offset(cursor)
 
     eligible: dict[str, dict[str, Any]] = {}
-    exclusions: list[dict[str, Any]] = []
+    exclusion_total = 0
+    exclusion_counts: dict[str, int] = {}
+    exclusion_samples: list[dict[str, Any]] = []
+    sample_limit = min(limit, 20)
     for row in instruments:
         if not isinstance(row, Mapping):
-            exclusions.append({"instrument_id": None, "ticker": None, "reasons": ["invalid_instrument_record"]})
+            reasons = ["invalid_instrument_record"]
+            exclusion_total += 1
+            exclusion_counts[reasons[0]] = exclusion_counts.get(reasons[0], 0) + 1
+            if len(exclusion_samples) < sample_limit:
+                exclusion_samples.append({"instrument_id": None, "ticker": None, "reasons": reasons})
             continue
         reasons = _exclusion_reasons(row)
         instrument_id = row.get("instrument_id")
@@ -107,7 +114,12 @@ def build_market_candidates(
         if not instrument_id:
             reasons.append("missing_instrument_id")
         if reasons:
-            exclusions.append({"instrument_id": instrument_id, "ticker": ticker, "reasons": _unique(reasons)})
+            unique_reasons = _unique(reasons)
+            exclusion_total += 1
+            for reason in unique_reasons:
+                exclusion_counts[reason] = exclusion_counts.get(reason, 0) + 1
+            if len(exclusion_samples) < sample_limit:
+                exclusion_samples.append({"instrument_id": instrument_id, "ticker": ticker, "reasons": unique_reasons})
             continue
 
         key = str(instrument_id)
@@ -123,7 +135,12 @@ def build_market_candidates(
     recommendation_count = sum(item["recommendation_state"] == "recommended" for item in universe)
     return {
         "candidates": page,
-        "exclusions": exclusions,
+        "exclusions": {
+            "total_count": exclusion_total,
+            "reason_counts": dict(sorted(exclusion_counts.items())),
+            "samples": exclusion_samples,
+            "sample_limit": sample_limit,
+        },
         "page": {
             "page_size": limit,
             "cursor": cursor,
@@ -131,6 +148,7 @@ def build_market_candidates(
             "returned_count": len(page),
             "candidate_count": len(universe),
             "recommendation_count": recommendation_count,
+            "exclusion_count": exclusion_total,
         },
     }
 
