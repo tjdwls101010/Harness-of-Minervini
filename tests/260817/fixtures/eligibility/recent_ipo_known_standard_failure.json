@@ -1,0 +1,20 @@
+{
+  "history_state": "insufficient",
+  "stage_2": {"id": "stage_2", "state": "fail", "doctrine_id": "eligibility.standard_stage2"},
+  "trend_template": [
+    {"id": "trend_template.price_above_150", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.price_above_200", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma150_above_sma200", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma200_rising", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma50_stack", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.price_above_50", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.above_52_week_low", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.rs", "state": "unavailable", "doctrine_id": "eligibility.standard_trend_template"}
+  ],
+  "primary_base": {
+    "quantitative_claims": [
+      {"id": "primary_base.minimum_trading_history", "state": "pass", "doctrine_id": "eligibility.recent_ipo_primary_base"}
+    ],
+    "quality": {"id": "primary_base.quality", "state": "supports", "doctrine_id": "eligibility.recent_ipo_primary_base"}
+  }
+}

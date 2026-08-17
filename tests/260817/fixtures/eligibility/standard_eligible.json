@@ -1,0 +1,14 @@
+{
+  "history_state": "sufficient",
+  "stage_2": {"id": "stage_2", "state": "pass", "doctrine_id": "eligibility.standard_stage2"},
+  "trend_template": [
+    {"id": "trend_template.price_above_150", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.price_above_200", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma150_above_sma200", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma200_rising", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.sma50_stack", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.price_above_50", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.above_52_week_low", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"},
+    {"id": "trend_template.rs", "state": "pass", "doctrine_id": "eligibility.standard_trend_template"}
+  ]
+}
