@@ -49,12 +49,44 @@ class MarketSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["evidence_quality"]["status"], "complete")
         self.assertEqual(snapshot["group_ranks"]["sectors"][0]["name"], "Technology")
         top_sector = snapshot["group_ranks"]["sectors"][0]
-        self.assertEqual(top_sector["rank_basis"], ["price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior"])
+        self.assertEqual(top_sector["rank_basis"], ["price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior", "provider_source_rank_tiebreaker"])
         self.assertNotIn("score", top_sector)
         self.assertEqual(
             {signal["metric"] for signal in top_sector["signal_vector"]},
-            set(top_sector["rank_basis"]),
+            set(top_sector["rank_basis"][:-1]),
         )
+
+    def test_equal_signal_vectors_preserve_the_provider_source_rank(self) -> None:
+        groups = []
+        for name, source_rank in (("Zeta", 1), ("Alpha", 2)):
+            groups.append(
+                {
+                    "name": name,
+                    "basis": {"rank": source_rank, "as_of": "2026-08-14"},
+                    "price_momentum": "unavailable",
+                    "breadth": "unavailable",
+                    "high_proximity": "unavailable",
+                    "rs_concentration": "observed",
+                    "stage2_candidates": "unavailable",
+                    "leader_behavior": "unavailable",
+                }
+            )
+
+        snapshot = evaluate_market_snapshot(
+            {
+                "breadth": None,
+                "qqq_21ema": None,
+                "sectors": groups,
+                "industries": [],
+                "leaders": [],
+                "trade_traction": None,
+            }
+        )
+
+        ranked = snapshot["group_ranks"]["sectors"]
+        self.assertEqual([group["name"] for group in ranked], ["Zeta", "Alpha"])
+        self.assertEqual(ranked[0]["source_basis"], {"rank": 1, "as_of": "2026-08-14"})
+        self.assertEqual(ranked[0]["rank_basis"][-1], "provider_source_rank_tiebreaker")
 
 
 class CandidateUniverseTests(unittest.TestCase):

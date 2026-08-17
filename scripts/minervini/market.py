@@ -26,6 +26,7 @@ _SIGNAL_STATES = frozenset(
 _POSITIVE = frozenset({"on", "positive", "constructive", "favorable", "pass", "passed", "supports"})
 _NEGATIVE = frozenset({"off", "negative", "destructive", "unfavorable", "fail", "failed", "contradicts"})
 _GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
+_GROUP_RANK_BASIS = (*_GROUP_METRICS, "provider_source_rank_tiebreaker")
 _US_EXCHANGES = frozenset({"NASDAQ", "NYSE", "NYSEAMERICAN", "NYSE ARCA", "CBOE", "IEX", "MEMX"})
 _ELIGIBLE_TYPES = frozenset({"common", "common_stock", "common stock", "adr"})
 
@@ -163,7 +164,8 @@ def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) ->
             continue
         name = group.get("name") or group.get("id") or f"{group_type}-{index + 1}"
         signals = [{"metric": metric, "state": _state(group.get(metric)), "value": group.get(metric)} for metric in _GROUP_METRICS]
-        ranked.append({"name": name, "signal_vector": signals, "rank_basis": list(_GROUP_METRICS)})
+        source_basis = dict(group["basis"]) if isinstance(group.get("basis"), Mapping) else {}
+        ranked.append({"name": name, "signal_vector": signals, "source_basis": source_basis, "rank_basis": list(_GROUP_RANK_BASIS)})
 
     ranked.sort(key=_group_rank_key)
     for rank, group in enumerate(ranked, start=1):
@@ -236,7 +238,9 @@ def _group_rank_key(group: Mapping[str, Any]) -> tuple[Any, ...]:
     states = tuple(order[item["state"]] for item in group["signal_vector"])
     stage_count = next(item["value"] for item in group["signal_vector"] if item["metric"] == "stage2_candidates")
     stage_tiebreak = -stage_count if isinstance(stage_count, (int, float)) and not isinstance(stage_count, bool) else 0
-    return (*states, stage_tiebreak, str(group["name"]))
+    source_rank = group.get("source_basis", {}).get("rank")
+    source_tiebreak = source_rank if isinstance(source_rank, (int, float)) and not isinstance(source_rank, bool) else float("inf")
+    return (*states, stage_tiebreak, source_tiebreak, str(group["name"]))
 
 
 def _exclusion_reasons(row: Mapping[str, Any]) -> list[str]:
