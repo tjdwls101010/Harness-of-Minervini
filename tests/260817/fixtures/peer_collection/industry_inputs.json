@@ -1,0 +1,34 @@
+{
+  "as_of": "2026-08-14",
+  "target_classification": {
+    "symbol": "TARGET",
+    "sector": "Technology",
+    "industry": "Semiconductors",
+    "industry_id": "yfinance:technology:semiconductors"
+  },
+  "target_rs_rating": {"rating": 94, "rating_date": "2026-08-14"},
+  "industry_top_rows": [
+    {"ticker": "LEADER", "rs_rating": 98, "rs_raw": 2.4},
+    {"ticker": "ADRPEER", "rs_rating": 96, "rs_raw": 2.1},
+    {"ticker": "MISSING", "rs_rating": 99, "rs_raw": 2.9}
+  ],
+  "prices": {
+    "TARGET": [
+      {"date": "2025-08-14", "Close": 100.0},
+      {"date": "2026-05-14", "Close": 125.0},
+      {"date": "2026-08-13", "Close": 155.0},
+      {"date": "2026-08-14", "Close": 150.0}
+    ],
+    "LEADER": [
+      {"date": "2025-08-14", "Close": 100.0},
+      {"date": "2026-05-14", "Close": 120.0},
+      {"date": "2026-08-13", "Close": 175.0},
+      {"date": "2026-08-14", "Close": 170.0}
+    ],
+    "ADRPEER": [
+      {"date": "2025-08-14", "Close": 100.0},
+      {"date": "2026-05-14", "Close": 110.0},
+      {"date": "2026-08-14", "Close": 165.0}
+    ]
+  }
+}
