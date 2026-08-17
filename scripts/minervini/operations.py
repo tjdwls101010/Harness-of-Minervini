@@ -1021,15 +1021,15 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
 
 def _watchlist(request: Mapping[str, Any], operation: str, runtime: Runtime) -> dict[str, Any]:
+    clock = _clock(request.get("as_of"))
     ledger = runtime.ledger_factory()
     if operation == "watchlist.show":
-        return envelope(operation, request=_clean_request(request), data={"records": ledger.show()})
+        return envelope(operation, request=_clean_request(request), as_of=_as_of(clock), data={"records": ledger.show()})
     if operation == "watchlist.history":
         ticker = _ticker(request.get("ticker"))
-        return envelope(operation, request={"ticker": ticker}, data={"ticker": ticker, "events": ledger.history(ticker)})
+        return envelope(operation, request=_clean_request({**request, "ticker": ticker}), as_of=_as_of(clock), data={"ticker": ticker, "events": ledger.history(ticker)})
     if operation == "watchlist.record":
         ticker = _ticker(request.get("ticker"))
-        clock = _clock(request.get("as_of"))
         required = ("instrument_id", "output_hash", "verdict")
         for field_name in required:
             if not isinstance(request.get(field_name), str) or not str(request[field_name]).strip():
@@ -1071,7 +1071,8 @@ def _watchlist(request: Mapping[str, Any], operation: str, runtime: Runtime) -> 
             raise RequestError(f"no recorded research for {ticker}", "ticker") from error
         return envelope(
             operation,
-            request={"ticker": ticker, "note": note},
+            request=_clean_request({**request, "ticker": ticker, "note": note}),
+            as_of=_as_of(clock),
             data={"record": record},
             side_effects=[{"type": "sqlite_write", "path": str(ledger.path)}],
         )
@@ -1082,7 +1083,8 @@ def _watchlist(request: Mapping[str, Any], operation: str, runtime: Runtime) -> 
         result = ledger.export(Path(output))
         return envelope(
             operation,
-            request={"output": output},
+            request=_clean_request(request),
+            as_of=_as_of(clock),
             data=result,
             side_effects=[{"type": "file_write", "path": result["path"]}],
         )

@@ -8,9 +8,9 @@ from datetime import date
 from typing import Any
 
 
-_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete"}
-_FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid"}
-_WAIT = {"wait", "pending", "watch", "not_triggered"}
+_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence", "waived_by_exception"}
+_FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
+_WAIT = {"wait", "pending", "watch", "not_triggered", "cautious", "defensive"}
 _MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"}
 
 
@@ -59,7 +59,10 @@ def _risk_value(payload: Mapping[str, Any], name: str) -> Any:
 def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     components = {name: _state(payload.get(name)) for name in ("market", "eligibility", "setup", "fundamentals")}
     risk_input = _mapping(payload.get("risk"))
-    risk_state = _state(risk_input, default="pass" if risk_input else "unavailable")
+    has_risk_inputs = bool(risk_input) or any(
+        payload.get(name) is not None for name in ("entry_price", "stop_price", "upside_price", "target_price", "average_gain_pct")
+    )
+    risk_state = _state(risk_input, default="pass" if has_risk_inputs else "unavailable")
     failed: list[str] = []
     missing: list[str] = []
     waiting: list[str] = []

@@ -1,1 +1,188 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.risk.schema.json","title":"Harness of Minervini v2 ticker.risk response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.risk"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.risk.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.risk"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.risk response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --market-state favorable --eligibility-state eligible --setup-state ready --fundamentals-state supports_convergence --entry-price 200 --stop-price 188 --upside-price 224",
+      "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --mode active --entry-price 200 --entry-date 2026-08-10 --stop-price 188"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "average_gain_pct": {
+        "description": "The trader's realized average gain percentage used for the half-average stop cap.",
+        "required": false,
+        "type": "number"
+      },
+      "completed_stop_breach": {
+        "default": false,
+        "description": "Assert a stop breach on completed evidence.",
+        "required": false,
+        "type": "boolean"
+      },
+      "current_price": {
+        "description": "Optional explicit current price; active mode otherwise fetches the latest completed close once anchors are complete.",
+        "required": false,
+        "type": "number"
+      },
+      "eligibility_state": {
+        "choices": [
+          "eligible",
+          "avoid",
+          "incomplete"
+        ],
+        "description": "Eligibility verdict from ticker.qualify.",
+        "required": false,
+        "type": "enum"
+      },
+      "entry_date": {
+        "description": "Actual ISO entry date; required in active mode.",
+        "required": false,
+        "type": "date"
+      },
+      "entry_price": {
+        "description": "Positive planned or actual entry price.",
+        "required": false,
+        "type": "number"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "fundamentals_state": {
+        "choices": [
+          "supports_convergence",
+          "does_not_support_convergence",
+          "waived_by_exception",
+          "incomplete"
+        ],
+        "description": "Fundamentals verdict from ticker.fundamentals.",
+        "required": false,
+        "type": "enum"
+      },
+      "invalidation_condition": {
+        "description": "Observable structural invalidation condition.",
+        "required": false,
+        "type": "string"
+      },
+      "invalidation_price": {
+        "description": "Positive structural invalidation price.",
+        "required": false,
+        "type": "number"
+      },
+      "live_stop_breach": {
+        "default": false,
+        "description": "Assert a live breach; SELL requires live_stop_check too.",
+        "required": false,
+        "type": "boolean"
+      },
+      "live_stop_check": {
+        "default": false,
+        "description": "Explicitly authorize partial-session hard-stop checking.",
+        "required": false,
+        "type": "boolean"
+      },
+      "market_state": {
+        "choices": [
+          "favorable",
+          "cautious",
+          "defensive",
+          "incomplete"
+        ],
+        "description": "Market verdict from market.snapshot.",
+        "required": false,
+        "type": "enum"
+      },
+      "mode": {
+        "choices": [
+          "prospective",
+          "active"
+        ],
+        "default": "prospective",
+        "description": "Prospective entry or active-position reducer.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "setup_state": {
+        "choices": [
+          "ready",
+          "wait",
+          "avoid",
+          "incomplete"
+        ],
+        "description": "Setup verdict from ticker.setup.",
+        "required": false,
+        "type": "enum"
+      },
+      "stop_price": {
+        "description": "Positive hard-stop price.",
+        "required": false,
+        "type": "number"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      },
+      "upside_price": {
+        "description": "Positive evidence-based reward reference; required in prospective mode.",
+        "required": false,
+        "type": "number"
+      }
+    },
+    "limitations": [
+      "This capability never recommends portfolio allocation or position size.",
+      "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.",
+      "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
+      "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."
+    ],
+    "output": "The sole final ticker verdict with component states, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context.",
+    "prerequisites": [
+      "Prospective mode should consume market.snapshot, ticker.qualify, ticker.setup, and ticker.fundamentals verdicts."
+    ],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "Required evidence is missing, so the domain verdict is INCOMPLETE.",
+      "ok": "A complete BUY-READY, WAIT, AVOID, HOLD, or SELL verdict was produced.",
+      "partial": "Active anchors were complete but the completed-price provider was unavailable.",
+      "unavailable": "An internal required capability cannot be evaluated."
+    },
+    "summary": "Reduce converged prospective evidence to BUY-READY, WAIT, AVOID, or INCOMPLETE, or active-position evidence to HOLD, SELL, or INCOMPLETE."
+  }
+}

@@ -1,1 +1,66 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/watchlist.export.schema.json","title":"Harness of Minervini v2 watchlist.export response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"watchlist.export"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/watchlist.export.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "watchlist.export"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 watchlist.export response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline watchlist export --output .artifacts/watchlist.json"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "output": {
+        "description": "Non-empty destination JSON path.",
+        "required": true,
+        "type": "path"
+      }
+    },
+    "limitations": [
+      "Export contains only allowed research fields and no portfolio sizing data.",
+      "Parent directories are created when needed; choose the destination deliberately."
+    ],
+    "output": "The destination path and exported record count.",
+    "prerequisites": [],
+    "side_effects": [
+      "Writes JSON to the exact caller-selected path."
+    ],
+    "status_meanings": {
+      "needs_input": "The output path is missing or invalid.",
+      "ok": "The export file was written."
+    },
+    "summary": "Explicitly export the current research-ledger snapshot to a caller-selected JSON path."
+  }
+}

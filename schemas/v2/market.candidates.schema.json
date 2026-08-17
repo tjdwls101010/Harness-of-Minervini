@@ -1,1 +1,79 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/market.candidates.schema.json","title":"Harness of Minervini v2 market.candidates response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"market.candidates"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/market.candidates.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "market.candidates"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 market.candidates response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline market candidates --limit 50",
+      "scripts/.venv/bin/python scripts/pipeline market candidates --limit 50 --cursor offset:50"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "cursor": {
+        "description": "Opaque cursor returned by the preceding page.",
+        "required": false,
+        "type": "string"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "limit": {
+        "default": 50,
+        "description": "Page size; this controls transport volume, not a recommendation quota.",
+        "required": false,
+        "type": "integer"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      }
+    },
+    "limitations": [
+      "Nasdaq Trader supplies a current security master, not historical constituents; unsupported historical requests are unavailable.",
+      "ETF, SPAC, shell, OTC, preferred, warrant, and unsupported instruments are excluded with reasons.",
+      "Candidate eligibility is not itself a buy recommendation."
+    ],
+    "output": "Eligible instruments, structured exclusions, and pagination metadata including universe-wide recommendation count.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "The limit or cursor is invalid.",
+      "ok": "The requested page, including a legitimate empty page, was returned.",
+      "unavailable": "The required security master is unavailable."
+    },
+    "summary": "Return a filtered, paginated US common-stock and ADR discovery universe."
+  }
+}

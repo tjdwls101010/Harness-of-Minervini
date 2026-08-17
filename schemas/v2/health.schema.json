@@ -1,1 +1,59 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/health.schema.json","title":"Harness of Minervini v2 health response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"health"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/health.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "health"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 health response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline health"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      }
+    },
+    "limitations": [
+      "This checks installed dependencies and local doctrine only; it does not prove that remote providers are reachable.",
+      "--as-of stamps the envelope but does not alter dependency readiness."
+    ],
+    "output": "Python, doctrine-registry, yfinance, and exact ibd-rs-rating version readiness.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "All required local components are ready.",
+      "partial": "At least one required local component is missing or mismatched."
+    },
+    "summary": "Check deterministic runtime readiness without making an investment judgment or network request."
+  }
+}

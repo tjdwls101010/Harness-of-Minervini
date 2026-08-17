@@ -1,1 +1,144 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.setup.schema.json","title":"Harness of Minervini v2 ticker.setup response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.setup"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.setup.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.setup"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.setup response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --price-geometry pass --supply-evidence pass --entry-kind completed_pivot --entry-state confirmed",
+      "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --entry-kind tl_early --entry-state confirmed --tactic-opt-in --confirmation-debt 'completed pivot breakout' --later-pivot-price 200 --later-pivot-condition 'completed close above 200' --invalidation-price 190 --invalidation-condition 'completed close below 190'"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "confirmation_debt": {
+        "description": "Repeatable unpaid confirmation required by a TL early entry.",
+        "required": false,
+        "type": "string[]"
+      },
+      "entry_kind": {
+        "choices": [
+          "completed_pivot",
+          "vcp_cheat",
+          "tl_early"
+        ],
+        "description": "Entry structure; TL early is advanced and opt-in.",
+        "required": false,
+        "type": "enum"
+      },
+      "entry_state": {
+        "choices": [
+          "confirmed",
+          "wait",
+          "needs_chart"
+        ],
+        "description": "Whether the named entry is confirmed on completed evidence.",
+        "required": false,
+        "type": "enum"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "invalidation_condition": {
+        "description": "Observable invalidation condition; pair with invalidation_price.",
+        "required": false,
+        "type": "string"
+      },
+      "invalidation_price": {
+        "description": "Positive invalidation price; pair with invalidation_condition for a precise level.",
+        "required": false,
+        "type": "number"
+      },
+      "later_pivot_condition": {
+        "description": "Later pivot confirmation condition required by a TL early entry.",
+        "required": false,
+        "type": "string"
+      },
+      "later_pivot_price": {
+        "description": "Later Minervini pivot price required by a TL early entry.",
+        "required": false,
+        "type": "number"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "price_geometry": {
+        "choices": [
+          "pass",
+          "fail",
+          "needs_chart"
+        ],
+        "description": "Independent chart judgment for base geometry.",
+        "required": false,
+        "type": "enum"
+      },
+      "supply_evidence": {
+        "choices": [
+          "pass",
+          "fail",
+          "needs_chart"
+        ],
+        "description": "Independent chart judgment for contracting supply and volume.",
+        "required": false,
+        "type": "enum"
+      },
+      "tactic_opt_in": {
+        "default": false,
+        "description": "Explicitly authorize the [TL-EARLY] tactic.",
+        "required": false,
+        "type": "boolean"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "Completed OHLCV can measure a candidate pivot but cannot certify visual base geometry or supply absorption.",
+      "A VCP label alone never passes the supply gate.",
+      "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation."
+    ],
+    "output": "READY, WAIT, AVOID, or INCOMPLETE setup state with separate geometry, supply, entry, debt, and invalidation evidence.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "Required chart evidence remains incomplete or needs_chart.",
+      "ok": "The setup reducer produced ready, wait, or avoid.",
+      "unavailable": "Completed price history is unavailable."
+    },
+    "summary": "Evaluate price geometry, supply contraction, entry confirmation, confirmation debt, and precise invalidation from completed bars plus chart judgments."
+  }
+}

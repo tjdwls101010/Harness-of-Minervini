@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 import sys
 from typing import Any
@@ -15,117 +16,181 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise RequestError(message=message, field="arguments")
 
 
-def _common(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--as-of", metavar="YYYY-MM-DD", help="Use evidence available by this completed US session.")
-    parser.add_argument("--format", choices=("compact", "full"), default="full", help="Control detail, never semantics.")
-    parser.add_argument("--no-cache", action="store_true", help="Bypass cache reads and writes.")
+_COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies"})
+
+
+def _compact_data(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _compact_data(item) for key, item in value.items() if key not in _COMPACT_OMIT_KEYS}
+    if isinstance(value, list):
+        return [_compact_data(item) for item in value]
+    return value
+
+
+def format_payload(payload: dict[str, Any], mode: str) -> dict[str, Any]:
+    """Reduce verbose evidence detail without changing verdict, signals, or missing evidence."""
+
+    if mode not in {"compact", "full"}:
+        raise ValueError("format must be compact or full")
+    formatted = deepcopy(payload)
+    if mode == "full":
+        return formatted
+    if "data" in formatted:
+        formatted["data"] = _compact_data(formatted["data"])
+    if isinstance(formatted.get("sources"), list):
+        formatted["sources"] = [
+            {key: source.get(key) for key in ("provider", "as_of", "stale")}
+            for source in formatted["sources"]
+            if isinstance(source, dict)
+        ]
+    return formatted
+
+
+class DetailedHelpFormatter(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    pass
+
+
+def _input_help(capability: str, name: str) -> str:
+    return str(CAPABILITIES[capability].inputs[name]["description"])
+
+
+def _capability_parser(subparsers: Any, command: str, capability: str) -> argparse.ArgumentParser:
+    contract = CAPABILITIES[capability]
+    return subparsers.add_parser(
+        command,
+        help=contract.summary,
+        description=contract.summary,
+        epilog=contract.help_epilog(),
+        formatter_class=DetailedHelpFormatter,
+    )
+
+
+def _group_parser(subparsers: Any, command: str, *, summary: str, details: str) -> argparse.ArgumentParser:
+    return subparsers.add_parser(
+        command,
+        help=summary,
+        description=summary,
+        epilog=f"{details}\n\nRun 'scripts/.venv/bin/python scripts/pipeline {command} <command> --help' for the complete leaf-command contract.",
+        formatter_class=DetailedHelpFormatter,
+    )
+
+
+def _common(parser: argparse.ArgumentParser, capability: str) -> None:
+    parser.add_argument("--as-of", metavar="YYYY-MM-DD", help=_input_help(capability, "as_of"))
+    parser.add_argument("--format", choices=("compact", "full"), default="full", help=_input_help(capability, "format"))
+    if "no_cache" in CAPABILITIES[capability].inputs:
+        parser.add_argument("--no-cache", action="store_true", help=_input_help(capability, "no_cache"))
 
 
 def build_parser() -> JsonArgumentParser:
-    parser = JsonArgumentParser(description="Harness of Minervini v2 composable evidence CLI")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("capabilities", help="List public capabilities.")
-    describe = sub.add_parser("describe", help="Describe one public capability as JSON.")
-    describe.add_argument("capability")
-    health = sub.add_parser("health", help="Check runtime and provider readiness.")
-    _common(health)
-    clock = sub.add_parser("clock", help="Resolve the completed-session analysis clock.")
-    _common(clock)
-
-    doctrine = sub.add_parser("doctrine", help="Inspect normalized doctrine claims.")
-    doctrine_sub = doctrine.add_subparsers(dest="doctrine_command", required=True)
-    doctrine_show = doctrine_sub.add_parser("show", help="Show one doctrine claim.")
-    doctrine_show.add_argument("claim_id")
-    _common(doctrine_show)
-
-    market = sub.add_parser("market", help="Market, sector, industry, and candidate evidence.")
-    market_sub = market.add_subparsers(dest="market_command", required=True)
-    snapshot = market_sub.add_parser("snapshot", help="Measure regime and group leadership.")
-    snapshot.add_argument(
-        "--trade-traction",
-        choices=("supports", "contradicts", "mixed", "needs_input"),
-        help="Report whether the user's recent pilot trades confirm the apparent market environment.",
+    parser = JsonArgumentParser(
+        description="Harness of Minervini v2: composable, point-in-time evidence and decision contracts for US momentum-stock analysis.",
+        epilog="Start with 'capabilities', inspect one contract with 'describe <capability>' or a leaf '--help', and compose only the evidence the question needs. Every non-help command prints exactly one JSON document. Run all examples from the repository root.",
+        formatter_class=DetailedHelpFormatter,
     )
-    snapshot.add_argument("--leader-limit", type=int, default=20, help="Maximum first-party RS leader observations to return (1-100).")
-    _common(snapshot)
-    candidates = market_sub.add_parser("candidates", help="Return a paginated candidate universe.")
-    candidates.add_argument("--limit", type=int, default=50)
-    candidates.add_argument("--cursor")
-    _common(candidates)
+    sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    ticker = sub.add_parser("ticker", help="Composable named-ticker evidence.")
-    ticker_sub = ticker.add_subparsers(dest="ticker_command", required=True)
-    for name in ("qualify", "setup", "fundamentals", "peers", "chart"):
-        child = ticker_sub.add_parser(name, help=f"Run ticker.{name}.")
-        child.add_argument("ticker")
-        if name == "qualify":
-            child.add_argument(
-                "--primary-base-quality",
-                choices=("supports", "contradicts", "needs_chart"),
-                help="Supply the model's weekly Primary Base chart judgment for a recent IPO.",
-            )
-        if name == "setup":
-            child.add_argument("--price-geometry", choices=("pass", "fail", "needs_chart"))
-            child.add_argument("--supply-evidence", choices=("pass", "fail", "needs_chart"))
-            child.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"))
-            child.add_argument("--entry-state", choices=("confirmed", "wait", "needs_chart"))
-            child.add_argument("--invalidation-price", type=float)
-            child.add_argument("--invalidation-condition")
-            child.add_argument("--tactic-opt-in", action="store_true")
-        if name == "fundamentals":
-            child.add_argument("--cik", help="Stable SEC CIK; required with historical --as-of.")
-            child.add_argument("--power-play-quality", choices=("textbook", "acceptable"))
-            child.add_argument("--power-play-fundamentals-exception", action="store_true")
-            child.add_argument("--power-play-technical-eligibility", action="store_true")
-            child.add_argument("--power-play-price-volume-structure", action="store_true")
-            child.add_argument("--power-play-market-alignment", action="store_true")
-            child.add_argument("--power-play-risk-controls", action="store_true")
-        if name == "peers":
-            child.add_argument("--limit", type=int, default=10)
-        if name == "chart":
-            child.add_argument("--output-dir")
-        _common(child)
-    risk = ticker_sub.add_parser("risk", help="Evaluate prospective or active ticker risk.")
-    risk.add_argument("ticker")
-    risk.add_argument("--mode", choices=("prospective", "active"), default="prospective")
-    risk.add_argument("--entry-price", type=float)
-    risk.add_argument("--entry-date")
-    risk.add_argument("--stop-price", type=float)
-    risk.add_argument("--upside-price", type=float)
-    risk.add_argument("--current-price", type=float)
-    risk.add_argument("--average-gain-pct", type=float)
-    risk.add_argument("--market-state")
-    risk.add_argument("--eligibility-state")
-    risk.add_argument("--setup-state")
-    risk.add_argument("--fundamentals-state")
-    risk.add_argument("--invalidation-price", type=float)
-    risk.add_argument("--invalidation-condition")
-    risk.add_argument("--completed-stop-breach", action="store_true")
-    risk.add_argument("--live-stop-check", action="store_true")
-    risk.add_argument("--live-stop-breach", action="store_true")
-    _common(risk)
+    _capability_parser(sub, "capabilities", "capabilities")
+    describe = _capability_parser(sub, "describe", "describe")
+    describe.add_argument("capability", help=_input_help("describe", "capability"))
+    health = _capability_parser(sub, "health", "health")
+    _common(health, "health")
+    clock = _capability_parser(sub, "clock", "clock")
+    _common(clock, "clock")
 
-    watchlist = sub.add_parser("watchlist", help="Explicit research-ledger operations.")
-    watchlist_sub = watchlist.add_subparsers(dest="watchlist_command", required=True)
+    doctrine = _group_parser(sub, "doctrine", summary="Inspect executable doctrine claims.", details="Doctrine is a normalized runtime registry. It is intentionally smaller and more operational than the source corpus.")
+    doctrine_sub = doctrine.add_subparsers(dest="doctrine_command", required=True, metavar="COMMAND")
+    doctrine_show = _capability_parser(doctrine_sub, "show", "doctrine.show")
+    doctrine_show.add_argument("claim_id", help=_input_help("doctrine.show", "claim_id"))
+    _common(doctrine_show, "doctrine.show")
+
+    market = _group_parser(sub, "market", summary="Inspect regime, groups, leadership, and the candidate universe.", details="Use snapshot for environment and leadership evidence, then candidates for paginated US common-stock and ADR discovery. Neither command prescribes portfolio allocation.")
+    market_sub = market.add_subparsers(dest="market_command", required=True, metavar="COMMAND")
+    snapshot = _capability_parser(market_sub, "snapshot", "market.snapshot")
+    snapshot.add_argument("--trade-traction", choices=("supports", "contradicts", "mixed", "needs_input"), help=_input_help("market.snapshot", "trade_traction"))
+    snapshot.add_argument("--leader-limit", type=int, default=20, metavar="N", help=_input_help("market.snapshot", "leader_limit"))
+    _common(snapshot, "market.snapshot")
+    candidates = _capability_parser(market_sub, "candidates", "market.candidates")
+    candidates.add_argument("--limit", type=int, default=50, metavar="N", help=_input_help("market.candidates", "limit"))
+    candidates.add_argument("--cursor", help=_input_help("market.candidates", "cursor"))
+    _common(candidates, "market.candidates")
+
+    ticker = _group_parser(sub, "ticker", summary="Compose named-ticker qualification, setup, fundamentals, peers, risk, and chart evidence.", details="A prospective decision normally flows qualify → setup/fundamentals/peers → risk. Active positions go directly to risk with actual entry and stop anchors. Each leaf remains independently inspectable.")
+    ticker_sub = ticker.add_subparsers(dest="ticker_command", required=True, metavar="COMMAND")
+    qualify = _capability_parser(ticker_sub, "qualify", "ticker.qualify")
+    qualify.add_argument("ticker", help=_input_help("ticker.qualify", "ticker"))
+    qualify.add_argument("--primary-base-quality", choices=("supports", "contradicts", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_quality"))
+    _common(qualify, "ticker.qualify")
+
+    setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
+    setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
+    setup.add_argument("--price-geometry", choices=("pass", "fail", "needs_chart"), help=_input_help("ticker.setup", "price_geometry"))
+    setup.add_argument("--supply-evidence", choices=("pass", "fail", "needs_chart"), help=_input_help("ticker.setup", "supply_evidence"))
+    setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
+    setup.add_argument("--entry-state", choices=("confirmed", "wait", "needs_chart"), help=_input_help("ticker.setup", "entry_state"))
+    setup.add_argument("--invalidation-price", type=float, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
+    setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
+    setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))
+    setup.add_argument("--confirmation-debt", action="append", default=[], metavar="TEXT", help=_input_help("ticker.setup", "confirmation_debt"))
+    setup.add_argument("--later-pivot-price", type=float, metavar="PRICE", help=_input_help("ticker.setup", "later_pivot_price"))
+    setup.add_argument("--later-pivot-condition", metavar="TEXT", help=_input_help("ticker.setup", "later_pivot_condition"))
+    _common(setup, "ticker.setup")
+
+    fundamentals = _capability_parser(ticker_sub, "fundamentals", "ticker.fundamentals")
+    fundamentals.add_argument("ticker", help=_input_help("ticker.fundamentals", "ticker"))
+    fundamentals.add_argument("--cik", help=_input_help("ticker.fundamentals", "cik"))
+    fundamentals.add_argument("--power-play-quality", choices=("textbook", "acceptable"), help=_input_help("ticker.fundamentals", "power_play_quality"))
+    for option in ("fundamentals_exception", "technical_eligibility", "price_volume_structure", "market_alignment", "risk_controls"):
+        field = f"power_play_{option}"
+        fundamentals.add_argument(f"--{field.replace('_', '-')}", action="store_true", help=_input_help("ticker.fundamentals", field))
+    _common(fundamentals, "ticker.fundamentals")
+
+    peers = _capability_parser(ticker_sub, "peers", "ticker.peers")
+    peers.add_argument("ticker", help=_input_help("ticker.peers", "ticker"))
+    peers.add_argument("--limit", type=int, default=10, metavar="N", help=_input_help("ticker.peers", "limit"))
+    _common(peers, "ticker.peers")
+
+    risk = _capability_parser(ticker_sub, "risk", "ticker.risk")
+    risk.add_argument("ticker", help=_input_help("ticker.risk", "ticker"))
+    risk.add_argument("--mode", choices=("prospective", "active"), default="prospective", help=_input_help("ticker.risk", "mode"))
+    for field in ("entry_price", "stop_price", "upside_price", "current_price", "average_gain_pct", "invalidation_price"):
+        risk.add_argument(f"--{field.replace('_', '-')}", type=float, metavar="NUMBER", help=_input_help("ticker.risk", field))
+    risk.add_argument("--entry-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "entry_date"))
+    risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))
+    risk.add_argument("--eligibility-state", choices=("eligible", "avoid", "incomplete"), help=_input_help("ticker.risk", "eligibility_state"))
+    risk.add_argument("--setup-state", choices=("ready", "wait", "avoid", "incomplete"), help=_input_help("ticker.risk", "setup_state"))
+    risk.add_argument("--fundamentals-state", choices=("supports_convergence", "does_not_support_convergence", "waived_by_exception", "incomplete"), help=_input_help("ticker.risk", "fundamentals_state"))
+    risk.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.risk", "invalidation_condition"))
+    for field in ("completed_stop_breach", "live_stop_check", "live_stop_breach"):
+        risk.add_argument(f"--{field.replace('_', '-')}", action="store_true", help=_input_help("ticker.risk", field))
+    _common(risk, "ticker.risk")
+
+    chart = _capability_parser(ticker_sub, "chart", "ticker.chart")
+    chart.add_argument("ticker", help=_input_help("ticker.chart", "ticker"))
+    chart.add_argument("--output-dir", metavar="PATH", help=_input_help("ticker.chart", "output_dir"))
+    _common(chart, "ticker.chart")
+
+    watchlist = _group_parser(sub, "watchlist", summary="Read or explicitly mutate the local research ledger.", details="show and history never create a missing database. record, annotate, and export are the only explicit ledger/file writes. The ledger never stores portfolio allocation or account data.")
+    watchlist_sub = watchlist.add_subparsers(dest="watchlist_command", required=True, metavar="COMMAND")
     for name in ("show", "history", "record", "annotate", "export"):
-        child = watchlist_sub.add_parser(name, help=f"Run watchlist.{name}.")
+        capability = f"watchlist.{name}"
+        child = _capability_parser(watchlist_sub, name, capability)
         if name in {"history", "record", "annotate"}:
-            child.add_argument("ticker")
+            child.add_argument("ticker", help=_input_help(capability, "ticker"))
         if name == "record":
-            child.add_argument("--instrument-id", required=True)
-            child.add_argument("--output-hash", required=True)
-            child.add_argument("--verdict", required=True)
-            child.add_argument("--condition")
-            child.add_argument("--invalidation")
-            child.add_argument("--doctrine-id", action="append", dest="doctrine_ids", default=[])
-            child.add_argument("--evidence-quality")
-            child.add_argument("--note")
+            child.add_argument("--instrument-id", required=True, help=_input_help(capability, "instrument_id"))
+            child.add_argument("--output-hash", required=True, help=_input_help(capability, "output_hash"))
+            child.add_argument("--verdict", required=True, help=_input_help(capability, "verdict"))
+            child.add_argument("--condition", help=_input_help(capability, "condition"))
+            child.add_argument("--invalidation", help=_input_help(capability, "invalidation"))
+            child.add_argument("--doctrine-id", action="append", dest="doctrine_ids", default=[], help=_input_help(capability, "doctrine_ids"))
+            child.add_argument("--evidence-quality", help=_input_help(capability, "evidence_quality"))
+            child.add_argument("--note", help=_input_help(capability, "note"))
         if name == "annotate":
-            child.add_argument("--note", required=True)
+            child.add_argument("--note", required=True, help=_input_help(capability, "note"))
         if name == "export":
-            child.add_argument("--output", required=True)
-        _common(child)
+            child.add_argument("--output", required=True, help=_input_help(capability, "output"))
+        _common(child, capability)
     return parser
 
 
@@ -148,13 +213,20 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
         entry_state = request.pop("entry_state", None)
         invalidation_price = request.pop("invalidation_price", None)
         invalidation_condition = request.pop("invalidation_condition", None)
+        confirmation_debt = request.pop("confirmation_debt", [])
+        later_pivot_price = request.pop("later_pivot_price", None)
+        later_pivot_condition = request.pop("later_pivot_condition", None)
         judgments: dict[str, Any] = {}
         if geometry is not None:
             judgments["price_geometry"] = {"state": geometry}
         if supply is not None:
             judgments["supply_evidence"] = {"state": supply}
-        if any(value is not None for value in (entry_kind, entry_state, invalidation_price, invalidation_condition)):
+        if any(value is not None for value in (entry_kind, entry_state, invalidation_price, invalidation_condition, later_pivot_price, later_pivot_condition)) or confirmation_debt:
             entry: dict[str, Any] = {"kind": entry_kind, "state": entry_state}
+            if confirmation_debt:
+                entry["confirmation_debt"] = confirmation_debt
+            if later_pivot_price is not None or later_pivot_condition is not None:
+                entry["minervini_later_pivot"] = {"price": later_pivot_price, "condition": later_pivot_condition}
             if invalidation_price is not None or invalidation_condition is not None:
                 entry["invalidation"] = {"price": invalidation_price, "condition": invalidation_condition}
             judgments["entry"] = entry
@@ -222,9 +294,11 @@ def dispatch(args: argparse.Namespace, *, runtime: Runtime | None = None) -> dic
 def main(argv: list[str] | None = None, *, runtime: Runtime | None = None) -> int:
     parser = build_parser()
     operation = "request"
+    output_format = "full"
     try:
         args = parser.parse_args(argv)
         operation = _operation(args)
+        output_format = getattr(args, "format", "full")
         payload = dispatch(args, runtime=runtime)
         code = 0
     except RequestError as error:
@@ -237,6 +311,7 @@ def main(argv: list[str] | None = None, *, runtime: Runtime | None = None) -> in
             data={"error": {"code": "internal_error", "message": str(error), "field": None, "retryable": False}},
         )
         code = 3
+    payload = format_payload(payload, output_format)
     print(json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")))
     return code
 

@@ -3,6 +3,7 @@ import pathlib
 import unittest
 
 from scripts.minervini.capabilities import CAPABILITIES
+from scripts.minervini.schema_sync import capability_schema
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -64,6 +65,10 @@ class VersionedSchemaContractTests(unittest.TestCase):
                 self.assertIn({"$ref": "envelope.schema.json"}, schema["allOf"])
                 operation_schema = next(item for item in schema["allOf"] if "properties" in item)
                 self.assertEqual(operation_schema["properties"]["operation"], {"const": capability})
+                description = CAPABILITIES[capability].description()
+                expected_contract = {key: value for key, value in description.items() if key not in {"name", "schema_id"}}
+                self.assertEqual(schema["x-capability-contract"], expected_contract)
+                self.assertEqual(schema, capability_schema(CAPABILITIES[capability]))
 
     def test_shared_envelope_has_exact_keys_and_status_vocabulary(self) -> None:
         with (SCHEMAS / "envelope.schema.json").open(encoding="utf-8") as handle:

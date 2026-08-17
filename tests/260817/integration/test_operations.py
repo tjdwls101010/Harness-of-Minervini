@@ -299,7 +299,7 @@ class OperationCompositionTests(unittest.TestCase):
 
         payload = execute(
             "ticker.fundamentals",
-            {"ticker": "TEST", "as_of": "2026-05-10", "cik": "0000123456"},
+            {"ticker": "TEST", "as_of": "2026-05-08", "cik": "0000123456"},
             runtime=runtime,
         )
 
@@ -313,7 +313,7 @@ class OperationCompositionTests(unittest.TestCase):
 
         payload = execute(
             "ticker.fundamentals",
-            {"ticker": "TEST", "as_of": "2026-05-10"},
+            {"ticker": "TEST", "as_of": "2026-05-08"},
             runtime=runtime,
         )
 
@@ -340,9 +340,10 @@ class OperationCompositionTests(unittest.TestCase):
             path = Path(temporary) / "ledger.sqlite3"
             runtime = Runtime(ledger_factory=lambda: Ledger(path))
 
-            empty = execute("watchlist.show", {}, runtime=runtime)
+            empty = execute("watchlist.show", {"as_of": AS_OF}, runtime=runtime)
 
             self.assertEqual(empty["data"]["records"], [])
+            self.assertEqual(empty["as_of"]["date"], AS_OF)
             self.assertFalse(path.exists())
 
             output_hash = hashlib.sha256(b"fixture-output").hexdigest()

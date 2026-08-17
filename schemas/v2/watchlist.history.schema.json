@@ -1,1 +1,63 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/watchlist.history.schema.json","title":"Harness of Minervini v2 watchlist.history response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"watchlist.history"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/watchlist.history.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "watchlist.history"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 watchlist.history response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline watchlist history AAPL"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "ticker": {
+        "description": "Ticker symbol whose recorded history should be read.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "History is keyed by recorded ticker events; stable instrument identity remains in each record.",
+      "--as-of stamps this read and does not time-filter events."
+    ],
+    "output": "Recorded events in ledger order; an absent ledger or symbol returns an empty list without creating state.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "Events or a legitimate empty list were returned."
+    },
+    "summary": "Read the explicit research-event history for one ticker symbol."
+  }
+}

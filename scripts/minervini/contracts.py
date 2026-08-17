@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 from typing import Any
 
 from . import SCHEMA_VERSION
@@ -19,11 +18,14 @@ class RequestError(Exception):
 
 
 def as_of_block(value: str | None = None) -> dict[str, Any]:
+    from .clock import resolve_as_of
+
+    clock = resolve_as_of(value)
     return {
-        "mode": "explicit" if value else "last_completed_session",
-        "date": value or date.today().isoformat(),
-        "timezone": "America/New_York",
-        "completed_session": True,
+        "mode": clock.mode,
+        "date": clock.date.isoformat(),
+        "timezone": clock.timezone,
+        "completed_session": clock.completed_session,
     }
 
 

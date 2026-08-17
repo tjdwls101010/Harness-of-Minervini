@@ -1,1 +1,46 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/describe.schema.json","title":"Harness of Minervini v2 describe response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"describe"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/describe.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "describe"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 describe response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline describe ticker.setup"
+    ],
+    "inputs": {
+      "capability": {
+        "description": "Exact capability ID returned by capabilities.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [],
+    "output": "Purpose, inputs, schema ID, prerequisites, limitations, status meanings, side effects, errors, and examples.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "The capability ID is unknown.",
+      "ok": "The capability exists."
+    },
+    "summary": "Return the machine-readable contract for one capability."
+  }
+}

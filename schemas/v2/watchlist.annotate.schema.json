@@ -1,1 +1,71 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/watchlist.annotate.schema.json","title":"Harness of Minervini v2 watchlist.annotate response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"watchlist.annotate"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/watchlist.annotate.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "watchlist.annotate"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 watchlist.annotate response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline watchlist annotate AAPL --note 'pivot confirmation still pending'"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "note": {
+        "description": "Non-empty note to append.",
+        "required": true,
+        "type": "string"
+      },
+      "ticker": {
+        "description": "Ticker symbol with an existing record.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "A note cannot create the first research record; use watchlist record first.",
+      "--as-of stamps the command envelope and does not rewrite the original research date."
+    ],
+    "output": "The updated latest record and appended history event.",
+    "prerequisites": [],
+    "side_effects": [
+      "Updates the ignored local SQLite ledger."
+    ],
+    "status_meanings": {
+      "needs_input": "The note is empty or no record exists for the ticker.",
+      "ok": "The note was appended."
+    },
+    "summary": "Append an explicit note to the latest recorded research item for a ticker."
+  }
+}

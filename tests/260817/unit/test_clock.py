@@ -25,6 +25,10 @@ class AnalysisClockTests(unittest.TestCase):
         self.assertEqual(resolved.mode, "explicit")
         self.assertEqual(resolved.timezone, "America/New_York")
 
+    def test_explicit_as_of_must_name_an_actual_us_trading_session(self) -> None:
+        with self.assertRaisesRegex(ValueError, "trading session"):
+            resolve_as_of("2026-08-09", now=datetime(2026, 8, 17, 11, 0, tzinfo=ET))
+
 
 if __name__ == "__main__":
     unittest.main()

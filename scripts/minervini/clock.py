@@ -140,4 +140,6 @@ def resolve_as_of(value: str | dt.date | None = None, *, now: dt.datetime | None
     explicit = _parse_date(value)
     if explicit > latest_completed:
         raise ValueError("as_of cannot be after the last completed US regular session")
+    if not is_trading_day(explicit):
+        raise ValueError("as_of must name a completed US trading session")
     return AnalysisClock(date=explicit, mode="explicit")

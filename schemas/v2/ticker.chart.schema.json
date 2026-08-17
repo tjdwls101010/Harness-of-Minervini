@@ -1,1 +1,79 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json","title":"Harness of Minervini v2 ticker.chart response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.chart"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.chart"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.chart response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker chart AAPL",
+      "scripts/.venv/bin/python scripts/pipeline ticker chart AAPL --output-dir .artifacts/review/AAPL"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "output_dir": {
+        "description": "Destination directory; defaults to the ignored .artifacts/charts directory.",
+        "required": false,
+        "type": "path"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "Charts corroborate qualitative ambiguity but never override a deterministic hard gate.",
+      "Weekly is rendered before daily; historical as-of is enforced before rendering."
+    ],
+    "output": "Chart artifact paths plus an input-hash manifest recording ticker, as-of, timeframe order, and completed-bar provenance.",
+    "prerequisites": [],
+    "side_effects": [
+      "Writes deterministic PNG artifacts and a manifest to the requested directory; the default directory is git-ignored."
+    ],
+    "status_meanings": {
+      "needs_input": "The destination path or ticker is invalid.",
+      "ok": "Both chart artifacts and the manifest were written.",
+      "unavailable": "Completed price history is unavailable."
+    },
+    "summary": "Render auditable weekly-first and daily chart artifacts from the same completed bars used by deterministic analysis."
+  }
+}

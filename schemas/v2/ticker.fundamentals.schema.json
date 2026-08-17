@@ -1,1 +1,119 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.fundamentals.schema.json","title":"Harness of Minervini v2 ticker.fundamentals response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.fundamentals"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.fundamentals.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.fundamentals"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.fundamentals response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL",
+      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL --as-of 2026-08-14 --cik 0000320193"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "cik": {
+        "description": "Stable SEC CIK of at most ten digits; required for historical --as-of.",
+        "required": false,
+        "type": "string"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "power_play_fundamentals_exception": {
+        "default": false,
+        "description": "Request the sole verified-fundamentals waiver.",
+        "required": false,
+        "type": "boolean"
+      },
+      "power_play_market_alignment": {
+        "default": false,
+        "description": "Assert separately verified market alignment.",
+        "required": false,
+        "type": "boolean"
+      },
+      "power_play_price_volume_structure": {
+        "default": false,
+        "description": "Assert separately verified VCP-quality structure.",
+        "required": false,
+        "type": "boolean"
+      },
+      "power_play_quality": {
+        "choices": [
+          "textbook",
+          "acceptable"
+        ],
+        "description": "VCP-qualified Power Play quality.",
+        "required": false,
+        "type": "enum"
+      },
+      "power_play_risk_controls": {
+        "default": false,
+        "description": "Assert separately verified risk controls.",
+        "required": false,
+        "type": "boolean"
+      },
+      "power_play_technical_eligibility": {
+        "default": false,
+        "description": "Assert separately verified technical eligibility.",
+        "required": false,
+        "type": "boolean"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "SEC facts are selected by filed_at, never period end alone.",
+      "Current ticker-to-CIK lookup is not used for historical identity; provide --cik.",
+      "Power Play may waive only unavailable verified fundamentals, never integrity, dilution, market, setup, eligibility, or risk controls.",
+      "The current SEC adapter reads the recent submissions index and discloses that older index files were not fetched."
+    ],
+    "output": "Filed-as-of growth and integrity evidence, leader category, discrepancies, missing facts, and fundamentals convergence state.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "Historical identity or another required argument is missing.",
+      "ok": "Filed evidence supports or contradicts convergence, or a fully proven exception applies.",
+      "partial": "Filed evidence exists but required facts are incomplete.",
+      "unavailable": "SEC evidence could not be obtained after one retry."
+    },
+    "summary": "Evaluate filed growth, revenue and margin confirmation, accounting integrity, dilution, leadership profile, and the narrow Power Play exception."
+  }
+}

@@ -1,1 +1,84 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://harness.minervini.dev/schemas/v2/ticker.qualify.schema.json","title":"Harness of Minervini v2 ticker.qualify response","allOf":[{"$ref":"envelope.schema.json"},{"properties":{"operation":{"const":"ticker.qualify"}},"required":["operation"]}]}
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.qualify.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.qualify"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.qualify response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL",
+      "scripts/.venv/bin/python scripts/pipeline ticker qualify IPOX --primary-base-quality needs_chart"
+    ],
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "primary_base_quality": {
+        "choices": [
+          "supports",
+          "contradicts",
+          "needs_chart"
+        ],
+        "description": "Weekly-chart judgment used only when insufficient long history opens the recent-IPO route.",
+        "required": false,
+        "type": "enum"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "All eight standard criteria are AND conditions; fundamentals and narrative cannot waive a known failure.",
+      "RS comes only from ibd-rs-rating 0.5.0 and is never approximated.",
+      "A chart judgment is required for ambiguous Primary Base quality."
+    ],
+    "output": "Eligibility route and state, exact Trend Template signals, completed-history depth, RS date/value, missing evidence, and next capabilities.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "A supplied argument is invalid.",
+      "ok": "Available evidence produced eligible, avoid, or incomplete domain state.",
+      "partial": "Price evidence succeeded but RS or another independent source is unavailable.",
+      "unavailable": "Completed price history is unavailable."
+    },
+    "summary": "Apply the low-cost Stage 2 and eight-of-eight Trend Template gate, or the bounded recent-IPO Primary Base route."
+  }
+}
