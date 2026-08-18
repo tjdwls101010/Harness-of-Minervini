@@ -38,7 +38,7 @@ Filed fundamentals come from SEC EDGAR, which requires every automated caller to
 export MINERVINI_SEC_USER_AGENT='Your Name you@example.com'
 ```
 
-Confirm the runtime can actually answer. `health` is offline and instant; `--probe` additionally makes one cheap request per provider and names any that cannot be reached:
+Confirm the runtime can actually answer. `health` is offline and instant; `--probe` additionally makes one cheap request per probed provider and names any that cannot be reached:
 
 ```bash
 scripts/.venv/bin/python scripts/pipeline health

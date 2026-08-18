@@ -226,6 +226,10 @@ class ProviderCache:
         snapshot = fetch()
         if not isinstance(snapshot, ProviderSnapshot):
             raise TypeError("provider cache fetch must return a ProviderSnapshot")
+        if snapshot.meta.stale:
+            # The session this snapshot missed will be filled in by the provider
+            # later; storing it now would pin the gap for as long as the key lives.
+            return snapshot
         document = {
             "cache_schema_version": CACHE_SCHEMA_VERSION,
             "runtime_schema_version": SCHEMA_VERSION,

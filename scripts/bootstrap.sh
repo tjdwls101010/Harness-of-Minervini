@@ -51,8 +51,21 @@ if failures:
 print(f"Import smoke passed for {len(module_names)} v2 modules and the pipeline package.")
 PY
 
-PYTHONPATH="$repo_root/scripts" "$canonical_python" "$repo_root/scripts/pipeline" health >/dev/null
-echo "Offline v2 health check passed."
+health_report="$(PYTHONPATH="$repo_root/scripts" "$canonical_python" "$repo_root/scripts/pipeline" health --format compact)"
+# health exits 0 for a valid `partial` envelope, so read the verdict rather than the code.
+PYTHONPATH="$repo_root/scripts" "$canonical_python" - "$health_report" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+gaps = [gap for gap in payload.get("missing") or [] if gap.get("required")]
+if payload["data"].get("ready") and not gaps:
+    print("Offline v2 health check passed.")
+    raise SystemExit(0)
+for gap in gaps:
+    print(f"health: {gap.get('id')}: {gap.get('detail') or gap.get('reason')}", file=sys.stderr)
+raise SystemExit(1)
+PY
 
 if [[ -z "${MINERVINI_SEC_USER_AGENT:-}" ]]; then
   echo "Note: export MINERVINI_SEC_USER_AGENT='Your Name you@example.com' before using 'ticker fundamentals'; SEC EDGAR refuses unidentified automated callers." >&2

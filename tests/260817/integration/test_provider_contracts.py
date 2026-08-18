@@ -6,7 +6,7 @@ import unittest
 
 import pandas as pd
 
-from scripts.minervini.providers import ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry
+from scripts.minervini.providers import ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry, redact
 from scripts.minervini.providers.finviz import raw_snapshot
 from scripts.minervini.providers.nasdaq import (
     historical_security_master,
@@ -28,6 +28,25 @@ class FakeTicker:
     def history(self, **kwargs: object) -> pd.DataFrame:
         self.calls.append(kwargs)
         return self.frame
+
+
+class FakeClock:
+    """A monotonic clock separating time the test passes from time a sleep costs."""
+
+    def __init__(self, start: float, *, oversleep: float = 1.0) -> None:
+        self.value = start
+        self.waits: list[float] = []
+        self.oversleep = oversleep
+
+    def now(self) -> float:
+        return self.value
+
+    def tick(self, seconds: float) -> None:
+        self.value += seconds
+
+    def sleep(self, seconds: float) -> None:
+        self.waits.append(seconds)
+        self.value += seconds * self.oversleep
 
 
 class FakeRS:
@@ -311,6 +330,26 @@ class ProviderContractTests(unittest.TestCase):
         self.assertIn("RuntimeError", detail)
         self.assertIn("https://api.example.com/v1/rs", detail)
 
+    def test_redaction_covers_the_shapes_a_credential_actually_arrives_in(self) -> None:
+        leaks = [
+            ("/v1/token/sk-live-abc", "sk-live-abc"),
+            ('{"apikey":"sk-live-abc","token":"json-secret"}', "sk-live-abc"),
+            ('{"apikey":"sk-live-abc","token":"json-secret"}', "json-secret"),
+            ("Cookie: session=deadbeef", "deadbeef"),
+            ("Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
+            ("api_key=secretvalue", "secretvalue"),
+            ("contact analyst@example.com", "analyst@example.com"),
+        ]
+
+        for message, secret in leaks:
+            with self.subTest(message=message):
+                self.assertNotIn(secret, redact(message))
+
+    def test_a_directly_constructed_boundary_failure_is_redacted_too(self) -> None:
+        error = ProviderUnavailable("sec", "request_failed", detail="User-Agent: Acme analyst@example.com")
+
+        self.assertNotIn("analyst@example.com", error.detail)
+
     def test_the_retry_waits_before_hitting_a_rate_limited_boundary_again(self) -> None:
         waits: list[float] = []
         attempts = 0
@@ -328,25 +367,39 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(waits, [0.25])
 
     def test_a_throttled_boundary_spaces_consecutive_requests(self) -> None:
-        elapsed = [100.0, 100.05]
-        waits: list[float] = []
-        throttle = RequestThrottle(0.15, monotonic=lambda: elapsed.pop(0), sleep=waits.append)
+        clock = FakeClock(100.0)
+        throttle = RequestThrottle(0.15, monotonic=clock.now, sleep=clock.sleep)
 
         throttle.wait()
+        clock.tick(0.05)
         throttle.wait()
 
-        self.assertEqual(len(waits), 1)
-        self.assertAlmostEqual(waits[0], 0.1)
+        self.assertEqual(len(clock.waits), 1)
+        self.assertAlmostEqual(clock.waits[0], 0.10)
 
     def test_a_throttled_boundary_never_waits_when_the_gap_already_passed(self) -> None:
-        elapsed = [100.0, 100.9]
-        waits: list[float] = []
-        throttle = RequestThrottle(0.15, monotonic=lambda: elapsed.pop(0), sleep=waits.append)
+        clock = FakeClock(100.0)
+        throttle = RequestThrottle(0.15, monotonic=clock.now, sleep=clock.sleep)
 
+        throttle.wait()
+        clock.tick(0.9)
+        throttle.wait()
+
+        self.assertEqual(clock.waits, [])
+
+    def test_a_throttled_boundary_rereads_the_clock_after_an_oversleep(self) -> None:
+        clock = FakeClock(100.0, oversleep=4.0)
+        throttle = RequestThrottle(0.15, monotonic=clock.now, sleep=clock.sleep)
+
+        throttle.wait()
+        clock.tick(0.05)
         throttle.wait()
         throttle.wait()
 
-        self.assertEqual(waits, [])
+        # Assuming the requested delay rather than rereading would credit the
+        # oversleep to the interval and let the third request go out immediately.
+        self.assertEqual(len(clock.waits), 2)
+        self.assertAlmostEqual(clock.waits[1], 0.15)
 
 
 if __name__ == "__main__":

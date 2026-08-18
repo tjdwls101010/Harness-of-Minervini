@@ -263,6 +263,18 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
 
+    def test_a_proven_stop_breach_survives_price_history_that_stops_early(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "as_of": AS_OF, "mode": "active", "entry_price": 200.0, "entry_date": "2025-12-01", "stop_price": 190.0},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "breached")
+
     def test_chart_writes_no_artifact_from_a_session_behind_price_history(self) -> None:
         runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
 
@@ -284,7 +296,8 @@ class OperationCompositionTests(unittest.TestCase):
         payload = execute("market.snapshot", {"as_of": AS_OF, "trade_traction": "supports"}, runtime=runtime)
 
         self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
-        self.assertNotEqual(payload["data"]["regime"]["judgment"], "favorable")
+        switch = next(s for s in payload["signals"] if s["id"] == "qqq_21ema_switch")
+        self.assertEqual(switch["state"], "unavailable")
 
     def test_health_keeps_its_offline_contract_unless_a_probe_is_requested(self) -> None:
         runtime = Runtime(
@@ -294,7 +307,7 @@ class OperationCompositionTests(unittest.TestCase):
         payload = execute("health", {}, runtime=runtime)
 
         self.assertEqual(payload["status"], "ok")
-        self.assertEqual(payload["data"]["reachability"], "not_checked")
+        self.assertEqual(payload["data"]["reachability"], {"checked": False, "providers": {}})
         self.assertTrue(payload["data"]["configuration"]["tls_ca_bundle"]["ready"])
         self.assertIn("sec_user_agent", payload["data"]["configuration"])
 
@@ -315,12 +328,24 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "partial")
         self.assertFalse(payload["data"]["ready"])
-        self.assertTrue(payload["data"]["reachability"]["fixture-prices"]["reachable"])
-        self.assertFalse(payload["data"]["reachability"]["fixture-rs"]["reachable"])
-        self.assertEqual(
-            payload["data"]["reachability"]["fixture-rs"]["detail"],
-            "ConnectionError: certificate verify failed",
-        )
+        self.assertTrue(payload["data"]["reachability"]["checked"])
+        providers = payload["data"]["reachability"]["providers"]
+        self.assertTrue(providers["fixture-prices"]["reachable"])
+        self.assertFalse(providers["fixture-rs"]["reachable"])
+        self.assertEqual(providers["fixture-rs"]["detail"], "ConnectionError: certificate verify failed")
+
+    def test_a_probe_that_breaks_reports_an_unreachable_provider_not_an_internal_error(self) -> None:
+        def broken() -> None:
+            raise ModuleNotFoundError("No module named 'rs_rating'")
+
+        runtime = Runtime(reachability_probes={"fixture-rs": broken})
+
+        payload = execute("health", {"probe": True}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        provider = payload["data"]["reachability"]["providers"]["fixture-rs"]
+        self.assertFalse(provider["reachable"])
+        self.assertIn("ModuleNotFoundError", provider["detail"])
         self.assertIn("fixture-rs", {item.get("provider") for item in payload["missing"]})
 
     def test_market_candidates_filters_provider_records_and_preserves_pagination(self) -> None:

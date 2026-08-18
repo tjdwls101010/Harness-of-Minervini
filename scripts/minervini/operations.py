@@ -27,7 +27,7 @@ from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
-from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
+from .providers import DETAIL_LIMIT, ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry, redact
 from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
@@ -193,10 +193,22 @@ def _local_configuration() -> dict[str, dict[str, Any]]:
     }
 
 
-def _default_reachability_probes() -> dict[str, Callable[[], None]]:
-    """Name the cheapest decisive call per provider that can otherwise fail silently."""
+def _probe_yfinance() -> None:
+    import yfinance as yf
 
-    return {"ibd-rs-rating": _probe_rs, "sec": _probe_sec}
+    frame = fetch_with_one_retry("yfinance", "daily_bars", lambda: yf.Ticker("SPY").history(period="5d", interval="1d"))
+    if frame is None or frame.empty:
+        raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
+
+
+def _default_reachability_probes() -> dict[str, Callable[[], None]]:
+    """Name the cheapest decisive call per probed provider.
+
+    Nasdaq's security master is a multi-megabyte download, so it is deliberately
+    not probed; its failures surface loudly in the operations that need it.
+    """
+
+    return {"yfinance": _probe_yfinance, "ibd-rs-rating": _probe_rs, "sec": _probe_sec}
 
 
 @dataclass(frozen=True)
@@ -360,21 +372,25 @@ def _health(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         "dependencies": dependencies,
         "configuration": configuration,
         "doctrine": doctrine,
-        "reachability": "not_checked",
+        "reachability": {"checked": False, "providers": {}},
     }
     if request.get("probe") is True:
-        reachability: dict[str, Any] = {}
+        probed: dict[str, Any] = {}
         for name, probe in runtime.reachability_probes.items():
             try:
                 probe()
             except ProviderUnavailable as error:
-                reachability[name] = {"reachable": False, "reason": error.reason, "detail": error.detail}
+                probed[name] = {"reachable": False, "reason": error.reason, "detail": error.detail}
                 missing.append(_missing_provider(error))
+            except Exception as error:  # A diagnostic must diagnose, never become the failure.
+                detail = redact(f"{type(error).__name__}: {error}")[:DETAIL_LIMIT]
+                probed[name] = {"reachable": False, "reason": "probe_failed", "detail": detail}
+                missing.append({"id": name, "provider": name, "reason": "probe_failed", "required": True, "attempts": 1, "retryable": True, "detail": detail})
             else:
-                reachability[name] = {"reachable": True, "reason": None, "detail": None}
-        ready = ready and all(item["reachable"] for item in reachability.values())
+                probed[name] = {"reachable": True, "reason": None, "detail": None}
+        ready = ready and all(item["reachable"] for item in probed.values())
         data["ready"] = ready
-        data["reachability"] = reachability
+        data["reachability"] = {"checked": True, "providers": probed}
     return envelope(
         "health",
         request=_clean_request(request),
@@ -726,8 +742,14 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing["ticker"] = symbol
             provider_missing.append(missing)
         else:
-            completed_prices[symbol] = prices.data
             sources.append(_source(prices.meta))
+            stale_price = _stale_price_gap(prices.meta)
+            if stale_price is not None:
+                stale_price["ticker"] = symbol
+                stale_price["required"] = symbol == ticker
+                provider_missing.append(stale_price)
+            else:
+                completed_prices[symbol] = prices.data
 
     try:
         collected = collect_same_industry_peer_rows(
@@ -915,6 +937,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         raise RequestError("trade_traction must be supports, contradicts, mixed, or needs_input", "trade_traction")
 
     sources: list[dict[str, Any]] = []
+    succeeded: list[ProviderSnapshot[Any]] = []
     provider_missing: list[dict[str, Any]] = []
 
     def collect(fetch: Callable[[], ProviderSnapshot[Any]]) -> ProviderSnapshot[Any] | None:
@@ -928,6 +951,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         if stale_price is not None:
             provider_missing.append(stale_price)
             return None
+        succeeded.append(snapshot)
         return snapshot
 
     qqq = collect(
@@ -1016,7 +1040,8 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     missing = [*provider_missing, *result["missing"], *section_missing]
     if trade_traction == "needs_input":
         missing.append({"id": "trade_traction", "reason": "user_feedback_required", "required": True})
-    if not sources:
+    if not succeeded:
+        # A snapshot that was fetched but discarded is provenance, not evidence.
         status = "unavailable"
     elif trade_traction in {None, "needs_input"}:
         status = "needs_input"
@@ -1034,7 +1059,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         missing=missing,
         sources=sources,
         doctrine_ids=["scope.data_integrity"],
-        next_capabilities=["market.candidates", "ticker.qualify"] if sources else [],
+        next_capabilities=["market.candidates", "ticker.qualify"] if succeeded else [],
     )
 
 
@@ -1070,15 +1095,6 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    if latest_date < as_of:
-        return {
-            "state": "unavailable",
-            "reason": "history_ends_before_as_of",
-            "requested_from": effective_date.isoformat(),
-            "last_available": latest_date.isoformat(),
-            "requested_through": as_of.isoformat(),
-        }, current_price
-
     path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date]
     if not path_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
@@ -1100,6 +1116,17 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
             }, current_price
+    if latest_date < as_of:
+        # No breach in the bars that exist. A later missing bar cannot prove HOLD,
+        # but it could never have erased a breach found above either.
+        return {
+            "state": "unavailable",
+            "reason": "history_ends_before_as_of",
+            "requested_from": effective_date.isoformat(),
+            "last_available": latest_date.isoformat(),
+            "requested_through": as_of.isoformat(),
+            "bars_checked": len(path_rows),
+        }, current_price
     return {
         "state": "clear",
         "basis": "completed_daily_low",
@@ -1168,36 +1195,41 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             sources.append(_source(prices.meta))
             stale_price = _stale_price_gap(prices.meta)
             if stale_price is not None:
-                # A stop path that stops a session early cannot establish HOLD.
                 provider_missing.append(stale_price)
-            else:
-                if stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool):
-                    price_path, current_price = _completed_stop_path(
-                        prices.data,
-                        effective_date=stop_effective_date,
-                        as_of=clock.date,
-                        stop_price=float(stop_price),
+            has_stop = stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool)
+            current_price = None
+            if has_stop:
+                # Runs even when the history stops early: a completed breach is
+                # irreversible, and a later missing bar cannot undo one.
+                price_path, path_price = _completed_stop_path(
+                    prices.data,
+                    effective_date=stop_effective_date,
+                    as_of=clock.date,
+                    stop_price=float(stop_price),
+                )
+                evidence["completed_price_path"] = price_path
+                if stale_price is None:
+                    current_price = path_price
+                if price_path.get("state") == "unavailable":
+                    provider_missing.append(
+                        {
+                            "id": "completed_price_path",
+                            "provider": prices.meta.provider,
+                            "reason": price_path.get("reason", "completed_price_path_unavailable"),
+                            "required": True,
+                            "attempts": 1,
+                            "retryable": False,
+                        }
                     )
-                    evidence["completed_price_path"] = price_path
-                    if price_path.get("state") == "unavailable":
-                        provider_missing.append(
-                            {
-                                "id": "completed_price_path",
-                                "provider": prices.meta.provider,
-                                "reason": price_path.get("reason", "completed_price_path_unavailable"),
-                                "required": True,
-                                "attempts": 1,
-                                "retryable": False,
-                            }
-                        )
-                else:
-                    price_path = None
-                    try:
-                        current_price = float(prices.data["Close"].iloc[-1])
-                    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
-                        current_price = None
-                if current_price is not None:
-                    evidence["current_price"] = current_price
+            elif stale_price is None:
+                # A price from an earlier session can only make a position look
+                # safer than the evidence supports, so it is withheld entirely.
+                try:
+                    current_price = float(prices.data["Close"].iloc[-1])
+                except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+                    current_price = None
+            if current_price is not None:
+                evidence["current_price"] = current_price
     result = reduce_risk(evidence)
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}

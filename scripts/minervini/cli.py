@@ -9,6 +9,7 @@ from typing import Any
 from .capabilities import CAPABILITIES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
+from .providers import redact
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -310,7 +311,7 @@ def main(argv: list[str] | None = None, *, runtime: Runtime | None = None) -> in
         payload = envelope(
             operation,
             status="unavailable",
-            data={"error": {"code": "internal_error", "message": str(error), "field": None, "retryable": False}},
+            data={"error": {"code": "internal_error", "message": redact(str(error)), "field": None, "retryable": False}},
         )
         code = 3
     payload = format_payload(payload, output_format)

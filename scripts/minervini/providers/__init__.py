@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 import re
+import threading
 import time
 from typing import Any, Callable, Generic, Mapping, TypeVar
 
@@ -47,7 +48,7 @@ class ProviderUnavailable(RuntimeError):
         self.operation = operation
         self.attempts = attempts
         self.retryable = retryable
-        self.detail = detail
+        self.detail = redact(detail)[:DETAIL_LIMIT] if detail else detail
         detail = f"{provider} unavailable: {reason}"
         if operation:
             detail = f"{detail} ({operation})"
@@ -73,15 +74,19 @@ class RequestThrottle:
         self._monotonic = monotonic
         self._sleep = sleep
         self._last_request_at: float | None = None
+        self._lock = threading.Lock()
 
     def wait(self) -> None:
-        now = self._monotonic()
-        if self._last_request_at is not None:
-            remaining = self._min_interval - (now - self._last_request_at)
-            if remaining > 0:
-                self._sleep(remaining)
-                now += remaining
-        self._last_request_at = now
+        with self._lock:
+            now = self._monotonic()
+            if self._last_request_at is not None:
+                remaining = self._min_interval - (now - self._last_request_at)
+                if remaining > 0:
+                    self._sleep(remaining)
+                    # Reread rather than assume: a sleep that overshot would
+                    # otherwise be credited to the next interval as well.
+                    now = self._monotonic()
+            self._last_request_at = now
 
 
 DETAIL_LIMIT = 200
@@ -90,8 +95,16 @@ DETAIL_LIMIT = 200
 # carries must not become a second channel for whatever the SDK put in its
 # exception text: query strings carry API keys, and this harness's own SEC
 # User-Agent carries the operator's email.
+_SECRET_WORD = r"[\w-]*(?:api[_-]?key|apikey|token|secret|password|passwd|bearer|auth)[\w-]*"
 _REDACTIONS = (
-    (re.compile(r"(?i)\b(bearer|token|key|secret|password)\b[=:\s]+\S+"), r"\1=[redacted]"),
+    # header form: `Authorization: Basic ...`, `Cookie: session=...`
+    (re.compile(r"(?i)\b(authorization|cookie|set-cookie|proxy-authorization)\s*:\s*[^\r\n]+"), r"\1: [redacted]"),
+    # assignment form, quoted or bare: `api_key=...`, `"token":"..."`, `Bearer ...`
+    (re.compile(r'(?i)\b(' + _SECRET_WORD + r')\b["\']?\s*[=:]\s*["\']?[^\s"\',;&})\]]+'), r"\1=[redacted]"),
+    (re.compile(r"(?i)\bbearer\s+\S+"), "bearer [redacted]"),
+    # path form: `/v1/token/sk-live-abc`
+    (re.compile(r"(?i)/(" + _SECRET_WORD + r")/[^/\s?#]+"), r"/\1/[redacted]"),
+    # any query string at all: too many providers put credentials there
     (re.compile(r"\?\S*"), "?[redacted]"),
     (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "[redacted-email]"),
 )
@@ -130,7 +143,7 @@ def fetch_with_one_retry(
         operation=operation,
         attempts=2,
         retryable=True,
-        detail=redact(f"{type(last_error).__name__}: {last_error}")[:DETAIL_LIMIT],
+        detail=f"{type(last_error).__name__}: {last_error}",
     ) from last_error
 
 
