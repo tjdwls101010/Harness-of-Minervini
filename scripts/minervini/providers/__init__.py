@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+import time
 from typing import Any, Callable, Generic, Mapping, TypeVar
 
 
@@ -38,23 +39,37 @@ class ProviderUnavailable(RuntimeError):
         operation: str | None = None,
         attempts: int = 1,
         retryable: bool = False,
+        detail: str | None = None,
     ) -> None:
         self.provider = provider
         self.reason = reason
         self.operation = operation
         self.attempts = attempts
         self.retryable = retryable
+        self.detail = detail
         detail = f"{provider} unavailable: {reason}"
         if operation:
             detail = f"{detail} ({operation})"
         super().__init__(detail)
 
 
-def fetch_with_one_retry(provider: str, operation: str, fetch: Callable[[], T]) -> T:
+DETAIL_LIMIT = 200
+
+
+def fetch_with_one_retry(
+    provider: str,
+    operation: str,
+    fetch: Callable[[], T],
+    *,
+    backoff_seconds: float = 1.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> T:
     """Make the one permitted retry at an external boundary and preserve its failure."""
 
     last_error: Exception | None = None
-    for _ in range(2):
+    for attempt in range(2):
+        if attempt:
+            sleep(backoff_seconds)
         try:
             return fetch()
         except Exception as error:  # External SDKs expose unrelated exception classes.
@@ -66,6 +81,7 @@ def fetch_with_one_retry(provider: str, operation: str, fetch: Callable[[], T]) 
         operation=operation,
         attempts=2,
         retryable=True,
+        detail=f"{type(last_error).__name__}: {last_error}"[:DETAIL_LIMIT],
     ) from last_error
 
 

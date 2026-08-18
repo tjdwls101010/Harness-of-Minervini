@@ -6,7 +6,7 @@ import unittest
 
 import pandas as pd
 
-from scripts.minervini.providers import ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 from scripts.minervini.providers.finviz import raw_snapshot
 from scripts.minervini.providers.nasdaq import (
     historical_security_master,
@@ -169,6 +169,33 @@ class ProviderContractTests(unittest.TestCase):
 
         self.assertEqual(attempts, 2)
         self.assertEqual(snapshot.data, html)
+
+    def test_a_boundary_failure_preserves_the_underlying_error_for_diagnosis(self) -> None:
+        def fetch() -> str:
+            raise ConnectionError("Failed to connect to the Neon Data API: certificate verify failed")
+
+        with self.assertRaises(ProviderUnavailable) as raised:
+            fetch_with_one_retry("ibd-rs-rating", "dates", fetch, sleep=lambda _: None)
+
+        self.assertEqual(raised.exception.reason, "request_failed")
+        self.assertIn("ConnectionError", raised.exception.detail)
+        self.assertIn("certificate verify failed", raised.exception.detail)
+
+    def test_the_retry_waits_before_hitting_a_rate_limited_boundary_again(self) -> None:
+        waits: list[float] = []
+        attempts = 0
+
+        def fetch() -> str:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise TimeoutError("first attempt")
+            return "recovered"
+
+        result = fetch_with_one_retry("sec", "company_tickers", fetch, backoff_seconds=0.25, sleep=waits.append)
+
+        self.assertEqual(result, "recovered")
+        self.assertEqual(waits, [0.25])
 
 
 if __name__ == "__main__":

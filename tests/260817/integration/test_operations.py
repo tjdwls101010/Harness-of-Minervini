@@ -194,6 +194,25 @@ class OperationCompositionTests(unittest.TestCase):
         rs = next(signal for signal in payload["signals"] if signal["id"] == "trend_template.relative_strength_minimum")
         self.assertEqual(rs["state"], "unavailable")
 
+    def test_an_unavailable_provider_reports_why_it_failed(self) -> None:
+        def unavailable_rs(ticker: str, as_of: str) -> ProviderSnapshot[dict[str, object]]:
+            raise ProviderUnavailable(
+                "fixture-rs",
+                "request_failed",
+                operation="dates",
+                detail="ConnectionError: certificate verify failed",
+            )
+
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: price_snapshot(),
+            rs_rating=unavailable_rs,
+        )
+
+        payload = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        gap = next(item for item in payload["missing"] if item["provider"] == "fixture-rs")
+        self.assertEqual(gap["detail"], "ConnectionError: certificate verify failed")
+
     def test_market_candidates_filters_provider_records_and_preserves_pagination(self) -> None:
         records = [
             SecurityRecord("nasdaq:NASDAQ:GOOD", "GOOD", "NASDAQ", "Good Common Stock", "common_stock", False, True, None),

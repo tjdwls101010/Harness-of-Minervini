@@ -235,7 +235,7 @@ def _source(meta: SnapshotMeta) -> dict[str, Any]:
 
 
 def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> dict[str, Any]:
-    return {
+    gap = {
         "id": error.operation or error.provider,
         "provider": error.provider,
         "reason": error.reason,
@@ -243,6 +243,9 @@ def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> d
         "attempts": error.attempts,
         "retryable": error.retryable,
     }
+    if error.detail:
+        gap["detail"] = error.detail
+    return gap
 
 
 def _clock_operation(request: Mapping[str, Any]) -> dict[str, Any]:
