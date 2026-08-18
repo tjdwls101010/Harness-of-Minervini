@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import unittest
 
@@ -67,10 +68,25 @@ class SharedHarnessTopologyTests(unittest.TestCase):
         self.assertIn("incomplete path coverage means INCOMPLETE", text)
         self.assertIn("actual effective date", text)
 
-    def test_settings_have_no_hooks_and_allow_only_the_canonical_runtime_boundary(self) -> None:
+    def test_the_only_hook_is_the_offline_readiness_notice_and_it_cannot_block(self) -> None:
         settings = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
 
-        self.assertNotIn("hooks", settings)
+        hooks = settings["hooks"]
+        self.assertEqual(list(hooks), ["SessionStart"])
+        self.assertEqual([group["matcher"] for group in hooks["SessionStart"]], ["startup"])
+        handlers = [handler for group in hooks["SessionStart"] for handler in group["hooks"]]
+        self.assertEqual(
+            [handler["command"] for handler in handlers],
+            ["${CLAUDE_PROJECT_DIR}/.claude/hooks/provider-readiness.sh"],
+        )
+        script = ROOT / ".claude" / "hooks" / "provider-readiness.sh"
+        self.assertTrue(os.access(script, os.X_OK))
+        # Every session pays for this, so it runs the offline half of health only.
+        self.assertIn("health --format compact", script.read_text(encoding="utf-8"))
+
+    def test_settings_allow_only_the_canonical_runtime_boundary(self) -> None:
+        settings = json.loads((ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+
         allowed = settings["permissions"]["allow"]
         self.assertIn("Bash(scripts/.venv/bin/python scripts/pipeline *)", allowed)
         self.assertIn("Bash(bash scripts/bootstrap.sh)", allowed)
