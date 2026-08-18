@@ -137,12 +137,12 @@ CAPABILITIES = {
         ),
         _capability(
             "health",
-            "Check deterministic runtime readiness without making an investment judgment or network request.",
-            inputs=_inputs(),
-            output="Python, doctrine-registry, yfinance, and exact ibd-rs-rating version readiness.",
-            limitations=["This checks installed dependencies and local doctrine only; it does not prove that remote providers are reachable.", "--as-of stamps the envelope but does not alter dependency readiness."],
-            status_meanings={"ok": "All required local components are ready.", "partial": "At least one required local component is missing or mismatched."},
-            examples=["scripts/.venv/bin/python scripts/pipeline health"],
+            "Check deterministic runtime readiness without making an investment judgment, and optionally probe whether providers are reachable.",
+            inputs=_inputs({"probe": _field("boolean", "Additionally make one cheap decisive request per provider to prove it is reachable; off by default so the default check stays offline.", default=False)}),
+            output="Python, doctrine-registry, yfinance, and exact ibd-rs-rating version readiness, plus per-provider reachability when probed.",
+            limitations=["Without --probe this checks installed dependencies and local doctrine only; it does not prove that remote providers are reachable.", "--probe makes real network requests and reports why a provider is unreachable rather than guessing.", "--as-of stamps the envelope but does not alter dependency readiness."],
+            status_meanings={"ok": "All required local components are ready, and every probed provider answered.", "partial": "A required local component is missing or mismatched, or a probed provider is unreachable."},
+            examples=["scripts/.venv/bin/python scripts/pipeline health", "scripts/.venv/bin/python scripts/pipeline health --probe"],
         ),
         _capability(
             "clock",

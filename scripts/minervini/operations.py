@@ -27,7 +27,7 @@ from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
-from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
@@ -152,6 +152,27 @@ def _default_industry_top(industry: str, as_of: str, limit: int) -> ProviderSnap
     return industry_top_snapshot(industry, as_of, n=limit)
 
 
+def _probe_rs() -> None:
+    from .providers.rs import _client
+
+    fetch_with_one_retry("ibd-rs-rating", "dates", _client().dates)
+
+
+def _probe_sec() -> None:
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    if not user_agent:
+        raise ProviderUnavailable("sec", "identifiable_user_agent_required", operation="company_tickers")
+    import requests
+
+    fetch_company_tickers(request_get=requests.get, user_agent=user_agent)
+
+
+def _default_reachability_probes() -> dict[str, Callable[[], None]]:
+    """Name the cheapest decisive call per provider that can otherwise fail silently."""
+
+    return {"ibd-rs-rating": _probe_rs, "sec": _probe_sec}
+
+
 @dataclass(frozen=True)
 class Runtime:
     """Replace only external boundaries in deterministic integration tests."""
@@ -167,6 +188,7 @@ class Runtime:
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
+    reachability_probes: Mapping[str, Callable[[], None]] = field(default_factory=_default_reachability_probes)
     cache: ProviderCache | None = None
 
 
@@ -258,7 +280,7 @@ def _clock_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def _health(request: Mapping[str, Any]) -> dict[str, Any]:
+def _health(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     clock = _clock(request.get("as_of"))
     dependencies: dict[str, dict[str, Any]] = {}
     for distribution, required in (("ibd-rs-rating", REQUIRED_PACKAGE_VERSION), ("yfinance", None)):
@@ -278,12 +300,26 @@ def _health(request: Mapping[str, Any]) -> dict[str, Any]:
         for name, item in dependencies.items()
         if not item["ready"]
     ]
+    data: dict[str, Any] = {"ready": ready, "python": sys.version.split()[0], "dependencies": dependencies, "doctrine": doctrine}
+    if request.get("probe") is True:
+        reachability: dict[str, Any] = {}
+        for name, probe in runtime.reachability_probes.items():
+            try:
+                probe()
+            except ProviderUnavailable as error:
+                reachability[name] = {"reachable": False, "reason": error.reason, "detail": error.detail}
+                missing.append(_missing_provider(error))
+            else:
+                reachability[name] = {"reachable": True, "reason": None, "detail": None}
+        ready = ready and all(item["reachable"] for item in reachability.values())
+        data["ready"] = ready
+        data["reachability"] = reachability
     return envelope(
         "health",
         request=_clean_request(request),
         as_of=_as_of(clock),
         status="ok" if ready else "partial",
-        data={"ready": ready, "python": sys.version.split()[0], "dependencies": dependencies, "doctrine": doctrine},
+        data=data,
         missing=missing,
     )
 
@@ -1229,7 +1265,7 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
     if operation == "clock":
         return _clock_operation(request)
     if operation == "health":
-        return _health(request)
+        return _health(request, runtime)
     if operation == "doctrine.show":
         return _doctrine_show(request)
     if operation == "ticker.qualify":

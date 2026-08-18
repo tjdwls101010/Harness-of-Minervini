@@ -213,6 +213,41 @@ class OperationCompositionTests(unittest.TestCase):
         gap = next(item for item in payload["missing"] if item["provider"] == "fixture-rs")
         self.assertEqual(gap["detail"], "ConnectionError: certificate verify failed")
 
+    def test_health_keeps_its_offline_contract_unless_a_probe_is_requested(self) -> None:
+        runtime = Runtime(
+            reachability_probes={"fixture-rs": lambda: self.fail("health must not reach a provider by default")},
+        )
+
+        payload = execute("health", {}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertNotIn("reachability", payload["data"])
+
+    def test_health_probe_names_the_provider_that_cannot_be_reached_and_why(self) -> None:
+        def unreachable() -> None:
+            raise ProviderUnavailable(
+                "fixture-rs",
+                "request_failed",
+                operation="dates",
+                detail="ConnectionError: certificate verify failed",
+            )
+
+        runtime = Runtime(
+            reachability_probes={"fixture-rs": unreachable, "fixture-prices": lambda: None},
+        )
+
+        payload = execute("health", {"probe": True}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertFalse(payload["data"]["ready"])
+        self.assertTrue(payload["data"]["reachability"]["fixture-prices"]["reachable"])
+        self.assertFalse(payload["data"]["reachability"]["fixture-rs"]["reachable"])
+        self.assertEqual(
+            payload["data"]["reachability"]["fixture-rs"]["detail"],
+            "ConnectionError: certificate verify failed",
+        )
+        self.assertIn("fixture-rs", {item["provider"] for item in payload["missing"]})
+
     def test_market_candidates_filters_provider_records_and_preserves_pagination(self) -> None:
         records = [
             SecurityRecord("nasdaq:NASDAQ:GOOD", "GOOD", "NASDAQ", "Good Common Stock", "common_stock", False, True, None),

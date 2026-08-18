@@ -53,6 +53,36 @@ class ProviderUnavailable(RuntimeError):
         super().__init__(detail)
 
 
+class RequestThrottle:
+    """Space consecutive requests at a boundary that rate-limits by source address.
+
+    SEC answers a burst with a 403 block on the whole exit IP rather than a
+    per-request rejection, so spacing is what keeps the next analysis session
+    able to reach it at all.
+    """
+
+    def __init__(
+        self,
+        min_interval_seconds: float,
+        *,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._min_interval = min_interval_seconds
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._last_request_at: float | None = None
+
+    def wait(self) -> None:
+        now = self._monotonic()
+        if self._last_request_at is not None:
+            remaining = self._min_interval - (now - self._last_request_at)
+            if remaining > 0:
+                self._sleep(remaining)
+                now += remaining
+        self._last_request_at = now
+
+
 DETAIL_LIMIT = 200
 
 
@@ -85,4 +115,4 @@ def fetch_with_one_retry(
     ) from last_error
 
 
-__all__ = ["ProviderSnapshot", "ProviderUnavailable", "SnapshotMeta", "fetch_with_one_retry"]
+__all__ = ["ProviderSnapshot", "ProviderUnavailable", "RequestThrottle", "SnapshotMeta", "fetch_with_one_retry"]

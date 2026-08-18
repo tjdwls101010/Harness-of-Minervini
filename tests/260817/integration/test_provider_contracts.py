@@ -6,7 +6,7 @@ import unittest
 
 import pandas as pd
 
-from scripts.minervini.providers import ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
+from scripts.minervini.providers import ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry
 from scripts.minervini.providers.finviz import raw_snapshot
 from scripts.minervini.providers.nasdaq import (
     historical_security_master,
@@ -231,6 +231,27 @@ class ProviderContractTests(unittest.TestCase):
 
         self.assertEqual(result, "recovered")
         self.assertEqual(waits, [0.25])
+
+    def test_a_throttled_boundary_spaces_consecutive_requests(self) -> None:
+        elapsed = [100.0, 100.05]
+        waits: list[float] = []
+        throttle = RequestThrottle(0.15, monotonic=lambda: elapsed.pop(0), sleep=waits.append)
+
+        throttle.wait()
+        throttle.wait()
+
+        self.assertEqual(len(waits), 1)
+        self.assertAlmostEqual(waits[0], 0.1)
+
+    def test_a_throttled_boundary_never_waits_when_the_gap_already_passed(self) -> None:
+        elapsed = [100.0, 100.9]
+        waits: list[float] = []
+        throttle = RequestThrottle(0.15, monotonic=lambda: elapsed.pop(0), sleep=waits.append)
+
+        throttle.wait()
+        throttle.wait()
+
+        self.assertEqual(waits, [])
 
 
 if __name__ == "__main__":
