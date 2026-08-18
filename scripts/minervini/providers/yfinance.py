@@ -6,6 +6,7 @@ import re
 from typing import Any
 import unicodedata
 
+import numpy as np
 import pandas as pd
 
 from ..clock import resolve_as_of
@@ -15,13 +16,18 @@ from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_on
 OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 
 
-def _complete_rows(frame: pd.DataFrame) -> pd.Series:
-    """Mark the rows whose every present OHLCV value is a finite number."""
+def _complete_rows(frame: pd.DataFrame) -> np.ndarray:
+    """Mark the rows whose every present OHLCV value is a finite number.
 
-    complete = pd.Series(True, index=frame.index)
+    Positional rather than label-indexed: a provider may repeat a session, and a
+    label slice would then keep or drop every row sharing that timestamp.
+    """
+
+    complete = np.ones(len(frame), dtype=bool)
     for column in OHLCV_COLUMNS:
         if column in frame:
-            complete &= pd.to_numeric(frame[column], errors="coerce").notna()
+            values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
+            complete &= np.isfinite(values)
     return complete
 
 
@@ -145,8 +151,9 @@ def completed_daily_bars(
     complete = _complete_rows(completed)
     if not complete.any():
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
-    completed = completed.loc[: complete[complete].index[-1]]
-    if not complete.loc[completed.index].all():
+    last_complete = int(np.flatnonzero(complete)[-1])
+    completed = completed.iloc[: last_complete + 1]
+    if not complete[: last_complete + 1].all():
         # An interior hole would silently shorten every moving-average window.
         raise ProviderUnavailable("yfinance", "incomplete_daily_bars", operation="daily_bars")
 

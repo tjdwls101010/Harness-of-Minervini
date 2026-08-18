@@ -20,8 +20,10 @@ def raw_snapshot(
     observed_et = observed_at.astimezone(ET)
     observed_session_date = observed_et.date()
     requested_date = date.fromisoformat(str(as_of)) if as_of is not None else observed_session_date
-    if as_of is not None and (
-        requested_date != last_completed_session(observed_at) or is_regular_session_open(observed_at)
+    # A live page can stand for a completed session only while none is running.
+    # An undated request still gets stamped with a session date, so it is gated too.
+    if is_regular_session_open(observed_at) or (
+        as_of is not None and requested_date != last_completed_session(observed_at)
     ):
         raise ProviderUnavailable("finviz", "historical_snapshot_unavailable", operation="raw_snapshot")
     elapsed_since_close = int((observed_et - session_close(requested_date)).total_seconds())

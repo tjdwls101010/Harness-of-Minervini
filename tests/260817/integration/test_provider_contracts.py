@@ -92,6 +92,24 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 17))
         self.assertFalse(snapshot.meta.stale)
 
+    def test_an_infinite_price_is_not_a_completed_bar(self) -> None:
+        index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
+        frame = pd.DataFrame({"Close": [10.2, 11.2, float("inf")]}, index=index)
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
+
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
+        self.assertTrue(snapshot.meta.stale)
+
+    def test_a_repeated_session_never_truncates_the_history_to_the_wrong_bar(self) -> None:
+        index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-14", "2026-08-17"])
+        frame = pd.DataFrame({"Close": [10.2, 11.2, 11.3, float("nan")]}, index=index)
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
+
+        self.assertEqual(len(snapshot.data), 3)
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
+
     def test_a_gap_inside_the_history_is_unavailable_rather_than_silently_compressed(self) -> None:
         index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
         frame = pd.DataFrame({"Close": [10.0, float("nan"), 12.0]}, index=index)
@@ -192,6 +210,15 @@ class ProviderContractTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.reason, "historical_snapshot_unavailable")
         self.assertEqual(calls, 0)
+
+    def test_finviz_refuses_an_undated_request_while_a_session_is_running(self) -> None:
+        with self.assertRaises(ProviderUnavailable) as raised:
+            raw_snapshot(
+                fetch=lambda: self.fail("an open session must never reach the network"),
+                retrieved_at=datetime(2026, 8, 17, 15, 0, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(raised.exception.reason, "historical_snapshot_unavailable")
 
     def test_finviz_serves_the_completed_session_overnight_and_discloses_the_later_observation(self) -> None:
         html = FIXTURES.joinpath("finviz.html").read_text()
