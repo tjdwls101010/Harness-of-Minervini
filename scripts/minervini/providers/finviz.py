@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 from typing import Callable
 
-from ..clock import ET, last_completed_session
+from ..clock import ET, is_regular_session_open, last_completed_session, session_close
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 
 
@@ -17,12 +17,16 @@ def raw_snapshot(
     """Preserve raw current Finviz evidence and refuse a false historical snapshot."""
 
     observed_at = retrieved_at or datetime.now(timezone.utc)
-    observed_session_date = observed_at.astimezone(ET).date()
+    observed_et = observed_at.astimezone(ET)
+    observed_session_date = observed_et.date()
     requested_date = date.fromisoformat(str(as_of)) if as_of is not None else observed_session_date
-    if as_of is not None and (
-        requested_date != observed_session_date or last_completed_session(observed_at) != requested_date
+    # A live page can stand for a completed session only while none is running.
+    # An undated request still gets stamped with a session date, so it is gated too.
+    if is_regular_session_open(observed_at) or (
+        as_of is not None and requested_date != last_completed_session(observed_at)
     ):
         raise ProviderUnavailable("finviz", "historical_snapshot_unavailable", operation="raw_snapshot")
+    elapsed_since_close = int((observed_et - session_close(requested_date)).total_seconds())
     document = fetch_with_one_retry("finviz", "raw_snapshot", fetch)
     if not isinstance(document, str):
         raise ProviderUnavailable("finviz", "invalid_raw_snapshot", operation="raw_snapshot")
@@ -32,7 +36,13 @@ def raw_snapshot(
             provider="finviz",
             retrieved_at=observed_at,
             as_of=requested_date,
-            coverage={"kind": "current_raw_snapshot_only", "historical": False},
+            coverage={
+                "kind": "current_raw_snapshot_only",
+                "historical": False,
+                "observed_at_et": observed_et.isoformat(),
+                "observed_after_session_close": elapsed_since_close > 0,
+                "seconds_after_session_close": elapsed_since_close,
+            },
             content_sha256=sha256(document.encode("utf-8")).hexdigest(),
         ),
     )

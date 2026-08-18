@@ -32,6 +32,19 @@ cd Harness-of-Minervini
 bash scripts/bootstrap.sh
 ```
 
+Filed fundamentals come from SEC EDGAR, which requires every automated caller to identify itself. Export your own name and email before asking for fundamentals; without it `ticker fundamentals` stops before making a request:
+
+```bash
+export MINERVINI_SEC_USER_AGENT='Your Name you@example.com'
+```
+
+Confirm the runtime can actually answer. `health` is offline and instant; `--probe` additionally makes one cheap request per probed provider and names any that cannot be reached:
+
+```bash
+scripts/.venv/bin/python scripts/pipeline health
+scripts/.venv/bin/python scripts/pipeline health --probe
+```
+
 Open the repository in Claude Code or Codex and ask naturally:
 
 ```text

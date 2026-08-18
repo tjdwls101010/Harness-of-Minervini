@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import pathlib
 import sys
+import time
 import unittest
 
 
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from minervini.fundamentals import evaluate_fundamentals
 from minervini.providers import ProviderUnavailable
 from minervini.providers.sec import (
+    MIN_REQUEST_INTERVAL_SECONDS,
     fetch_company_facts,
     fetch_company_submissions,
     fetch_company_tickers,
@@ -119,6 +121,15 @@ class SecProviderTests(unittest.TestCase):
 
         self.assertEqual(original["quarterly"]["eps"][-1]["value"], 0.7)
         self.assertEqual(amended["quarterly"]["eps"][-1]["value"], 0.75)
+
+    def test_consecutive_sec_documents_are_spaced_under_the_published_rate_limit(self) -> None:
+        payload = json.loads((FIXTURES / "company_tickers.json").read_text())
+        started = time.monotonic()
+
+        fetch_company_tickers(request_get=lambda *a, **k: FixtureResponse(payload), user_agent=USER_AGENT)
+        fetch_company_tickers(request_get=lambda *a, **k: FixtureResponse(payload), user_agent=USER_AGENT)
+
+        self.assertGreaterEqual(time.monotonic() - started, MIN_REQUEST_INTERVAL_SECONDS)
 
     def test_rejects_an_unidentifiable_user_agent_before_making_a_request(self) -> None:
         request_get = FixtureGet()

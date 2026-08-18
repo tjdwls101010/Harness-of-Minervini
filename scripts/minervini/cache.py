@@ -18,7 +18,9 @@ from . import SCHEMA_VERSION
 from .providers import ProviderSnapshot, SnapshotMeta
 
 
-CACHE_SCHEMA_VERSION = "1"
+# Bumped when a stored snapshot's meaning changes. Version 1 accepted an
+# unfinished daily bar as a completed session, so those entries must not be read.
+CACHE_SCHEMA_VERSION = "2"
 
 T = TypeVar("T")
 
@@ -224,6 +226,10 @@ class ProviderCache:
         snapshot = fetch()
         if not isinstance(snapshot, ProviderSnapshot):
             raise TypeError("provider cache fetch must return a ProviderSnapshot")
+        if snapshot.meta.stale:
+            # The session this snapshot missed will be filled in by the provider
+            # later; storing it now would pin the gap for as long as the key lives.
+            return snapshot
         document = {
             "cache_schema_version": CACHE_SCHEMA_VERSION,
             "runtime_schema_version": SCHEMA_VERSION,

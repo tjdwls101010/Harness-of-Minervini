@@ -6,13 +6,15 @@ import json
 import re
 from typing import Any, Callable, Iterable, Mapping
 
-from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
+from . import ProviderSnapshot, ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry
 
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_COMPANYFACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_PROVIDER = "sec"
+MIN_REQUEST_INTERVAL_SECONDS = 0.15
+_THROTTLE = RequestThrottle(MIN_REQUEST_INTERVAL_SECONDS)
 _FORM_TYPES = {"10-Q", "10-K", "20-F"}
 _QUARTERLY_METRICS = {
     "eps": ("EarningsPerShareDiluted", "BasicAndDilutedEarningsLossPerShare"),
@@ -256,6 +258,7 @@ def _request_json(operation: str, url: str, request_get: Callable[..., Any], use
     _validate_user_agent(user_agent)
 
     def fetch() -> Mapping[str, Any]:
+        _THROTTLE.wait()
         response = request_get(url, headers={"User-Agent": user_agent}, timeout=30)
         response.raise_for_status()
         payload = response.json()

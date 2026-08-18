@@ -74,6 +74,10 @@ def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
             "judgment": judgment,
             "evidence": regime_evidence,
             "qqq_switch_is_context_only": True,
+            # Finviz publishes only a live page, so breadth is a current
+            # observation standing in for the completed session, never a
+            # measurement taken at its close.
+            "breadth_is_context_only": True,
         },
         "signal_vector": vector,
         "group_ranks": {"sectors": sector_ranks, "industries": industry_ranks},

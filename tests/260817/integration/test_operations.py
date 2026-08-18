@@ -46,6 +46,22 @@ def price_snapshot(*, rising: bool = True, as_of: str = AS_OF) -> ProviderSnapsh
     )
 
 
+def stale_price_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
+    """A history the provider could only complete through the session before as_of."""
+
+    snapshot = price_snapshot(as_of="2025-12-30")
+    return ProviderSnapshot(
+        snapshot.data,
+        SnapshotMeta(
+            provider="fixture-prices",
+            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            as_of=date(2025, 12, 30),
+            coverage={"completed_only": True, "requested_session": as_of, "last_completed_bar": "2025-12-30"},
+            stale=True,
+        ),
+    )
+
+
 def rs_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[dict[str, object]]:
     return ProviderSnapshot(
         {"ticker": "TEST", "rating": 94, "rating_date": as_of},
@@ -190,9 +206,147 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "partial")
         self.assertEqual(payload["data"]["eligibility_state"], "avoid")
-        self.assertIn("fixture-rs", {item["provider"] for item in payload["missing"]})
+        self.assertIn("fixture-rs", {item.get("provider") for item in payload["missing"]})
         rs = next(signal for signal in payload["signals"] if signal["id"] == "trend_template.relative_strength_minimum")
         self.assertEqual(rs["state"], "unavailable")
+
+    def test_an_unavailable_provider_reports_why_it_failed(self) -> None:
+        def unavailable_rs(ticker: str, as_of: str) -> ProviderSnapshot[dict[str, object]]:
+            raise ProviderUnavailable(
+                "fixture-rs",
+                "request_failed",
+                operation="dates",
+                detail="ConnectionError: certificate verify failed",
+            )
+
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: price_snapshot(),
+            rs_rating=unavailable_rs,
+        )
+
+        payload = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        gap = next(item for item in payload["missing"] if item["provider"] == "fixture-rs")
+        self.assertEqual(gap["detail"], "ConnectionError: certificate verify failed")
+
+    def test_qualify_refuses_to_judge_eligibility_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: stale_price_snapshot(),
+            rs_rating=lambda ticker, as_of: rs_snapshot(),
+        )
+
+        payload = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["eligibility_state"], "incomplete")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+        self.assertEqual(payload["next_capabilities"], [])
+
+    def test_setup_refuses_to_judge_a_setup_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute("ticker.setup", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_risk_withholds_a_hold_or_sell_when_price_history_is_a_session_behind(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "as_of": AS_OF, "mode": "active", "entry_price": 100.0, "entry_date": "2025-12-01", "stop_price": 94.0},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_a_proven_stop_breach_survives_price_history_that_stops_early(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "as_of": AS_OF, "mode": "active", "entry_price": 200.0, "entry_date": "2025-12-01", "stop_price": 190.0},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "breached")
+
+    def test_chart_writes_no_artifact_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute("ticker.chart", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["side_effects"], [])
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_market_snapshot_does_not_read_the_index_switch_from_a_stale_session(self) -> None:
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: stale_price_snapshot(),
+            finviz_breadth=lambda as_of: (_ for _ in ()).throw(ProviderUnavailable("finviz", "raw_snapshot_unavailable")),
+            sector_ranking=lambda as_of: list_snapshot("ibd-rs-rating", []),
+            industry_ranking=lambda as_of: list_snapshot("ibd-rs-rating", []),
+            market_leaders=lambda as_of, limit: list_snapshot("ibd-rs-rating", []),
+        )
+
+        payload = execute("market.snapshot", {"as_of": AS_OF, "trade_traction": "supports"}, runtime=runtime)
+
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+        switch = next(s for s in payload["signals"] if s["id"] == "qqq_21ema_switch")
+        self.assertEqual(switch["state"], "unavailable")
+
+    def test_health_keeps_its_offline_contract_unless_a_probe_is_requested(self) -> None:
+        runtime = Runtime(
+            reachability_probes={"fixture-rs": lambda: self.fail("health must not reach a provider by default")},
+        )
+
+        payload = execute("health", {}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["reachability"], {"checked": False, "providers": {}})
+        self.assertTrue(payload["data"]["configuration"]["tls_ca_bundle"]["ready"])
+        self.assertIn("sec_user_agent", payload["data"]["configuration"])
+
+    def test_health_probe_names_the_provider_that_cannot_be_reached_and_why(self) -> None:
+        def unreachable() -> None:
+            raise ProviderUnavailable(
+                "fixture-rs",
+                "request_failed",
+                operation="dates",
+                detail="ConnectionError: certificate verify failed",
+            )
+
+        runtime = Runtime(
+            reachability_probes={"fixture-rs": unreachable, "fixture-prices": lambda: None},
+        )
+
+        payload = execute("health", {"probe": True}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertFalse(payload["data"]["ready"])
+        self.assertTrue(payload["data"]["reachability"]["checked"])
+        providers = payload["data"]["reachability"]["providers"]
+        self.assertTrue(providers["fixture-prices"]["reachable"])
+        self.assertFalse(providers["fixture-rs"]["reachable"])
+        self.assertEqual(providers["fixture-rs"]["detail"], "ConnectionError: certificate verify failed")
+
+    def test_a_probe_that_breaks_reports_an_unreachable_provider_not_an_internal_error(self) -> None:
+        def broken() -> None:
+            raise ModuleNotFoundError("No module named 'rs_rating'")
+
+        runtime = Runtime(reachability_probes={"fixture-rs": broken})
+
+        payload = execute("health", {"probe": True}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        provider = payload["data"]["reachability"]["providers"]["fixture-rs"]
+        self.assertFalse(provider["reachable"])
+        self.assertIn("ModuleNotFoundError", provider["detail"])
+        self.assertIn("fixture-rs", {item.get("provider") for item in payload["missing"]})
 
     def test_market_candidates_filters_provider_records_and_preserves_pagination(self) -> None:
         records = [

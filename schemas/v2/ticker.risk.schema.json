@@ -193,7 +193,7 @@
     "status_meanings": {
       "needs_input": "Required evidence is missing, so the domain verdict is INCOMPLETE.",
       "ok": "A complete BUY-READY, WAIT, AVOID, HOLD, or SELL verdict was produced; active HOLD includes a clear completed stop path.",
-      "partial": "The completed-price provider failed or could not cover the full active stop window.",
+      "partial": "The completed-price provider failed, could not cover the full active stop window, or stopped before the requested session.",
       "unavailable": "An internal required capability cannot be evaluated."
     },
     "summary": "Reduce converged prospective evidence to BUY-READY, WAIT, AVOID, or INCOMPLETE, or active-position evidence to HOLD, SELL, or INCOMPLETE."

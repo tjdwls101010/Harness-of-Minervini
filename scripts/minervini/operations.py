@@ -27,7 +27,7 @@ from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
-from .providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from .providers import DETAIL_LIMIT, ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry, redact
 from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
@@ -152,6 +152,65 @@ def _default_industry_top(industry: str, as_of: str, limit: int) -> ProviderSnap
     return industry_top_snapshot(industry, as_of, n=limit)
 
 
+def _probe_rs() -> None:
+    from .providers.rs import _client
+
+    fetch_with_one_retry("ibd-rs-rating", "dates", _client().dates)
+
+
+def _probe_sec() -> None:
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    if not user_agent:
+        raise ProviderUnavailable("sec", "identifiable_user_agent_required", operation="company_tickers")
+    import requests
+
+    fetch_company_tickers(request_get=requests.get, user_agent=user_agent)
+
+
+def _local_configuration() -> dict[str, dict[str, Any]]:
+    """Report the local settings that silently disable a provider when absent.
+
+    Both were dead here without the runtime saying so: an unpopulated CA bundle
+    kills every stdlib-TLS provider, and an unset SEC User-Agent stops filed
+    fundamentals before a request is made.
+    """
+
+    import ssl
+
+    ca_certificates = ssl.create_default_context().cert_store_stats()["x509_ca"]
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    return {
+        "tls_ca_bundle": {
+            "ready": ca_certificates > 0,
+            "required": True,
+            "detail": None if ca_certificates else "the interpreter loaded no CA certificates; stdlib TLS cannot verify any host",
+        },
+        "sec_user_agent": {
+            "ready": bool(user_agent),
+            "required": False,
+            "detail": None if user_agent else "MINERVINI_SEC_USER_AGENT is unset; ticker fundamentals cannot reach SEC",
+        },
+    }
+
+
+def _probe_yfinance() -> None:
+    import yfinance as yf
+
+    frame = fetch_with_one_retry("yfinance", "daily_bars", lambda: yf.Ticker("SPY").history(period="5d", interval="1d"))
+    if frame is None or frame.empty:
+        raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
+
+
+def _default_reachability_probes() -> dict[str, Callable[[], None]]:
+    """Name the cheapest decisive call per probed provider.
+
+    Nasdaq's security master is a multi-megabyte download, so it is deliberately
+    not probed; its failures surface loudly in the operations that need it.
+    """
+
+    return {"yfinance": _probe_yfinance, "ibd-rs-rating": _probe_rs, "sec": _probe_sec}
+
+
 @dataclass(frozen=True)
 class Runtime:
     """Replace only external boundaries in deterministic integration tests."""
@@ -167,6 +226,7 @@ class Runtime:
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
+    reachability_probes: Mapping[str, Callable[[], None]] = field(default_factory=_default_reachability_probes)
     cache: ProviderCache | None = None
 
 
@@ -234,8 +294,29 @@ def _source(meta: SnapshotMeta) -> dict[str, Any]:
     }
 
 
-def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> dict[str, Any]:
+def _stale_price_gap(meta: SnapshotMeta) -> dict[str, Any] | None:
+    """Report price history that could not reach the requested completed session.
+
+    A verdict computed from the previous session but stamped with this one is
+    indistinguishable from a current verdict, so callers withhold the judgment
+    rather than qualifying it.
+    """
+
+    if not meta.stale:
+        return None
     return {
+        "id": "completed_price_evidence",
+        "provider": meta.provider,
+        "reason": "session_behind_as_of",
+        "required": True,
+        "attempts": 1,
+        "retryable": True,
+        "detail": f"last completed bar {meta.coverage.get('last_completed_bar')} is behind requested session {meta.coverage.get('requested_session')}",
+    }
+
+
+def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> dict[str, Any]:
+    gap = {
         "id": error.operation or error.provider,
         "provider": error.provider,
         "reason": error.reason,
@@ -243,6 +324,9 @@ def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> d
         "attempts": error.attempts,
         "retryable": error.retryable,
     }
+    if error.detail:
+        gap["detail"] = error.detail
+    return gap
 
 
 def _clock_operation(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -255,7 +339,7 @@ def _clock_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def _health(request: Mapping[str, Any]) -> dict[str, Any]:
+def _health(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     clock = _clock(request.get("as_of"))
     dependencies: dict[str, dict[str, Any]] = {}
     for distribution, required in (("ibd-rs-rating", REQUIRED_PACKAGE_VERSION), ("yfinance", None)):
@@ -269,18 +353,50 @@ def _health(request: Mapping[str, Any]) -> dict[str, Any]:
             "ready": installed is not None and (required is None or installed == required),
         }
     doctrine = validate_doctrine()
+    configuration = _local_configuration()
     ready = doctrine["valid"] and all(item["ready"] for item in dependencies.values())
+    ready = ready and all(item["ready"] for item in configuration.values() if item["required"])
     missing = [
         {"id": name, "reason": "package_missing_or_version_mismatch", "required": True}
         for name, item in dependencies.items()
         if not item["ready"]
     ]
+    missing.extend(
+        {"id": name, "reason": "local_configuration_missing", "required": item["required"], "detail": item["detail"]}
+        for name, item in configuration.items()
+        if not item["ready"]
+    )
+    data: dict[str, Any] = {
+        "ready": ready,
+        "python": sys.version.split()[0],
+        "dependencies": dependencies,
+        "configuration": configuration,
+        "doctrine": doctrine,
+        "reachability": {"checked": False, "providers": {}},
+    }
+    if request.get("probe") is True:
+        probed: dict[str, Any] = {}
+        for name, probe in runtime.reachability_probes.items():
+            try:
+                probe()
+            except ProviderUnavailable as error:
+                probed[name] = {"reachable": False, "reason": error.reason, "detail": error.detail}
+                missing.append(_missing_provider(error))
+            except Exception as error:  # A diagnostic must diagnose, never become the failure.
+                detail = redact(f"{type(error).__name__}: {error}")[:DETAIL_LIMIT]
+                probed[name] = {"reachable": False, "reason": "probe_failed", "detail": detail}
+                missing.append({"id": name, "provider": name, "reason": "probe_failed", "required": True, "attempts": 1, "retryable": True, "detail": detail})
+            else:
+                probed[name] = {"reachable": True, "reason": None, "detail": None}
+        ready = ready and all(item["reachable"] for item in probed.values())
+        data["ready"] = ready
+        data["reachability"] = {"checked": True, "providers": probed}
     return envelope(
         "health",
         request=_clean_request(request),
         as_of=_as_of(clock),
         status="ok" if ready else "partial",
-        data={"ready": ready, "python": sys.version.split()[0], "dependencies": dependencies, "doctrine": doctrine},
+        data=data,
         missing=missing,
     )
 
@@ -331,6 +447,18 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         )
 
     sources = [_source(prices.meta)]
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.qualify",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "eligibility_state": "incomplete", "price_as_of": prices.meta.as_of.isoformat() if prices.meta.as_of else None},
+            missing=[stale_price],
+            sources=sources,
+            next_capabilities=[],
+        )
     missing: list[dict[str, Any]] = []
     rating: int | None = None
     rating_date: str | None = None
@@ -405,6 +533,17 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             status="unavailable",
             data={"ticker": ticker, "setup_state": "incomplete"},
             missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.setup",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "setup_state": "incomplete"},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
         )
     judgments = request.get("chart_judgments")
     if judgments is not None and not isinstance(judgments, Mapping):
@@ -603,8 +742,14 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing["ticker"] = symbol
             provider_missing.append(missing)
         else:
-            completed_prices[symbol] = prices.data
             sources.append(_source(prices.meta))
+            stale_price = _stale_price_gap(prices.meta)
+            if stale_price is not None:
+                stale_price["ticker"] = symbol
+                stale_price["required"] = symbol == ticker
+                provider_missing.append(stale_price)
+            else:
+                completed_prices[symbol] = prices.data
 
     try:
         collected = collect_same_industry_peer_rows(
@@ -792,6 +937,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         raise RequestError("trade_traction must be supports, contradicts, mixed, or needs_input", "trade_traction")
 
     sources: list[dict[str, Any]] = []
+    succeeded: list[ProviderSnapshot[Any]] = []
     provider_missing: list[dict[str, Any]] = []
 
     def collect(fetch: Callable[[], ProviderSnapshot[Any]]) -> ProviderSnapshot[Any] | None:
@@ -801,6 +947,11 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
             provider_missing.append(_missing_provider(error, required=False))
             return None
         sources.append(_source(snapshot.meta))
+        stale_price = _stale_price_gap(snapshot.meta)
+        if stale_price is not None:
+            provider_missing.append(stale_price)
+            return None
+        succeeded.append(snapshot)
         return snapshot
 
     qqq = collect(
@@ -889,7 +1040,8 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     missing = [*provider_missing, *result["missing"], *section_missing]
     if trade_traction == "needs_input":
         missing.append({"id": "trade_traction", "reason": "user_feedback_required", "required": True})
-    if not sources:
+    if not succeeded:
+        # A snapshot that was fetched but discarded is provenance, not evidence.
         status = "unavailable"
     elif trade_traction in {None, "needs_input"}:
         status = "needs_input"
@@ -907,7 +1059,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         missing=missing,
         sources=sources,
         doctrine_ids=["scope.data_integrity"],
-        next_capabilities=["market.candidates", "ticker.qualify"] if sources else [],
+        next_capabilities=["market.candidates", "ticker.qualify"] if succeeded else [],
     )
 
 
@@ -943,15 +1095,6 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    if latest_date < as_of:
-        return {
-            "state": "unavailable",
-            "reason": "history_ends_before_as_of",
-            "requested_from": effective_date.isoformat(),
-            "last_available": latest_date.isoformat(),
-            "requested_through": as_of.isoformat(),
-        }, current_price
-
     path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date]
     if not path_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
@@ -973,6 +1116,17 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
             }, current_price
+    if latest_date < as_of:
+        # No breach in the bars that exist. A later missing bar cannot prove HOLD,
+        # but it could never have erased a breach found above either.
+        return {
+            "state": "unavailable",
+            "reason": "history_ends_before_as_of",
+            "requested_from": effective_date.isoformat(),
+            "last_available": latest_date.isoformat(),
+            "requested_through": as_of.isoformat(),
+            "bars_checked": len(path_rows),
+        }, current_price
     return {
         "state": "clear",
         "basis": "completed_daily_low",
@@ -1038,14 +1192,24 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         except ProviderUnavailable as error:
             provider_missing.append(_missing_provider(error))
         else:
-            if stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool):
-                price_path, current_price = _completed_stop_path(
+            sources.append(_source(prices.meta))
+            stale_price = _stale_price_gap(prices.meta)
+            if stale_price is not None:
+                provider_missing.append(stale_price)
+            has_stop = stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool)
+            current_price = None
+            if has_stop:
+                # Runs even when the history stops early: a completed breach is
+                # irreversible, and a later missing bar cannot undo one.
+                price_path, path_price = _completed_stop_path(
                     prices.data,
                     effective_date=stop_effective_date,
                     as_of=clock.date,
                     stop_price=float(stop_price),
                 )
                 evidence["completed_price_path"] = price_path
+                if stale_price is None:
+                    current_price = path_price
                 if price_path.get("state") == "unavailable":
                     provider_missing.append(
                         {
@@ -1057,15 +1221,15 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                             "retryable": False,
                         }
                     )
-            else:
-                price_path = None
+            elif stale_price is None:
+                # A price from an earlier session can only make a position look
+                # safer than the evidence supports, so it is withheld entirely.
                 try:
                     current_price = float(prices.data["Close"].iloc[-1])
                 except (AttributeError, KeyError, IndexError, TypeError, ValueError):
                     current_price = None
             if current_price is not None:
                 evidence["current_price"] = current_price
-            sources.append(_source(prices.meta))
     result = reduce_risk(evidence)
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}
@@ -1107,6 +1271,17 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             status="unavailable",
             data={"ticker": ticker},
             missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
         )
     output_dir = request.get("output_dir")
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
@@ -1226,7 +1401,7 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
     if operation == "clock":
         return _clock_operation(request)
     if operation == "health":
-        return _health(request)
+        return _health(request, runtime)
     if operation == "doctrine.show":
         return _doctrine_show(request)
     if operation == "ticker.qualify":

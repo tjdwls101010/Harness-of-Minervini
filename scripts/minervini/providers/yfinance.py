@@ -6,10 +6,29 @@ import re
 from typing import Any
 import unicodedata
 
+import numpy as np
 import pandas as pd
 
 from ..clock import resolve_as_of
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
+
+
+OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
+
+
+def _complete_rows(frame: pd.DataFrame) -> np.ndarray:
+    """Mark the rows whose every present OHLCV value is a finite number.
+
+    Positional rather than label-indexed: a provider may repeat a session, and a
+    label slice would then keep or drop every row sharing that timestamp.
+    """
+
+    complete = np.ones(len(frame), dtype=bool)
+    for column in OHLCV_COLUMNS:
+        if column in frame:
+            values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
+            complete &= np.isfinite(values)
+    return complete
 
 
 def _index_dates(frame: pd.DataFrame) -> pd.Series:
@@ -126,13 +145,28 @@ def completed_daily_bars(
     if completed.empty:
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
 
+    # A session the provider has not finished writing arrives with the price fields
+    # blank. Treating it as completed is what let two different sessions be mixed
+    # into one verdict, so completion is decided here rather than by each consumer.
+    complete = _complete_rows(completed)
+    if not complete.any():
+        raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
+    # Blank rows before a listing began are not the history's problem; blank rows
+    # between real sessions are, because they silently shorten every average.
+    filled = np.flatnonzero(complete)
+    first_complete, last_complete = int(filled[0]), int(filled[-1])
+    completed = completed.iloc[first_complete : last_complete + 1]
+    if not complete[first_complete : last_complete + 1].all():
+        raise ProviderUnavailable("yfinance", "incomplete_daily_bars", operation="daily_bars")
+
+    last_completed_bar = _index_dates(completed).iloc[-1]
     observed_at = retrieved_at or datetime.now(timezone.utc)
     return ProviderSnapshot(
         data=completed,
         meta=SnapshotMeta(
             provider="yfinance",
             retrieved_at=observed_at,
-            as_of=clock.date,
+            as_of=last_completed_bar,
             coverage={
                 "interval": "1d",
                 "completed_only": True,
@@ -140,6 +174,9 @@ def completed_daily_bars(
                 "requested_start": start,
                 "requested_end_exclusive": end,
                 "adjusted": False,
+                "requested_session": clock.date.isoformat(),
+                "last_completed_bar": last_completed_bar.isoformat(),
             },
+            stale=last_completed_bar != clock.date,
         ),
     )

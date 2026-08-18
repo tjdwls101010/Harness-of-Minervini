@@ -58,6 +58,51 @@ class ProviderCacheIntegrationTests(unittest.TestCase):
             self.assertEqual(other_session.data, {"ticker": "AAPL"})
             self.assertEqual(calls, ["fetch", "fetch"])
 
+    def test_a_snapshot_that_missed_the_requested_session_is_never_stored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = ProviderCache(root=Path(directory))
+            calls: list[str] = []
+
+            def fetch() -> ProviderSnapshot[dict[str, str]]:
+                calls.append("fetch")
+                return ProviderSnapshot(
+                    {"ticker": "AAOI"},
+                    SnapshotMeta(
+                        provider="yfinance",
+                        retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
+                        as_of=date(2026, 8, 14),
+                        stale=True,
+                    ),
+                )
+
+            cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
+            cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
+
+            self.assertEqual(calls, ["fetch", "fetch"])
+            self.assertEqual(list(cache.path.glob("*.json")), [])
+
+    def test_entries_written_before_the_partial_bar_fix_are_never_served(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache = ProviderCache(root=Path(directory))
+            calls: list[str] = []
+
+            def fetch() -> ProviderSnapshot[dict[str, str]]:
+                calls.append("fetch")
+                return ProviderSnapshot(
+                    {"ticker": "AAOI"},
+                    SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc), as_of=date(2026, 8, 14)),
+                )
+
+            cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
+            entry = next(cache.path.glob("*.json"))
+            document = json.loads(entry.read_text())
+            document["cache_schema_version"] = "1"
+            entry.write_text(json.dumps(document), encoding="utf-8")
+
+            cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
+
+            self.assertEqual(calls, ["fetch", "fetch"])
+
     def test_resolve_cache_dir_uses_repo_state_by_default_and_environment_override(self) -> None:
         root = Path("/repository")
 

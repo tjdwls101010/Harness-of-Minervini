@@ -9,6 +9,7 @@ from typing import Any
 from .capabilities import CAPABILITIES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
+from .providers import redact
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -94,6 +95,7 @@ def build_parser() -> JsonArgumentParser:
     describe = _capability_parser(sub, "describe", "describe")
     describe.add_argument("capability", help=_input_help("describe", "capability"))
     health = _capability_parser(sub, "health", "health")
+    health.add_argument("--probe", action="store_true", help=_input_help("health", "probe"))
     _common(health, "health")
     clock = _capability_parser(sub, "clock", "clock")
     _common(clock, "clock")
@@ -309,7 +311,7 @@ def main(argv: list[str] | None = None, *, runtime: Runtime | None = None) -> in
         payload = envelope(
             operation,
             status="unavailable",
-            data={"error": {"code": "internal_error", "message": str(error), "field": None, "retryable": False}},
+            data={"error": {"code": "internal_error", "message": redact(str(error)), "field": None, "retryable": False}},
         )
         code = 3
     payload = format_payload(payload, output_format)

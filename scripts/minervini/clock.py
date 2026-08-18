@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 
 ET = ZoneInfo("America/New_York")
+REGULAR_OPEN = dt.time(9, 30)
 REGULAR_CLOSE = dt.time(16, 0)
 EARLY_CLOSE = dt.time(13, 0)
 
@@ -95,11 +96,35 @@ def is_early_close(day: dt.date) -> bool:
     return day == thanksgiving + dt.timedelta(days=1) or (day.month, day.day) in {(7, 3), (12, 24)}
 
 
-def last_completed_session(now: dt.datetime | None = None) -> dt.date:
+def session_close(day: dt.date) -> dt.datetime:
+    """Return the scheduled closing bell of one completed trading session."""
+
+    return dt.datetime.combine(day, EARLY_CLOSE if is_early_close(day) else REGULAR_CLOSE, tzinfo=ET)
+
+
+def is_regular_session_open(now: dt.datetime | None = None) -> bool:
+    """Report whether a US regular session is trading right now.
+
+    Live provider snapshots describe the session in progress, so they may only
+    stand in for a completed session while no session is open.
+    """
+
+    now_et = _as_et(now)
+    day = now_et.date()
+    if not is_trading_day(day):
+        return False
+    return dt.datetime.combine(day, REGULAR_OPEN, tzinfo=ET) <= now_et < session_close(day)
+
+
+def _as_et(now: dt.datetime | None) -> dt.datetime:
     observed = now or dt.datetime.now(tz=ET)
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=dt.datetime.now().astimezone().tzinfo)
-    now_et = observed.astimezone(ET)
+    return observed.astimezone(ET)
+
+
+def last_completed_session(now: dt.datetime | None = None) -> dt.date:
+    now_et = _as_et(now)
     day = now_et.date()
     if is_trading_day(day):
         close = dt.datetime.combine(day, EARLY_CLOSE if is_early_close(day) else REGULAR_CLOSE, tzinfo=ET)
