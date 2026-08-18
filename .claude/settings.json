@@ -7,5 +7,19 @@
       "Bash(scripts/.venv/bin/python scripts/pipeline *)",
       "Bash(bash scripts/bootstrap.sh)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/provider-readiness.sh",
+            "args": []
+          }
+        ]
+      }
+    ]
   }
 }

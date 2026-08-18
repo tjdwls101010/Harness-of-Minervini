@@ -53,3 +53,7 @@ PY
 
 PYTHONPATH="$repo_root/scripts" "$canonical_python" "$repo_root/scripts/pipeline" health >/dev/null
 echo "Offline v2 health check passed."
+
+if [[ -z "${MINERVINI_SEC_USER_AGENT:-}" ]]; then
+  echo "Note: export MINERVINI_SEC_USER_AGENT='Your Name you@example.com' before using 'ticker fundamentals'; SEC EDGAR refuses unidentified automated callers." >&2
+fi
