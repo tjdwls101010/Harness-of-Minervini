@@ -129,6 +129,16 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(len(snapshot.data), 3)
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
 
+    def test_blank_rows_before_a_listing_started_are_trimmed_not_called_a_gap(self) -> None:
+        index = pd.to_datetime(["2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"])
+        frame = pd.DataFrame({"Close": [float("nan"), float("nan"), 11.2, 12.0]}, index=index)
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
+
+        self.assertEqual(len(snapshot.data), 2)
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
+        self.assertFalse(snapshot.meta.stale)
+
     def test_a_gap_inside_the_history_is_unavailable_rather_than_silently_compressed(self) -> None:
         index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
         frame = pd.DataFrame({"Close": [10.0, float("nan"), 12.0]}, index=index)

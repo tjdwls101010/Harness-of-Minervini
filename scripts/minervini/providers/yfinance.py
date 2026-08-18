@@ -151,10 +151,12 @@ def completed_daily_bars(
     complete = _complete_rows(completed)
     if not complete.any():
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
-    last_complete = int(np.flatnonzero(complete)[-1])
-    completed = completed.iloc[: last_complete + 1]
-    if not complete[: last_complete + 1].all():
-        # An interior hole would silently shorten every moving-average window.
+    # Blank rows before a listing began are not the history's problem; blank rows
+    # between real sessions are, because they silently shorten every average.
+    filled = np.flatnonzero(complete)
+    first_complete, last_complete = int(filled[0]), int(filled[-1])
+    completed = completed.iloc[first_complete : last_complete + 1]
+    if not complete[first_complete : last_complete + 1].all():
         raise ProviderUnavailable("yfinance", "incomplete_daily_bars", operation="daily_bars")
 
     last_completed_bar = _index_dates(completed).iloc[-1]
