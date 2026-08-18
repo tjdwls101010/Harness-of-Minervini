@@ -74,7 +74,8 @@
     },
     "limitations": [
       "QQQ versus 21 EMA is context only and cannot authorize risk-on by itself.",
-      "Finviz breadth is a current completed-session snapshot and cannot reconstruct an uncaptured historical page.",
+      "Finviz publishes only a live page, so breadth is a current observation standing in for the completed session; it is context evidence and the envelope discloses how long after the close it was read.",
+      "Breadth is refused outright while a regular session is open, and an uncaptured historical page can never be reconstructed.",
       "A missing source remains unavailable; no web or proxy number replaces it."
     ],
     "output": "A transparent signal vector, regime judgment, ranked groups, leader observations, missing evidence, and source metadata.",
@@ -83,7 +84,7 @@
     "status_meanings": {
       "needs_input": "Trade traction is absent even though provider evidence may exist.",
       "ok": "All requested evidence is available, including trade traction.",
-      "partial": "Some independent sources or breadth sections are unavailable.",
+      "partial": "Some independent sources or breadth sections are unavailable, or an index history stopped before the requested session.",
       "unavailable": "No market evidence source succeeded."
     },
     "summary": "Measure market regime, breadth, sector and industry leadership, and leading-stock evidence without forcing a bullish score."

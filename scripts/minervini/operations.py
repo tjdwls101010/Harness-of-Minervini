@@ -167,6 +167,32 @@ def _probe_sec() -> None:
     fetch_company_tickers(request_get=requests.get, user_agent=user_agent)
 
 
+def _local_configuration() -> dict[str, dict[str, Any]]:
+    """Report the local settings that silently disable a provider when absent.
+
+    Both were dead here without the runtime saying so: an unpopulated CA bundle
+    kills every stdlib-TLS provider, and an unset SEC User-Agent stops filed
+    fundamentals before a request is made.
+    """
+
+    import ssl
+
+    ca_certificates = ssl.create_default_context().cert_store_stats()["x509_ca"]
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    return {
+        "tls_ca_bundle": {
+            "ready": ca_certificates > 0,
+            "required": True,
+            "detail": None if ca_certificates else "the interpreter loaded no CA certificates; stdlib TLS cannot verify any host",
+        },
+        "sec_user_agent": {
+            "ready": bool(user_agent),
+            "required": False,
+            "detail": None if user_agent else "MINERVINI_SEC_USER_AGENT is unset; ticker fundamentals cannot reach SEC",
+        },
+    }
+
+
 def _default_reachability_probes() -> dict[str, Callable[[], None]]:
     """Name the cheapest decisive call per provider that can otherwise fail silently."""
 
@@ -315,13 +341,27 @@ def _health(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "ready": installed is not None and (required is None or installed == required),
         }
     doctrine = validate_doctrine()
+    configuration = _local_configuration()
     ready = doctrine["valid"] and all(item["ready"] for item in dependencies.values())
+    ready = ready and all(item["ready"] for item in configuration.values() if item["required"])
     missing = [
         {"id": name, "reason": "package_missing_or_version_mismatch", "required": True}
         for name, item in dependencies.items()
         if not item["ready"]
     ]
-    data: dict[str, Any] = {"ready": ready, "python": sys.version.split()[0], "dependencies": dependencies, "doctrine": doctrine}
+    missing.extend(
+        {"id": name, "reason": "local_configuration_missing", "required": item["required"], "detail": item["detail"]}
+        for name, item in configuration.items()
+        if not item["ready"]
+    )
+    data: dict[str, Any] = {
+        "ready": ready,
+        "python": sys.version.split()[0],
+        "dependencies": dependencies,
+        "configuration": configuration,
+        "doctrine": doctrine,
+        "reachability": "not_checked",
+    }
     if request.get("probe") is True:
         reachability: dict[str, Any] = {}
         for name, probe in runtime.reachability_probes.items():

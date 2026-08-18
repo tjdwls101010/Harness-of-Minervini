@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+import re
 import time
 from typing import Any, Callable, Generic, Mapping, TypeVar
 
@@ -85,6 +86,24 @@ class RequestThrottle:
 
 DETAIL_LIMIT = 200
 
+# A boundary failure is reported to whoever runs the CLI, so the message it
+# carries must not become a second channel for whatever the SDK put in its
+# exception text: query strings carry API keys, and this harness's own SEC
+# User-Agent carries the operator's email.
+_REDACTIONS = (
+    (re.compile(r"(?i)\b(bearer|token|key|secret|password)\b[=:\s]+\S+"), r"\1=[redacted]"),
+    (re.compile(r"\?\S*"), "?[redacted]"),
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "[redacted-email]"),
+)
+
+
+def redact(text: str) -> str:
+    """Strip credentials and operator identity from an external failure message."""
+
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text
+
 
 def fetch_with_one_retry(
     provider: str,
@@ -111,8 +130,8 @@ def fetch_with_one_retry(
         operation=operation,
         attempts=2,
         retryable=True,
-        detail=f"{type(last_error).__name__}: {last_error}"[:DETAIL_LIMIT],
+        detail=redact(f"{type(last_error).__name__}: {last_error}")[:DETAIL_LIMIT],
     ) from last_error
 
 
-__all__ = ["ProviderSnapshot", "ProviderUnavailable", "RequestThrottle", "SnapshotMeta", "fetch_with_one_retry"]
+__all__ = ["ProviderSnapshot", "ProviderUnavailable", "RequestThrottle", "SnapshotMeta", "fetch_with_one_retry", "redact"]

@@ -206,6 +206,18 @@ class ProviderContractTests(unittest.TestCase):
         self.assertTrue(snapshot.meta.coverage["observed_after_session_close"])
         self.assertFalse(snapshot.meta.stale)
 
+    def test_finviz_measures_the_observation_against_the_session_close_not_the_calendar_day(self) -> None:
+        html = FIXTURES.joinpath("finviz.html").read_text()
+
+        snapshot = raw_snapshot(
+            fetch=lambda: html,
+            as_of="2026-08-17",
+            retrieved_at=datetime(2026, 8, 17, 21, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertTrue(snapshot.meta.coverage["observed_after_session_close"])
+        self.assertEqual(snapshot.meta.coverage["seconds_after_session_close"], 3600)
+
     def test_finviz_serves_the_friday_session_through_the_weekend(self) -> None:
         html = FIXTURES.joinpath("finviz.html").read_text()
 
@@ -254,6 +266,23 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(raised.exception.reason, "request_failed")
         self.assertIn("ConnectionError", raised.exception.detail)
         self.assertIn("certificate verify failed", raised.exception.detail)
+
+    def test_a_preserved_failure_never_carries_a_credential_or_an_operator_email(self) -> None:
+        def fetch() -> str:
+            raise RuntimeError(
+                "401 for https://api.example.com/v1/rs?token=sk-live-abcdef123456 "
+                "with Authorization: Bearer eyJhbGciOi and User-Agent: Acme analyst@example.com"
+            )
+
+        with self.assertRaises(ProviderUnavailable) as raised:
+            fetch_with_one_retry("ibd-rs-rating", "dates", fetch, sleep=lambda _: None)
+
+        detail = raised.exception.detail
+        self.assertNotIn("sk-live-abcdef123456", detail)
+        self.assertNotIn("eyJhbGciOi", detail)
+        self.assertNotIn("analyst@example.com", detail)
+        self.assertIn("RuntimeError", detail)
+        self.assertIn("https://api.example.com/v1/rs", detail)
 
     def test_the_retry_waits_before_hitting_a_rate_limited_boundary_again(self) -> None:
         waits: list[float] = []

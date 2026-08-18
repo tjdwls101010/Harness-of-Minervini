@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 from typing import Callable
 
-from ..clock import ET, is_regular_session_open, last_completed_session
+from ..clock import ET, is_regular_session_open, last_completed_session, session_close
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 
 
@@ -24,6 +24,7 @@ def raw_snapshot(
         requested_date != last_completed_session(observed_at) or is_regular_session_open(observed_at)
     ):
         raise ProviderUnavailable("finviz", "historical_snapshot_unavailable", operation="raw_snapshot")
+    elapsed_since_close = int((observed_et - session_close(requested_date)).total_seconds())
     document = fetch_with_one_retry("finviz", "raw_snapshot", fetch)
     if not isinstance(document, str):
         raise ProviderUnavailable("finviz", "invalid_raw_snapshot", operation="raw_snapshot")
@@ -37,7 +38,8 @@ def raw_snapshot(
                 "kind": "current_raw_snapshot_only",
                 "historical": False,
                 "observed_at_et": observed_et.isoformat(),
-                "observed_after_session_close": observed_session_date != requested_date,
+                "observed_after_session_close": elapsed_since_close > 0,
+                "seconds_after_session_close": elapsed_since_close,
             },
             content_sha256=sha256(document.encode("utf-8")).hexdigest(),
         ),

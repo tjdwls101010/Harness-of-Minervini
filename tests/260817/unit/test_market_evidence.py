@@ -33,6 +33,7 @@ class MarketEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["breadth"]["state"], "unavailable")
         self.assertTrue(all(section["state"] == "unavailable" for section in evidence["breadth"]["sections"].values()))
         self.assertTrue(snapshot["regime"]["qqq_switch_is_context_only"])
+        self.assertTrue(snapshot["regime"]["breadth_is_context_only"])
         self.assertNotEqual(snapshot["regime"]["judgment"], "favorable")
 
     def test_finviz_sections_degrade_independently(self) -> None:

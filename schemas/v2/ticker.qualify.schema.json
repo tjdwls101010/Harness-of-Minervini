@@ -73,6 +73,7 @@
     "limitations": [
       "All eight standard criteria are AND conditions; fundamentals and narrative cannot waive a known failure.",
       "RS comes only from ibd-rs-rating 0.5.0 and is never approximated.",
+      "When completed price history stops before --as-of the verdict is withheld rather than computed from the earlier session; name that session with --as-of to get an aligned answer.",
       "A chart judgment is required for ambiguous Primary Base quality."
     ],
     "output": "Eligibility route and state, exact Trend Template signals, completed-history depth, RS date/value, missing evidence, and next capabilities.",
@@ -81,7 +82,7 @@
     "status_meanings": {
       "needs_input": "A supplied argument is invalid.",
       "ok": "Available evidence produced eligible, avoid, or incomplete domain state.",
-      "partial": "Price evidence succeeded but RS or another independent source is unavailable.",
+      "partial": "RS or another independent source is unavailable, or completed price history stops before the requested session and eligibility is withheld.",
       "unavailable": "Completed price history is unavailable."
     },
     "summary": "Apply the low-cost Stage 2 and eight-of-eight Trend Template gate, or the bounded recent-IPO Primary Base route."

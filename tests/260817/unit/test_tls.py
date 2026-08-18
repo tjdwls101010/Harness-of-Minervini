@@ -51,6 +51,20 @@ class DefaultCaBundleTests(unittest.TestCase):
 
         self.assertEqual(environ, {})
 
+    def test_an_unavailable_certifi_never_breaks_importing_the_runtime(self) -> None:
+        def missing_bundle() -> str:
+            raise ModuleNotFoundError("No module named 'certifi'")
+
+        environ: dict[str, str] = {}
+
+        ensure_default_ca_bundle(
+            verify_paths=FakeVerifyPaths("/nonexistent/etc/openssl/cert.pem", None),
+            environ=environ,
+            bundle=missing_bundle,
+        )
+
+        self.assertEqual(environ, {})
+
 
 class RuntimeImportTests(unittest.TestCase):
     def test_importing_the_runtime_leaves_stdlib_tls_able_to_verify(self) -> None:

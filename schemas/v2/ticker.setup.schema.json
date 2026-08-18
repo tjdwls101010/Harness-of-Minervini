@@ -142,6 +142,7 @@
     "status_meanings": {
       "needs_input": "Required chart evidence remains incomplete or needs_chart.",
       "ok": "The setup reducer produced ready, wait, or avoid.",
+      "partial": "Completed price history stops before the requested session, so the setup is not judged.",
       "unavailable": "Completed price history is unavailable."
     },
     "summary": "Evaluate price geometry, supply contraction, entry confirmation, confirmation debt, and precise invalidation from completed bars plus chart judgments."

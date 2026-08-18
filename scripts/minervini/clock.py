@@ -96,6 +96,12 @@ def is_early_close(day: dt.date) -> bool:
     return day == thanksgiving + dt.timedelta(days=1) or (day.month, day.day) in {(7, 3), (12, 24)}
 
 
+def session_close(day: dt.date) -> dt.datetime:
+    """Return the scheduled closing bell of one completed trading session."""
+
+    return dt.datetime.combine(day, EARLY_CLOSE if is_early_close(day) else REGULAR_CLOSE, tzinfo=ET)
+
+
 def is_regular_session_open(now: dt.datetime | None = None) -> bool:
     """Report whether a US regular session is trading right now.
 
@@ -107,8 +113,7 @@ def is_regular_session_open(now: dt.datetime | None = None) -> bool:
     day = now_et.date()
     if not is_trading_day(day):
         return False
-    close = EARLY_CLOSE if is_early_close(day) else REGULAR_CLOSE
-    return dt.datetime.combine(day, REGULAR_OPEN, tzinfo=ET) <= now_et < dt.datetime.combine(day, close, tzinfo=ET)
+    return dt.datetime.combine(day, REGULAR_OPEN, tzinfo=ET) <= now_et < session_close(day)
 
 
 def _as_et(now: dt.datetime | None) -> dt.datetime:

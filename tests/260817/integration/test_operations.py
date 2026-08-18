@@ -206,7 +206,7 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "partial")
         self.assertEqual(payload["data"]["eligibility_state"], "avoid")
-        self.assertIn("fixture-rs", {item["provider"] for item in payload["missing"]})
+        self.assertIn("fixture-rs", {item.get("provider") for item in payload["missing"]})
         rs = next(signal for signal in payload["signals"] if signal["id"] == "trend_template.relative_strength_minimum")
         self.assertEqual(rs["state"], "unavailable")
 
@@ -294,7 +294,9 @@ class OperationCompositionTests(unittest.TestCase):
         payload = execute("health", {}, runtime=runtime)
 
         self.assertEqual(payload["status"], "ok")
-        self.assertNotIn("reachability", payload["data"])
+        self.assertEqual(payload["data"]["reachability"], "not_checked")
+        self.assertTrue(payload["data"]["configuration"]["tls_ca_bundle"]["ready"])
+        self.assertIn("sec_user_agent", payload["data"]["configuration"])
 
     def test_health_probe_names_the_provider_that_cannot_be_reached_and_why(self) -> None:
         def unreachable() -> None:
@@ -319,7 +321,7 @@ class OperationCompositionTests(unittest.TestCase):
             payload["data"]["reachability"]["fixture-rs"]["detail"],
             "ConnectionError: certificate verify failed",
         )
-        self.assertIn("fixture-rs", {item["provider"] for item in payload["missing"]})
+        self.assertIn("fixture-rs", {item.get("provider") for item in payload["missing"]})
 
     def test_market_candidates_filters_provider_records_and_preserves_pagination(self) -> None:
         records = [
