@@ -62,6 +62,45 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
         self.assertIsInstance(snapshot.meta, SnapshotMeta)
 
+    def test_an_unfinished_final_bar_is_dropped_and_the_session_gap_is_declared(self) -> None:
+        index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0, 11.0, 12.0],
+                "High": [10.5, 11.5, 12.5],
+                "Low": [9.5, 10.5, 11.5],
+                "Close": [10.2, 11.2, float("nan")],
+                "Volume": [100, 200, 300],
+            },
+            index=index,
+        )
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
+
+        self.assertEqual(snapshot.data.index[-1].date().isoformat(), "2026-08-14")
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
+        self.assertTrue(snapshot.meta.stale)
+        self.assertEqual(snapshot.meta.coverage["requested_session"], "2026-08-17")
+        self.assertEqual(snapshot.meta.coverage["last_completed_bar"], "2026-08-14")
+
+    def test_a_complete_history_through_the_requested_session_is_not_stale(self) -> None:
+        index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
+        frame = pd.DataFrame({"Close": [10.2, 11.2, 12.2]}, index=index)
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
+
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 17))
+        self.assertFalse(snapshot.meta.stale)
+
+    def test_a_gap_inside_the_history_is_unavailable_rather_than_silently_compressed(self) -> None:
+        index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
+        frame = pd.DataFrame({"Close": [10.0, float("nan"), 12.0]}, index=index)
+
+        with self.assertRaises(ProviderUnavailable) as raised:
+            completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
+
+        self.assertEqual(raised.exception.reason, "incomplete_daily_bars")
+
     def test_rs_uses_the_library_current_date_explicitly_and_never_backfills_history(self) -> None:
         current_client = FakeRS()
         current = rating_snapshot("ACME", client=current_client, package_version="0.5.0", as_of="2026-08-14")

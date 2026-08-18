@@ -18,7 +18,9 @@ from . import SCHEMA_VERSION
 from .providers import ProviderSnapshot, SnapshotMeta
 
 
-CACHE_SCHEMA_VERSION = "1"
+# Bumped when a stored snapshot's meaning changes. Version 1 accepted an
+# unfinished daily bar as a completed session, so those entries must not be read.
+CACHE_SCHEMA_VERSION = "2"
 
 T = TypeVar("T")
 

@@ -256,6 +256,27 @@ def _source(meta: SnapshotMeta) -> dict[str, Any]:
     }
 
 
+def _stale_price_gap(meta: SnapshotMeta) -> dict[str, Any] | None:
+    """Report price history that could not reach the requested completed session.
+
+    A verdict computed from the previous session but stamped with this one is
+    indistinguishable from a current verdict, so callers withhold the judgment
+    rather than qualifying it.
+    """
+
+    if not meta.stale:
+        return None
+    return {
+        "id": "completed_price_evidence",
+        "provider": meta.provider,
+        "reason": "session_behind_as_of",
+        "required": True,
+        "attempts": 1,
+        "retryable": True,
+        "detail": f"last completed bar {meta.coverage.get('last_completed_bar')} is behind requested session {meta.coverage.get('requested_session')}",
+    }
+
+
 def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> dict[str, Any]:
     gap = {
         "id": error.operation or error.provider,
@@ -370,6 +391,18 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         )
 
     sources = [_source(prices.meta)]
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.qualify",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "eligibility_state": "incomplete", "price_as_of": prices.meta.as_of.isoformat() if prices.meta.as_of else None},
+            missing=[stale_price],
+            sources=sources,
+            next_capabilities=[],
+        )
     missing: list[dict[str, Any]] = []
     rating: int | None = None
     rating_date: str | None = None
@@ -444,6 +477,17 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             status="unavailable",
             data={"ticker": ticker, "setup_state": "incomplete"},
             missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.setup",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "setup_state": "incomplete"},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
         )
     judgments = request.get("chart_judgments")
     if judgments is not None and not isinstance(judgments, Mapping):
@@ -840,6 +884,10 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
             provider_missing.append(_missing_provider(error, required=False))
             return None
         sources.append(_source(snapshot.meta))
+        stale_price = _stale_price_gap(snapshot.meta)
+        if stale_price is not None:
+            provider_missing.append(stale_price)
+            return None
         return snapshot
 
     qqq = collect(
@@ -1077,34 +1125,39 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         except ProviderUnavailable as error:
             provider_missing.append(_missing_provider(error))
         else:
-            if stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool):
-                price_path, current_price = _completed_stop_path(
-                    prices.data,
-                    effective_date=stop_effective_date,
-                    as_of=clock.date,
-                    stop_price=float(stop_price),
-                )
-                evidence["completed_price_path"] = price_path
-                if price_path.get("state") == "unavailable":
-                    provider_missing.append(
-                        {
-                            "id": "completed_price_path",
-                            "provider": prices.meta.provider,
-                            "reason": price_path.get("reason", "completed_price_path_unavailable"),
-                            "required": True,
-                            "attempts": 1,
-                            "retryable": False,
-                        }
-                    )
-            else:
-                price_path = None
-                try:
-                    current_price = float(prices.data["Close"].iloc[-1])
-                except (AttributeError, KeyError, IndexError, TypeError, ValueError):
-                    current_price = None
-            if current_price is not None:
-                evidence["current_price"] = current_price
             sources.append(_source(prices.meta))
+            stale_price = _stale_price_gap(prices.meta)
+            if stale_price is not None:
+                # A stop path that stops a session early cannot establish HOLD.
+                provider_missing.append(stale_price)
+            else:
+                if stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool):
+                    price_path, current_price = _completed_stop_path(
+                        prices.data,
+                        effective_date=stop_effective_date,
+                        as_of=clock.date,
+                        stop_price=float(stop_price),
+                    )
+                    evidence["completed_price_path"] = price_path
+                    if price_path.get("state") == "unavailable":
+                        provider_missing.append(
+                            {
+                                "id": "completed_price_path",
+                                "provider": prices.meta.provider,
+                                "reason": price_path.get("reason", "completed_price_path_unavailable"),
+                                "required": True,
+                                "attempts": 1,
+                                "retryable": False,
+                            }
+                        )
+                else:
+                    price_path = None
+                    try:
+                        current_price = float(prices.data["Close"].iloc[-1])
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+                        current_price = None
+                if current_price is not None:
+                    evidence["current_price"] = current_price
     result = reduce_risk(evidence)
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}
@@ -1146,6 +1199,17 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             status="unavailable",
             data={"ticker": ticker},
             missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
         )
     output_dir = request.get("output_dir")
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):

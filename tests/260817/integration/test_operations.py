@@ -46,6 +46,22 @@ def price_snapshot(*, rising: bool = True, as_of: str = AS_OF) -> ProviderSnapsh
     )
 
 
+def stale_price_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
+    """A history the provider could only complete through the session before as_of."""
+
+    snapshot = price_snapshot(as_of="2025-12-30")
+    return ProviderSnapshot(
+        snapshot.data,
+        SnapshotMeta(
+            provider="fixture-prices",
+            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            as_of=date(2025, 12, 30),
+            coverage={"completed_only": True, "requested_session": as_of, "last_completed_bar": "2025-12-30"},
+            stale=True,
+        ),
+    )
+
+
 def rs_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[dict[str, object]]:
     return ProviderSnapshot(
         {"ticker": "TEST", "rating": 94, "rating_date": as_of},
@@ -212,6 +228,63 @@ class OperationCompositionTests(unittest.TestCase):
 
         gap = next(item for item in payload["missing"] if item["provider"] == "fixture-rs")
         self.assertEqual(gap["detail"], "ConnectionError: certificate verify failed")
+
+    def test_qualify_refuses_to_judge_eligibility_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: stale_price_snapshot(),
+            rs_rating=lambda ticker, as_of: rs_snapshot(),
+        )
+
+        payload = execute("ticker.qualify", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["eligibility_state"], "incomplete")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+        self.assertEqual(payload["next_capabilities"], [])
+
+    def test_setup_refuses_to_judge_a_setup_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute("ticker.setup", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_risk_withholds_a_hold_or_sell_when_price_history_is_a_session_behind(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "as_of": AS_OF, "mode": "active", "entry_price": 100.0, "entry_date": "2025-12-01", "stop_price": 94.0},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_chart_writes_no_artifact_from_a_session_behind_price_history(self) -> None:
+        runtime = Runtime(price_history=lambda ticker, as_of: stale_price_snapshot())
+
+        payload = execute("ticker.chart", {"ticker": "TEST", "as_of": AS_OF}, runtime=runtime)
+
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["side_effects"], [])
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+
+    def test_market_snapshot_does_not_read_the_index_switch_from_a_stale_session(self) -> None:
+        runtime = Runtime(
+            price_history=lambda ticker, as_of: stale_price_snapshot(),
+            finviz_breadth=lambda as_of: (_ for _ in ()).throw(ProviderUnavailable("finviz", "raw_snapshot_unavailable")),
+            sector_ranking=lambda as_of: list_snapshot("ibd-rs-rating", []),
+            industry_ranking=lambda as_of: list_snapshot("ibd-rs-rating", []),
+            market_leaders=lambda as_of, limit: list_snapshot("ibd-rs-rating", []),
+        )
+
+        payload = execute("market.snapshot", {"as_of": AS_OF, "trade_traction": "supports"}, runtime=runtime)
+
+        self.assertIn("completed_price_evidence", {item["id"] for item in payload["missing"]})
+        self.assertNotEqual(payload["data"]["regime"]["judgment"], "favorable")
 
     def test_health_keeps_its_offline_contract_unless_a_probe_is_requested(self) -> None:
         runtime = Runtime(
