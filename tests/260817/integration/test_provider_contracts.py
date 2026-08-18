@@ -154,6 +154,41 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(raised.exception.reason, "historical_snapshot_unavailable")
         self.assertEqual(calls, 0)
 
+    def test_finviz_serves_the_completed_session_overnight_and_discloses_the_later_observation(self) -> None:
+        html = FIXTURES.joinpath("finviz.html").read_text()
+
+        snapshot = raw_snapshot(
+            fetch=lambda: html,
+            as_of="2026-08-17",
+            retrieved_at=datetime(2026, 8, 18, 4, 57, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 17))
+        self.assertTrue(snapshot.meta.coverage["observed_after_session_close"])
+        self.assertFalse(snapshot.meta.stale)
+
+    def test_finviz_serves_the_friday_session_through_the_weekend(self) -> None:
+        html = FIXTURES.joinpath("finviz.html").read_text()
+
+        snapshot = raw_snapshot(
+            fetch=lambda: html,
+            as_of="2026-08-14",
+            retrieved_at=datetime(2026, 8, 15, 16, 0, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
+        self.assertTrue(snapshot.meta.coverage["observed_after_session_close"])
+
+    def test_finviz_refuses_a_session_older_than_the_last_completed_one(self) -> None:
+        with self.assertRaises(ProviderUnavailable) as raised:
+            raw_snapshot(
+                fetch=lambda: self.fail("an older session must never reach the network"),
+                as_of="2026-08-13",
+                retrieved_at=datetime(2026, 8, 18, 4, 57, tzinfo=timezone.utc),
+            )
+
+        self.assertEqual(raised.exception.reason, "historical_snapshot_unavailable")
+
     def test_external_provider_retries_once_before_returning_a_snapshot(self) -> None:
         html = FIXTURES.joinpath("finviz.html").read_text()
         attempts = 0
