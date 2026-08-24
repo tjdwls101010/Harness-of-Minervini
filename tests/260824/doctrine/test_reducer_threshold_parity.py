@@ -25,19 +25,23 @@ REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.js
 
 @contextlib.contextmanager
 def threshold_moved(claim_id: str, name: str, **changes: object):
-    """Swap one registry threshold for the duration of a test."""
+    """Swap one registry threshold for the duration of a test, in memory only.
 
-    original = json.loads(REGISTRY.read_text(encoding="utf-8"))
-    edited = copy.deepcopy(original)
+    An earlier version rewrote the checked-in registry and restored it afterwards,
+    which made the suite unrunnable read-only and left a corrupt registry behind if a
+    run died between the two writes. Substituting the loader keeps the edit where it
+    belongs -- inside the test.
+    """
+
+    edited = copy.deepcopy(json.loads(REGISTRY.read_text(encoding="utf-8")))
     record = next(item for item in edited["claims"] if item["id"] == claim_id)
     record["thresholds"][name].update(changes)
-    REGISTRY.write_text(json.dumps(edited, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    doctrine._load_registry.cache_clear()
+    loader = doctrine._load_registry
+    doctrine._load_registry = lambda: edited
     try:
         yield
     finally:
-        REGISTRY.write_text(json.dumps(original, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        doctrine._load_registry.cache_clear()
+        doctrine._load_registry = loader
 
 
 def rising_history(sessions: int = 260) -> pd.DataFrame:
