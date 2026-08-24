@@ -38,7 +38,7 @@ class PrimaryBaseDepthBandTests(unittest.TestCase):
         claim = base_claim(frame, "primary_base.duration_depth")
 
         self.assertEqual(claim["state"], "fail")
-        self.assertEqual(claim["basis"]["required"], "<= 25% for a three-week base")
+        self.assertEqual(claim["basis"]["required"], "<= 25")
 
     def test_three_week_base_accepts_a_correction_inside_twenty_five_percent(self) -> None:
         frame = history(sessions=60, peak_position=44, peak=100.0, trough=80.0, last=99.0)
@@ -51,7 +51,7 @@ class PrimaryBaseDepthBandTests(unittest.TestCase):
         claim = base_claim(frame, "primary_base.duration_depth")
 
         self.assertEqual(claim["state"], "pass")
-        self.assertEqual(claim["basis"]["required"], "<= 35% for a three-to-five-week base")
+        self.assertEqual(claim["basis"]["required"], "within [25, 35]% for a three-to-five-week base")
 
     def test_longer_correction_between_thirty_five_and_fifty_percent_is_chart_review_not_failure(self) -> None:
         frame = history(sessions=60, peak_position=10, peak=100.0, trough=55.0, last=99.0)

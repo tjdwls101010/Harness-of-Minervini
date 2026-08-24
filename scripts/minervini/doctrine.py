@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import builtins
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -13,27 +15,49 @@ _CLAIM_FIELDS = (
     "id",
     "title",
     "kind",
+    "layer",
     "status",
     "context",
     "required_inputs",
     "rule",
+    "thresholds",
+    "computability",
     "failure",
     "missing",
     "precedence",
     "quarantine",
     "consumers",
 )
+# Present only where they mean something, and dropped from the runtime claim when absent.
+_OPTIONAL_CLAIM_FIELDS = ("attributed_to", "out_of_scope", "unquantified", "disagrees_with")
 _REQUIRED_FIELDS = frozenset((*_CLAIM_FIELDS, "provenance", "tests"))
+_VALID_COMPUTABILITY = frozenset({"deterministic", "chart_assisted", "judgment_only"})
+_VALID_OUT_OF_SCOPE = frozenset({"position_sizing"})
+# This module publishes a function named `list`, so the builtin type is shadowed from
+# its definition onward. Type checks below reach it through `builtins` on purpose.
 _VALID_KINDS = frozenset({"constitution", "hard_gate", "default", "tactic", "interpretation", "exception", "quarantine"})
+_VALID_LAYERS = frozenset({"canonical", "practice", "harness"})
+_VALID_ROLES = frozenset({"gate", "band", "reference"})
+_COMPARATORS = {
+    "<=": lambda measured, limit: measured <= limit,
+    ">=": lambda measured, limit: measured >= limit,
+    "<": lambda measured, limit: measured < limit,
+    ">": lambda measured, limit: measured > limit,
+}
+_VALID_CORPORA = frozenset({"Minervini", "TraderLion"})
+_MINIMUM_QUOTATION_LENGTH = 20
 
 
+@lru_cache(maxsize=1)
 def _load_registry() -> dict[str, Any]:
     with _REGISTRY_PATH.open(encoding="utf-8") as registry_file:
         return json.load(registry_file)
 
 
 def _runtime_claim(record: dict[str, Any]) -> dict[str, Any]:
-    return {field: record[field] for field in _CLAIM_FIELDS}
+    claim = {field: record[field] for field in _CLAIM_FIELDS}
+    claim.update({field: record[field] for field in _OPTIONAL_CLAIM_FIELDS if field in record})
+    return claim
 
 
 def _result(record: dict[str, Any]) -> dict[str, Any]:
@@ -71,9 +95,96 @@ def list(
     return [_result(record) for record in records]
 
 
-def validate() -> dict[str, Any]:
+def threshold(claim_id: str, name: str) -> Any:
+    """Return one registered numeric threshold.
+
+    Reducers read their numbers here rather than holding literals, so the value a
+    verdict used and the value the registry cites are the same object. A name the
+    registry does not define raises instead of defaulting: a threshold nobody
+    registered is a threshold nobody sourced.
+
+    Raises:
+        KeyError: If ``claim_id`` is unknown or does not register ``name``.
+    """
+    thresholds = get_claim(claim_id)["claim"]["thresholds"]
+    if name not in thresholds:
+        raise KeyError(f"{claim_id} registers no threshold named {name}")
+    specification = thresholds[name]
+    return specification["range"] if specification["role"] == "band" else specification["value"]
+
+
+def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One threshold plus the quotation it cites, refusing a role it was not registered as.
+
+    Reading a band as a gate is how a range the source hedged becomes a cliff it never
+    drew, so the mismatch raises here rather than producing a plausible verdict.
+    """
+    record = get_claim(claim_id)
+    specification = record["claim"]["thresholds"].get(name)
+    if specification is None:
+        raise KeyError(f"{claim_id} registers no threshold named {name}")
+    if specification["role"] != expected_role:
+        raise ValueError(f"{claim_id}.{name} is registered as a {specification['role']}, not a {expected_role}")
+    return specification, record["provenance"]["quotations"][specification["quote_index"]]
+
+
+def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
+    """Compare a measurement with a limit the source states as a filter.
+
+    A gate has no proximity language on purpose. Its whole job is to be unarguable,
+    and a stop that is "basically ten percent" is the negotiation the risk spine exists
+    to forbid.
+    """
+    specification, _ = _specification(claim_id, name, "gate")
+    limit = specification["value"]
+    comparator = specification["comparator"]
+    signal: dict[str, Any] = {
+        "id": f"{claim_id}.{name}",
+        "doctrine_id": claim_id,
+        "role": "gate",
+        "measured": measured,
+        "unit": specification["unit"],
+        "required": f"{comparator} {limit}",
+    }
+    if measured is None:
+        signal["state"] = "unavailable"
+    else:
+        signal["state"] = "pass" if _COMPARATORS[comparator](measured, limit) else "fail"
+    return signal
+
+
+def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
+    """Place a measurement inside a range the source gave as a range.
+
+    ``band_position`` exists because 26 and 34.9 are not the same picture even though
+    both sit inside 25-35, and a bare pass/fail throws that difference away. The
+    quotation travels with the signal so the response can cite what it is reading.
+    """
+    specification, quotation = _specification(claim_id, name, "band")
+    low, high = specification["range"]
+    signal: dict[str, Any] = {
+        "id": f"{claim_id}.{name}",
+        "doctrine_id": claim_id,
+        "role": "band",
+        "measured": measured,
+        "unit": specification["unit"],
+        "source_range": [low, high],
+        "exact": specification["exact"],
+        "quotation": quotation["text"],
+    }
+    if measured is None:
+        signal["state"] = "unavailable"
+        return signal
+    span = high - low
+    signal["band_position"] = round((measured - low) / span, 4) if span else 0.0
+    # Tighter than the range is better, never a defect; only the loose edge is a limit.
+    signal["state"] = "beyond_source_range" if measured > high else "within_source_range"
+    return signal
+
+
+def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Validate the registry's public contract and executable-claim coverage."""
-    registry = _load_registry()
+    registry = _load_registry() if registry is None else registry
     errors: list[str] = []
     claim_ids: set[str] = set()
     precedence_order = set(registry.get("precedence_order", []))
@@ -108,8 +219,74 @@ def validate() -> dict[str, Any]:
             errors.append(f"{label} executable record requires a consumer")
         if not record["quarantine"].get("is_quarantined") and not record["tests"]:
             errors.append(f"{label} executable record requires a test reference")
+        if record["layer"] not in _VALID_LAYERS:
+            errors.append(f"{label}.layer is invalid")
+        if record["computability"] not in _VALID_COMPUTABILITY:
+            errors.append(f"{label}.computability is invalid")
+        out_of_scope = record.get("out_of_scope")
+        if out_of_scope is not None:
+            if out_of_scope not in _VALID_OUT_OF_SCOPE:
+                errors.append(f"{label}.out_of_scope is not a recognised exclusion")
+            elif record["consumers"] != ["doctrine audit"]:
+                # An out-of-scope record is audit material; wiring it to a capability
+                # would put a number the harness may not prescribe into a verdict.
+                errors.append(f"{label} is out of scope and cannot name a runtime consumer")
+        if record["layer"] == "practice" and record["kind"] == "hard_gate":
+            errors.append(f"{label} practice-layer record cannot be a hard gate")
+        quotations = record["provenance"].get("quotations")
+        if not isinstance(quotations, builtins.list):
+            quotations = []
+        # A harness-layer record is the harness's own operating rule and has no book to
+        # quote; saying so is honest, whereas attaching a borrowed citation would not be.
+        needs_quotation = not record["quarantine"].get("is_quarantined") and record["layer"] != "harness"
+        if needs_quotation and not quotations:
+            errors.append(f"{label} executable record requires at least one source quotation")
+        for position, quotation in enumerate(quotations):
+            if not isinstance(quotation, Mapping):
+                errors.append(f"{label}.provenance.quotations[{position}] must be an object")
+                continue
+            if quotation.get("corpus") not in _VALID_CORPORA:
+                errors.append(f"{label}.provenance.quotations[{position}].corpus is not a known corpus")
+            if not isinstance(quotation.get("row"), int) or isinstance(quotation.get("row"), bool):
+                errors.append(f"{label}.provenance.quotations[{position}].row must be an integer chapter id")
+            text = quotation.get("text")
+            if not isinstance(text, str) or len(text.strip()) < _MINIMUM_QUOTATION_LENGTH:
+                errors.append(f"{label}.provenance.quotations[{position}].text must quote the source")
+        thresholds = record["thresholds"]
+        if not isinstance(thresholds, Mapping):
+            errors.append(f"{label}.thresholds must be an object")
+            continue
+        for name, specification in thresholds.items():
+            if not isinstance(specification, Mapping):
+                errors.append(f"{label}.thresholds.{name} must be an object")
+                continue
+            index = specification.get("quote_index")
+            if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(quotations):
+                errors.append(f"{label}.thresholds.{name}.quote_index does not point at a quotation")
+            if not isinstance(specification.get("unit"), str):
+                errors.append(f"{label}.thresholds.{name} must name its unit")
+            if not isinstance(specification.get("exact"), bool):
+                errors.append(f"{label}.thresholds.{name} must say whether the source states it exactly")
+            role = specification.get("role")
+            if role not in _VALID_ROLES:
+                errors.append(f"{label}.thresholds.{name}.role must be gate, band, or reference")
+                continue
+            if role == "band":
+                span = specification.get("range")
+                if not isinstance(span, builtins.list) or len(span) != 2 or not all(isinstance(edge, (int, float)) and not isinstance(edge, bool) for edge in span):
+                    errors.append(f"{label}.thresholds.{name} is a band and needs a two-number range")
+                elif span[0] > span[1]:
+                    errors.append(f"{label}.thresholds.{name} range is inverted")
+            else:
+                if "value" not in specification:
+                    errors.append(f"{label}.thresholds.{name} must carry a value")
+                if role == "gate" and specification.get("comparator") not in _COMPARATORS:
+                    errors.append(f"{label}.thresholds.{name} is a gate and needs a comparator")
+                if role == "gate" and record["layer"] == "practice":
+                    # A practice-layer number can inform a judgment; it cannot reject a candidate.
+                    errors.append(f"{label}.thresholds.{name} cannot be a gate on the practice layer")
 
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
 
 
-__all__ = ["get_claim", "list", "validate"]
+__all__ = ["evaluate_band", "evaluate_gate", "get_claim", "list", "threshold", "validate"]

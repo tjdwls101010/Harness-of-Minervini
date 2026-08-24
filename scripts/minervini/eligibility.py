@@ -25,10 +25,10 @@ TREND_TEMPLATE_CRITERIA = (
     "trend_template.sma_150_above_sma_200",
     "trend_template.sma_200_rising",
     "trend_template.sma_50_above_150_and_200",
+    "trend_template.price_above_sma_50",
     "trend_template.price_above_52_week_low",
     "trend_template.price_near_52_week_high",
     "trend_template.relative_strength_minimum",
-    "trend_template.price_above_sma_50",
 )
 _QUALITATIVE_STATES = frozenset(
     {

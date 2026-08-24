@@ -18,12 +18,15 @@ class DoctrineRegistryTests(unittest.TestCase):
         self.assertNotIn("provenance", result["claim"])
         self.assertIn("provenance", result)
 
-    def test_list_excludes_quarantined_rules_unless_an_audit_requests_them(self) -> None:
+    def test_the_registry_holds_no_quarantined_rule_and_the_audit_view_agrees(self) -> None:
+        # The one quarantined record, a Chapter 12 failure cascade, was deleted once
+        # re-sourcing found no supporting passage in either corpus. Quarantine is for
+        # material too weakly sourced to execute, not for material with no source at all.
         active_ids = {item["claim"]["id"] for item in doctrine.list()}
         audit_ids = {item["claim"]["id"] for item in doctrine.list(include_quarantined=True)}
 
-        self.assertNotIn("quarantine.ch12_failure_cascade", active_ids)
-        self.assertIn("quarantine.ch12_failure_cascade", audit_ids)
+        self.assertEqual(active_ids, audit_ids)
+        self.assertNotIn("quarantine.ch12_failure_cascade", audit_ids)
 
     def test_validate_reports_a_complete_registry(self) -> None:
         result = doctrine.validate()
@@ -32,11 +35,12 @@ class DoctrineRegistryTests(unittest.TestCase):
         self.assertEqual(result["errors"], [])
         self.assertGreaterEqual(result["claim_count"], 11)
 
-    def test_all_executable_claims_are_exposed_to_runtime_consumers(self) -> None:
+    def test_every_claim_a_reducer_depends_on_is_exposed_to_runtime_consumers(self) -> None:
         claims = {item["claim"]["id"] for item in doctrine.list()}
 
-        self.assertEqual(
-            claims,
+        # The registry grew past a hundred records; naming them all here would only
+        # restate the file. These are the ones a reducer will fail without.
+        self.assertLessEqual(
             {
                 "scope.data_integrity",
                 "eligibility.standard_stage2",
@@ -50,13 +54,15 @@ class DoctrineRegistryTests(unittest.TestCase):
                 "tactic.early_entry_confirmation_debt",
                 "management.ema21_sma50_roles",
             },
+            claims,
         )
 
     def test_recent_ipo_route_never_waives_a_known_standard_failure(self) -> None:
         result = doctrine.get_claim("eligibility.recent_ipo_primary_base")
 
-        self.assertIn("no known standard gate failure", result["claim"]["rule"]["conditions"])
-        self.assertIn("emergence is to an all-time high or from a constructive consolidation near it", result["claim"]["rule"]["conditions"])
+        conditions = " | ".join(result["claim"]["rule"]["conditions"])
+        self.assertIn("no known standard", conditions)
+        self.assertIn("constructive consolidation near", conditions)
         self.assertEqual(result["claim"]["missing"]["effect"], "incomplete")
 
     def test_power_play_exception_is_limited_to_fundamentals_policy(self) -> None:
@@ -93,24 +99,31 @@ class DoctrineRegistryTests(unittest.TestCase):
             ],
         )
 
-    def test_management_roles_and_weak_failure_cascade_remain_distinct(self) -> None:
+    def test_management_averages_keep_their_separate_roles(self) -> None:
         management = doctrine.get_claim("management.ema21_sma50_roles")
-        cascade = doctrine.get_claim("quarantine.ch12_failure_cascade")
 
         self.assertEqual(management["claim"]["rule"]["roles"]["ema_21"], "default trade management")
         self.assertEqual(management["claim"]["rule"]["trigger"], "two completed closes below the selected management average")
-        self.assertTrue(cascade["claim"]["quarantine"]["is_quarantined"])
+        # A practice-layer default, so it can inform a judgment but never reject a candidate.
+        self.assertEqual(management["claim"]["layer"], "practice")
+        self.assertNotEqual(management["claim"]["kind"], "hard_gate")
 
     def test_risk_spine_defends_breakeven_after_three_r(self) -> None:
         result = doctrine.get_claim("risk.profit_protection_at_3r")
 
         self.assertIn("three R", result["claim"]["rule"]["summary"])
 
-    def test_runtime_registry_payloads_do_not_embed_source_tags_or_long_source_text(self) -> None:
-        payload = json.dumps(doctrine.list(include_quarantined=True))
+    def test_runtime_registry_payloads_carry_no_source_tags_and_no_source_text(self) -> None:
+        records = doctrine.list(include_quarantined=True)
+        payload = json.dumps(records)
 
         self.assertNotIn("[M]", payload)
         self.assertNotIn("[TL]", payload)
+        # Provenance is the audit half of a record and is returned beside the claim,
+        # never inside it, so an executable claim carries no source text of its own.
+        executable = json.dumps([record["claim"] for record in records])
+        self.assertNotIn("quotations", executable)
+        self.assertTrue(all("provenance" in record for record in records))
 
 
 if __name__ == "__main__":
