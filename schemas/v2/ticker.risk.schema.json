@@ -96,12 +96,12 @@
         "type": "enum"
       },
       "invalidation_condition": {
-        "description": "Observable structural invalidation condition.",
+        "description": "Observable structural invalidation condition. Pair it with --invalidation-price in active mode: a condition the harness cannot evaluate against completed bars is reported as missing evidence rather than assumed unbreached.",
         "required": false,
         "type": "string"
       },
       "invalidation_price": {
-        "description": "Positive structural invalidation price.",
+        "description": "Positive structural invalidation price. In active mode it is audited over completed bars from --entry-date, alongside and independently of the hard stop.",
         "required": false,
         "type": "number"
       },
@@ -180,7 +180,7 @@
       "This capability never recommends portfolio allocation or position size.",
       "A hard stop may not exceed 10% or half the realized average gain; --average-gain-pct is required for a prospective verdict and reward-to-risk must be at least 2:1.",
       "A completed current price above the protective level cannot establish HOLD: the provider must cover every completed daily Low from --stop-effective-date through --as-of; a recovered price does not erase an earlier breach.",
-      "The audited protective level is the higher of --stop-price and --invalidation-price, because a long position reaches it first.",
+      "Each protective level is audited from its own effective date: the hard stop from --stop-effective-date, the structural invalidation from --entry-date. A breach of either is a SELL, and HOLD requires every declared level to be cleared over its whole window.",
       "--stop-effective-date defaults to --entry-date. When a stop was raised or replaced later, supply its actual effective date so the newer stop is not applied retroactively.",
       "An explicit --current-price at or below the stop can trigger SELL; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",

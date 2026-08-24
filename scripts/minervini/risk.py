@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import date
@@ -44,7 +45,7 @@ def _state(value: Any, default: str = "unavailable") -> str:
 def _number(value: Any) -> float | None:
     if isinstance(value, bool):
         return None
-    if isinstance(value, (int, float)) and value > 0:
+    if isinstance(value, (int, float)) and value > 0 and math.isfinite(value):
         return float(value)
     return None
 
@@ -156,23 +157,22 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _valid_entry_date(value: Any) -> bool:
-    if not isinstance(value, str):
-        return False
-    try:
-        date.fromisoformat(value)
-    except ValueError:
-        return False
-    return True
-
-
 def _triggered(value: Any) -> bool:
     if not isinstance(value, Mapping):
         return False
     return str(value.get("state", value.get("status", ""))).lower() in {"triggered", "breached"}
 
 
-def _audit_records(path: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _iso_date(value: Any) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, Any]]:
     """Per-level audit records; a single-level path counts as one record."""
 
     audits = path.get("audits")
@@ -187,40 +187,61 @@ def _audit_records(path: Mapping[str, Any]) -> list[dict[str, Any]]:
             "effective_from": path.get("from"),
             "through": path.get("through"),
             "bars_checked": path.get("bars_checked"),
+            "state": path_state,
         }
     ]
 
 
-def _audited(records: list[Mapping[str, Any]], level: float) -> bool:
-    """Whether some record proves completed bars stayed above ``level`` over a stated window."""
+def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None) -> bool:
+    """Whether some record cleared ``level`` over every session from ``required_from``."""
 
+    if required_from is None:
+        return False
     for record in records:
         audited_level = _number(record.get("level"))
         if audited_level is None or audited_level < level:
             continue
-        # A window the record does not state is a window nobody checked, so an
-        # unnamed level or an unbounded span cannot stand in for the audit.
-        if isinstance(record.get("effective_from"), str) and isinstance(record.get("through"), str):
-            return True
+        if str(record.get("state", "")).strip().lower() != "clear":
+            continue
+        # A window the record does not state is a window nobody checked, and one that
+        # starts late leaves the sessions before it unexamined.
+        effective_from = _iso_date(record.get("effective_from"))
+        if effective_from is None or effective_from > required_from:
+            continue
+        if _iso_date(record.get("through")) is None:
+            continue
+        bars = record.get("bars_checked")
+        if not isinstance(bars, int) or isinstance(bars, bool) or bars < 1:
+            continue
+        return True
     return False
 
 
 def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     entry = _number(payload.get("entry_price"))
-    entry_date = payload.get("entry_date")
+    entry_date = _iso_date(payload.get("entry_date"))
     stop = _number(payload.get("stop_price"))
     invalidation = _mapping(payload.get("invalidation"))
     invalidation_price = _number(invalidation.get("price"))
+    invalidation_condition = invalidation.get("condition")
+    has_condition = isinstance(invalidation_condition, str) and bool(invalidation_condition.strip())
     declared_plan = payload.get("stop_price") is not None or bool(invalidation)
-    protective_levels = [level for level in (stop, invalidation_price) if level is not None]
+    # A stop raised later is only in force from its own date; the structural
+    # invalidation has stood since entry.
+    stop_from = _iso_date(payload.get("stop_effective_date")) or entry_date
+    protective_plan = [
+        (level, required_from)
+        for level, required_from in ((stop, stop_from), (invalidation_price, entry_date))
+        if level is not None
+    ]
     missing: list[str] = []
     if entry is None:
         missing.append("entry_price")
-    if not _valid_entry_date(entry_date):
+    if entry_date is None:
         missing.append("entry_date")
     if not declared_plan:
         missing.append("stop_or_invalidation")
-    elif not protective_levels:
+    elif not protective_plan:
         # A condition nobody can evaluate against completed bars, or a price that
         # is not a price, leaves nothing for the audit to clear.
         missing.append("auditable_protective_level")
@@ -234,40 +255,40 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
     breached = live_triggered or completed_stop or invalidation_triggered
-    if current is None and not breached:
-        missing.append("current_price")
-    if protective_levels and not breached:
-        records = _audit_records(completed_price_path)
-        if path_state != "clear" or not all(_audited(records, level) for level in protective_levels):
-            missing.append("completed_price_path")
+    if not breached:
+        if current is None:
+            missing.append("current_price")
+        if protective_plan:
+            records = _audit_records(completed_price_path, path_state)
+            if path_state != "clear" or not all(_audited(records, level, required_from) for level, required_from in protective_plan):
+                missing.append("completed_price_path")
+        if invalidation_price is None and has_condition:
+            # HOLD asserts nothing has invalidated the thesis; an exit condition the
+            # harness never evaluated cannot be part of that assertion.
+            missing.append("invalidation_condition_not_audited")
 
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
-    unaudited = (
-        ["invalidation_condition"]
-        if invalidation_price is None and isinstance(invalidation.get("condition"), str) and invalidation["condition"].strip()
-        else []
-    )
-    if missing:
+    if breached:
+        # A known breach is evidence, and evidence outranks whatever else is absent.
+        verdict = "SELL"
+        reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
+        missing = []
+    elif missing:
         verdict = "INCOMPLETE"
-        reasons: list[str] = []
+        reasons = []
     else:
-        if breached:
-            verdict = "SELL"
-            reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
-        else:
-            verdict = "HOLD"
-            reasons = []
-            if entry is not None and stop is not None and current is not None and stop < entry:
-                initial_risk = entry - stop
-                if initial_risk > 0 and (current - entry) / initial_risk >= 3:
-                    controls["breakeven_protection_required"] = True
+        verdict = "HOLD"
+        reasons = []
+        if entry is not None and stop is not None and current is not None and stop < entry:
+            initial_risk = entry - stop
+            if initial_risk > 0 and (current - entry) / initial_risk >= 3:
+                controls["breakeven_protection_required"] = True
     return {
         "mode": "active",
         "verdict": verdict,
         "risk_controls": controls,
         "completed_price_path": completed_price_path or None,
-        "unaudited_evidence": unaudited,
-        "failed": reasons if not missing else [],
+        "failed": reasons,
         "missing": missing,
         "waiting": [],
     }

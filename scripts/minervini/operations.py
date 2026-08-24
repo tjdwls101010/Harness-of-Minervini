@@ -1067,7 +1067,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
 def _positive(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value) if value > 0 else None
+    return float(value) if value > 0 and math.isfinite(value) else None
 
 
 def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1177,11 +1177,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     invalidation = evidence.get("invalidation")
     has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(invalidation, Mapping)
     has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
-    stop_price = _positive(evidence.get("stop_price"))
+    raw_stop_price = evidence.get("stop_price")
+    stop_price = _positive(raw_stop_price)
     raw_invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
     invalidation_price = _positive(raw_invalidation_price)
-    if raw_invalidation_price is not None and invalidation_price is None:
-        raise RequestError("invalidation_price must be a positive number", "invalidation_price")
+    for raw, resolved, field in ((raw_stop_price, stop_price, "stop_price"), (raw_invalidation_price, invalidation_price, "invalidation_price")):
+        if raw is not None and resolved is None:
+            raise RequestError(f"{field} must be a finite positive number", field)
     protective_level = max([level for level in (stop_price, invalidation_price) if level is not None], default=None)
     stop_effective_date: date | None = None
     entry_date: date | None = None

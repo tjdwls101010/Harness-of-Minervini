@@ -32,7 +32,7 @@ class PathCoverageTests(unittest.TestCase):
                 "invalidation": {"price": 95.0, "condition": "completed close below the base low"},
                 "completed_price_path": {
                     "state": "clear",
-                    "audits": [{"level": 90.0, "role": "stop", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10}],
+                    "audits": [{"level": 90.0, "role": "stop", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10, "state": "clear"}],
                 },
             }
         )
@@ -49,8 +49,8 @@ class PathCoverageTests(unittest.TestCase):
                 "completed_price_path": {
                     "state": "clear",
                     "audits": [
-                        {"level": 90.0, "role": "stop", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10},
-                        {"level": 95.0, "role": "invalidation", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10},
+                        {"level": 90.0, "role": "stop", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10, "state": "clear"},
+                        {"level": 95.0, "role": "invalidation", "effective_from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10, "state": "clear"},
                     ],
                 },
             }

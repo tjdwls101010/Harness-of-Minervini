@@ -33,7 +33,7 @@ scripts/.venv/bin/python -m pip check
 
 Provider tests use frozen source-shaped fixtures and injected transports; they do not record live responses during the test run. Historical tests must include a future fact or bar that would expose look-ahead leakage. Side-effecting capabilities need adjacent tests proving that read-only operations do not create or mutate state.
 
-Regenerate capability schemas with `PYTHONPATH=scripts scripts/.venv/bin/python -m minervini.schema_sync`, then run the schema and CLI contract suite. Validate harness topology with the harness-creator validator when `CLAUDE.md`, `.claude/`, `.agents/`, or permissions change.
+Regenerate capability schemas with `PYTHONPATH=scripts scripts/.venv/bin/python -m minervini.schema_sync`, then run the schema and CLI contract suite. Validate harness topology with the harness-creator validator when `CLAUDE.md`, `.claude/`, `.codex/`, or permissions change.
 
 ## Doctrine changes
 
