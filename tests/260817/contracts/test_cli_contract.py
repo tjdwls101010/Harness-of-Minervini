@@ -260,6 +260,8 @@ class PublicCliContractTests(unittest.TestCase):
             "94",
             "--upside-price",
             "112",
+            "--average-gain-pct",
+            "20",
         )
 
         self.assertEqual(completed.returncode, 0, completed.stderr)

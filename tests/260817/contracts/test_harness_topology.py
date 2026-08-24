@@ -16,15 +16,17 @@ SKILLS = ROOT / ".claude" / "skills"
 class SharedHarnessTopologyTests(unittest.TestCase):
     def test_claude_and_codex_resolve_the_same_harness_files(self) -> None:
         agents_md = ROOT / "AGENTS.md"
-        agent_skills = ROOT / ".agents" / "skills"
+        # The Codex CLI resolves its skill catalog from .codex/skills; a .agents/skills
+        # link was never read by any host and drifted silently for that reason.
+        codex_skills = ROOT / ".codex" / "skills"
 
         self.assertTrue(agents_md.is_symlink())
         self.assertEqual(agents_md.readlink(), Path("CLAUDE.md"))
         self.assertEqual(agents_md.resolve(), CLAUDE.resolve())
-        self.assertTrue(agent_skills.is_symlink())
-        self.assertEqual(agent_skills.readlink(), Path("../.claude/skills"))
-        self.assertEqual(agent_skills.resolve(), SKILLS.resolve())
-        self.assertFalse((ROOT / ".codex" / "skills").exists())
+        self.assertTrue(codex_skills.is_symlink())
+        self.assertEqual(codex_skills.readlink(), Path("../.claude/skills"))
+        self.assertEqual(codex_skills.resolve(), SKILLS.resolve())
+        self.assertFalse((ROOT / ".agents").exists())
 
     def test_runtime_harness_has_only_two_intent_skills_and_no_fixed_rails(self) -> None:
         self.assertEqual({path.name for path in SKILLS.iterdir()}, {"market-scan", "ticker-analysis"})

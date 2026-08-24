@@ -18,7 +18,7 @@ The quality criterion is not imitation by prose volume. The harness must preserv
 - Evidence over narrative: deterministic providers and reducers own precise market facts and verdict mechanics. Web research may explain current context but cannot fill numerical gaps, alter a hard gate, or masquerade as point-in-time evidence.
 - Missing is not failure: known failed evidence and unavailable evidence remain separate throughout providers, reducers, envelopes, skills, and user-facing conclusions.
 - No-trade is valid: the system is not required to manufacture candidates, bullish regimes, or BUY-READY outcomes.
-- One shared harness: Claude Code uses `.claude/skills`; Codex reaches the same files through `.agents/skills -> ../.claude/skills`. `AGENTS.md -> CLAUDE.md` shares the constitution. No duplicated Codex copy exists.
+- One shared harness: Claude Code uses `.claude/skills`; Codex reaches the same files through `.codex/skills -> ../.claude/skills`. `AGENTS.md -> CLAUDE.md` shares the constitution. No duplicated Codex copy exists.
 
 ## Information ownership
 
@@ -36,7 +36,7 @@ The runtime skills deliberately do not cite books or maintain human-facing bibli
 
 ## Runtime topology
 
-The always-loaded root is `CLAUDE.md`; `AGENTS.md` is its symbolic link. The only routed runtime skills are `.claude/skills/market-scan/SKILL.md` and `.claude/skills/ticker-analysis/SKILL.md`; `.agents/skills` is a symbolic link to that directory.
+The always-loaded root is `CLAUDE.md`; `AGENTS.md` is its symbolic link. The only routed runtime skills are `.claude/skills/market-scan/SKILL.md` and `.claude/skills/ticker-analysis/SKILL.md`; `.codex/skills` is a symbolic link to that directory.
 
 There are no project agents, rules, workflows, or duplicate `.codex/skills`. Fixed scout agents and a `/screen` workflow were retired because concurrency and depth should follow the actual candidate set and unresolved evidence rather than a hard-coded fan-out rail. Cross-cutting JSON, schema, clock, retry, and side-effect guarantees are enforced by code and tests, not by advisory hooks.
 
@@ -150,7 +150,7 @@ Obsolete v1 runtime and design documents are removed after the v1 tag and releas
 
 ## Maintenance protocol
 
-When adding or changing a capability, first define or update the public test seam under `tests/260817`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
+When adding or changing a capability, first define or update the public test seam under the current dated suite directory in `tests/`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
 
 When changing doctrine, edit the normalized registry and its doctrine tests before changing a reducer. Preserve provenance and precedence in the registry. Add text to `CLAUDE.md` only if it is an always-on invariant; add text to a skill only if it changes task-specific judgment; put syntax and defaults in the interface.
 
@@ -158,10 +158,11 @@ When adding a provider, declare present and historical support separately, use a
 
 When adding a side effect, mark it in capability metadata, disclose it in leaf help and the envelope, require explicit user intent, place generated state in ignored paths by default, and add a non-side-effect regression test for adjacent read operations.
 
-Before accepting a harness change, run the focused RED/GREEN test, the complete `tests/260817` suite, help/schema parity, bootstrap and compile checks, and the harness validator. Update this spec in the same change whenever topology, information ownership, permissions, skills, or validation requirements change.
+Before accepting a harness change, run the focused RED/GREEN test, the complete `tests/` suite, help/schema parity, bootstrap and compile checks, and the harness validator. Update this spec in the same change whenever topology, information ownership, permissions, skills, or validation requirements change.
 
 ## Change history
 
 - 2026-08-17: Rebuilt the harness as v2 around principle over rail, interface over document, dense progressive disclosure, typed point-in-time providers, composable deterministic reducers, explicit research state, two shared host skills, and detailed just-in-time CLI help. Retired v1 agents, rules, workflow, reference libraries, trade-review route, duplicate Codex skill link, and legacy runtime substrate after preserving the v1 baseline for release.
 - 2026-08-18: Repaired the provider layer after an AAOI session found three providers dead and the runtime reporting `ready: true`. The RS outage recorded in the v2 live report as an external provider outage was a local CA bundle the python.org interpreter never populated. Moved bar-completion to the provider boundary, withheld domain verdicts built on evidence that stops before the requested session, bumped the cache schema so entries holding an unfinished bar can never be served, preserved and redacted boundary failure causes, replaced the Finviz calendar-day gate with a session-open gate and demoted its breadth to context evidence, added `health --probe` plus offline configuration checks, and added a session-start readiness hook. Verification: 208 deterministic tests, two adversarial reviews by an independent model.
 - 2026-08-17: Closed the adversarial behavioral blockers by auditing the full active stop path and treating hypothetical evidence as a closed world; bounded candidate exclusion evidence after live smoke exposed a roughly 200,000-token response; completed 167 deterministic and artifact tests plus a 30-report independent behavioral gate.
+- 2026-08-24 (v2.5 Phase 0): Fixed four verified judgment-plane defects found by a five-source audit. An active invalidation level is now compared with the completed price path and the latest price instead of being read as a status flag, and the audited protective level is the higher of the hard stop and the invalidation because a long position reaches it first. A missing `average_gain_pct` degrades to explicit missing evidence rather than silently skipping the half-average-gain cap. Primary Base depth follows the source's three-week, three-to-five-week, and longer-correction bands, with 35-50% sent to chart review and anything past 50% rejected; emergence became a separate trigger signal so an unbroken all-time high is unfinished timing, not AVOID. The chart renderer is imported lazily so discovery, help, and every deterministic capability run on a machine without the plotting stack. Corrected the Codex skill link to its real path `.codex/skills`. New suite: `tests/260824`; discovery root moved to `tests/`. Verification: 235 deterministic tests.

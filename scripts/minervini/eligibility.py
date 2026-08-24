@@ -16,6 +16,7 @@ EligibilityRoute = Literal["standard", "recent_ipo_primary_base"]
 HistoryState = Literal["sufficient", "insufficient", "unknown"]
 
 _HARD_GATE_STATES = frozenset({"pass", "fail", "unavailable"})
+_TRIGGER_STATES = frozenset({"pass", "not_triggered", "unavailable"})
 _STAGE_2_DOCTRINE_ID = "eligibility.standard_stage2"
 _TREND_TEMPLATE_DOCTRINE_ID = "eligibility.standard_trend_template"
 _PRIMARY_BASE_DOCTRINE_ID = "eligibility.recent_ipo_primary_base"
@@ -53,7 +54,7 @@ class EligibilitySignal:
     basis: Mapping[str, Any] | None = None
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any], *, hard_gate: bool) -> "EligibilitySignal":
+    def from_mapping(cls, value: Mapping[str, Any], *, allowed_states: frozenset[str], kind: str) -> "EligibilitySignal":
         try:
             signal = cls(
                 id=value["id"],
@@ -65,10 +66,8 @@ class EligibilitySignal:
             raise ValueError(f"eligibility signal is missing {error.args[0]}") from error
         if not all(isinstance(item, str) and item for item in (signal.id, signal.state, signal.doctrine_id)):
             raise ValueError("eligibility signal id, state, and doctrine_id must be non-empty strings")
-        allowed_states = _HARD_GATE_STATES if hard_gate else _QUALITATIVE_STATES
         if signal.state not in allowed_states:
-            gate_kind = "hard gate" if hard_gate else "qualitative signal"
-            raise ValueError(f"unsupported {gate_kind} state: {signal.state}")
+            raise ValueError(f"unsupported {kind} state: {signal.state}")
         return signal
 
     def to_dict(self) -> dict[str, Any]:
@@ -80,9 +79,14 @@ class EligibilitySignal:
 
 @dataclass(frozen=True)
 class PrimaryBaseEvidence:
-    """Claim inputs for the recent-IPO route, supplied by its dedicated evaluator."""
+    """Claim inputs for the recent-IPO route, supplied by its dedicated evaluator.
+
+    Base structure is a hard gate; emergence is the trigger that has or has not
+    happened yet, so the two cannot share a state vocabulary.
+    """
 
     quantitative_claims: tuple[EligibilitySignal, ...]
+    emergence: EligibilitySignal
     quality: EligibilitySignal
 
     @classmethod
@@ -90,12 +94,19 @@ class PrimaryBaseEvidence:
         claims = value.get("quantitative_claims", ())
         if not isinstance(claims, list):
             raise ValueError("primary_base.quantitative_claims must be a list")
+        emergence = value.get("emergence")
+        if not isinstance(emergence, Mapping):
+            raise ValueError("primary_base.emergence must be supplied")
         quality = value.get("quality")
         if not isinstance(quality, Mapping):
             raise ValueError("primary_base.quality must be supplied")
         return cls(
-            quantitative_claims=tuple(EligibilitySignal.from_mapping(item, hard_gate=True) for item in claims),
-            quality=EligibilitySignal.from_mapping(quality, hard_gate=False),
+            quantitative_claims=tuple(
+                EligibilitySignal.from_mapping(item, allowed_states=_HARD_GATE_STATES, kind="hard gate")
+                for item in claims
+            ),
+            emergence=EligibilitySignal.from_mapping(emergence, allowed_states=_TRIGGER_STATES, kind="trigger signal"),
+            quality=EligibilitySignal.from_mapping(quality, allowed_states=_QUALITATIVE_STATES, kind="qualitative signal"),
         )
 
 
@@ -124,10 +135,13 @@ class EligibilityEvidence:
         trend_template = value.get("trend_template")
         if not isinstance(trend_template, list) or len(trend_template) != 8:
             raise ValueError("trend_template must contain exactly eight criteria")
-        stage_2_signal = EligibilitySignal.from_mapping(stage_2, hard_gate=True)
+        stage_2_signal = EligibilitySignal.from_mapping(stage_2, allowed_states=_HARD_GATE_STATES, kind="hard gate")
         if stage_2_signal.doctrine_id != _STAGE_2_DOCTRINE_ID:
             raise ValueError("stage_2 must use its canonical doctrine id")
-        signals = tuple(EligibilitySignal.from_mapping(item, hard_gate=True) for item in trend_template)
+        signals = tuple(
+            EligibilitySignal.from_mapping(item, allowed_states=_HARD_GATE_STATES, kind="hard gate")
+            for item in trend_template
+        )
         if tuple(signal.id for signal in signals) != TREND_TEMPLATE_CRITERIA:
             raise ValueError("trend_template must contain the canonical eight criteria in source-map order")
         if any(signal.doctrine_id != _TREND_TEMPLATE_DOCTRINE_ID for signal in signals):
@@ -138,7 +152,7 @@ class EligibilityEvidence:
         primary_base_evidence = PrimaryBaseEvidence.from_mapping(primary_base) if primary_base is not None else None
         if primary_base_evidence is not None and any(
             signal.doctrine_id != _PRIMARY_BASE_DOCTRINE_ID
-            for signal in (*primary_base_evidence.quantitative_claims, primary_base_evidence.quality)
+            for signal in (*primary_base_evidence.quantitative_claims, primary_base_evidence.emergence, primary_base_evidence.quality)
         ):
             raise ValueError("primary_base must use its canonical doctrine id")
         return cls(
@@ -189,10 +203,13 @@ def evaluate_eligibility(evidence: EligibilityEvidence) -> EligibilityResult:
         return EligibilityResult("standard", "incomplete", standard_signals)
 
     primary_base = evidence.primary_base
-    route_signals = (*standard_signals, *primary_base.quantitative_claims, primary_base.quality)
+    route_signals = (*standard_signals, *primary_base.quantitative_claims, primary_base.emergence, primary_base.quality)
     if any(signal.state == "fail" for signal in primary_base.quantitative_claims):
         return EligibilityResult("recent_ipo_primary_base", "avoid", route_signals)
     if not primary_base.quantitative_claims or any(signal.state != "pass" for signal in primary_base.quantitative_claims):
+        return EligibilityResult("recent_ipo_primary_base", "incomplete", route_signals)
+    if primary_base.emergence.state != "pass":
+        # A base that has not emerged yet is unfinished timing, not a rejected candidate.
         return EligibilityResult("recent_ipo_primary_base", "incomplete", route_signals)
     if primary_base.quality.state == "supports":
         return EligibilityResult("recent_ipo_primary_base", "eligible", route_signals)

@@ -103,7 +103,7 @@ All v2 tests and fixtures live under `tests/260817` and exercise public seams. T
 
 ```bash
 bash scripts/bootstrap.sh
-scripts/.venv/bin/python -m unittest discover -s tests/260817 -p 'test_*.py'
+scripts/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 scripts/.venv/bin/python -m compileall -q scripts/minervini scripts/pipeline
 scripts/.venv/bin/python -m pip check
 ```

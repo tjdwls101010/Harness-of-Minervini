@@ -22,11 +22,11 @@ Keep leaf help offline and detailed enough to explain purpose, inputs, defaults,
 
 ## Test-driven workflow
 
-Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under `tests/260817`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
+Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under the current dated suite directory in `tests/`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
 
 ```bash
 bash scripts/bootstrap.sh
-scripts/.venv/bin/python -m unittest discover -s tests/260817 -p 'test_*.py'
+scripts/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 scripts/.venv/bin/python -m compileall -q scripts/minervini scripts/pipeline
 scripts/.venv/bin/python -m pip check
 ```

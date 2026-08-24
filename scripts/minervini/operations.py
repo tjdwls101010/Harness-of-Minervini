@@ -17,7 +17,6 @@ import pandas as pd
 
 from .cache import ProviderCache
 from .clock import AnalysisClock, resolve_as_of
-from .chart import render_chart_artifacts
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
@@ -1063,7 +1062,14 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     )
 
 
-def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_price: float) -> tuple[dict[str, Any], float | None]:
+def _protective_level(*levels: Any) -> float | None:
+    """The highest supplied level, which a long position reaches before any lower one."""
+
+    usable = [float(level) for level in levels if isinstance(level, (int, float)) and not isinstance(level, bool) and level > 0]
+    return max(usable) if usable else None
+
+
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float) -> tuple[dict[str, Any], float | None]:
     if not isinstance(frame, pd.DataFrame) or frame.empty or not {"Low", "Close"}.issubset(frame.columns):
         return {"state": "unavailable", "reason": "completed_ohlc_path_unavailable"}, None
     timestamps = pd.to_datetime(frame.index, errors="coerce")
@@ -1105,14 +1111,14 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
         if not math.isfinite(low) or low <= 0:
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
-        if low <= stop_price:
+        if low <= protective_level:
             return {
                 "state": "breached",
                 "basis": "completed_daily_low",
                 "from": effective_date.isoformat(),
                 "through": latest_date.isoformat(),
                 "bars_checked": len(path_rows),
-                "stop_price": stop_price,
+                "checked_level": protective_level,
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
             }, current_price
@@ -1133,7 +1139,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
         "from": effective_date.isoformat(),
         "through": latest_date.isoformat(),
         "bars_checked": len(path_rows),
-        "stop_price": stop_price,
+        "checked_level": protective_level,
     }, current_price
 
 
@@ -1147,11 +1153,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     evidence["mode"] = mode
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
-    has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(evidence.get("invalidation"), Mapping)
+    invalidation = evidence.get("invalidation")
+    has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(invalidation, Mapping)
     has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
     stop_price = evidence.get("stop_price")
+    invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
+    # A long position crosses the higher level first, so that is the one the completed
+    # bars have to clear before HOLD is supportable.
+    protective_level = _protective_level(stop_price, invalidation_price)
     stop_effective_date: date | None = None
-    if mode == "active" and stop_price is not None and has_position_anchors:
+    if mode == "active" and protective_level is not None and has_position_anchors:
         raw_effective_date = evidence.get("stop_effective_date") or evidence.get("entry_date")
         try:
             stop_effective_date = date.fromisoformat(str(raw_effective_date))
@@ -1166,14 +1177,14 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         evidence["stop_effective_date"] = stop_effective_date.isoformat()
 
     explicit_current = evidence.get("current_price")
-    explicit_completed_breach = isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool) and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= float(stop_price)
+    explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
     if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
         evidence["completed_price_path"] = {
             "state": "breached",
             "basis": "explicit_completed_price",
             "from": stop_effective_date.isoformat(),
             "through": clock.date.isoformat(),
-            "stop_price": float(stop_price),
+            "checked_level": protective_level,
             "breach_date": clock.date.isoformat(),
             "breach_price": float(explicit_current),
         }
@@ -1196,16 +1207,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             stale_price = _stale_price_gap(prices.meta)
             if stale_price is not None:
                 provider_missing.append(stale_price)
-            has_stop = stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool)
+            has_protective_level = stop_effective_date is not None and protective_level is not None
             current_price = None
-            if has_stop:
+            if has_protective_level:
                 # Runs even when the history stops early: a completed breach is
                 # irreversible, and a later missing bar cannot undo one.
                 price_path, path_price = _completed_stop_path(
                     prices.data,
                     effective_date=stop_effective_date,
                     as_of=clock.date,
-                    stop_price=float(stop_price),
+                    protective_level=protective_level,
                 )
                 evidence["completed_price_path"] = price_path
                 if stale_price is None:
@@ -1252,6 +1263,26 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
+    try:
+        # Imported here so a machine without the plotting stack still runs discovery,
+        # help, and every deterministic capability.
+        from .chart import render_chart_artifacts
+    except ImportError as error:
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[
+                {
+                    "id": "chart_renderer",
+                    "reason": f"plotting_stack_unavailable: {error}",
+                    "required": True,
+                    "retryable": False,
+                }
+            ],
+        )
     try:
         prices = _cached_provider(
             runtime,

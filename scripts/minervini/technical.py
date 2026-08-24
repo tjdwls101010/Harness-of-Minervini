@@ -59,17 +59,34 @@ def _primary_base(close: pd.Series, quality: str | None) -> dict[str, Any]:
     elif duration <= 15:
         depth_state = "pass" if depth <= 25 else "fail"
         depth_required = "<= 25% for a three-week base"
-    elif duration >= 25:
+    elif duration <= 25:
         depth_state = "pass" if depth <= 35 else "fail"
-        depth_required = "<= 35% for a five-week-or-longer base"
-    else:
+        depth_required = "<= 35% for a three-to-five-week base"
+    elif depth <= 35:
+        depth_state = "pass"
+        depth_required = "<= 35% for a base longer than five weeks"
+    elif depth <= 50:
+        # The source allows as much as 50% only for a correction lasting about a year and
+        # gives no session count for "about". A measured depth in this band is reported and
+        # sent to chart review rather than resolved by an invented cutoff.
         depth_state = "unavailable"
-        depth_required = "manual review in the source's three-to-five-week transition band"
+        depth_required = "35-50% requires weekly-chart confirmation that the correction lasted about a year"
+    else:
+        depth_state = "fail"
+        depth_required = "<= 50% at any duration"
     claims.append(_signal("primary_base.duration_depth", depth_state, round(depth, 4) if depth is not None else None, depth_required, DOCTRINE_IPO))
-    claims.append(_signal("primary_base.all_time_high_breakout", "unavailable" if ath_breakout is None else "pass" if ath_breakout else "fail", float(close.iloc[-1]) if count else None, "close above all prior completed-session highs", DOCTRINE_IPO))
     quality_state = quality if quality in {"supports", "contradicts", "needs_chart"} else "needs_chart"
     return {
         "quantitative_claims": claims,
+        # The source accepts emergence to an all-time high or from a constructive
+        # consolidation near it, so an unbroken high is timing that has not happened yet.
+        "emergence": _signal(
+            "primary_base.emergence",
+            "unavailable" if ath_breakout is None else "pass" if ath_breakout else "not_triggered",
+            float(close.iloc[-1]) if count else None,
+            "close above all prior completed-session highs",
+            DOCTRINE_IPO,
+        ),
         "quality": {
             "id": "primary_base.visual_quality",
             "state": quality_state,

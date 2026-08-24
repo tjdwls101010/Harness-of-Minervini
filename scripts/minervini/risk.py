@@ -111,6 +111,10 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         missing.append("stop_price")
     if upside is None:
         missing.append("upside_price")
+    if average_gain is None:
+        # The half-average-gain cap is the tighter of the two stop ceilings for most
+        # traders, so an absent realized average gain hides a gate rather than relaxing one.
+        missing.append("average_gain_pct")
     if entry is not None and stop is not None:
         if stop >= entry:
             failed.append("initial_stop_price")
@@ -173,7 +177,12 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     entry_date = payload.get("entry_date")
     stop = _number(payload.get("stop_price"))
     invalidation = _mapping(payload.get("invalidation"))
-    precise_invalidation = _number(invalidation.get("price")) is not None or bool(invalidation.get("condition"))
+    invalidation_price = _number(invalidation.get("price"))
+    precise_invalidation = invalidation_price is not None or bool(invalidation.get("condition"))
+    # For a long position the higher of the two levels is crossed first, so it is the
+    # one a price path has to clear before HOLD means anything.
+    protective_levels = [level for level in (stop, invalidation_price) if level is not None]
+    protective_level = max(protective_levels) if protective_levels else None
     missing: list[str] = []
     if entry is None:
         missing.append("entry_price")
@@ -187,11 +196,17 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
     path_state = str(completed_price_path.get("state", "")).strip().lower()
+    # A path that predates this field audited the hard stop, which is what it was named after.
+    checked_level = _number(completed_price_path.get("checked_level"))
+    if checked_level is None:
+        checked_level = _number(completed_price_path.get("stop_price")) or stop
     completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_state in {"triggered", "breached"} or (current is not None and stop is not None and current <= stop)
-    invalidation_triggered = _triggered(invalidation)
+    invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
+    invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
     if current is None and not (live_triggered or completed_stop or invalidation_triggered):
         missing.append("current_price")
-    if stop is not None and not (live_triggered or completed_stop or invalidation_triggered) and path_state != "clear":
+    path_clears_protection = path_state == "clear" and checked_level is not None and protective_level is not None and checked_level >= protective_level
+    if protective_level is not None and not (live_triggered or completed_stop or invalidation_triggered) and not path_clears_protection:
         missing.append("completed_price_path")
 
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
@@ -201,7 +216,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     else:
         if live_triggered or completed_stop or invalidation_triggered:
             verdict = "SELL"
-            reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered"]
+            reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
         else:
             verdict = "HOLD"
             reasons = []

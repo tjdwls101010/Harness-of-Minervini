@@ -24,7 +24,7 @@
       "internal_error"
     ],
     "examples": [
-      "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --market-state favorable --eligibility-state eligible --setup-state ready --fundamentals-state supports_convergence --entry-price 200 --stop-price 188 --upside-price 224",
+      "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --market-state favorable --eligibility-state eligible --setup-state ready --fundamentals-state supports_convergence --entry-price 200 --stop-price 188 --upside-price 224 --average-gain-pct 24",
       "scripts/.venv/bin/python scripts/pipeline ticker risk AAPL --mode active --entry-price 200 --entry-date 2026-08-10 --stop-price 188"
     ],
     "exit_codes": {
@@ -39,7 +39,7 @@
         "type": "date"
       },
       "average_gain_pct": {
-        "description": "The trader's realized average gain percentage used for the half-average stop cap.",
+        "description": "The trader's realized average gain percentage. Prospective mode cannot reach BUY-READY without it; its absence is reported as missing evidence, not a relaxed cap.",
         "required": false,
         "type": "number"
       },
@@ -178,8 +178,9 @@
     },
     "limitations": [
       "This capability never recommends portfolio allocation or position size.",
-      "A hard stop may not exceed 10% or half the supplied realized average gain; reward-to-risk must be at least 2:1.",
-      "A completed current price above the stop cannot establish HOLD: the provider must cover every completed daily Low from --stop-effective-date through --as-of; a recovered price does not erase an earlier breach.",
+      "A hard stop may not exceed 10% or half the realized average gain; --average-gain-pct is required for a prospective verdict and reward-to-risk must be at least 2:1.",
+      "A completed current price above the protective level cannot establish HOLD: the provider must cover every completed daily Low from --stop-effective-date through --as-of; a recovered price does not erase an earlier breach.",
+      "The audited protective level is the higher of --stop-price and --invalidation-price, because a long position reaches it first.",
       "--stop-effective-date defaults to --entry-date. When a stop was raised or replaced later, supply its actual effective date so the newer stop is not applied retroactively.",
       "An explicit --current-price at or below the stop can trigger SELL; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",

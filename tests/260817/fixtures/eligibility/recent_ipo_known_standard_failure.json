@@ -55,6 +55,11 @@
         "doctrine_id": "eligibility.recent_ipo_primary_base"
       }
     ],
+    "emergence": {
+      "id": "primary_base.emergence",
+      "state": "pass",
+      "doctrine_id": "eligibility.recent_ipo_primary_base"
+    },
     "quality": {
       "id": "primary_base.quality",
       "state": "supports",
