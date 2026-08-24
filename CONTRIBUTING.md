@@ -22,18 +22,18 @@ Keep leaf help offline and detailed enough to explain purpose, inputs, defaults,
 
 ## Test-driven workflow
 
-Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under `tests/260817`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
+Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under the current dated suite directory in `tests/`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
 
 ```bash
 bash scripts/bootstrap.sh
-scripts/.venv/bin/python -m unittest discover -s tests/260817 -p 'test_*.py'
+scripts/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 scripts/.venv/bin/python -m compileall -q scripts/minervini scripts/pipeline
 scripts/.venv/bin/python -m pip check
 ```
 
 Provider tests use frozen source-shaped fixtures and injected transports; they do not record live responses during the test run. Historical tests must include a future fact or bar that would expose look-ahead leakage. Side-effecting capabilities need adjacent tests proving that read-only operations do not create or mutate state.
 
-Regenerate capability schemas with `PYTHONPATH=scripts scripts/.venv/bin/python -m minervini.schema_sync`, then run the schema and CLI contract suite. Validate harness topology with the harness-creator validator when `CLAUDE.md`, `.claude/`, `.agents/`, or permissions change.
+Regenerate capability schemas with `PYTHONPATH=scripts scripts/.venv/bin/python -m minervini.schema_sync`, then run the schema and CLI contract suite. Validate harness topology with the harness-creator validator when `CLAUDE.md`, `.claude/`, `.codex/`, or permissions change.
 
 ## Doctrine changes
 

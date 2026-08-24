@@ -56,7 +56,7 @@ class DoctrineRegistryTests(unittest.TestCase):
         result = doctrine.get_claim("eligibility.recent_ipo_primary_base")
 
         self.assertIn("no known standard gate failure", result["claim"]["rule"]["conditions"])
-        self.assertIn("breakout is to an all-time high", result["claim"]["rule"]["conditions"])
+        self.assertIn("emergence is to an all-time high or from a constructive consolidation near it", result["claim"]["rule"]["conditions"])
         self.assertEqual(result["claim"]["missing"]["effect"], "incomplete")
 
     def test_power_play_exception_is_limited_to_fundamentals_policy(self) -> None:

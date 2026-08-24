@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 import json
+import math
 import sys
 from typing import Any
 
@@ -10,6 +11,18 @@ from .capabilities import CAPABILITIES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
 from .providers import redact
+
+
+def positive_number(value: str) -> float:
+    """Reject a value JSON cannot carry before it can reach an envelope."""
+
+    try:
+        number = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a number") from None
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError(f"{value!r} must be a finite positive number")
+    return number
 
 
 class JsonArgumentParser(argparse.ArgumentParser):
@@ -122,6 +135,8 @@ def build_parser() -> JsonArgumentParser:
     qualify = _capability_parser(ticker_sub, "qualify", "ticker.qualify")
     qualify.add_argument("ticker", help=_input_help("ticker.qualify", "ticker"))
     qualify.add_argument("--primary-base-quality", choices=("supports", "contradicts", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_quality"))
+    qualify.add_argument("--primary-base-emergence", choices=("near_high_consolidation", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_emergence"))
+    qualify.add_argument("--primary-base-long-correction", choices=("confirmed", "not_confirmed", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_long_correction"))
     _common(qualify, "ticker.qualify")
 
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
@@ -130,11 +145,11 @@ def build_parser() -> JsonArgumentParser:
     setup.add_argument("--supply-evidence", choices=("pass", "fail", "needs_chart"), help=_input_help("ticker.setup", "supply_evidence"))
     setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
     setup.add_argument("--entry-state", choices=("confirmed", "wait", "needs_chart"), help=_input_help("ticker.setup", "entry_state"))
-    setup.add_argument("--invalidation-price", type=float, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
+    setup.add_argument("--invalidation-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
     setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
     setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))
     setup.add_argument("--confirmation-debt", action="append", default=[], metavar="TEXT", help=_input_help("ticker.setup", "confirmation_debt"))
-    setup.add_argument("--later-pivot-price", type=float, metavar="PRICE", help=_input_help("ticker.setup", "later_pivot_price"))
+    setup.add_argument("--later-pivot-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "later_pivot_price"))
     setup.add_argument("--later-pivot-condition", metavar="TEXT", help=_input_help("ticker.setup", "later_pivot_condition"))
     _common(setup, "ticker.setup")
 
@@ -156,7 +171,7 @@ def build_parser() -> JsonArgumentParser:
     risk.add_argument("ticker", help=_input_help("ticker.risk", "ticker"))
     risk.add_argument("--mode", choices=("prospective", "active"), default="prospective", help=_input_help("ticker.risk", "mode"))
     for field in ("entry_price", "stop_price", "upside_price", "current_price", "average_gain_pct", "invalidation_price"):
-        risk.add_argument(f"--{field.replace('_', '-')}", type=float, metavar="NUMBER", help=_input_help("ticker.risk", field))
+        risk.add_argument(f"--{field.replace('_', '-')}", type=positive_number, metavar="NUMBER", help=_input_help("ticker.risk", field))
     risk.add_argument("--entry-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "entry_date"))
     risk.add_argument("--stop-effective-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "stop_effective_date"))
     risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))

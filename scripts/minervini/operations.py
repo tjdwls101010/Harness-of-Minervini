@@ -17,7 +17,6 @@ import pandas as pd
 
 from .cache import ProviderCache
 from .clock import AnalysisClock, resolve_as_of
-from .chart import render_chart_artifacts
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
@@ -33,7 +32,7 @@ from .providers.nasdaq import SecurityRecord, current_security_master, historica
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
-from .risk import reduce_risk
+from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .setup_evidence import build_setup_evidence
 from .technical import build_eligibility_evidence
@@ -484,6 +483,8 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         prices.data,
         rs_rating=rating,
         primary_base_quality=request.get("primary_base_quality"),
+        primary_base_emergence=request.get("primary_base_emergence"),
+        primary_base_long_correction=request.get("primary_base_long_correction"),
     )
     result = evaluate_eligibility(EligibilityEvidence.from_mapping(measured)).to_dict()
     next_capabilities = ["ticker.setup", "ticker.fundamentals"] if result["eligibility_state"] == "eligible" else []
@@ -1063,7 +1064,35 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     )
 
 
-def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_price: float) -> tuple[dict[str, Any], float | None]:
+def _positive(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if value > 0 and math.isfinite(value) else None
+
+
+def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
+    """One path verdict over several levels, each audited from its own effective date.
+
+    A breach anywhere is irreversible, so it outranks every clear audit; a level
+    whose window could not be covered leaves the whole path unresolved.
+    """
+
+    breaches = [audit for audit in audits if audit["state"] == "breached"]
+    if breaches:
+        governing = min(breaches, key=lambda audit: audit["breach_date"])
+    else:
+        unresolved = [audit for audit in audits if audit["state"] != "clear"]
+        governing = unresolved[0] if unresolved else max(audits, key=lambda audit: audit["level"])
+    shared = {key: value for key, value in governing.items() if key not in {"level", "role", "effective_from"}}
+    return {
+        **shared,
+        "checked_level": governing["level"],
+        "from": governing["effective_from"],
+        "audits": audits,
+    }
+
+
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float) -> tuple[dict[str, Any], float | None]:
     if not isinstance(frame, pd.DataFrame) or frame.empty or not {"Low", "Close"}.issubset(frame.columns):
         return {"state": "unavailable", "reason": "completed_ohlc_path_unavailable"}, None
     timestamps = pd.to_datetime(frame.index, errors="coerce")
@@ -1105,14 +1134,13 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
         if not math.isfinite(low) or low <= 0:
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
-        if low <= stop_price:
+        if low <= protective_level:
             return {
                 "state": "breached",
                 "basis": "completed_daily_low",
                 "from": effective_date.isoformat(),
                 "through": latest_date.isoformat(),
                 "bars_checked": len(path_rows),
-                "stop_price": stop_price,
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
             }, current_price
@@ -1133,7 +1161,6 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, stop_
         "from": effective_date.isoformat(),
         "through": latest_date.isoformat(),
         "bars_checked": len(path_rows),
-        "stop_price": stop_price,
     }, current_price
 
 
@@ -1145,13 +1172,27 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         raise RequestError("mode must be prospective or active", "mode")
     evidence = {key: value for key, value in request.items() if key not in {"ticker", "as_of", "format", "no_cache"}}
     evidence["mode"] = mode
+    # The reducer measures every audit window against the decision date, so it
+    # cannot be the one input the operation keeps to itself.
+    evidence["as_of"] = clock.date.isoformat()
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
-    has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(evidence.get("invalidation"), Mapping)
-    has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
-    stop_price = evidence.get("stop_price")
+    invalidation = evidence.get("invalidation")
+    # The audit needs the date the position started and a plan to clear; what it
+    # was bought at decides 3R protection, not whether a level was breached. Both
+    # predicates come from the reducer so routing cannot drift from the verdict.
+    has_position_anchors = evidence.get("entry_date") is not None and declares_exit_plan(evidence)
+    raw_stop_price = evidence.get("stop_price")
+    stop_price = _positive(raw_stop_price)
+    raw_invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
+    invalidation_price = _positive(raw_invalidation_price)
+    for raw, resolved, field in ((raw_stop_price, stop_price, "stop_price"), (raw_invalidation_price, invalidation_price, "invalidation_price")):
+        if raw is not None and resolved is None:
+            raise RequestError(f"{field} must be a finite positive number", field)
+    protective_level = max([level for level in (stop_price, invalidation_price) if level is not None], default=None)
     stop_effective_date: date | None = None
-    if mode == "active" and stop_price is not None and has_position_anchors:
+    entry_date: date | None = None
+    if mode == "active" and evidence.get("entry_date") is not None:
         raw_effective_date = evidence.get("stop_effective_date") or evidence.get("entry_date")
         try:
             stop_effective_date = date.fromisoformat(str(raw_effective_date))
@@ -1159,25 +1200,50 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         except ValueError as error:
             field = "stop_effective_date" if evidence.get("stop_effective_date") is not None else "entry_date"
             raise RequestError(f"{field} must be an ISO date", field) from error
+        # Chronology is checked before any evidence is fetched: a position that does
+        # not exist on the decision date cannot be sold, held, or audited.
+        if entry_date > clock.date:
+            raise RequestError("entry_date cannot be after as_of", "entry_date")
         if stop_effective_date < entry_date:
             raise RequestError("stop_effective_date cannot precede entry_date", "stop_effective_date")
         if stop_effective_date > clock.date:
             raise RequestError("stop_effective_date cannot be after as_of", "stop_effective_date")
         evidence["stop_effective_date"] = stop_effective_date.isoformat()
 
+    # A stop raised later is only in force from its own date, while the structural
+    # invalidation has stood since entry. Auditing both against one date would let
+    # the later start hide a breach the earlier level already suffered.
+    protective_plan: list[tuple[str, float, date]] = []
+    if stop_price is not None and stop_effective_date is not None:
+        protective_plan.append(("stop", stop_price, stop_effective_date))
+    if invalidation_price is not None and entry_date is not None:
+        protective_plan.append(("invalidation", invalidation_price, entry_date))
+
     explicit_current = evidence.get("current_price")
-    explicit_completed_breach = isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool) and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= float(stop_price)
+    explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
     if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
         evidence["completed_price_path"] = {
             "state": "breached",
             "basis": "explicit_completed_price",
             "from": stop_effective_date.isoformat(),
             "through": clock.date.isoformat(),
-            "stop_price": float(stop_price),
+            "checked_level": protective_level,
             "breach_date": clock.date.isoformat(),
             "breach_price": float(explicit_current),
+            "audits": [
+                {
+                    "role": role,
+                    "level": level,
+                    "effective_from": effective.isoformat(),
+                    "through": clock.date.isoformat(),
+                    "state": "breached" if float(explicit_current) <= level else "clear",
+                }
+                for role, level, effective in protective_plan
+            ],
         }
-    if mode == "active" and has_position_anchors and not explicit_completed_breach and not isinstance(evidence.get("completed_stop"), Mapping):
+    # A breach that already settles the verdict needs no price history, and a
+    # provider failure fetched for nothing would downgrade a terminal SELL to partial.
+    if mode == "active" and has_position_anchors and not settled_breach(evidence):
         try:
             prices = _cached_provider(
                 runtime,
@@ -1196,17 +1262,22 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             stale_price = _stale_price_gap(prices.meta)
             if stale_price is not None:
                 provider_missing.append(stale_price)
-            has_stop = stop_effective_date is not None and isinstance(stop_price, (int, float)) and not isinstance(stop_price, bool)
             current_price = None
-            if has_stop:
+            if protective_plan:
                 # Runs even when the history stops early: a completed breach is
                 # irreversible, and a later missing bar cannot undo one.
-                price_path, path_price = _completed_stop_path(
-                    prices.data,
-                    effective_date=stop_effective_date,
-                    as_of=clock.date,
-                    stop_price=float(stop_price),
-                )
+                audits: list[dict[str, Any]] = []
+                path_price = None
+                for role, level, effective in protective_plan:
+                    audit, audit_price = _completed_stop_path(
+                        prices.data,
+                        effective_date=effective,
+                        as_of=clock.date,
+                        protective_level=level,
+                    )
+                    audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
+                    path_price = audit_price if audit_price is not None else path_price
+                price_path = _combine_audits(audits)
                 evidence["completed_price_path"] = price_path
                 if stale_price is None:
                     current_price = path_price
@@ -1252,6 +1323,26 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
+    try:
+        # Imported here so a machine without the plotting stack still runs discovery,
+        # help, and every deterministic capability.
+        from .chart import render_chart_artifacts
+    except ImportError as error:
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[
+                {
+                    "id": "chart_renderer",
+                    "reason": f"plotting_stack_unavailable: {error}",
+                    "required": True,
+                    "retryable": False,
+                }
+            ],
+        )
     try:
         prices = _cached_provider(
             runtime,

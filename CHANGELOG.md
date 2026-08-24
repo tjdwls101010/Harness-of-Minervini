@@ -10,13 +10,13 @@ All notable changes to this project are documented here. The format is based on 
 - **Point-in-time provider layer.** Completed Yahoo bars, exact-date `ibd-rs-rating==0.5.0`, filed-as-of SEC facts, current Nasdaq security identity, current Yahoo classification, and captured Finviz breadth now retain typed availability, coverage, retrieval time, version, and content hashes.
 - **Doctrine-aware decision engines.** Standard Stage 2 and eight-of-eight qualification, bounded recent-IPO Primary Base eligibility, setup and VCP supply evidence, filed fundamentals and the narrow Power Play exception, current same-industry peers, market vectors, and prospective or active-position risk remain separate auditable axes.
 - **Explicit local research state.** A non-creating SQLite ledger records or annotates research only through explicit watchlist write capabilities; the provider cache and chart artifacts use ignored paths and disclose their side effects.
-- **V2 verification suite.** Public-seam doctrine, unit, contract, integration, provider-fixture, topology, behavioral, and baseline tests live under `tests/260817`.
+- **V2 verification suite.** Public-seam doctrine, unit, contract, integration, provider-fixture, topology, behavioral, and baseline tests live under `tests/`, in a dated directory per rewrite wave.
 
 ### Changed
 
 - **Principle over rail.** The always-loaded constitution now carries compact decision invariants while two intent skills adaptively select only the evidence the question needs; no fixed workflow, scout, batch size, or monolithic score controls the analysis.
 - **Interface over document.** Command syntax, defaults, limits, statuses, side effects, and examples moved into the executable registry and detailed CLI help. Human documentation teaches discovery instead of duplicating a flag catalog.
-- **Claude and Codex share literal files.** `AGENTS.md -> CLAUDE.md` and `.agents/skills -> ../.claude/skills` remove host-specific prompt copies and drift.
+- **Claude and Codex share literal files.** `AGENTS.md -> CLAUDE.md` and `.codex/skills -> ../.claude/skills` remove host-specific prompt copies and drift.
 - **Point-in-time and missing-evidence semantics are release gates.** Incomplete bars, post-cutoff filings, mutable current taxonomy, stale or withheld RS, transport failures, and successful no-data responses cannot be silently promoted to usable historical evidence.
 - **Active HOLD audits the whole stop window.** A recovered latest price cannot hide an earlier completed-daily-low breach; changed stops carry an effective date, incomplete path coverage stays `INCOMPLETE`, and leaf help explains the distinction from an explicit live check.
 - **Candidate transport stays dense.** Discovery pagination returns complete exclusion counts by reason with at most `min(limit, 20)` representative records instead of dumping thousands of excluded instruments into every response.

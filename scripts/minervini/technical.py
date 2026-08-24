@@ -36,7 +36,12 @@ def _sma(close: pd.Series, length: int) -> float | None:
     return float(close.rolling(length).mean().iloc[-1])
 
 
-def _primary_base(close: pd.Series, quality: str | None) -> dict[str, Any]:
+def _primary_base(
+    close: pd.Series,
+    quality: str | None,
+    emergence_judgment: str | None,
+    long_correction: str | None,
+) -> dict[str, Any]:
     count = len(close)
     prior = close.iloc[:-1]
     claims: list[dict[str, Any]] = []
@@ -59,17 +64,39 @@ def _primary_base(close: pd.Series, quality: str | None) -> dict[str, Any]:
     elif duration <= 15:
         depth_state = "pass" if depth <= 25 else "fail"
         depth_required = "<= 25% for a three-week base"
-    elif duration >= 25:
+    elif duration <= 25:
         depth_state = "pass" if depth <= 35 else "fail"
-        depth_required = "<= 35% for a five-week-or-longer base"
+        depth_required = "<= 35% for a three-to-five-week base"
+    elif depth <= 35:
+        depth_state = "pass"
+        depth_required = "<= 35% for a base longer than five weeks"
+    elif depth <= 50:
+        # The source allows as much as 50% only for a correction lasting about a year and
+        # gives no session count for "about", so the caller confirms that from the weekly
+        # chart rather than the module resolving it with an invented cutoff.
+        depth_state = {"confirmed": "pass", "not_confirmed": "fail"}.get(str(long_correction), "unavailable")
+        depth_required = "35-50% requires weekly-chart confirmation that the correction lasted about a year"
     else:
-        depth_state = "unavailable"
-        depth_required = "manual review in the source's three-to-five-week transition band"
+        depth_state = "fail"
+        depth_required = "<= 50% at any duration"
     claims.append(_signal("primary_base.duration_depth", depth_state, round(depth, 4) if depth is not None else None, depth_required, DOCTRINE_IPO))
-    claims.append(_signal("primary_base.all_time_high_breakout", "unavailable" if ath_breakout is None else "pass" if ath_breakout else "fail", float(close.iloc[-1]) if count else None, "close above all prior completed-session highs", DOCTRINE_IPO))
     quality_state = quality if quality in {"supports", "contradicts", "needs_chart"} else "needs_chart"
     return {
         "quantitative_claims": claims,
+        # The source accepts emergence to an all-time high or from a constructive
+        # consolidation near it, so an unbroken high is timing that has not happened
+        # yet, and the second route needs the caller's chart confirmation.
+        "emergence": _signal(
+            "primary_base.emergence",
+            "unavailable"
+            if ath_breakout is None
+            else "pass"
+            if ath_breakout or emergence_judgment == "near_high_consolidation"
+            else "not_triggered",
+            float(close.iloc[-1]) if count else None,
+            "close above all prior completed-session highs, or a chart-confirmed constructive consolidation near them",
+            DOCTRINE_IPO,
+        ),
         "quality": {
             "id": "primary_base.visual_quality",
             "state": quality_state,
@@ -84,6 +111,8 @@ def build_eligibility_evidence(
     *,
     rs_rating: int | None,
     primary_base_quality: str | None = None,
+    primary_base_emergence: str | None = None,
+    primary_base_long_correction: str | None = None,
 ) -> dict[str, Any]:
     """Build the canonical eight claims from completed daily bars only.
 
@@ -129,7 +158,7 @@ def build_eligibility_evidence(
         "trend_template": trend,
     }
     if history_state == "insufficient":
-        result["primary_base"] = _primary_base(close, primary_base_quality)
+        result["primary_base"] = _primary_base(close, primary_base_quality, primary_base_emergence, primary_base_long_correction)
     return result
 
 

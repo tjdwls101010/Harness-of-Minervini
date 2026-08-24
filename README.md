@@ -99,11 +99,11 @@ Normal analysis is read-only apart from an ignored provider cache. Research stat
 
 ## Development
 
-All v2 tests and fixtures live under `tests/260817` and exercise public seams. The implementation plan records the full architecture and acceptance rationale at [docs/plans/260817/harness-v2-greenfield-plan.md](docs/plans/260817/harness-v2-greenfield-plan.md); the maintainers' non-runtime design record is `.claude/harness-spec.md`.
+All v2 tests and fixtures live under `tests/`, in a dated directory per rewrite wave, and exercise public seams. The implementation plan records the full architecture and acceptance rationale at [docs/plans/260817/harness-v2-greenfield-plan.md](docs/plans/260817/harness-v2-greenfield-plan.md); the maintainers' non-runtime design record is `.claude/harness-spec.md`.
 
 ```bash
 bash scripts/bootstrap.sh
-scripts/.venv/bin/python -m unittest discover -s tests/260817 -p 'test_*.py'
+scripts/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 scripts/.venv/bin/python -m compileall -q scripts/minervini scripts/pipeline
 scripts/.venv/bin/python -m pip check
 ```

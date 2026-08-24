@@ -99,7 +99,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         self.assertIn("half_average_gain_cap", result["failed"])
 
     def test_active_requires_entry_date_and_stop_or_invalidation(self) -> None:
-        result = reduce_risk({"mode": "active", "entry_price": 100.0})
+        result = reduce_risk({"mode": "active", "as_of": "2026-08-21", "entry_price": 100.0})
 
         self.assertEqual(result["verdict"], "INCOMPLETE")
         self.assertCountEqual(result["missing"], ["entry_date", "stop_or_invalidation", "current_price"])
@@ -107,6 +107,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
     def test_active_live_stop_breach_requires_explicit_live_check(self) -> None:
         evidence = {
             "mode": "active",
+            "as_of": "2026-08-21",
             "entry_price": 100.0,
             "entry_date": "2026-08-10",
             "stop_price": 94.0,
@@ -121,12 +122,14 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         result = reduce_risk(
             {
                 "mode": "active",
+                "as_of": "2026-08-14",
                 "entry_price": 100.0,
                 "entry_date": "2026-08-10",
                 "stop_price": 94.0,
                 "current_price": 98.0,
                 "completed_price_path": {
                     "state": "clear",
+                    "checked_level": 94.0,
                     "from": "2026-08-10",
                     "through": "2026-08-14",
                     "bars_checked": 5,
@@ -141,6 +144,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         result = reduce_risk(
             {
                 "mode": "active",
+                "as_of": "2026-08-21",
                 "entry_price": 100.0,
                 "entry_date": "2026-08-10",
                 "stop_price": 94.0,
@@ -155,6 +159,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         result = reduce_risk(
             {
                 "mode": "active",
+                "as_of": "2026-08-21",
                 "entry_price": 100.0,
                 "entry_date": "2026-08-10",
                 "stop_price": 94.0,
@@ -168,6 +173,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
     def test_active_completed_stop_or_invalidation_trigger_is_sell(self) -> None:
         evidence = {
             "mode": "active",
+            "as_of": "2026-08-21",
             "entry_price": 100.0,
             "entry_date": "2026-08-10",
             "invalidation": {"price": 94.0, "state": "triggered"},
