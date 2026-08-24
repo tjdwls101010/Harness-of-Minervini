@@ -28,7 +28,7 @@
    - `gate` — 원전이 필터 언어로 진술한 한계("If a stock doesn't meet the Trend Template criteria, I don't consider it"). pass/fail을 결정하고 근접성 논변을 허용하지 않는다. 리스크 스파인도 여기 — 승자에 대한 서술이 아니라 트레이더 행동에 대한 제약이므로.
    - `band` — 원전이 범위로 준 것. 측정치·범위·범위 내 위치(`band_position`)·어느 쪽 끝이 좋은지(`direction`)를 보고하고, 수렴에 기여하되 **단독으로 판정을 내지 못한다.**
    - `reference` — 모집단 통계. 종목에 평가되지 않는다.
-   - 게이트는 16개이고 전부 코어 12 claims 안에 있다. 채굴된 claim은 단 하나도 게이트로 승격되지 않았다.
+   - 게이트는 18개이고 전부 코어 12 claims 안에 있다. 채굴된 claim은 단 하나도 게이트로 승격되지 않았다.
    - **Phase 2·6에 번짐**: VCP 정량 엔진의 측정치는 이 스키마 위에 올라간다(Phase 2가 그만큼 줄어든다). 응답 표준에 "모든 band 측정치는 값과 원전 범위를 함께 명시" 규칙 추가(Phase 6 프로즈 작업의 일부를 선반영).
 
 10. **band 공시는 조건 없이 항상.** "느슨한 가장자리에 가까울 때만 명시"는 "가깝다"의 컷오프를 발명해야 하므로 채택하지 않았다. 모든 band 측정치를 값·범위와 함께 보고하면 26%와 34.9%의 차이가 독자에게 그대로 전달되고 발명되는 숫자가 없다.
@@ -161,7 +161,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
 - **Phase 0 — 완료·머지됨** (PR #3, `b3aca97`). 계획의 버그 4건으로 시작해 codex 적대 리뷰 7라운드(6→4→3→3→2→1건 발견 후 ACCEPT)에서 12건이 추가로 나왔고 전부 수정. 마지막 세 커밋은 증상이 아니라 뿌리를 제거했다 — 같은 판단을 두 곳에서 각자의 말로 내리던 사본 3쌍(`settled_breach`, `declares_exit_plan`, `_status_word`)을 리듀서 단독 소유로 통합.
 - **Phase 1 — 브랜치 `feat/doctrine-registry-expansion`에 커밋됨, 적대 리뷰 2라운드 진행 중.** 레지스트리 12 → 124 claims. 1라운드 REJECT(8건, P1 5건) 전부 수정 후 `e63a942`. 2라운드 codex run id: `20260825-000308-p1-doctrine-review-51ac` (`codex_bridge.py result --run <id>`로 회수).
-  - 현재: 348 tests OK, `validate()` valid/124, 검증기 190 verified + 6 declared, `validate_harness.py` PASS.
+  - 현재: 364 tests OK, `validate()` valid/124, 검증기 190 verified + 6 declared, `validate_harness.py` PASS.
   - PR 전 남은 것: 2라운드 판정 처리 → PR → 머지.
   - CLAUDE.md 114줄(계획 예산 111줄 대비 +3). band 공시·role 규칙 때문이며 Phase 6의 중복 제거로 상쇄 예정.
 - **Phase 2~7 — 미착수.**

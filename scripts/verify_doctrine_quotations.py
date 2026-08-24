@@ -63,6 +63,11 @@ def collapse(text: str, *, source: bool = False) -> str:
     # figure would read as the author's own.
     text = re.sub(r"(?<=\d)\s*[-]\s*(?=\d)", " to ", text)
     text = re.sub(r"(?<=\d)\s*:\s*(?=\d)", " ratio ", text)
+    # An operator and a sign are the whole content of a filter line. Dropping them lets
+    # "> 69" read as "< 69" and "-25.00%" as "25.00%", reversing what was cited.
+    text = text.replace("<=", " lte ").replace(">=", " gte ").replace("≤", " lte ").replace("≥", " gte ")
+    text = text.replace("<", " lt ").replace(">", " gt ")
+    text = re.sub(r"-(?=\d)", " minus ", text)
     # Dropping the remaining spaces and punctuation is what makes a hyphenation break
     # ("sta tistics") compare equal to the word the author actually wrote.
     return re.sub(r"[^a-z0-9]", "", text)
@@ -125,7 +130,13 @@ def _uncovered(needle: str, readings: tuple[str, ...]) -> str | None:
                     high = middle - 1
             best = max(best, low)
         if best < _MINIMUM_RUN:
-            return needle[cursor : cursor + _MINIMUM_RUN]
+            # A run this short is either the tail of a genuine assembly or an insertion.
+            # Asking whether the whole remainder is somewhere in the row separates them,
+            # instead of rejecting every assembly that ends in a short passage.
+            remainder = needle[cursor:]
+            if any(remainder in body for body in readings):
+                return None
+            return remainder[:_MINIMUM_RUN]
         cursor += best
     return None
 

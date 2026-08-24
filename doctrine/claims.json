@@ -5100,26 +5100,24 @@
       },
       "thresholds": {
         "prior_growth_rate_percent": {
-          "role": "band",
-          "range": [
+          "role": "reference",
+          "unit": "percent",
+          "exact": false,
+          "quote_index": 0,
+          "value": [
             50,
             60
-          ],
-          "unit": "percent",
-          "exact": false,
-          "quote_index": 0,
-          "direction": "inside_is_better"
+          ]
         },
         "decelerated_growth_rate_percent": {
-          "role": "band",
-          "range": [
-            20,
-            30
-          ],
+          "role": "reference",
           "unit": "percent",
           "exact": false,
           "quote_index": 0,
-          "direction": "inside_is_better"
+          "value": [
+            20,
+            30
+          ]
         }
       },
       "failure": {

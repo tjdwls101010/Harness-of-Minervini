@@ -35,6 +35,9 @@ _REQUIRED_FIELDS = frozenset((*_CLAIM_FIELDS, "provenance", "tests"))
 _VALID_COMPUTABILITY = frozenset({"deterministic", "chart_assisted", "judgment_only"})
 _VALID_OUT_OF_SCOPE = frozenset({"position_sizing"})
 _VALID_DIRECTIONS = frozenset({"lower_is_better", "higher_is_better", "inside_is_better"})
+# Enough places to strip binary-float noise from a reported figure and far too many to
+# soften any limit the registry states.
+_REPORTED_PRECISION = 10
 # Every threshold a reducer reads by name. A registry that no longer supplies one of
 # these validates cleanly today and raises KeyError mid-verdict tomorrow, so the
 # dependency is declared here where validation can see it.
@@ -201,7 +204,9 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
         "role": "band",
-        "measured": measured,
+        # Rounded for the reader, exactly as a gate reports; every comparison below
+        # still uses the measurement it was handed.
+        "measured": round(measured, _REPORTED_PRECISION) if isinstance(measured, float) else measured,
         "unit": specification["unit"],
         "source_range": [low, high],
         "exact": specification["exact"],
@@ -325,7 +330,16 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                 if specification.get("direction") not in _VALID_DIRECTIONS:
                     errors.append(f"{label}.thresholds.{name} is a band and must say which direction is better")
             else:
-                if not _is_number(specification.get("value")):
+                value = specification.get("value")
+                # A reference is never compared against anything, so it may cite a figure
+                # the source gave as a pair. A gate is compared, so it may not.
+                numeric = _is_number(value) or (
+                    role == "reference"
+                    and isinstance(value, builtins.list)
+                    and len(value) == 2
+                    and all(_is_number(edge) for edge in value)
+                )
+                if not numeric:
                     # A boolean passes `"value" in specification` and then compares as 1,
                     # turning an ordinary stop into a rejection with the registry still green.
                     errors.append(f"{label}.thresholds.{name} must carry a numeric value")

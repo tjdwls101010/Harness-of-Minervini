@@ -66,12 +66,24 @@ class QualifyBandReportingTests(unittest.TestCase):
         self.assertGreater(loose["band_position"], tight["band_position"])
 
     def test_a_standard_route_ticker_reports_no_primary_base_band(self) -> None:
+        # Enough history for the standard route, so no Primary Base is measured at all.
         # Nothing measured, nothing to disclose; an empty map beats a null placeholder.
+        sessions = 260
+        index = pd.bdate_range(end=AS_OF, periods=sessions)
+        close = pd.Series([50.0 + value * 0.4 for value in range(sessions)], index=index)
+        frame = pd.DataFrame(
+            {"Open": close * 0.995, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(sessions, 1_000_000)},
+            index=index,
+        )
+        long_history = ProviderSnapshot(
+            frame,
+            SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}),
+        )
         payload = execute(
             "ticker.qualify",
             {"ticker": "TEST", "as_of": AS_OF},
             runtime=Runtime(
-                price_history=lambda ticker, as_of: recent_ipo(trough=70.0),
+                price_history=lambda ticker, as_of: long_history,
                 rs_rating=lambda ticker, as_of: ProviderSnapshot(
                     {"rating": 88, "rating_date": AS_OF},
                     SnapshotMeta(provider="ibd-rs-rating", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}),
@@ -79,7 +91,8 @@ class QualifyBandReportingTests(unittest.TestCase):
             ),
         )
 
-        self.assertIn("bands", payload["data"])
+        self.assertEqual(payload["data"]["route"], "standard")
+        self.assertEqual(payload["data"]["bands"], {})
 
 
 if __name__ == "__main__":

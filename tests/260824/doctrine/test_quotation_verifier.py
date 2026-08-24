@@ -127,5 +127,35 @@ class FragmentCoverageTests(unittest.TestCase):
         self.assertEqual((defects, assembled), ([], []))
 
 
+class OperatorFidelityTests(unittest.TestCase):
+    def test_reversing_a_comparison_operator_changes_the_text(self) -> None:
+        self.assertNotEqual(verifier.collapse("RS 12M: > 69"), verifier.collapse("RS 12M: < 69"))
+
+    def test_dropping_a_minus_sign_changes_the_text(self) -> None:
+        self.assertNotEqual(verifier.collapse("% Off 52 Wk High: > -25.00%"), verifier.collapse("% Off 52 Wk High: > 25.00%"))
+
+    def test_an_operator_still_reads_the_same_written_either_way(self) -> None:
+        self.assertEqual(verifier.collapse("at least 30%"), verifier.collapse("at least 30 %"))
+
+
+class ShortPieceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.rows = verifier.load_rows()
+        if not self.rows:
+            self.skipTest("build-time corpus is absent")
+
+    def test_a_declared_assembly_ending_in_a_short_genuine_piece_is_accepted(self) -> None:
+        joined = (
+            "It's important to point out that a stock must meet all eight of the Trend Template criteria "
+            "to be considered in a confirmed stage 2 uptrend. "
+            "wait and buy only in stage 2."
+        )
+
+        defects, _, declared = verifier.verify(one_claim(joined, assembled_from="two passages"), self.rows)
+
+        self.assertEqual(defects, [])
+        self.assertEqual(len(declared), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
