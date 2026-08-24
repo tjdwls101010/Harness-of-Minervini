@@ -6,7 +6,7 @@
 
 **감사 판정(5소스 수렴): 부분 재작성.** 인프라 계층 — 프로바이더·point-in-time 규율·envelope 계약·Trend Template 게이트·완결 스탑 경로 감사·캐시(208 테스트 통과) — 은 우수하므로 보존한다. **판단 평면** — 셋업 정량화, 매도/포지션 관리, 시장 리더십 행동, 펀더멘털 깊이, 최종 조합 무결성 — 이 빈약하다: 원전 지식의 55%가 부재(고영향 167건), 기존 행동 검증 30리포트는 거부 규율만 증명했고 판단 품질 시나리오는 0건이었다. 성진의 의심이 정확했다.
 
-감사 원자료(재확인용): sonnet 커버리지 맵 `/private/tmp/claude-501/-Users-seongjin-Coding-Invest-Harness-of-Minervini/9774a78a-7271-4df4-ba2b-a1a429142c11/tasks/wf_result.json`, codex 채굴 전문 `~/.claude/projects/-Users-seongjin-Coding-Invest-Harness-of-Minervini/44976f35-0d66-4a18-8546-80710f7de54a/tool-results/bwqufnoib.txt`, codex 감사 `.codex-runs/20260824-204125-harness-audit-c39f/`. 유실 시 원 소스(`.tmp/*.db`)에서 재채굴 가능.
+감사 원자료(재확인용): sonnet 커버리지 맵 `<세션 스크래치패드>`, codex 채굴 전문 `<클로드 프로젝트 tool-results>`, codex 감사 `.codex-runs/20260824-204125-harness-audit-c39f/`. 유실 시 원 소스(`.tmp/*.db`)에서 재채굴 가능.
 
 ## 확정된 사용자 결정 (스코프)
 
@@ -168,7 +168,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
 ### 채굴 원자료 (스크래치패드, 세션 종료 시 소실 가능)
 
-`/private/tmp/claude-501/-Users-seongjin-Coding-Invest-Harness-of-Minervini/273ddb78-8a25-42f3-8a8a-6dea3ab7f10d/scratchpad/`에 `mined_eligibility.json`(31) · `mined_market.json`(25) · `mined_fundamentals.json`(32) · `mined_existing.json`(12) · `mined_practitioners.json`(34) · `codex_mining.txt`(매도 26 + 셋업 30) · `coverage_map.json`. 전부 `doctrine/claims.json`에 흡수됐으므로 소실돼도 치명적이지 않지만, Phase 2·3·4가 원 채굴 노트(특히 `codex_mining.txt`의 VCP 30측정치와 `mined_practitioners.json`의 실무자별 볼륨 프로파일)를 다시 참조할 수 있다.
+`<세션 스크래치패드>`에 `mined_eligibility.json`(31) · `mined_market.json`(25) · `mined_fundamentals.json`(32) · `mined_existing.json`(12) · `mined_practitioners.json`(34) · `codex_mining.txt`(매도 26 + 셋업 30) · `coverage_map.json`. 전부 `doctrine/claims.json`에 흡수됐으므로 소실돼도 치명적이지 않지만, Phase 2·3·4가 원 채굴 노트(특히 `codex_mining.txt`의 VCP 30측정치와 `mined_practitioners.json`의 실무자별 볼륨 프로파일)를 다시 참조할 수 있다.
 
 ### 에이전트 보고를 믿지 말 것 (이번 세션에서 4번 확인)
 

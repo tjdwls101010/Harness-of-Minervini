@@ -73,9 +73,13 @@ def _depth_claim(depth: float | None, duration: int | None, long_correction: str
     year_long = _gate("primary_base.duration_depth", "year_long_correction_depth_pct", depth, DOCTRINE_IPO)
     if year_long["state"] == "fail":
         return year_long
-    # Between the two ceilings the source permits the depth only for a correction lasting
-    # about a year, and never says how many sessions "about" is. The caller confirms it
-    # from the weekly chart instead of the module resolving it with an invented cutoff.
+    # The deeper allowance is for a correction lasting about a year, which a base only a
+    # few weeks long is not, whatever the caller confirms.
+    if _gate("primary_base.duration_depth", "year_long_exception_minimum_duration_sessions", duration, DOCTRINE_IPO)["state"] != "pass":
+        return ceiling
+    # Between the two ceilings the source never says how many sessions "about a year" is,
+    # so the caller confirms it from the weekly chart rather than the module resolving it
+    # with an invented cutoff.
     resolved = {"confirmed": "pass", "not_confirmed": "fail"}.get(str(long_correction), "unavailable")
     return _signal("primary_base.duration_depth", resolved, depth, year_long["basis"]["required"] + " only for a chart-confirmed year-long correction", DOCTRINE_IPO)
 

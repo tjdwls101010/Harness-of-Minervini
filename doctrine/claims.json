@@ -413,6 +413,14 @@
           "comparator": "<=",
           "exact": false,
           "quote_index": 2
+        },
+        "year_long_exception_minimum_duration_sessions": {
+          "role": "gate",
+          "value": 25,
+          "unit": "sessions",
+          "comparator": ">",
+          "exact": false,
+          "quote_index": 2
         }
       },
       "failure": {
@@ -5111,7 +5119,7 @@
           "unit": "percent",
           "exact": false,
           "quote_index": 0,
-          "direction": "lower_is_better"
+          "direction": "inside_is_better"
         }
       },
       "failure": {

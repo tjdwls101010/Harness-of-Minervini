@@ -58,6 +58,11 @@ def collapse(text: str, *, source: bool = False) -> str:
     # alteration of a quoted figure reads as the author's own number.
     text = re.sub(r"(?<=\d),(?=\d)", "", text)
     text = re.sub(r"(?<=\d)\.(?=\d)", " point ", text)
+    # A dash between figures makes a range and a colon makes a ratio. Stripping either
+    # turns "30-40 percent" into "3040 percent" and "2:1" into "21", so an altered
+    # figure would read as the author's own.
+    text = re.sub(r"(?<=\d)\s*[-]\s*(?=\d)", " to ", text)
+    text = re.sub(r"(?<=\d)\s*:\s*(?=\d)", " ratio ", text)
     # Dropping the remaining spaces and punctuation is what makes a hyphenation break
     # ("sta tistics") compare equal to the word the author actually wrote.
     return re.sub(r"[^a-z0-9]", "", text)
@@ -96,11 +101,33 @@ def _reads_in_order(pieces: list[str], readings: tuple[str, ...]) -> bool:
     return False
 
 
-def _fragments(text: str) -> list[str]:
-    """Sentence-sized pieces, so an assembled quotation can be checked piece by piece."""
+_MINIMUM_RUN = 24
 
-    pieces = re.split(r"(?<=[.!?])\s+|\s+\d+[.)]\s+", text)
-    return [collapse(piece) for piece in pieces if len(collapse(piece)) >= 25]
+
+def _uncovered(needle: str, readings: tuple[str, ...]) -> str | None:
+    """The first stretch of the quotation that no reading accounts for.
+
+    Checking sentence-sized pieces let a short one through: anything below the size
+    floor was simply dropped, so a fabricated "Buy now." appended to a real passage was
+    never looked at. Walking the whole string instead leaves nothing unexamined.
+    """
+
+    cursor = 0
+    while cursor < len(needle):
+        best = 0
+        for body in readings:
+            low, high = best, len(needle) - cursor
+            while low < high:
+                middle = (low + high + 1) // 2
+                if needle[cursor : cursor + middle] in body:
+                    low = middle
+                else:
+                    high = middle - 1
+            best = max(best, low)
+        if best < _MINIMUM_RUN:
+            return needle[cursor : cursor + _MINIMUM_RUN]
+        cursor += best
+    return None
 
 
 def verify(registry: dict, rows: dict[tuple[str, int], tuple[str, ...]]) -> tuple[list[str], list[str], list[str]]:
@@ -133,16 +160,15 @@ def verify(registry: dict, rows: dict[tuple[str, int], tuple[str, ...]]) -> tupl
             # are not adjacent. It never excuses a piece that is not in the source --
             # otherwise the field is a way to enter any sentence at all and have it
             # counted as verified.
-            pieces = _fragments(quotation["text"])
-            absent = [piece for piece in pieces if not any(piece in reading for reading in readings)]
+            uncovered = _uncovered(needle, readings)
             declared = quotation.get("assembled_from")
-            if pieces and not absent:
+            if uncovered is None:
                 if declared:
                     declarations.append(f"{label}: {declared}")
                 else:
-                    assembled.append(f"{label}: every sentence is genuine but they are not adjacent; needs assembled_from")
+                    assembled.append(f"{label}: every passage is genuine but they are not adjacent; needs assembled_from")
             elif declared:
-                defects.append(f"{label}: declares '{declared}' but this is not in the source: {absent[0][:60] if absent else 'no checkable fragment'}")
+                defects.append(f"{label}: declares '{declared}' but this is not in the source: {uncovered}")
             else:
                 defects.append(f"{label}: departs from the extraction and does not say how; needs assembled_from")
     return defects, assembled, declarations

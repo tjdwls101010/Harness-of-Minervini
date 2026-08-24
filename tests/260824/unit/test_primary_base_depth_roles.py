@@ -54,13 +54,17 @@ class DepthRoleTests(unittest.TestCase):
         self.assertEqual(loose["state"], tight["state"])
         self.assertGreater(loose["band_position"], tight["band_position"])
 
-    def test_a_session_either_side_of_five_weeks_gets_the_same_verdict(self) -> None:
-        # The old code routed on a duration reference, so 25 sessions failed and 26 went
-        # unavailable at the same depth. A reference may not decide anything.
-        at_five_weeks = depth_claim(primary_base(peak_position=34, trough=60.0))
-        past_five_weeks = depth_claim(primary_base(peak_position=33, trough=60.0))
+    def test_the_depth_ceiling_is_the_same_either_side_of_five_weeks(self) -> None:
+        # The source gives one ceiling for any base past three weeks, so the ordinary
+        # verdict must not move at the five-week mark. What does change there is whether
+        # the year-long exception is available at all, which is the source's own
+        # distinction between a three-to-five-week base and a longer correction.
+        at_five_weeks = depth_claim(primary_base(peak_position=34, trough=70.0))
+        past_five_weeks = depth_claim(primary_base(peak_position=33, trough=70.0))
 
-        self.assertEqual(at_five_weeks["state"], past_five_weeks["state"])
+        self.assertEqual(at_five_weeks["state"], "pass")
+        self.assertEqual(past_five_weeks["state"], "pass")
+        self.assertEqual(at_five_weeks["basis"]["required"], past_five_weeks["basis"]["required"])
 
 
 if __name__ == "__main__":

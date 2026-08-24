@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import json
+import math
 from collections.abc import Iterable, Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -38,22 +39,23 @@ _VALID_DIRECTIONS = frozenset({"lower_is_better", "higher_is_better", "inside_is
 # these validates cleanly today and raises KeyError mid-verdict tomorrow, so the
 # dependency is declared here where validation can see it.
 REQUIRED_THRESHOLDS = (
-    ("eligibility.standard_trend_template", "sma_200_rising_minimum_months"),
-    ("eligibility.standard_trend_template", "minimum_pct_above_52_week_low"),
-    ("eligibility.standard_trend_template", "maximum_pct_below_52_week_high"),
-    ("eligibility.standard_trend_template", "relative_strength_minimum"),
-    ("eligibility.recent_ipo_primary_base", "minimum_trading_history_sessions"),
-    ("eligibility.recent_ipo_primary_base", "minimum_base_duration_sessions"),
-    ("eligibility.recent_ipo_primary_base", "three_week_base_depth_pct"),
-    ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct"),
-    ("eligibility.recent_ipo_primary_base", "base_depth_ceiling_pct"),
-    ("eligibility.recent_ipo_primary_base", "year_long_correction_depth_pct"),
-    ("risk.initial_stop_and_reward", "initial_stop_ceiling_pct"),
-    ("risk.initial_stop_and_reward", "ordinary_loss_target_pct"),
-    ("risk.initial_stop_and_reward", "half_average_gain_multiple"),
-    ("risk.initial_stop_and_reward", "reward_to_risk_minimum"),
-    ("risk.initial_stop_and_reward", "reward_to_risk_preferred"),
-    ("risk.profit_protection_at_3r", "breakeven_protection_trigger_r"),
+    ("eligibility.standard_trend_template", "sma_200_rising_minimum_months", "gate"),
+    ("eligibility.standard_trend_template", "minimum_pct_above_52_week_low", "gate"),
+    ("eligibility.standard_trend_template", "maximum_pct_below_52_week_high", "gate"),
+    ("eligibility.standard_trend_template", "relative_strength_minimum", "gate"),
+    ("eligibility.recent_ipo_primary_base", "minimum_trading_history_sessions", "gate"),
+    ("eligibility.recent_ipo_primary_base", "minimum_base_duration_sessions", "gate"),
+    ("eligibility.recent_ipo_primary_base", "three_week_base_depth_pct", "gate"),
+    ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct", "band"),
+    ("eligibility.recent_ipo_primary_base", "base_depth_ceiling_pct", "gate"),
+    ("eligibility.recent_ipo_primary_base", "year_long_correction_depth_pct", "gate"),
+    ("eligibility.recent_ipo_primary_base", "year_long_exception_minimum_duration_sessions", "gate"),
+    ("risk.initial_stop_and_reward", "initial_stop_ceiling_pct", "gate"),
+    ("risk.initial_stop_and_reward", "ordinary_loss_target_pct", "band"),
+    ("risk.initial_stop_and_reward", "half_average_gain_multiple", "gate"),
+    ("risk.initial_stop_and_reward", "reward_to_risk_minimum", "gate"),
+    ("risk.initial_stop_and_reward", "reward_to_risk_preferred", "reference"),
+    ("risk.profit_protection_at_3r", "breakeven_protection_trigger_r", "gate"),
 )
 # This module publishes a function named `list`, so the builtin type is shadowed from
 # its definition onward. Type checks below reach it through `builtins` on purpose.
@@ -329,27 +331,36 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                     errors.append(f"{label}.thresholds.{name} must carry a numeric value")
                 if role == "gate" and specification.get("comparator") not in _COMPARATORS:
                     errors.append(f"{label}.thresholds.{name} is a gate and needs a comparator")
-                if role == "gate" and record["layer"] == "practice":
-                    # A practice-layer number can inform a judgment; it cannot reject a candidate.
-                    errors.append(f"{label}.thresholds.{name} cannot be a gate on the practice layer")
+                if role == "gate" and record["layer"] != "canonical":
+                    # A practice-layer number can inform a judgment and a harness-layer
+                    # record has no source at all; neither may reject a candidate.
+                    errors.append(f"{label}.thresholds.{name} cannot be a gate on the {record['layer']} layer")
                 if role == "gate" and record.get("attributed_to") not in (None, "Minervini"):
                     # Another practitioner's standard is contrast material. Making it a gate
                     # would let a voice the harness does not follow reject a candidate.
                     errors.append(f"{label}.thresholds.{name} is attributed to {record['attributed_to']} and cannot be a gate")
 
     registered = {record.get("id"): record for record in registry.get("claims", [])}
-    for claim_id, name in REQUIRED_THRESHOLDS:
+    for claim_id, name, role in REQUIRED_THRESHOLDS:
         record = registered.get(claim_id)
         if record is None:
             errors.append(f"a reducer reads {claim_id}.{name} but no such claim is registered")
-        elif name not in record.get("thresholds", {}):
+            continue
+        specification = record.get("thresholds", {}).get(name)
+        if specification is None:
             errors.append(f"a reducer reads {claim_id}.{name} but that threshold is not registered")
+        elif specification.get("role") != role:
+            # A reducer reads a gate's scalar or a band's pair. Swapping the role keeps
+            # the name resolvable and hands the reducer the wrong shape mid-verdict.
+            errors.append(f"a reducer reads {claim_id}.{name} as a {role} but it is registered as a {specification.get('role')}")
 
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # Python's JSON reader accepts NaN and Infinity, and every comparison against NaN is
+    # false, so an ordinary stop would silently fail a ceiling the registry calls valid.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 __all__ = ["evaluate_band", "evaluate_gate", "get_claim", "list", "threshold", "validate"]
