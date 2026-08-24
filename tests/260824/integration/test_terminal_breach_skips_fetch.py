@@ -60,5 +60,39 @@ class AuditPreconditionTests(unittest.TestCase):
         self.assertEqual(calls, ["TEST"])
 
 
+class RoutingAgreesWithTheReducerTests(unittest.TestCase):
+    """The operation must not decide breach or plan on its own terms."""
+
+    def setUp(self) -> None:
+        self.calls: list[str] = []
+
+    def refuse(self, ticker: str, as_of: str):
+        self.calls.append(ticker)
+        raise ProviderUnavailable(provider="fixture-prices", reason="unavailable", retryable=False)
+
+    def run_risk(self, **request: object) -> dict:
+        return execute("ticker.risk", {**POSITION, **request}, runtime=Runtime(price_history=self.refuse))
+
+    def test_an_untriggered_completed_stop_is_not_a_settled_breach(self) -> None:
+        payload = self.run_risk(stop_price=94.0, completed_stop={"state": "not_triggered"})
+
+        self.assertEqual(self.calls, ["TEST"])
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+
+    def test_a_triggered_stop_event_is_a_settled_breach(self) -> None:
+        payload = self.run_risk(stop_price=94.0, stop_event={"state": "triggered"})
+
+        self.assertEqual(self.calls, [])
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["status"], "ok")
+
+    def test_a_state_only_invalidation_is_not_a_plan_worth_fetching_for(self) -> None:
+        payload = self.run_risk(invalidation={"state": "triggered"})
+
+        self.assertEqual(self.calls, [])
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertIn("stop_or_invalidation", payload["data"]["missing"])
+
+
 if __name__ == "__main__":
     unittest.main()

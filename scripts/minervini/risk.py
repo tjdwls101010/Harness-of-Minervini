@@ -218,18 +218,60 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
     return False
 
 
+def _exit_plan(payload: Mapping[str, Any]) -> tuple[float | None, bool]:
+    """The invalidation's auditable level and whether it carries a real condition."""
+
+    invalidation = _mapping(payload.get("invalidation"))
+    condition = invalidation.get("condition")
+    return _number(invalidation.get("price")), isinstance(condition, str) and bool(condition.strip())
+
+
+def declares_exit_plan(evidence: Mapping[str, Any]) -> bool:
+    """Whether an exit level or condition was actually declared.
+
+    A mapping that carries only a status declares no level and no condition, so
+    there is nothing for a "triggered" flag to be a trigger of.
+    """
+
+    payload = _mapping(evidence)
+    invalidation_price, has_condition = _exit_plan(payload)
+    return payload.get("stop_price") is not None or invalidation_price is not None or has_condition
+
+
+def settled_breach(evidence: Mapping[str, Any]) -> bool:
+    """Whether the evidence already settles the verdict without completed price history.
+
+    The operation asks this before fetching bars: a breach it would never look at
+    is a request that can only downgrade a terminal SELL to a partial one.
+    """
+
+    payload = _mapping(evidence)
+    if payload.get("mode") != "active":
+        return False
+    invalidation = _mapping(payload.get("invalidation"))
+    invalidation_price, _ = _exit_plan(payload)
+    stop = _number(payload.get("stop_price"))
+    current = _number(payload.get("current_price"))
+    levels = [level for level in (stop, invalidation_price) if level is not None]
+    live_stop = _mapping(payload.get("live_stop"))
+    return (
+        (bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop))
+        or _triggered(payload.get("completed_stop"))
+        or _triggered(payload.get("stop_event"))
+        or _triggered(payload.get("completed_price_path"))
+        or (declares_exit_plan(payload) and _triggered(invalidation))
+        or (current is not None and bool(levels) and current <= max(levels))
+    )
+
+
 def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     as_of = _iso_date(payload.get("as_of"))
     entry = _number(payload.get("entry_price"))
     entry_date = _iso_date(payload.get("entry_date"))
     stop = _number(payload.get("stop_price"))
     invalidation = _mapping(payload.get("invalidation"))
-    invalidation_price = _number(invalidation.get("price"))
-    invalidation_condition = invalidation.get("condition")
-    has_condition = isinstance(invalidation_condition, str) and bool(invalidation_condition.strip())
-    # A mapping that carries only a status declares no exit level and no condition,
-    # so there is nothing for a "triggered" flag to be a trigger of.
-    declared_plan = payload.get("stop_price") is not None or invalidation_price is not None or has_condition
+    invalidation_price, has_condition = _exit_plan(payload)
+    declared_plan = declares_exit_plan(payload)
     # A stop raised later is only in force from its own date; the structural
     # invalidation has stood since entry.
     stop_effective_date = _iso_date(payload.get("stop_effective_date"))

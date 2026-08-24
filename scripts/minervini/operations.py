@@ -32,7 +32,7 @@ from .providers.nasdaq import SecurityRecord, current_security_master, historica
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
-from .risk import reduce_risk
+from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .setup_evidence import build_setup_evidence
 from .technical import build_eligibility_evidence
@@ -1178,10 +1178,10 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
     invalidation = evidence.get("invalidation")
-    has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(invalidation, Mapping)
-    # The audit needs the date the position started and a level to clear; what it
-    # was bought at decides 3R protection, not whether a level was breached.
-    has_position_anchors = evidence.get("entry_date") is not None and has_stop_or_invalidation
+    # The audit needs the date the position started and a plan to clear; what it
+    # was bought at decides 3R protection, not whether a level was breached. Both
+    # predicates come from the reducer so routing cannot drift from the verdict.
+    has_position_anchors = evidence.get("entry_date") is not None and declares_exit_plan(evidence)
     raw_stop_price = evidence.get("stop_price")
     stop_price = _positive(raw_stop_price)
     raw_invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
@@ -1243,15 +1243,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         }
     # A breach that already settles the verdict needs no price history, and a
     # provider failure fetched for nothing would downgrade a terminal SELL to partial.
-    live_stop = evidence.get("live_stop")
-    live_breach_asserted = bool(evidence.get("live_stop_check")) and isinstance(live_stop, Mapping) and live_stop.get("partial_session") is True and str(live_stop.get("state", "")).lower() in {"triggered", "breached"}
-    invalidation_asserted = (
-        isinstance(invalidation, Mapping)
-        and str(invalidation.get("state", invalidation.get("status", ""))).lower() in {"triggered", "breached"}
-        and (invalidation_price is not None or isinstance(invalidation.get("condition"), str) and invalidation["condition"].strip())
-    )
-    settled_breach = explicit_completed_breach or live_breach_asserted or invalidation_asserted or isinstance(evidence.get("completed_stop"), Mapping)
-    if mode == "active" and has_position_anchors and not settled_breach:
+    if mode == "active" and has_position_anchors and not settled_breach(evidence):
         try:
             prices = _cached_provider(
                 runtime,
