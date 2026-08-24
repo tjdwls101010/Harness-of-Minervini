@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 import unittest
 
+import numpy as np
+import pandas as pd
+
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderUnavailable
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 
 
 AS_OF = "2025-12-31"
@@ -92,6 +96,51 @@ class RoutingAgreesWithTheReducerTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(payload["status"], "needs_input")
         self.assertIn("stop_or_invalidation", payload["data"]["missing"])
+
+
+class SuppliedPathBreachTests(unittest.TestCase):
+    """A breach the caller already supplied must not be overwritten by a fresh fetch."""
+
+    def setUp(self) -> None:
+        self.calls: list[str] = []
+
+    def clear_history(self, ticker: str, as_of: str):
+        self.calls.append(ticker)
+        values = np.linspace(50, 150, 260)
+        index = pd.bdate_range(end=AS_OF, periods=len(values))
+        close = pd.Series(values, index=index)
+        frame = pd.DataFrame(
+            {"Open": close * 0.995, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)},
+            index=index,
+        )
+        return ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                as_of=date.fromisoformat(AS_OF),
+                coverage={"completed_only": True},
+            ),
+        )
+
+    def run_risk(self, path: dict) -> dict:
+        return execute(
+            "ticker.risk",
+            {**POSITION, "stop_price": 94.0, "completed_price_path": path},
+            runtime=Runtime(price_history=self.clear_history),
+        )
+
+    def test_a_padded_breach_state_is_still_a_breach(self) -> None:
+        payload = self.run_risk({"state": " breached "})
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(self.calls, [])
+
+    def test_a_breach_reported_under_status_is_still_a_breach(self) -> None:
+        payload = self.run_risk({"status": "breached"})
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":

@@ -157,10 +157,16 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _triggered(value: Any) -> bool:
+def _status_word(value: Any) -> str:
+    """The one way this module reads a state, so two readers cannot disagree."""
+
     if not isinstance(value, Mapping):
-        return False
-    return str(value.get("state", value.get("status", ""))).lower() in {"triggered", "breached"}
+        return ""
+    return str(value.get("state", value.get("status", ""))).strip().lower()
+
+
+def _triggered(value: Any) -> bool:
+    return _status_word(value) in {"triggered", "breached"}
 
 
 def _iso_date(value: Any) -> date | None:
@@ -201,7 +207,7 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
         audited_level = _number(record.get("level"))
         if audited_level is None or audited_level < level:
             continue
-        if str(record.get("state", "")).strip().lower() != "clear":
+        if _status_word(record) != "clear":
             continue
         # A window that starts late leaves the sessions before it unexamined, and one
         # that ends early cannot speak for the sessions after it.
@@ -302,8 +308,8 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
-    path_state = str(completed_price_path.get("state", "")).strip().lower()
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_state in {"triggered", "breached"} or (current is not None and stop is not None and current <= stop)
+    path_state = _status_word(completed_price_path)
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
     breached = live_triggered or completed_stop or invalidation_triggered
