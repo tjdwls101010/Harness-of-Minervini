@@ -11,6 +11,9 @@ from typing import Any
 from . import doctrine
 
 
+# Enough places to strip binary-float noise from a reported figure and far too many
+# to soften any limit the registry states.
+_REPORTED_PRECISION = 10
 _ENTRY_RISK = "risk.initial_stop_and_reward"
 _PROFIT_PROTECTION = "risk.profit_protection_at_3r"
 
@@ -128,8 +131,10 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         if stop >= entry:
             failed.append("initial_stop_price")
         else:
-            stop_pct = round((entry - stop) / entry * 100, 4)
-            controls["initial_stop_pct"] = stop_pct
+            # Rounded for the reader, never for the comparison: a value tidied to the
+            # limit before it is checked is a tolerance the gate design forbids.
+            stop_pct = (entry - stop) / entry * 100
+            controls["initial_stop_pct"] = round(stop_pct, _REPORTED_PRECISION)
             # The source gives the ordinary loss target as a range, so the reading
             # travels with its range instead of collapsing to a pass.
             controls["loss_target"] = doctrine.evaluate_band(_ENTRY_RISK, "ordinary_loss_target_pct", stop_pct)
@@ -138,8 +143,8 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
             if average_gain is not None and stop_pct > average_gain * average_gain_multiple:
                 failed.append("half_average_gain_cap")
             if upside is not None:
-                reward_to_risk = round((upside - entry) / (entry - stop), 4)
-                controls["reward_to_risk"] = reward_to_risk
+                reward_to_risk = (upside - entry) / (entry - stop)
+                controls["reward_to_risk"] = round(reward_to_risk, _REPORTED_PRECISION)
                 if doctrine.evaluate_gate(_ENTRY_RISK, "reward_to_risk_minimum", reward_to_risk)["state"] == "fail":
                     failed.append("reward_to_risk")
     elif entry is not None and upside is not None and upside <= entry:

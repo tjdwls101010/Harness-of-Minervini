@@ -51,7 +51,8 @@ class PrimaryBaseDepthBandTests(unittest.TestCase):
         claim = base_claim(frame, "primary_base.duration_depth")
 
         self.assertEqual(claim["state"], "pass")
-        self.assertEqual(claim["basis"]["required"], "within [25, 35]% for a three-to-five-week base")
+        # The rejecting claim is a gate now, so it states a limit and nothing about range.
+        self.assertEqual(claim["basis"]["required"], "<= 35")
 
     def test_longer_correction_between_thirty_five_and_fifty_percent_is_chart_review_not_failure(self) -> None:
         frame = history(sessions=60, peak_position=10, peak=100.0, trough=55.0, last=99.0)

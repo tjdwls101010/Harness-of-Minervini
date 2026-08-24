@@ -52,7 +52,13 @@ def collapse(text: str, *, source: bool = False) -> str:
     if source:
         for pattern in _PAGE_FURNITURE:
             text = pattern.sub(" ", text)
-    # Dropping spaces as well as punctuation is what makes a hyphenation break
+    # A separator inside a number carries no meaning and a decimal point carries all of
+    # it, so the point survives as a word while the thousands comma does not. Without
+    # this, "7.5 percent" and "75 percent" normalise to the same string and a tenfold
+    # alteration of a quoted figure reads as the author's own number.
+    text = re.sub(r"(?<=\d),(?=\d)", "", text)
+    text = re.sub(r"(?<=\d)\.(?=\d)", " point ", text)
+    # Dropping the remaining spaces and punctuation is what makes a hyphenation break
     # ("sta tistics") compare equal to the word the author actually wrote.
     return re.sub(r"[^a-z0-9]", "", text)
 
@@ -123,15 +129,20 @@ def verify(registry: dict, rows: dict[tuple[str, int], tuple[str, ...]]) -> tupl
                 continue
             # A quotation may legitimately depart from the extraction: sentences joined
             # from a list, a passage read across a figure block, a word the extraction
-            # broke and the transcriber repaired. What it may not do is depart silently.
-            declared = quotation.get("assembled_from")
-            if declared:
-                declarations.append(f"{label}: {declared}")
-                continue
+            # broke and the transcriber repaired. A declaration explains why the pieces
+            # are not adjacent. It never excuses a piece that is not in the source --
+            # otherwise the field is a way to enter any sentence at all and have it
+            # counted as verified.
             pieces = _fragments(quotation["text"])
             absent = [piece for piece in pieces if not any(piece in reading for reading in readings)]
+            declared = quotation.get("assembled_from")
             if pieces and not absent:
-                assembled.append(f"{label}: every sentence is genuine but they are not adjacent; needs assembled_from")
+                if declared:
+                    declarations.append(f"{label}: {declared}")
+                else:
+                    assembled.append(f"{label}: every sentence is genuine but they are not adjacent; needs assembled_from")
+            elif declared:
+                defects.append(f"{label}: declares '{declared}' but this is not in the source: {absent[0][:60] if absent else 'no checkable fragment'}")
             else:
                 defects.append(f"{label}: departs from the extraction and does not say how; needs assembled_from")
     return defects, assembled, declarations
@@ -150,7 +161,7 @@ def main() -> int:
     registry = json.loads(arguments.registry.read_text(encoding="utf-8"))
     total = sum(len(record["provenance"].get("quotations", [])) for record in registry["claims"])
     defects, assembled, declarations = verify(registry, rows)
-    verified = total - len(defects) - len(assembled)
+    verified = total - len(defects) - len(assembled) - len(declarations)
     print(f"verified {verified} of {total} quotations across {len(registry['claims'])} claims")
     if declarations:
         print(f"\ndeclared departures from the extraction ({len(declarations)}) -- accepted because they say what they did:")

@@ -395,7 +395,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 2
+          "quote_index": 2,
+          "direction": "lower_is_better"
         },
         "year_long_correction_depth_pct": {
           "role": "gate",
@@ -405,10 +406,11 @@
           "exact": false,
           "quote_index": 2
         },
-        "five_week_base_duration_sessions": {
-          "role": "reference",
-          "value": 25,
-          "unit": "sessions",
+        "base_depth_ceiling_pct": {
+          "role": "gate",
+          "value": 35,
+          "unit": "percent",
+          "comparator": "<=",
           "exact": false,
           "quote_index": 2
         }
@@ -622,7 +624,8 @@
           ],
           "unit": "weeks",
           "exact": false,
-          "quote_index": 2
+          "quote_index": 2,
+          "direction": "inside_is_better"
         },
         "flag_minimum_sessions": {
           "role": "gate",
@@ -640,7 +643,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 2
+          "quote_index": 2,
+          "direction": "lower_is_better"
         },
         "tight_action_maximum_pct": {
           "role": "gate",
@@ -752,7 +756,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         },
         "half_average_gain_multiple": {
           "role": "gate",
@@ -2679,7 +2684,8 @@
           ],
           "unit": "weeks",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -2748,7 +2754,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -2895,7 +2902,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         },
         "leader_rest_pullback": {
           "role": "band",
@@ -2905,7 +2913,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -2974,7 +2983,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         },
         "severe_bear_correction_ceiling": {
           "role": "reference",
@@ -3057,7 +3067,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -3320,7 +3331,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         },
         "post_bubble_decline": {
           "role": "band",
@@ -3330,7 +3342,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -3540,7 +3553,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -3608,7 +3622,8 @@
           ],
           "unit": "count",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -3739,7 +3754,8 @@
           ],
           "unit": "count",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -3879,7 +3895,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -4105,7 +4122,8 @@
           ],
           "unit": "sessions",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         },
         "first_stress_test_window": {
           "role": "band",
@@ -4115,7 +4133,8 @@
           ],
           "unit": "sessions",
           "exact": false,
-          "quote_index": 2
+          "quote_index": 2,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -4499,7 +4518,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         },
         "minimum_growth_window_quarters": {
           "role": "band",
@@ -4509,7 +4529,8 @@
           ],
           "unit": "quarters",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -4579,7 +4600,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         }
       },
       "failure": {
@@ -4647,7 +4669,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         },
         "bull_market_growth_window_quarters": {
           "role": "band",
@@ -4657,7 +4680,8 @@
           ],
           "unit": "quarters",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -4724,7 +4748,8 @@
           ],
           "unit": "ratio",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         }
       },
       "failure": {
@@ -5074,7 +5099,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         },
         "decelerated_growth_rate_percent": {
           "role": "band",
@@ -5084,7 +5110,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -5163,7 +5190,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -5291,7 +5319,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -5503,7 +5532,8 @@
           ],
           "unit": "quarters",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         },
         "turnaround_growth_window_quarters_ch7": {
           "role": "band",
@@ -5513,7 +5543,8 @@
           ],
           "unit": "quarters",
           "exact": false,
-          "quote_index": 1
+          "quote_index": 1,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -5663,7 +5694,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         },
         "market_leader_best_stretch_years": {
           "role": "band",
@@ -5673,7 +5705,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -5803,7 +5836,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -6049,7 +6083,8 @@
           ],
           "unit": "multiple",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -6116,7 +6151,8 @@
           ],
           "unit": "multiple",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -6184,7 +6220,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         },
         "pe_expansion_signal_window_months": {
           "role": "band",
@@ -6194,7 +6231,8 @@
           ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         },
         "pe_expansion_historical_average_multiple": {
           "role": "band",
@@ -6204,7 +6242,8 @@
           ],
           "unit": "multiple",
           "exact": false,
-          "quote_index": 1
+          "quote_index": 1,
+          "direction": "lower_is_better"
         }
       },
       "failure": {
@@ -7077,7 +7116,8 @@
           ],
           "unit": "cents",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -7404,7 +7444,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 1
+          "quote_index": 1,
+          "direction": "higher_is_better"
         },
         "base_length_min": {
           "role": "reference",
@@ -7691,7 +7732,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "lower_is_better"
         },
         "min_days_volume_follow_through": {
           "role": "reference",
@@ -7897,7 +7939,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         }
       },
       "failure": {
@@ -8279,7 +8322,8 @@
           ],
           "unit": "quarters",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -8352,7 +8396,8 @@
           ],
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "direction": "higher_is_better"
         }
       },
       "failure": {
@@ -8482,7 +8527,8 @@
           ],
           "unit": "percent",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "direction": "inside_is_better"
         }
       },
       "failure": {

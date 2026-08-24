@@ -17,6 +17,9 @@ DOCTRINE_IPO = "eligibility.recent_ipo_primary_base"
 # Completed US sessions in a calendar month, used only to read a source duration the
 # book states in months into the bar count this module actually counts.
 _SESSIONS_PER_MONTH = 21
+# Enough places to strip binary-float noise from a reported figure and far too many
+# to soften any limit the registry states.
+_REPORTED_PRECISION = 10
 
 
 def _signal(identifier: str, state: str, measured: Any, required: str, doctrine_id: str = DOCTRINE_TREND) -> dict[str, Any]:
@@ -35,7 +38,8 @@ def _gate(identifier: str, name: str, measured: float | None, doctrine_id: str =
     limit its help text advertises from ever being two different numbers.
     """
     gate = doctrine.evaluate_gate(doctrine_id, name, measured)
-    return _signal(identifier, gate["state"], gate["measured"], gate["required"], doctrine_id)
+    reported = round(gate["measured"], _REPORTED_PRECISION) if isinstance(gate["measured"], float) else gate["measured"]
+    return _signal(identifier, gate["state"], reported, gate["required"], doctrine_id)
 
 
 def _comparison(identifier: str, measured: float | None, comparator: float | None, required: str) -> dict[str, Any]:
@@ -51,30 +55,29 @@ def _sma(close: pd.Series, length: int) -> float | None:
 
 
 def _depth_claim(depth: float | None, duration: int | None, long_correction: str | None) -> dict[str, Any]:
-    """Apply the depth rule the base's own duration selects.
+    """Decide the base's depth with gates only.
 
-    The source states one ceiling for a three-week consolidation, a range for a three-
-    to-five-week base, and a deeper allowance for a correction lasting about a year. It
-    never says how many sessions "about a year" is, so that last case is confirmed from
-    the weekly chart instead of resolved with a cutoff nobody wrote down.
+    The source states a tighter ceiling for a three-week consolidation, a ceiling for
+    anything longer, and a deeper allowance for a correction lasting about a year. Each
+    is a limit it states in filter language, so each is a gate. The 25-35 range travels
+    separately, because where inside a range a base sat is worth reporting and is not
+    something a range can decide.
     """
     if depth is None or duration is None:
         return _signal("primary_base.duration_depth", "unavailable", depth, "source-defined duration/depth band", DOCTRINE_IPO)
-    measured = round(depth, 4)
-    three_weeks = doctrine.threshold(DOCTRINE_IPO, "minimum_base_duration_sessions")
-    five_weeks = doctrine.threshold(DOCTRINE_IPO, "five_week_base_duration_sessions")
-    if duration <= three_weeks:
-        return _gate("primary_base.duration_depth", "three_week_base_depth_pct", measured, DOCTRINE_IPO)
-    band = doctrine.evaluate_band(DOCTRINE_IPO, "three_to_five_week_base_depth_pct", measured)
-    if duration <= five_weeks:
-        return _signal("primary_base.duration_depth", "pass" if band["state"] == "within_source_range" else "fail", measured, f"within {band['source_range']}% for a three-to-five-week base", DOCTRINE_IPO)
-    if band["state"] == "within_source_range":
-        return _signal("primary_base.duration_depth", "pass", measured, f"within {band['source_range']}% for a base longer than five weeks", DOCTRINE_IPO)
-    year_long = _gate("primary_base.duration_depth", "year_long_correction_depth_pct", measured, DOCTRINE_IPO)
+    if duration <= doctrine.threshold(DOCTRINE_IPO, "minimum_base_duration_sessions"):
+        return _gate("primary_base.duration_depth", "three_week_base_depth_pct", depth, DOCTRINE_IPO)
+    ceiling = _gate("primary_base.duration_depth", "base_depth_ceiling_pct", depth, DOCTRINE_IPO)
+    if ceiling["state"] == "pass":
+        return ceiling
+    year_long = _gate("primary_base.duration_depth", "year_long_correction_depth_pct", depth, DOCTRINE_IPO)
     if year_long["state"] == "fail":
         return year_long
+    # Between the two ceilings the source permits the depth only for a correction lasting
+    # about a year, and never says how many sessions "about" is. The caller confirms it
+    # from the weekly chart instead of the module resolving it with an invented cutoff.
     resolved = {"confirmed": "pass", "not_confirmed": "fail"}.get(str(long_correction), "unavailable")
-    return _signal("primary_base.duration_depth", resolved, measured, f"deeper than {band['source_range'][1]}% needs weekly-chart confirmation that the correction lasted about a year", DOCTRINE_IPO)
+    return _signal("primary_base.duration_depth", resolved, depth, year_long["basis"]["required"] + " only for a chart-confirmed year-long correction", DOCTRINE_IPO)
 
 
 def _primary_base(
@@ -103,6 +106,9 @@ def _primary_base(
     quality_state = quality if quality in {"supports", "contradicts", "needs_chart"} else "needs_chart"
     return {
         "quantitative_claims": claims,
+        # Reported beside the gates, never as one: two bases inside the same range are
+        # not the same picture, and a bare pass throws that difference away.
+        "depth_band": doctrine.evaluate_band(DOCTRINE_IPO, "three_to_five_week_base_depth_pct", depth),
         # The source accepts emergence to an all-time high or from a constructive
         # consolidation near it, so an unbroken high is timing that has not happened
         # yet, and the second route needs the caller's chart confirmation.
@@ -166,8 +172,8 @@ def build_eligibility_evidence(
         _signal(TREND_TEMPLATE_CRITERIA[2], "unavailable" if sma200 is None or sma200_month_ago is None else "pass" if sma200 > sma200_month_ago else "fail", round(sma200, 4) if sma200 is not None else None, f"200 SMA higher than {rising_sessions} completed sessions earlier"),
         _signal(TREND_TEMPLATE_CRITERIA[3], "unavailable" if sma50 is None or sma150 is None or sma200 is None else "pass" if sma50 > sma150 and sma50 > sma200 else "fail", round(sma50, 4) if sma50 is not None else None, "50 SMA > 150 SMA and 200 SMA"),
         _comparison(TREND_TEMPLATE_CRITERIA[4], current, sma50, "price > 50 SMA"),
-        _gate(TREND_TEMPLATE_CRITERIA[5], "minimum_pct_above_52_week_low", round(above_low_pct, 4) if above_low_pct is not None else None),
-        _gate(TREND_TEMPLATE_CRITERIA[6], "maximum_pct_below_52_week_high", round(below_high_pct, 4) if below_high_pct is not None else None),
+        _gate(TREND_TEMPLATE_CRITERIA[5], "minimum_pct_above_52_week_low", above_low_pct),
+        _gate(TREND_TEMPLATE_CRITERIA[6], "maximum_pct_below_52_week_high", below_high_pct),
         _gate(TREND_TEMPLATE_CRITERIA[7], "relative_strength_minimum", rs_rating if rs_rating is None or 1 <= rs_rating <= 99 else -1),
     ]
     history_state = "sufficient" if len(close) >= 200 else "insufficient"

@@ -33,6 +33,28 @@ _OPTIONAL_CLAIM_FIELDS = ("attributed_to", "out_of_scope", "unquantified", "disa
 _REQUIRED_FIELDS = frozenset((*_CLAIM_FIELDS, "provenance", "tests"))
 _VALID_COMPUTABILITY = frozenset({"deterministic", "chart_assisted", "judgment_only"})
 _VALID_OUT_OF_SCOPE = frozenset({"position_sizing"})
+_VALID_DIRECTIONS = frozenset({"lower_is_better", "higher_is_better", "inside_is_better"})
+# Every threshold a reducer reads by name. A registry that no longer supplies one of
+# these validates cleanly today and raises KeyError mid-verdict tomorrow, so the
+# dependency is declared here where validation can see it.
+REQUIRED_THRESHOLDS = (
+    ("eligibility.standard_trend_template", "sma_200_rising_minimum_months"),
+    ("eligibility.standard_trend_template", "minimum_pct_above_52_week_low"),
+    ("eligibility.standard_trend_template", "maximum_pct_below_52_week_high"),
+    ("eligibility.standard_trend_template", "relative_strength_minimum"),
+    ("eligibility.recent_ipo_primary_base", "minimum_trading_history_sessions"),
+    ("eligibility.recent_ipo_primary_base", "minimum_base_duration_sessions"),
+    ("eligibility.recent_ipo_primary_base", "three_week_base_depth_pct"),
+    ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct"),
+    ("eligibility.recent_ipo_primary_base", "base_depth_ceiling_pct"),
+    ("eligibility.recent_ipo_primary_base", "year_long_correction_depth_pct"),
+    ("risk.initial_stop_and_reward", "initial_stop_ceiling_pct"),
+    ("risk.initial_stop_and_reward", "ordinary_loss_target_pct"),
+    ("risk.initial_stop_and_reward", "half_average_gain_multiple"),
+    ("risk.initial_stop_and_reward", "reward_to_risk_minimum"),
+    ("risk.initial_stop_and_reward", "reward_to_risk_preferred"),
+    ("risk.profit_protection_at_3r", "breakeven_protection_trigger_r"),
+)
 # This module publishes a function named `list`, so the builtin type is shadowed from
 # its definition onward. Type checks below reach it through `builtins` on purpose.
 _VALID_KINDS = frozenset({"constitution", "hard_gate", "default", "tactic", "interpretation", "exception", "quarantine"})
@@ -106,11 +128,21 @@ def threshold(claim_id: str, name: str) -> Any:
     Raises:
         KeyError: If ``claim_id`` is unknown or does not register ``name``.
     """
-    thresholds = get_claim(claim_id)["claim"]["thresholds"]
+    claim = get_claim(claim_id)["claim"]
+    _readable(claim, claim_id)
+    thresholds = claim["thresholds"]
     if name not in thresholds:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
     return specification["range"] if specification["role"] == "band" else specification["value"]
+
+
+def _readable(record: Mapping[str, Any], claim_id: str) -> None:
+    """Refuse to hand back a number this harness is not permitted to act on."""
+
+    exclusion = record.get("out_of_scope")
+    if exclusion:
+        raise ValueError(f"{claim_id} is recorded {exclusion} and is audit material; no capability may read its numbers")
 
 
 def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -120,6 +152,7 @@ def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[s
     drew, so the mismatch raises here rather than producing a plausible verdict.
     """
     record = get_claim(claim_id)
+    _readable(record["claim"], claim_id)
     specification = record["claim"]["thresholds"].get(name)
     if specification is None:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
@@ -177,8 +210,16 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         return signal
     span = high - low
     signal["band_position"] = round((measured - low) / span, 4) if span else 0.0
-    # Tighter than the range is better, never a defect; only the loose edge is a limit.
-    signal["state"] = "beyond_source_range" if measured > high else "within_source_range"
+    # Which edge is the limit depends on what the range describes. A base shallower than
+    # its depth range is better; a company growing slower than its growth range is not.
+    direction = specification["direction"]
+    signal["direction"] = direction
+    if direction != "higher_is_better" and measured > high:
+        signal["state"] = "beyond_source_range"
+    elif direction != "lower_is_better" and measured < low:
+        signal["state"] = "short_of_source_range"
+    else:
+        signal["state"] = "within_source_range"
     return signal
 
 
@@ -231,8 +272,10 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                 # An out-of-scope record is audit material; wiring it to a capability
                 # would put a number the harness may not prescribe into a verdict.
                 errors.append(f"{label} is out of scope and cannot name a runtime consumer")
-        if record["layer"] == "practice" and record["kind"] == "hard_gate":
-            errors.append(f"{label} practice-layer record cannot be a hard gate")
+        if record["layer"] in {"practice", "harness"} and record["kind"] == "hard_gate":
+            # A harness-layer record has no source; letting it be a hard gate would put an
+            # unsourced rejection into the same tier as the eight criteria.
+            errors.append(f"{label} {record['layer']}-layer record cannot be a hard gate")
         quotations = record["provenance"].get("quotations")
         if not isinstance(quotations, builtins.list):
             quotations = []
@@ -273,20 +316,40 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                 continue
             if role == "band":
                 span = specification.get("range")
-                if not isinstance(span, builtins.list) or len(span) != 2 or not all(isinstance(edge, (int, float)) and not isinstance(edge, bool) for edge in span):
+                if not isinstance(span, builtins.list) or len(span) != 2 or not all(_is_number(edge) for edge in span):
                     errors.append(f"{label}.thresholds.{name} is a band and needs a two-number range")
                 elif span[0] > span[1]:
                     errors.append(f"{label}.thresholds.{name} range is inverted")
+                if specification.get("direction") not in _VALID_DIRECTIONS:
+                    errors.append(f"{label}.thresholds.{name} is a band and must say which direction is better")
             else:
-                if "value" not in specification:
-                    errors.append(f"{label}.thresholds.{name} must carry a value")
+                if not _is_number(specification.get("value")):
+                    # A boolean passes `"value" in specification` and then compares as 1,
+                    # turning an ordinary stop into a rejection with the registry still green.
+                    errors.append(f"{label}.thresholds.{name} must carry a numeric value")
                 if role == "gate" and specification.get("comparator") not in _COMPARATORS:
                     errors.append(f"{label}.thresholds.{name} is a gate and needs a comparator")
                 if role == "gate" and record["layer"] == "practice":
                     # A practice-layer number can inform a judgment; it cannot reject a candidate.
                     errors.append(f"{label}.thresholds.{name} cannot be a gate on the practice layer")
+                if role == "gate" and record.get("attributed_to") not in (None, "Minervini"):
+                    # Another practitioner's standard is contrast material. Making it a gate
+                    # would let a voice the harness does not follow reject a candidate.
+                    errors.append(f"{label}.thresholds.{name} is attributed to {record['attributed_to']} and cannot be a gate")
+
+    registered = {record.get("id"): record for record in registry.get("claims", [])}
+    for claim_id, name in REQUIRED_THRESHOLDS:
+        record = registered.get(claim_id)
+        if record is None:
+            errors.append(f"a reducer reads {claim_id}.{name} but no such claim is registered")
+        elif name not in record.get("thresholds", {}):
+            errors.append(f"a reducer reads {claim_id}.{name} but that threshold is not registered")
 
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 __all__ = ["evaluate_band", "evaluate_gate", "get_claim", "list", "threshold", "validate"]
