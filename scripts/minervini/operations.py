@@ -1179,7 +1179,9 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     provider_missing: list[dict[str, Any]] = []
     invalidation = evidence.get("invalidation")
     has_stop_or_invalidation = evidence.get("stop_price") is not None or isinstance(invalidation, Mapping)
-    has_position_anchors = evidence.get("entry_price") is not None and evidence.get("entry_date") is not None and has_stop_or_invalidation
+    # The audit needs the date the position started and a level to clear; what it
+    # was bought at decides 3R protection, not whether a level was breached.
+    has_position_anchors = evidence.get("entry_date") is not None and has_stop_or_invalidation
     raw_stop_price = evidence.get("stop_price")
     stop_price = _positive(raw_stop_price)
     raw_invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
@@ -1239,7 +1241,17 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 for role, level, effective in protective_plan
             ],
         }
-    if mode == "active" and has_position_anchors and not explicit_completed_breach and not isinstance(evidence.get("completed_stop"), Mapping):
+    # A breach that already settles the verdict needs no price history, and a
+    # provider failure fetched for nothing would downgrade a terminal SELL to partial.
+    live_stop = evidence.get("live_stop")
+    live_breach_asserted = bool(evidence.get("live_stop_check")) and isinstance(live_stop, Mapping) and live_stop.get("partial_session") is True and str(live_stop.get("state", "")).lower() in {"triggered", "breached"}
+    invalidation_asserted = (
+        isinstance(invalidation, Mapping)
+        and str(invalidation.get("state", invalidation.get("status", ""))).lower() in {"triggered", "breached"}
+        and (invalidation_price is not None or isinstance(invalidation.get("condition"), str) and invalidation["condition"].strip())
+    )
+    settled_breach = explicit_completed_breach or live_breach_asserted or invalidation_asserted or isinstance(evidence.get("completed_stop"), Mapping)
+    if mode == "active" and has_position_anchors and not settled_breach:
         try:
             prices = _cached_provider(
                 runtime,

@@ -88,5 +88,33 @@ class AnchorIntegrityTests(unittest.TestCase):
         self.assertEqual(result["missing"], [])
 
 
+class BreachIndependenceTests(unittest.TestCase):
+    def test_a_completed_price_below_the_stop_sells_without_the_entry_price(self) -> None:
+        payload = position(current_price=94.0)
+        del payload["entry_price"]
+
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "SELL")
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
+    def test_a_state_only_invalidation_declares_no_exit_plan(self) -> None:
+        payload = position(invalidation={"state": "triggered"})
+        del payload["stop_price"]
+
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "INCOMPLETE")
+        self.assertIn("stop_or_invalidation", result["missing"])
+
+    def test_a_condition_bearing_invalidation_asserted_triggered_still_sells(self) -> None:
+        payload = position(invalidation={"state": "triggered", "condition": "completed close below the base low"})
+        del payload["stop_price"]
+
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "SELL")
+
+
 if __name__ == "__main__":
     unittest.main()

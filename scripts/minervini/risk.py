@@ -227,7 +227,9 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     invalidation_price = _number(invalidation.get("price"))
     invalidation_condition = invalidation.get("condition")
     has_condition = isinstance(invalidation_condition, str) and bool(invalidation_condition.strip())
-    declared_plan = payload.get("stop_price") is not None or bool(invalidation)
+    # A mapping that carries only a status declares no exit level and no condition,
+    # so there is nothing for a "triggered" flag to be a trigger of.
+    declared_plan = payload.get("stop_price") is not None or invalidation_price is not None or has_condition
     # A stop raised later is only in force from its own date; the structural
     # invalidation has stood since entry.
     stop_effective_date = _iso_date(payload.get("stop_effective_date"))
@@ -243,8 +245,6 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     anchors: list[str] = []
     if as_of is None:
         anchors.append("as_of")
-    if entry is None:
-        anchors.append("entry_price")
     if entry_date is None:
         anchors.append("entry_date")
     if entry_date is not None and as_of is not None and entry_date > as_of:
@@ -268,6 +268,9 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     gaps: list[str] = []
     if not breached:
+        if entry is None:
+            # Entry economics decide 3R protection, never whether a level was breached.
+            gaps.append("entry_price")
         if current is None:
             gaps.append("current_price")
         if declared_plan and not protective_plan:
