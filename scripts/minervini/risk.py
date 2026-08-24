@@ -192,10 +192,10 @@ def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, A
     ]
 
 
-def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None) -> bool:
-    """Whether some record cleared ``level`` over every session from ``required_from``."""
+def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None, as_of: date | None) -> bool:
+    """Whether some record cleared ``level`` over every session from ``required_from`` to ``as_of``."""
 
-    if required_from is None:
+    if required_from is None or as_of is None:
         return False
     for record in records:
         audited_level = _number(record.get("level"))
@@ -203,12 +203,13 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
             continue
         if str(record.get("state", "")).strip().lower() != "clear":
             continue
-        # A window the record does not state is a window nobody checked, and one that
-        # starts late leaves the sessions before it unexamined.
+        # A window that starts late leaves the sessions before it unexamined, and one
+        # that ends early cannot speak for the sessions after it.
         effective_from = _iso_date(record.get("effective_from"))
-        if effective_from is None or effective_from > required_from:
+        through = _iso_date(record.get("through"))
+        if effective_from is None or through is None:
             continue
-        if _iso_date(record.get("through")) is None:
+        if effective_from > required_from or through < as_of:
             continue
         bars = record.get("bars_checked")
         if not isinstance(bars, int) or isinstance(bars, bool) or bars < 1:
@@ -218,6 +219,7 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
 
 
 def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
+    as_of = _iso_date(payload.get("as_of"))
     entry = _number(payload.get("entry_price"))
     entry_date = _iso_date(payload.get("entry_date"))
     stop = _number(payload.get("stop_price"))
@@ -228,23 +230,31 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     declared_plan = payload.get("stop_price") is not None or bool(invalidation)
     # A stop raised later is only in force from its own date; the structural
     # invalidation has stood since entry.
-    stop_from = _iso_date(payload.get("stop_effective_date")) or entry_date
+    stop_effective_date = _iso_date(payload.get("stop_effective_date"))
+    stop_from = stop_effective_date or entry_date
     protective_plan = [
         (level, required_from)
         for level, required_from in ((stop, stop_from), (invalidation_price, entry_date))
         if level is not None
     ]
-    missing: list[str] = []
+
+    # Anchors describe whether the request is a coherent position at all. A breach
+    # outranks evidence nobody gathered, but never a request that contradicts itself.
+    anchors: list[str] = []
+    if as_of is None:
+        anchors.append("as_of")
     if entry is None:
-        missing.append("entry_price")
+        anchors.append("entry_price")
     if entry_date is None:
-        missing.append("entry_date")
+        anchors.append("entry_date")
+    if entry_date is not None and as_of is not None and entry_date > as_of:
+        anchors.append("entry_date_after_as_of")
+    if stop_effective_date is not None and entry_date is not None and stop_effective_date < entry_date:
+        anchors.append("stop_effective_date_before_entry_date")
+    if stop_effective_date is not None and as_of is not None and stop_effective_date > as_of:
+        anchors.append("stop_effective_date_after_as_of")
     if not declared_plan:
-        missing.append("stop_or_invalidation")
-    elif not protective_plan:
-        # A condition nobody can evaluate against completed bars, or a price that
-        # is not a price, leaves nothing for the audit to clear.
-        missing.append("auditable_protective_level")
+        anchors.append("stop_or_invalidation")
 
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
@@ -255,30 +265,39 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
     breached = live_triggered or completed_stop or invalidation_triggered
+
+    gaps: list[str] = []
     if not breached:
         if current is None:
-            missing.append("current_price")
+            gaps.append("current_price")
+        if declared_plan and not protective_plan:
+            # A condition nobody can evaluate against completed bars, or a price that
+            # is not a price, leaves nothing for the audit to clear.
+            gaps.append("auditable_protective_level")
         if protective_plan:
             records = _audit_records(completed_price_path, path_state)
-            if path_state != "clear" or not all(_audited(records, level, required_from) for level, required_from in protective_plan):
-                missing.append("completed_price_path")
+            if path_state != "clear" or not all(_audited(records, level, required_from, as_of) for level, required_from in protective_plan):
+                gaps.append("completed_price_path")
         if invalidation_price is None and has_condition:
             # HOLD asserts nothing has invalidated the thesis; an exit condition the
             # harness never evaluated cannot be part of that assertion.
-            missing.append("invalidation_condition_not_audited")
+            gaps.append("invalidation_condition_not_audited")
 
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
-    if breached:
-        # A known breach is evidence, and evidence outranks whatever else is absent.
-        verdict = "SELL"
-        reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
-        missing = []
-    elif missing:
+    reasons: list[str] = []
+    if anchors:
         verdict = "INCOMPLETE"
-        reasons = []
+        missing = anchors + gaps
+    elif breached:
+        verdict = "SELL"
+        missing = []
+        reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
+    elif gaps:
+        verdict = "INCOMPLETE"
+        missing = gaps
     else:
         verdict = "HOLD"
-        reasons = []
+        missing = []
         if entry is not None and stop is not None and current is not None and stop < entry:
             initial_risk = entry - stop
             if initial_risk > 0 and (current - entry) / initial_risk >= 3:

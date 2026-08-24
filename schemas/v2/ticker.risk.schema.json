@@ -182,6 +182,7 @@
       "A completed current price above the protective level cannot establish HOLD: the provider must cover every completed daily Low from --stop-effective-date through --as-of; a recovered price does not erase an earlier breach.",
       "Each protective level is audited from its own effective date: the hard stop from --stop-effective-date, the structural invalidation from --entry-date. A breach of either is a SELL, and HOLD requires every declared level to be cleared over its whole window.",
       "--stop-effective-date defaults to --entry-date. When a stop was raised or replaced later, supply its actual effective date so the newer stop is not applied retroactively.",
+      "Active-mode chronology is checked before any evidence is fetched: --entry-date cannot follow --as-of, and --stop-effective-date can neither precede --entry-date nor follow --as-of. An asserted breach outranks evidence nobody gathered, but never a request that contradicts itself or declares no exit plan.",
       "An explicit --current-price at or below the stop can trigger SELL; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
       "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."

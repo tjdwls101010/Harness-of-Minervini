@@ -7,7 +7,7 @@ import unittest
 from scripts.minervini.risk import reduce_risk
 
 
-BASE = {"mode": "active", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0}
+BASE = {"mode": "active", "as_of": "2026-08-21", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0}
 COVERAGE = {"from": "2026-08-10", "through": "2026-08-21", "bars_checked": 10}
 
 
@@ -74,7 +74,7 @@ class UnauditableProtectionTests(unittest.TestCase):
         self.assertIn("auditable_protective_level", result["missing"])
 
     def test_a_missing_plan_is_reported_once_as_a_missing_plan(self) -> None:
-        result = reduce_risk({"mode": "active", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0})
+        result = reduce_risk({"mode": "active", "as_of": "2026-08-21", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0})
 
         self.assertEqual(result["missing"], ["stop_or_invalidation"])
 

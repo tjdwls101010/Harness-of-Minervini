@@ -7,7 +7,7 @@ import unittest
 from scripts.minervini.risk import reduce_risk
 
 
-BASE = {"mode": "active", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0}
+BASE = {"mode": "active", "as_of": "2026-08-21", "entry_price": 100.0, "entry_date": "2026-08-10", "current_price": 98.0}
 
 
 def audit(role: str, level: float, effective_from: str, state: str = "clear") -> dict:
@@ -15,7 +15,7 @@ def audit(role: str, level: float, effective_from: str, state: str = "clear") ->
 
 
 class AuditWindowTests(unittest.TestCase):
-    def test_an_audit_starting_after_a_level_took_effect_leaves_the_gap_open(self) -> None:
+    def test_an_audit_that_skips_a_lower_level_effective_earlier_leaves_it_open(self) -> None:
         result = reduce_risk(
             {
                 **BASE,

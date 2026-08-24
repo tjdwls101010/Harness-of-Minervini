@@ -1172,6 +1172,9 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         raise RequestError("mode must be prospective or active", "mode")
     evidence = {key: value for key, value in request.items() if key not in {"ticker", "as_of", "format", "no_cache"}}
     evidence["mode"] = mode
+    # The reducer measures every audit window against the decision date, so it
+    # cannot be the one input the operation keeps to itself.
+    evidence["as_of"] = clock.date.isoformat()
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
     invalidation = evidence.get("invalidation")
@@ -1187,7 +1190,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     protective_level = max([level for level in (stop_price, invalidation_price) if level is not None], default=None)
     stop_effective_date: date | None = None
     entry_date: date | None = None
-    if mode == "active" and protective_level is not None and has_position_anchors:
+    if mode == "active" and evidence.get("entry_date") is not None:
         raw_effective_date = evidence.get("stop_effective_date") or evidence.get("entry_date")
         try:
             stop_effective_date = date.fromisoformat(str(raw_effective_date))
@@ -1195,6 +1198,10 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         except ValueError as error:
             field = "stop_effective_date" if evidence.get("stop_effective_date") is not None else "entry_date"
             raise RequestError(f"{field} must be an ISO date", field) from error
+        # Chronology is checked before any evidence is fetched: a position that does
+        # not exist on the decision date cannot be sold, held, or audited.
+        if entry_date > clock.date:
+            raise RequestError("entry_date cannot be after as_of", "entry_date")
         if stop_effective_date < entry_date:
             raise RequestError("stop_effective_date cannot precede entry_date", "stop_effective_date")
         if stop_effective_date > clock.date:

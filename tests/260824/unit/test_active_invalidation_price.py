@@ -9,6 +9,7 @@ from scripts.minervini.risk import reduce_risk
 
 BASE = {
     "mode": "active",
+    "as_of": "2026-08-21",
     "entry_price": 100.0,
     "entry_date": "2026-08-10",
 }
