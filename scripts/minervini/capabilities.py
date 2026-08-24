@@ -199,13 +199,15 @@ CAPABILITIES = {
                 {
                     "ticker": _field("string", "US-listed ticker symbol.", required=True),
                     "primary_base_quality": _field("enum", "Weekly-chart judgment used only when insufficient long history opens the recent-IPO route.", choices=["supports", "contradicts", "needs_chart"]),
+                    "primary_base_emergence": _field("enum", "Weekly-chart judgment for the source's second emergence route, a constructive consolidation near the all-time high. A completed close above every prior high already triggers emergence without this.", choices=["near_high_consolidation", "needs_chart"]),
+                    "primary_base_long_correction": _field("enum", "Weekly-chart judgment resolving a Primary Base 35 to 50 percent deep, which the source permits only for a correction lasting about a year. Deeper than 50 percent fails regardless.", choices=["confirmed", "not_confirmed", "needs_chart"]),
                 },
                 providers=True,
             ),
             output="Eligibility route and state, exact Trend Template signals, completed-history depth, RS date/value, missing evidence, and next capabilities.",
-            limitations=["All eight standard criteria are AND conditions; fundamentals and narrative cannot waive a known failure.", "RS comes only from ibd-rs-rating 0.5.0 and is never approximated.", "When completed price history stops before --as-of the verdict is withheld rather than computed from the earlier session; name that session with --as-of to get an aligned answer.", "A chart judgment is required for ambiguous Primary Base quality."],
+            limitations=["All eight standard criteria are AND conditions; fundamentals and narrative cannot waive a known failure.", "RS comes only from ibd-rs-rating 0.5.0 and is never approximated.", "When completed price history stops before --as-of the verdict is withheld rather than computed from the earlier session; name that session with --as-of to get an aligned answer.", "A chart judgment is required for ambiguous Primary Base quality.", "Primary Base depth bands are 25% at three weeks, 35% up to five weeks and beyond, and 50% only for a chart-confirmed year-long correction; a base that has not emerged yet is incomplete rather than rejected."],
             status_meanings={"ok": "Available evidence produced eligible, avoid, or incomplete domain state.", "partial": "RS or another independent source is unavailable, or completed price history stops before the requested session and eligibility is withheld.", "unavailable": "Completed price history is unavailable.", "needs_input": "A supplied argument is invalid."},
-            examples=["scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL", "scripts/.venv/bin/python scripts/pipeline ticker qualify IPOX --primary-base-quality needs_chart"],
+            examples=["scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL", "scripts/.venv/bin/python scripts/pipeline ticker qualify IPOX --primary-base-quality supports --primary-base-emergence near_high_consolidation"],
         ),
         _capability(
             "ticker.setup",

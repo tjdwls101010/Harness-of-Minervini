@@ -172,49 +172,86 @@ def _triggered(value: Any) -> bool:
     return str(value.get("state", value.get("status", ""))).lower() in {"triggered", "breached"}
 
 
+def _audit_records(path: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Per-level audit records; a single-level path counts as one record."""
+
+    audits = path.get("audits")
+    if isinstance(audits, list):
+        return [dict(item) for item in audits if isinstance(item, Mapping)]
+    if not path:
+        return []
+    return [
+        {
+            "level": path.get("checked_level"),
+            "role": "stop",
+            "effective_from": path.get("from"),
+            "through": path.get("through"),
+            "bars_checked": path.get("bars_checked"),
+        }
+    ]
+
+
+def _audited(records: list[Mapping[str, Any]], level: float) -> bool:
+    """Whether some record proves completed bars stayed above ``level`` over a stated window."""
+
+    for record in records:
+        audited_level = _number(record.get("level"))
+        if audited_level is None or audited_level < level:
+            continue
+        # A window the record does not state is a window nobody checked, so an
+        # unnamed level or an unbounded span cannot stand in for the audit.
+        if isinstance(record.get("effective_from"), str) and isinstance(record.get("through"), str):
+            return True
+    return False
+
+
 def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     entry = _number(payload.get("entry_price"))
     entry_date = payload.get("entry_date")
     stop = _number(payload.get("stop_price"))
     invalidation = _mapping(payload.get("invalidation"))
     invalidation_price = _number(invalidation.get("price"))
-    precise_invalidation = invalidation_price is not None or bool(invalidation.get("condition"))
-    # For a long position the higher of the two levels is crossed first, so it is the
-    # one a price path has to clear before HOLD means anything.
+    declared_plan = payload.get("stop_price") is not None or bool(invalidation)
     protective_levels = [level for level in (stop, invalidation_price) if level is not None]
-    protective_level = max(protective_levels) if protective_levels else None
     missing: list[str] = []
     if entry is None:
         missing.append("entry_price")
     if not _valid_entry_date(entry_date):
         missing.append("entry_date")
-    if stop is None and not precise_invalidation:
+    if not declared_plan:
         missing.append("stop_or_invalidation")
+    elif not protective_levels:
+        # A condition nobody can evaluate against completed bars, or a price that
+        # is not a price, leaves nothing for the audit to clear.
+        missing.append("auditable_protective_level")
 
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
     path_state = str(completed_price_path.get("state", "")).strip().lower()
-    # A path that predates this field audited the hard stop, which is what it was named after.
-    checked_level = _number(completed_price_path.get("checked_level"))
-    if checked_level is None:
-        checked_level = _number(completed_price_path.get("stop_price")) or stop
     completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_state in {"triggered", "breached"} or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
-    if current is None and not (live_triggered or completed_stop or invalidation_triggered):
+    breached = live_triggered or completed_stop or invalidation_triggered
+    if current is None and not breached:
         missing.append("current_price")
-    path_clears_protection = path_state == "clear" and checked_level is not None and protective_level is not None and checked_level >= protective_level
-    if protective_level is not None and not (live_triggered or completed_stop or invalidation_triggered) and not path_clears_protection:
-        missing.append("completed_price_path")
+    if protective_levels and not breached:
+        records = _audit_records(completed_price_path)
+        if path_state != "clear" or not all(_audited(records, level) for level in protective_levels):
+            missing.append("completed_price_path")
 
     controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
+    unaudited = (
+        ["invalidation_condition"]
+        if invalidation_price is None and isinstance(invalidation.get("condition"), str) and invalidation["condition"].strip()
+        else []
+    )
     if missing:
         verdict = "INCOMPLETE"
         reasons: list[str] = []
     else:
-        if live_triggered or completed_stop or invalidation_triggered:
+        if breached:
             verdict = "SELL"
             reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
         else:
@@ -229,6 +266,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         "verdict": verdict,
         "risk_controls": controls,
         "completed_price_path": completed_price_path or None,
+        "unaudited_evidence": unaudited,
         "failed": reasons if not missing else [],
         "missing": missing,
         "waiting": [],

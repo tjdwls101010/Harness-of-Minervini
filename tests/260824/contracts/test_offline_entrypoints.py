@@ -16,7 +16,7 @@ PIPELINE = ROOT / "scripts" / "pipeline"
 BLOCKED = ("matplotlib", "mplfinance")
 
 
-def run_without_plotting(*arguments: str) -> subprocess.CompletedProcess[str]:
+def _run_shadowed(command: list[str]) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as shadow:
         for name in BLOCKED:
             # A stub module earlier on sys.path reproduces a machine where the
@@ -27,28 +27,25 @@ def run_without_plotting(*arguments: str) -> subprocess.CompletedProcess[str]:
             "PYTHONPATH": os.pathsep.join([shadow, str(ROOT / "scripts")]),
             "MPLCONFIGDIR": shadow,
         }
-        return subprocess.run(
-            [str(PYTHON), str(PIPELINE), *arguments],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            cwd=str(ROOT),
-            env=environment,
-        )
+        return subprocess.run(command, capture_output=True, text=True, timeout=120, cwd=str(ROOT), env=environment)
+
+
+def run_without_plotting(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return _run_shadowed([str(PYTHON), str(PIPELINE), *arguments])
+
+
+def run_without_plotting_python(source: str) -> subprocess.CompletedProcess[str]:
+    return _run_shadowed([str(PYTHON), "-c", source])
 
 
 class OfflineEntrypointTests(unittest.TestCase):
     def test_the_plotting_stack_really_is_blocked_for_these_runs(self) -> None:
-        probe = subprocess.run(
-            [str(PYTHON), "-c", "import matplotlib"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=str(ROOT),
-            env={**os.environ, "PYTHONPATH": ""},
-        )
+        # Asserting the real install exists would fail on the very machine this
+        # feature is for, so the probe checks the shadow instead.
+        probe = run_without_plotting_python("import matplotlib")
 
-        self.assertEqual(probe.returncode, 0, "matplotlib must be installed for this test to mean anything")
+        self.assertNotEqual(probe.returncode, 0)
+        self.assertIn("is unavailable here", probe.stderr)
 
     def test_capabilities_discovery_survives_a_missing_plotting_stack(self) -> None:
         completed = run_without_plotting("capabilities")

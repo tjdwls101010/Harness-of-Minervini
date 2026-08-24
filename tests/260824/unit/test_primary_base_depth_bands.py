@@ -25,8 +25,8 @@ def history(*, sessions: int, peak_position: int, peak: float, trough: float, la
     return pd.DataFrame({"Close": closes}, index=index)
 
 
-def base_claim(frame: pd.DataFrame, identifier: str) -> dict:
-    evidence = build_eligibility_evidence(frame, rs_rating=85)
+def base_claim(frame: pd.DataFrame, identifier: str, **judgments: str) -> dict:
+    evidence = build_eligibility_evidence(frame, rs_rating=85, **judgments)
     claims = evidence["primary_base"]["quantitative_claims"]
     return next(claim for claim in claims if claim["id"] == identifier)
 
@@ -72,6 +72,36 @@ class PrimaryBaseDepthBandTests(unittest.TestCase):
         self.assertEqual(base_claim(frame, "primary_base.duration_depth")["state"], "fail")
 
 
+class LongCorrectionConfirmationTests(unittest.TestCase):
+    def test_a_confirmed_year_long_correction_resolves_the_thirty_five_to_fifty_band(self) -> None:
+        frame = history(sessions=60, peak_position=10, peak=100.0, trough=55.0, last=99.0)
+
+        claim = base_claim(frame, "primary_base.duration_depth", primary_base_long_correction="confirmed")
+
+        self.assertEqual(claim["state"], "pass")
+
+    def test_a_rejected_year_long_correction_fails_the_band(self) -> None:
+        frame = history(sessions=60, peak_position=10, peak=100.0, trough=55.0, last=99.0)
+
+        claim = base_claim(frame, "primary_base.duration_depth", primary_base_long_correction="not_confirmed")
+
+        self.assertEqual(claim["state"], "fail")
+
+    def test_confirming_a_long_correction_cannot_rescue_a_correction_past_fifty_percent(self) -> None:
+        frame = history(sessions=60, peak_position=10, peak=100.0, trough=45.0, last=99.0)
+
+        claim = base_claim(frame, "primary_base.duration_depth", primary_base_long_correction="confirmed")
+
+        self.assertEqual(claim["state"], "fail")
+
+    def test_confirming_a_long_correction_cannot_widen_a_three_week_base(self) -> None:
+        frame = history(sessions=60, peak_position=44, peak=100.0, trough=70.0, last=99.0)
+
+        claim = base_claim(frame, "primary_base.duration_depth", primary_base_long_correction="confirmed")
+
+        self.assertEqual(claim["state"], "fail")
+
+
 class PrimaryBaseEmergenceTests(unittest.TestCase):
     def test_an_unbroken_all_time_high_is_a_separate_not_triggered_signal(self) -> None:
         frame = history(sessions=60, peak_position=10, peak=100.0, trough=70.0, last=99.0)
@@ -90,6 +120,23 @@ class PrimaryBaseEmergenceTests(unittest.TestCase):
         primary_base = build_eligibility_evidence(frame, rs_rating=85)["primary_base"]
 
         self.assertEqual(primary_base["emergence"]["state"], "pass")
+
+    def test_a_confirmed_consolidation_near_the_all_time_high_also_triggers_emergence(self) -> None:
+        frame = history(sessions=60, peak_position=10, peak=100.0, trough=70.0, last=99.0)
+
+        primary_base = build_eligibility_evidence(
+            frame, rs_rating=85, primary_base_emergence="near_high_consolidation"
+        )["primary_base"]
+
+        self.assertEqual(primary_base["emergence"]["state"], "pass")
+        self.assertEqual(primary_base["emergence"]["basis"]["required"], "close above all prior completed-session highs, or a chart-confirmed constructive consolidation near them")
+
+    def test_an_unconfirmed_near_high_judgment_leaves_emergence_untriggered(self) -> None:
+        frame = history(sessions=60, peak_position=10, peak=100.0, trough=70.0, last=99.0)
+
+        primary_base = build_eligibility_evidence(frame, rs_rating=85, primary_base_emergence="needs_chart")["primary_base"]
+
+        self.assertEqual(primary_base["emergence"]["state"], "not_triggered")
 
 
 if __name__ == "__main__":

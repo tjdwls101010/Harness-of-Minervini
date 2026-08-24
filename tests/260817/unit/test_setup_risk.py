@@ -127,6 +127,7 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
                 "current_price": 98.0,
                 "completed_price_path": {
                     "state": "clear",
+                    "checked_level": 94.0,
                     "from": "2026-08-10",
                     "through": "2026-08-14",
                     "bars_checked": 5,

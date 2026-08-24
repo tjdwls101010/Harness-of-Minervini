@@ -122,6 +122,8 @@ def build_parser() -> JsonArgumentParser:
     qualify = _capability_parser(ticker_sub, "qualify", "ticker.qualify")
     qualify.add_argument("ticker", help=_input_help("ticker.qualify", "ticker"))
     qualify.add_argument("--primary-base-quality", choices=("supports", "contradicts", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_quality"))
+    qualify.add_argument("--primary-base-emergence", choices=("near_high_consolidation", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_emergence"))
+    qualify.add_argument("--primary-base-long-correction", choices=("confirmed", "not_confirmed", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_long_correction"))
     _common(qualify, "ticker.qualify")
 
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
