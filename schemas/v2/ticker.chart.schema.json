@@ -67,9 +67,10 @@
     },
     "limitations": [
       "Charts corroborate qualitative ambiguity but never override a deterministic hard gate.",
-      "Weekly is rendered before daily; historical as-of is enforced before rendering."
+      "Weekly is rendered before daily; historical as-of is enforced before rendering.",
+      "The detector's turning points and its pivot are marked on the price panel, because this is where a person turns that proposal into the approval ticker.setup asks for. A segmentation the detector will not vouch for draws nothing rather than showing a structure the engine refuses to use, and an anchor with no bar in the rendered timeframe is left off rather than placed on a session that does not exist."
     ],
-    "output": "Chart artifact paths plus an input-hash manifest recording ticker, as-of, timeframe order, and completed-bar provenance.",
+    "output": "Chart artifact paths plus an input-hash manifest recording ticker, as-of, timeframe order, completed-bar provenance, and the swing segmentation drawn on the price panel.",
     "prerequisites": [],
     "side_effects": [
       "Writes deterministic PNG artifacts and a manifest to the requested directory; the default directory is git-ignored."

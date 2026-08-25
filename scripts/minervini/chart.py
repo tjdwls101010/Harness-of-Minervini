@@ -21,6 +21,8 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
+from .swings import canonical_chain
+
 
 RENDERER_VERSION = "1.0.0"
 _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
@@ -47,11 +49,15 @@ def render_chart_artifacts(
 
     input_sha256 = _input_sha256(daily)
     weekly = _weekly_bars(daily, as_of_date)
+    # The chart is where a person turns the detector's proposal into an approval, so it draws
+    # what they are being asked to approve. A chart without the anchors makes that approval a
+    # formality: agreeing to a list of dates while looking at a picture that never names them.
+    segmentation = canonical_chain(daily)
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{timeframe}.png"
-        _render_png(bars, path, symbol, timeframe, as_of_date)
+        _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
         artifacts.append({"timeframe": timeframe, "path": str(path), "bars": len(bars)})
 
     manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_manifest.json"
@@ -61,6 +67,7 @@ def render_chart_artifacts(
         "as_of": as_of_date.isoformat(),
         "input_sha256": input_sha256,
         "paths": {artifact["timeframe"]: artifact["path"] for artifact in artifacts},
+        "segmentation": segmentation,
         "artifacts": artifacts,
     }
     _atomic_json(manifest_path, manifest)
@@ -133,7 +140,7 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     return weekly
 
 
-def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date) -> None:
+def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> None:
     figure, (price_axis, volume_axis) = plt.subplots(
         2,
         1,
@@ -159,6 +166,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         for label, values in overlays.items():
             if values.notna().any():
                 price_axis.plot(bars.index, values, linewidth=0.9, label=label)
+        _draw_anchors(price_axis, bars, segmentation)
         volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
         price_axis.set_title(f"{ticker} {timeframe.title()} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
@@ -172,6 +180,34 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         _atomic_figure(figure, path)
     finally:
         plt.close(figure)
+
+
+def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, Any] | None) -> None:
+    """Mark the turning points the detector will corroborate a declared chain against.
+
+    Only anchors that fall on a bar in this timeframe are drawn: a weekly chart has no session
+    to place a Tuesday low on, and inventing one would put a mark where nothing happened.
+    """
+    anchors = (segmentation or {}).get("anchors") or []
+    if not anchors:
+        return
+    sessions = {stamp.date().isoformat(): stamp for stamp in bars.index}
+    drawn = False
+    for anchor in anchors:
+        stamp = sessions.get(str(anchor["date"]))
+        if stamp is None:
+            continue
+        price = float(anchor["price"])
+        price_axis.plot(
+            [stamp], [price],
+            marker="v" if anchor["kind"] == "high" else "^",
+            color="#0b5cad", markersize=7, linestyle="none",
+            label="detected swing" if not drawn else None,
+        )
+        drawn = True
+    pivot = anchors[-1]
+    if str(pivot["date"]) in sessions:
+        price_axis.axhline(float(pivot["price"]), color="#0b5cad", linewidth=0.8, linestyle="--", alpha=0.7, label="pivot")
 
 
 def _atomic_figure(figure: plt.Figure, path: Path) -> None:
