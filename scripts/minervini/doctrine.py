@@ -358,6 +358,13 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
         if not isinstance(thresholds, Mapping):
             errors.append(f"{label}.thresholds must be an object")
             continue
+        if record["failure"].get("effect") == "not_applicable" and any(
+            isinstance(specification, Mapping) and specification.get("role") == "gate"
+            for specification in thresholds.values()
+        ):
+            # A gate is an executable pass/fail rule by definition, so a claim holding one
+            # and also saying failure does not apply describes itself two ways at once.
+            errors.append(f"{label} holds a gate and cannot declare a failure effect of not_applicable")
         for name, specification in thresholds.items():
             if not isinstance(specification, Mapping):
                 errors.append(f"{label}.thresholds.{name} must be an object")

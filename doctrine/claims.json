@@ -2635,8 +2635,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "not_applicable",
@@ -4073,8 +4073,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "not_applicable",
@@ -7072,8 +7072,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "incomplete",
@@ -7481,8 +7481,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "incomplete",
@@ -7557,8 +7557,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "incomplete",
@@ -9040,8 +9040,8 @@
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "incomplete",
