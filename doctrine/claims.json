@@ -8318,15 +8318,15 @@
       },
       "thresholds": {
         "earnings_acceleration_lookback": {
-          "role": "band",
-          "range": [
-            1,
-            4
-          ],
+          "role": "reference",
           "unit": "quarters",
           "exact": true,
           "quote_index": 0,
-          "direction": "inside_is_better"
+          "value": [
+            1,
+            4
+          ],
+          "note": "the quarters chosen for inspection, not a range a measurement lands inside; a fifth accelerating quarter is not adverse"
         }
       },
       "failure": {
