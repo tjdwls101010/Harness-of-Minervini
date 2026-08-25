@@ -65,6 +65,32 @@
    - **claim 단위 귀속은 혼합 소유권을 정확히 표현하지 못한다.** `eligibility.recent_ipo_primary_base`의 40세션은 claim 스스로 "하네스의 환산"이라고 밝히는데 `attributed_to: Minervini` 때문에 `_binds()`가 그 환산값까지 Minervini 게이트로 취급한다. 정확히 하려면 임계 단위 provenance가 필요하고, 그건 새 스키마 변경이다. 지금은 알려진 한계로 둔다 — 40세션은 실제로 판정에 쓰이고 구속돼야 하므로 harness 유래로 표기하면 eligibility가 깨진다.
    - **복합 조건 게이트는 단독 평가하면 원전을 훼손한다(슬라이스 ④).** `turnaround_min_strong_quarters >= 2`는 원문이 "2개 분기 **또는** 1개 분기가 TTM EPS를 이전 고점 근처/위로"라는 OR이라 첫 가지만 평가하면 유효한 두 번째 경로가 fail이 된다. `receivables_and_inventory_vs_sales_double_trouble_ratio < 2`는 "두 비율이 **모두** 2배 이상이고 설명이 없을 때"라는 AND+예외다. 두 claim의 `rule.summary`가 이 구조를 기록하고 있으니 배선 시 반드시 읽을 것. 설명 유무는 정성 입력이라 `required_inputs`에 유령 항목을 넣지 않았다.
 
+23. **체인 분할 게이밍 — 연기는 되지만 그동안 READY를 내는 것은 안 된다.** 적대 리뷰 3라운드의 가장 날카로운 논증이다. 정준 분할을 슬라이스 ②에서 만들 수 없다는 판단은 맞지만, **검증 못 한다는 사실을 아는 상태에서 그 증거를 요구하지 않고 READY를 내는 것은 결정 19의 원칙과 정면 충돌한다.** 구멍을 선언하고 넘어가는 것이 구멍을 모르는 것보다 나쁘다 — 판정이 획득된 것처럼 보이기 때문이다.
+   - `setup.declared_chain_completeness`(harness 계층)를 필수 증거로 넣었다. 호출자가 `--chain-completeness complete`로 보증해야 하고, 없으면 incomplete, `partial`이면 wait다. 슬라이스 ③의 검출기가 들어오면 이 증거를 자동으로 공급할 수 있다.
+   - **낮은 피벗 중 일부는 슬라이스 ②에서 닫았다.** 마지막 앵커의 오른쪽 이웃이 자기 자신이라 그 뒤를 안 봤는데, "선언된 피벗이 돌파 직전까지 최고 High였는가"는 정준 분할 없이도 검사 가능하다(`pivot_is_highest_to_breakout`).
+
+24. **숫자 없는 명시적 제한은 report-only가 아니라 판단 요구다.** 추격 한계("without chasing the stock up more than a few percentage points")를 보고만 하게 뒀더니 40세션 전 돌파에 +50% 연장된 셋업이 최종 BUY-READY까지 갔다. 임계를 발명하지 않는 해법은 보고가 아니라 **정성 입력 요구**다 — `--entry-proximity {at_pivot,chased,needs_judgment}`. 없으면 incomplete, `chased`면 wait이고, 현재 연장률·돌파 시점 연장률·경과 세션 수가 그 옆에 실린다. 측정이 거부할 수 있는 유일한 경우는 피벗을 아직 안 넘은 상태에서 `at_pivot`이라고 읽는 것이다.
+
+25. **차트 판단 세 개가 C3의 구조화 스키마다.** `--right-side-development` `--chain-completeness` `--entry-proximity`. 셋 다 (1) 측정이 재진술할 수 없는 것만 묻고 (2) 없으면 incomplete이며 (3) 측정과 모순되면 거부된다 — pause가 없는데 constructive, 피벗을 못 넘었는데 at_pivot. `--price-geometry pass`와 다른 점은 여기다: 그건 측정이 이미 아는 것을 재진술했고 반증 불가능했다.
+
+26. **원전 문장의 조동사가 곧 role이다.** 슬라이스 ②에서 반복해 나온 패턴이다. 한 문장 안에서도 갈린다 — "the volume **must** be much bigger on up days … and a few of the price spikes **should** be large"는 게이트 하나와 보고 하나다. 둘을 같은 게이트에 묶었더니 출처가 헤지한 절이 must의 권한을 빌려 최대 상승일과 최대 하락일의 머리카락 차이로 후보를 거부했다. 복수형도 마찬가지다 — "a few of the price spikes"를 최대값 하나로 축약하면 문장이 묻지 않은 것에 답하게 된다.
+
+27. **교정 깊이는 이력상 고점에서 잰다 — 내가 원전을 거꾸로 읽었다.** 완전히 회복된 하락은 그 랠리가 오버헤드 서플라이를 소화했으므로 이전 베이스의 것이라고 판단해 창을 좁혔었다. 인용문의 바로 다음 절이 정반대를 말한다 — "A correction of more than 50 percent is generally too much, and a stock could fail **as it reaches or slightly surpasses a new high**. This is due to excessive overhead supply created by the steep price decline." **회복이 위험이 사라지는 시점이 아니라 위험이 도착하는 시점이다.** 프로바이더가 준 이력의 최고점과 그 이후 최저점으로 되돌렸다.
+
+28. **호출자는 자기 체인의 완결성을 스스로 보증할 수 없다.** `--chain-completeness complete`를 도입해놓고 그 체인을 제출한 사람이 직접 선언하게 뒀는데, 그러면 검사 대상이 검사를 수행하는 것이라 `--price-geometry pass`가 더 긴 설명을 달고 돌아온 것과 같다. `partial`은 받는다(구멍을 인정하는 데 비용이 없고 사실을 말한다). `complete`는 `--completeness-source independent_segmentation`이 함께 올 때만 유효하고, 그 공급자가 슬라이스 ③의 검출기다. **따라서 표준 경로는 슬라이스 ③ 전까지 WAIT가 상한이다** — 결정 19가 검출기 단독에 건 것과 같은 제약이 반대 방향에서 적용된다.
+
+29. **판단 입력은 "측정이 반박할 수 있는가"로 등급이 갈린다.** 셋 중 둘은 반박된다 — pause가 없는데 constructive, 돌파 시점보다 더 멀어졌는데 at_pivot("as close to the pivot as possible"의 가장 가까운 지점은 돌파다). 완결성은 반박 자체가 불가능하므로 독립 공급자를 요구한다. 계약 문서에 "셋 다 bars가 틀린 선언을 거부한다"고 써놨던 것은 사실이 아니었고 정정했다.
+
+30. **피벗 실패는 회복할 수 있어야 한다.** 첫 돌파를 고정하는 것은 맞지만(볼륨·DCR을 종목이 실제로 베이스를 떠난 세션에서 재야 하므로), 한 번 피벗 아래로 닫으면 영구히 트리거 불가로 만든 것은 claim과 정반대였다. 트리거는 **지금 피벗 위에 있는가**를 읽고, 실패 횟수는 그 옆에 센다.
+
+31. **"noticeably"에 엄격한 부등호를 대입하면 안 된다.** 가격이 조용해졌는가를 `pause 중앙값 < base 중앙값`으로 판정했더니 0.0024%p 차이가 양성 증거가 됐다. 출처가 정도부사를 쓰고 숫자를 안 줬으면 판정이 아니라 보고다. 같은 문장의 볼륨 절은 게이트로 남는다 — 수축은 일어났거나 안 일어났거나이기 때문이다.
+
+32. **공급자의 이름을 호출자가 타이핑하는 것은 provenance가 아니다.** 자기 보증 구멍을 막으려고 "독립 분할이 보증해야 한다"고 해놓고, 그 독립성을 주장하는 문자열을 CLI 플래그로 공개했다. `--completeness-source independent_segmentation`은 아무나 칠 수 있다. 공개 표면에서 제거했고 요청에 들어오면 거부한다. seam은 하네스가 실제로 만든 분할을 위해 남아 있고, **따라서 표준 경로는 지금 어떤 요청으로도 READY에 도달하지 못한다.** 슬라이스 ③이 그 자리를 채운다.
+
+33. **추격 한계에 시도한 모든 기계적 규칙이 엉뚱한 곳을 잘랐다.** "돌파 시점보다 멀어졌으면 거부"는 +20% 갭 돌파 후 1% 되밀린 것을 at_pivot으로 인정하고, +3.62% 돌파 다음 날 +0.01%를 거부했다. 절대 거리를 안 보기 때문이다. 원전이 한계를 말하고 숫자를 안 줬으면 판단은 독자의 것이다 — 유일하게 남긴 거부는 "피벗을 못 넘었는데 at_pivot"이고, 대신 현재 연장률·돌파 시점 연장률·경과 세션 수에 **Minervini 자신이 말한 5~20센트 버퍼를 밴드로** 함께 싣는다.
+
+34. **원전은 실패를 두 종류로 나눈다.** "a base failure, which requires building a whole new base before it can be purchased again, and a pivot failure, which can reset and recover within a small number of days." 하나의 카운터로 뭉개고 있었다. 베이스 저점 아래 종가는 첫 번째 종류이고 나중의 어떤 랠리도 선언된 구조를 되살리지 못한다(trigger fail). 두 번째는 회복 가능하고, "a small number of days"에 숫자가 없으므로 피벗 아래에서 보낸 세션 수를 보고한다.
+
 ## 실행 단계
 
 각 단계 공통 게이트: `tdd` 스킬 선행(공개 시임 합의 → RED → GREEN, 테스트는 `./tests` 아래 레포 관례대로 — 기존 `tests/260817`은 보존하고 이번 재작성 스위트는 새 날짜 디렉터리 `tests/2608xx/`에 작성) → codex(sol, xhigh) diff 리뷰 → `validate_harness.py` 0 에러 → `harness-spec.md` Change history 동기 갱신 → 브랜치/PR(한국어 커밋 규칙, 스쿼시 머지). 큰 단계는 구현 전 codex 설계 리뷰 추가.

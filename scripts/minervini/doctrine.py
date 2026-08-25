@@ -145,14 +145,16 @@ def threshold(claim_id: str, name: str) -> Any:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
     role = specification["role"]
-    # A raw number is one comparison away from a verdict, so the two kinds of number that
-    # must never carry one do not come out of here at all. A marker leaves through
-    # `evaluate_marker`, where the distance travels with it; another practitioner's filter
-    # leaves through `evaluate_gate`, where it is stamped as contrast.
+    # A raw number is one comparison away from a verdict, so the kinds of number whose
+    # meaning is positional do not come out of here at all: a band leaves through
+    # `evaluate_band` and a marker through `evaluate_marker`, each carrying where the
+    # measurement sat. Binding is checked only for gates, because only a gate could decide
+    # anything; a reference is never compared with a measurement, so reading one raw is how
+    # a window length reaches the code that computes the series it names.
     if role in {"marker", "band"}:
         evaluator = "evaluate_marker" if role == "marker" else "evaluate_band"
         raise ValueError(f"{claim_id}.{name} is a {role}; read it through {evaluator} so where the measurement sits travels with it")
-    if not _binds(claim):
+    if role == "gate" and not _binds(claim):
         raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
     return specification["value"]
 
@@ -227,7 +229,21 @@ def _binds(record: Mapping[str, Any]) -> bool:
     and deleting one line from Ryan's claim made his standard bind.
     """
 
-    return record.get("layer") == "canonical" and record.get("attributed_to") == "Minervini"
+    layer = record.get("layer")
+    if layer == "harness":
+        # The harness's own operating rules are this harness's, by definition. What they may
+        # not do is reject without being named, which `validate` enforces separately.
+        return True
+    return layer == "canonical" and record.get("attributed_to") == "Minervini"
+
+
+def binds(claim_id: str) -> bool:
+    """Whether this harness applies the claim, or reads it for contrast.
+
+    Public because reducers and evidence builders both need the answer, and an answer this
+    load-bearing must have one owner.
+    """
+    return _binds(get_claim(claim_id)["claim"])
 
 
 def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -394,12 +410,15 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
         ):
             # A filter with no measurement is unanswered, not irrelevant.
             errors.append(f"{label} holds a gate and cannot declare a missing effect of not_applicable")
-        if record["failure"].get("effect") == "reject" and not _binds(record) and claim_id not in _HARNESS_CONTRACT_REJECTIONS:
-            # A contrast filter reports; the rejection words belong to the standard this
-            # harness actually follows. The exemption is named rather than inferred from the
-            # layer, because a harness-layer record is exempt only when its rejection is
-            # about the request contract, and nothing in the record says which those are.
-            errors.append(f"{label} does not bind and cannot declare a failure effect of reject")
+        if record["failure"].get("effect") == "reject":
+            if record["layer"] == "practice" or record.get("attributed_to") not in (None, "Minervini"):
+                # A contrast filter reports; the rejection words belong to the standard this
+                # harness actually follows.
+                errors.append(f"{label} is contrast material and cannot declare a failure effect of reject")
+            elif record["layer"] == "harness" and claim_id not in _HARNESS_CONTRACT_REJECTIONS:
+                # A harness-layer record has no source, so a rejection written there has to be
+                # named rather than inferred from the layer.
+                errors.append(f"{label} is a harness rule and cannot declare a failure effect of reject unless it is named")
         for name, specification in thresholds.items():
             if not isinstance(specification, Mapping):
                 errors.append(f"{label}.thresholds.{name} must be an object")
@@ -490,4 +509,4 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-__all__ = ["evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "threshold", "validate"]
+__all__ = ["binds", "evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "threshold", "validate"]

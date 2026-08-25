@@ -5,7 +5,6 @@ import pathlib
 import unittest
 
 from scripts.minervini.risk import reduce_risk
-from scripts.minervini.setup import evaluate_setup
 
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "setup_risk"
@@ -13,41 +12,6 @@ FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "setup_ris
 
 def fixture(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text())
-
-
-class SetupPublicSeamTests(unittest.TestCase):
-    def test_vcp_label_without_separate_supply_evidence_is_incomplete_not_ready(self) -> None:
-        result = evaluate_setup(fixture("vcp_label_only.json"))
-
-        self.assertEqual(result["setup_state"], "incomplete")
-        self.assertEqual(result["price_geometry"]["state"], "pass")
-        self.assertEqual(result["supply_evidence"]["state"], "unavailable")
-        self.assertIn("supply_evidence", result["missing"])
-
-    def test_completed_pivot_with_geometry_and_supply_is_ready(self) -> None:
-        result = evaluate_setup(fixture("completed_pivot.json"))
-
-        self.assertEqual(result["setup_state"], "ready")
-        self.assertEqual(result["entry"]["kind"], "completed_pivot")
-        self.assertEqual(result["entry"]["confirmation_debt"], [])
-
-    def test_tl_early_keeps_confirmation_debt_later_pivot_and_precise_invalidation(self) -> None:
-        result = evaluate_setup(fixture("tl_early.json"))
-
-        self.assertEqual(result["setup_state"], "ready")
-        self.assertEqual(result["entry"]["tactic"], "[TL-EARLY]")
-        self.assertEqual(result["entry"]["confirmation_debt"], ["completed Minervini pivot breakout"])
-        self.assertEqual(result["entry"]["minervini_later_pivot"]["price"], 100.2)
-        self.assertEqual(result["entry"]["invalidation"]["price"], 96.0)
-
-    def test_tl_early_without_precise_invalidation_waits(self) -> None:
-        evidence = fixture("tl_early.json")
-        del evidence["entry"]["invalidation"]
-
-        result = evaluate_setup(evidence)
-
-        self.assertEqual(result["setup_state"], "wait")
-        self.assertIn("precise_invalidation", result["missing"])
 
 
 class RiskReducerPublicSeamTests(unittest.TestCase):

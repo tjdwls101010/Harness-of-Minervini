@@ -30,7 +30,9 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise RequestError(message=message, field="arguments")
 
 
-_COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies"})
+# Every value that decided something already travels in a signal, so the raw measurement
+# table and the anchor list are detail rather than meaning.
+_COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies", "measurements", "anchors", "contractions"})
 
 
 def _compact_data(value: Any) -> Any:
@@ -141,10 +143,13 @@ def build_parser() -> JsonArgumentParser:
 
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
-    setup.add_argument("--price-geometry", choices=("pass", "fail", "needs_chart"), help=_input_help("ticker.setup", "price_geometry"))
-    setup.add_argument("--supply-evidence", choices=("pass", "fail", "needs_chart"), help=_input_help("ticker.setup", "supply_evidence"))
+    setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
     setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
-    setup.add_argument("--entry-state", choices=("confirmed", "wait", "needs_chart"), help=_input_help("ticker.setup", "entry_state"))
+    setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
+    setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
+    setup.add_argument("--pivot-reset", choices=("prompt_reset", "stale_reset", "needs_judgment"), help=_input_help("ticker.setup", "pivot_reset"))
+    setup.add_argument("--entry-proximity", choices=("at_pivot", "chased", "needs_judgment"), help=_input_help("ticker.setup", "entry_proximity"))
+    setup.add_argument("--right-side-development", choices=("constructive", "compressed", "needs_chart"), help=_input_help("ticker.setup", "right_side_development"))
     setup.add_argument("--invalidation-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
     setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
     setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))
@@ -225,31 +230,20 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
         if not key.endswith("_command") and key != "command" and value is not None
     }
     if operation == "ticker.setup":
-        geometry = request.pop("price_geometry", None)
-        supply = request.pop("supply_evidence", None)
-        entry_kind = request.pop("entry_kind", None)
-        entry_state = request.pop("entry_state", None)
         invalidation_price = request.pop("invalidation_price", None)
         invalidation_condition = request.pop("invalidation_condition", None)
         confirmation_debt = request.pop("confirmation_debt", [])
         later_pivot_price = request.pop("later_pivot_price", None)
         later_pivot_condition = request.pop("later_pivot_condition", None)
-        judgments: dict[str, Any] = {}
-        if geometry is not None:
-            judgments["price_geometry"] = {"state": geometry}
-        if supply is not None:
-            judgments["supply_evidence"] = {"state": supply}
-        if any(value is not None for value in (entry_kind, entry_state, invalidation_price, invalidation_condition, later_pivot_price, later_pivot_condition)) or confirmation_debt:
-            entry: dict[str, Any] = {"kind": entry_kind, "state": entry_state}
-            if confirmation_debt:
-                entry["confirmation_debt"] = confirmation_debt
-            if later_pivot_price is not None or later_pivot_condition is not None:
-                entry["minervini_later_pivot"] = {"price": later_pivot_price, "condition": later_pivot_condition}
-            if invalidation_price is not None or invalidation_condition is not None:
-                entry["invalidation"] = {"price": invalidation_price, "condition": invalidation_condition}
-            judgments["entry"] = entry
-        if judgments:
-            request["chart_judgments"] = judgments
+        entry: dict[str, Any] = {}
+        if confirmation_debt:
+            entry["confirmation_debt"] = confirmation_debt
+        if later_pivot_price is not None or later_pivot_condition is not None:
+            entry["minervini_later_pivot"] = {"price": later_pivot_price, "condition": later_pivot_condition}
+        if invalidation_price is not None or invalidation_condition is not None:
+            entry["invalidation"] = {"price": invalidation_price, "condition": invalidation_condition}
+        if entry:
+            request["entry"] = entry
     if operation == "ticker.risk":
         invalidation_price = request.pop("invalidation_price", None)
         invalidation_condition = request.pop("invalidation_condition", None)

@@ -2162,7 +2162,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "computability": "chart_assisted",
       "note": "This 3-60 week range (Chapter 10, general VCP/consolidation discussion) does NOT match the '5 to 26 weeks' figure given for stage-2 base patterns in Chapter 5 (basecount.typical_base_duration_5_to_26_weeks). Both are verbatim and both are hedged ('as many as', 'most commonly'); they appear to describe overlapping but not identical things (general consolidation footprint vs. stage-2 base patterns specifically) — a reducer author should decide which applies to which check rather than assuming one supersedes the other.",
@@ -2422,7 +2423,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_measurements.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -3065,10 +3067,12 @@
       },
       "consumers": [
         "market.snapshot",
-        "market.candidates"
+        "market.candidates",
+        "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "computability": "deterministic",
       "note": "Two distinct thresholds share the value 50: one is the ceiling for a survivable severe-bear-market correction ('as much as 50 percent'), the other is the point past which the source calls the correction 'generally too much' ('more than 50 percent'). Keep both — they frame the same number from opposite sides.",
@@ -7182,8 +7186,8 @@
         "setup"
       ],
       "required_inputs": [
-        "pivot_price",
-        "current_price"
+        "pivot",
+        "entry_price"
       ],
       "rule": {
         "summary": "Minervini typically waits for price 5-20 cents above the pivot before buying, and states there is no magic number"
@@ -9144,6 +9148,943 @@
         "the exact ZVR formula — it is a proprietary third-party (eSignal) tool"
       ],
       "note": "The underlying ZVR ratio formula is not disclosed in the text and is a third-party proprietary tool (eSignal); only the 50% end-of-day threshold and its consequence (\"trade would become suspect\") are computable from what is stated."
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {
+        "contraction_count": {
+          "role": "band",
+          "range": [
+            2,
+            6
+          ],
+          "unit": "count",
+          "exact": true,
+          "direction": "inside_is_better",
+          "quote_index": 0
+        },
+        "typical_contraction_count": {
+          "role": "reference",
+          "value": [
+            2,
+            4
+          ],
+          "unit": "count",
+          "exact": true,
+          "quote_index": 1
+        }
+      },
+      "computability": "chart_assisted",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.vcp_contraction_count",
+      "title": "A VCP shows two to six contractions, most commonly two to four",
+      "required_inputs": [
+        "price_contractions"
+      ],
+      "rule": {
+        "summary": "A VCP's contraction count sits between two and six, and most VCP setups form with two to four."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A count outside two to six is reported with the measured count rather than treated as a disqualification the source did not state."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a declared or chart-confirmed contraction sequence the count is unknown, not zero."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "During a VCP, you will generally see a succession of anywhere from two to six contractions",
+            "supports": "the two-to-six range the band reports against"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Typically, most VCP setups will be formed by two to four contractions, although sometimes there can be as many as five or six.",
+            "supports": "the typical count, stated about the population of VCP setups rather than as a filter"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the two-to-six range is stated as a range and reports as a band, while 'typically, most' describes the population and stays a reference"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {
+        "successive_depth_ratio": {
+          "role": "marker",
+          "value": 0.5,
+          "unit": "ratio",
+          "exact": false,
+          "quote_index": 0
+        }
+      },
+      "computability": "chart_assisted",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.successive_contraction_halving",
+      "title": "Each successive contraction runs about half the previous one, with the tolerance left undefined",
+      "required_inputs": [
+        "price_contractions"
+      ],
+      "rule": {
+        "summary": "Each successive contraction should run about half the previous pullback, and the source states no boundary around 'about'."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A ratio far from one-half is reported with its distance; the source explicitly declined to say where half stops being half."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without consecutive contraction depths there is no ratio to report."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "As a rule of thumb, I like to see each successive contraction contained to about half (plus or minus a reasonable amount) of the previous pullback or contraction.",
+            "supports": "the one-half value and the source's explicit refusal to bound it"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; 'plus or minus a reasonable amount' refuses a boundary, so one-half is registered as a marker and reports the measured ratio beside it"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {},
+      "computability": "chart_assisted",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.contractions_must_contract",
+      "title": "Contractions narrow from left to right as supply is absorbed",
+      "required_inputs": [
+        "price_contractions"
+      ],
+      "rule": {
+        "summary": "A constructive base's contractions grow smaller from left to right; a sequence that widens is not the pattern the name describes."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A widening sequence is reported as a sequence that does not contract, with every measured depth, rather than as a VCP with poor symmetry."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a contraction sequence the direction is unknown."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "If the stock is indeed being accumulated by institutions, the contractions will be smaller from left to right as supply is absorbed by the bigger players.",
+            "supports": "the direction the sequence must run for the accumulation reading to hold"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the statement is directional and carries no number, so it is evaluated as a numberless observation and reported with the measured depths"
+      }
+    },
+    {
+      "kind": "hard_gate",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {},
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "qualification_and_risk_hard_gates",
+        "overrides": [
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.demand_supply_volume_asymmetry",
+      "title": "Volume must be much bigger on up days than on down days",
+      "required_inputs": [
+        "base_daily_bars"
+      ],
+      "rule": {
+        "summary": "Across the base, volume on up days must outweigh volume on down days; the source states the requirement and supplies no magnitude."
+      },
+      "failure": {
+        "effect": "reject",
+        "meaning": "Down-day volume outweighing up-day volume across the base is distribution, and the source states the requirement with 'must'."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the base's daily bars the asymmetry is unmeasured, not satisfied."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "In other words, the volume must be much bigger on up days than on down days, and a few of the price spikes to the upside should be large, dwarfing the contractions that have occurred on relatively lower volume.",
+            "supports": "the requirement, stated as a filter with no number attached"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the sentence is filter language with no magnitude, so it is a gate the harness evaluates on direction alone and never on a threshold it would have had to invent"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {
+        "final_contraction_volume_ratio": {
+          "role": "marker",
+          "value": 1.0,
+          "unit": "ratio",
+          "exact": false,
+          "quote_index": 0
+        },
+        "extremely_low_volume_days": {
+          "role": "band",
+          "range": [
+            1,
+            2
+          ],
+          "unit": "count",
+          "exact": true,
+          "direction": "inside_is_better",
+          "quote_index": 0
+        },
+        "volume_baseline_sessions": {
+          "role": "reference",
+          "value": 50,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0
+        }
+      },
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.final_contraction_volume_dryup",
+      "title": "Volume on the final contraction runs below the 50-day average with one or two extremely low days",
+      "required_inputs": [
+        "final_contraction_daily_volume",
+        "volume_50d_average"
+      ],
+      "rule": {
+        "summary": "The final contraction's volume runs below the 50-day average, with one or two days when volume is extremely low."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Final-contraction volume at or above its baseline is reported with the measured ratio; the source hedges the rule for the largest-cap stocks in the same passage."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without fifty sessions of volume behind the base end there is no baseline, and a shorter average is not one."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "In fact, we want to see volume on the final contraction that is below the 50-day average, with one or two days when volume is extremely low. This may not always occur in the largest-cap stocks",
+            "supports": "the baseline window, the one-to-two count, and the source's own exception"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; 'we want to see' with an exception in the same breath is not filter language, so the ratio is a marker, the day count is the range the source gave, and the fifty-session window is a fact about which series to compute; the ratio's marker carries its direction in the sign of the reported distance, because the passage says 'below the 50-day average' and then exempts the largest-cap stocks in the same breath"
+      }
+    },
+    {
+      "kind": "hard_gate",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {},
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "qualification_and_risk_hard_gates",
+        "overrides": [
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.pivot_volume_contraction",
+      "title": "Every correct pivot point develops with a contraction in volume",
+      "required_inputs": [
+        "final_contraction_daily_volume",
+        "volume_50d_average"
+      ],
+      "rule": {
+        "summary": "A correct pivot develops with volume contracting, often well below average, with at least one day of very significant contraction."
+      },
+      "failure": {
+        "effect": "reject",
+        "meaning": "A pivot forming without any volume contraction is not the pivot the source describes; the sentence admits no exception."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the pivot area's volume the contraction is unmeasured."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Every correct pivot point will develop with a contraction in volume, often to a level well below average with at least one day when volume contracts very significantly",
+            "supports": "the requirement stated of every correct pivot, with the magnitude words left qualitative"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; 'every correct pivot point will' is definitional and admits no proximity argument, and the magnitude words carry no number, so this is evaluated as a numberless gate"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {},
+      "computability": "chart_assisted",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.time_compression_hazard",
+      "title": "A right side that develops too fast is time compression and is hazardous",
+      "required_inputs": [
+        "base_daily_bars",
+        "price_contractions"
+      ],
+      "rule": {
+        "summary": "A right side that advances too quickly shows as V-shaped action or an absent right-side development, and the stock should be avoided at least temporarily."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A compressed right side is reported with both halves' duration and the pauses counted; the source supplies no ratio at which the hazard begins."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the base's boundaries neither side has a duration."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "If a stock advances too quickly up the right side, this forms a hazardous time compression, and in most cases the stock should be avoided, at least temporarily. Time compression will show up as V-shaped price action or the absence of proper right-side development.",
+            "supports": "the hazard and the two observable forms it takes"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the passage names the hazard and never a ratio, so both durations and the pause count are reported and nothing is decided from them"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "thresholds": {},
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.structural_pivot_and_trigger",
+      "title": "The pivot is the high of the completed pause, and the trigger is price above it on expanding volume",
+      "required_inputs": [
+        "price_contractions",
+        "breakout_day_volume"
+      ],
+      "rule": {
+        "summary": "After a base is established the pivot is the price level that acts as the trigger, and the buy point is price moving above it on expanding volume."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Price below the declared pivot is timing that has not happened yet, reported with the distance to it."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a structural pause there is no pivot, and a rolling window's maximum is not one."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "after a base pattern has been established, the pivot point is where the stock establishes a price level that will act as the trigger to enter that trade.",
+            "supports": "the pivot is structural and follows a completed base"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "the point at which you want to buy is when the stock moves above the pivot point on expanding volume.",
+            "supports": "the trigger pairs clearing the pivot with expanding volume"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the passage defines the level and the trigger without numbers, so the pivot comes from the declared structure and the volume expansion is reported against each practitioner's own baseline"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "practice",
+      "attributed_to": null,
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "thresholds": {
+        "closing_range_midpoint_pct": {
+          "role": "marker",
+          "value": 50,
+          "unit": "percent",
+          "exact": true,
+          "quote_index": 1
+        }
+      },
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.closing_range_formula",
+      "title": "Closing range places the close within the bar's range",
+      "required_inputs": [
+        "daily_bar"
+      ],
+      "rule": {
+        "summary": "Closing range is the close's position between the bar's low and high, expressed as a percentage; above fifty suggests buying pressure was stronger."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A weak closing range is one bar's evidence, and the source says the larger pattern and higher time frames supersede it."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "A bar whose high equals its low has no range, so the closing range is undefined rather than zero."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 6,
+            "text": "Closing range = (Close − Low / High − Low) * 100",
+            "supports": "the formula as printed, missing the parentheses the arithmetic needs"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 6,
+            "text": "A closing range of greater than 50% suggests that for that bar, buying pressure was stronger.",
+            "supports": "the midpoint the measurement is read against, stated as a suggestion rather than a filter"
+          }
+        ],
+        "resolution": "mined from TraderLion row 6; the printed formula omits the parentheses, and the worked example in the same passage (high 100, low 90, close 98 gives 80 percent) settles the grouping. 'Suggests' is not filter language, so fifty is a marker"
+      }
+    },
+    {
+      "kind": "default",
+      "layer": "practice",
+      "attributed_to": null,
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "thresholds": {
+        "high_volume_ratio": {
+          "role": "marker",
+          "value": 1.25,
+          "unit": "ratio",
+          "exact": false,
+          "quote_index": 1
+        },
+        "low_volume_ratio": {
+          "role": "marker",
+          "value": 0.75,
+          "unit": "ratio",
+          "exact": false,
+          "quote_index": 1
+        },
+        "swing_baseline_sessions": {
+          "role": "reference",
+          "value": 20,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0
+        },
+        "position_baseline_sessions": {
+          "role": "reference",
+          "value": 50,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0
+        }
+      },
+      "computability": "deterministic",
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_measurements.py",
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "id": "setup.volume_state_convention",
+      "title": "Volume is above or below average by roughly a quarter, against a horizon-specific window",
+      "required_inputs": [
+        "daily_volume"
+      ],
+      "rule": {
+        "summary": "Volume around a quarter above its moving average is a high-volume day and around a quarter below is a low-volume day, measured over twenty sessions for swing horizons and fifty for position horizons."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "This names what a volume reading is called, and the naming does not by itself qualify or disqualify a setup."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the baseline window's worth of volume there is no average to compare against."
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 6,
+            "text": "For swing traders a 20-day period simple moving average is helpful, for position traders you can use a 50-day simple moving average. They will provide similar reference points in most cases.",
+            "supports": "the two baseline windows, chosen rather than measured"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 6,
+            "text": "keep an eye out for bars where volume is around 25% more than average or 25% less. These are above or below average volume days.",
+            "supports": "the two ratios, stated with 'around' and no boundary"
+          }
+        ],
+        "resolution": "mined from TraderLion rows 6; 'around 25%' declines to draw a line, so both ratios are markers, and the two windows select which series to compute rather than being compared with anything"
+      }
+    },
+    {
+      "id": "setup.chase_limit_above_pivot",
+      "title": "Buy as close to the pivot as possible, without chasing more than a few percentage points",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "pivot",
+        "latest_completed_close",
+        "chart_review"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "The entry belongs as close to the pivot as possible, and the source declines to say how far 'a few percentage points' reaches; the distance read is the latest completed close's, because completed bars cannot show that any other price is still on offer."
+      },
+      "computability": "chart_assisted",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "An entry the reader judges chased is not the entry the source describes, and the source states the limit without a number, so the reading is the reader's and the distance travels with it."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "The distance above the pivot is measured, but 'more than a few percentage points' has no number in it, so an unjudged distance is unfinished rather than acceptable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_reducer.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "You want to buy as close to the pivot point as possible without chasing the stock up more than a few percentage points.",
+            "supports": "the limit and the source's refusal to put a number on it"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; 'a few percentage points' is a limit without a magnitude, so the extension above the pivot is reported beside the sentence and no threshold is registered"
+      }
+    },
+    {
+      "id": "setup.failure_reset_types",
+      "title": "A base failure needs a whole new base; a pivot failure can reset and recover",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "price_contractions",
+        "pivot",
+        "chart_review"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "A failure at the pivot can reset and recover within a small number of days, while a failure of the base itself requires building a whole new base; how small a number of days is small enough is read from the chart, and the longest spell below the pivot is reported for that reading."
+      },
+      "computability": "chart_assisted",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Earlier attempts at the pivot are counted beside the current one rather than disqualifying it; the source says a pivot failure can reset, and gives no count at which it stops being able to."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a pivot and the sessions after it there is nothing to count."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "This is what I call a failure reset, which comes in two forms: a base failure, which requires building a whole new base before it can be purchased again, and a pivot failure, which can reset and recover within a small number of days.",
+            "supports": "the two failure kinds, and that a pivot failure is recoverable rather than terminal"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the passage names two failure kinds and gives a duration only as 'a small number of days', so the count of earlier attempts is reported and no deadline is registered"
+      }
+    },
+    {
+      "id": "setup.upside_spikes_dwarf_contractions",
+      "title": "A few upside price spikes should be large enough to dwarf the contractions",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "required_inputs": [
+        "base_daily_bars"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "A few of the upside price spikes across the base should be large enough to dwarf the contractions, which happen on relatively lower volume."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "The source says these spikes 'should' be large, not that they must be, so a base whose largest decline outruns its largest advance is reported for review rather than rejected."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the base's daily bars there are no spikes to compare."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_round_two.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "In other words, the volume must be much bigger on up days than on down days, and a few of the price spikes to the upside should be large, dwarfing the contractions that have occurred on relatively lower volume.",
+            "supports": "the second clause, stated with 'should' where the first is stated with 'must'"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the sentence carries two requirements at two strengths, and binding both to one hard gate let a clause the source hedged with 'should' reject a candidate. The volume clause stays the gate; this clause reports."
+      }
+    },
+    {
+      "id": "setup.declared_chain_completeness",
+      "title": "A declared swing chain must be vouched for as the base's whole structure",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "swing_chain",
+        "chart_review"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "Every anchor in a declared chain is checked against the bars, but whether the chain describes the base's whole structure is not something completed bars can settle, so it is read from the chart and declared."
+      },
+      "computability": "chart_assisted",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A chain declared as partial describes something other than the base being judged, so the setup cannot be ready on it; the reading is the caller's and the engine reports which one it got."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the reading, a chain that skipped or merged contractions is indistinguishable from one that did not, and the engine cannot tell the difference by measurement."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_round_three.py"
+      ],
+      "provenance": {
+        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement separates it from an honest one. An independent segmentation would, and building one is a later slice; until then the gap is declared rather than stepped over."
+      }
     }
   ]
 }
