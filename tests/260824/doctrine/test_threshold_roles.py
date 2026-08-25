@@ -55,10 +55,10 @@ class BandTests(unittest.TestCase):
         self.assertEqual(loose["state"], tight["state"])
         self.assertNotEqual(loose["band_position"], tight["band_position"])
 
-    def test_a_measurement_past_the_loose_edge_is_beyond_the_range(self) -> None:
+    def test_a_measurement_past_the_loose_edge_is_above_the_range(self) -> None:
         signal = doctrine.evaluate_band(*BAND, 41.0)
 
-        self.assertEqual(signal["state"], "beyond_source_range")
+        self.assertEqual(signal["state"], "above_source_range")
         self.assertGreater(signal["band_position"], 1)
 
     def test_a_measurement_tighter_than_the_range_is_outside_it_on_the_good_side(self) -> None:
@@ -67,7 +67,7 @@ class BandTests(unittest.TestCase):
         # second one honestly.
         signal = doctrine.evaluate_band(*BAND, 12.0)
 
-        self.assertEqual(signal["state"], "short_of_source_range")
+        self.assertEqual(signal["state"], "below_source_range")
         self.assertEqual(signal["direction"], "lower_is_better")
         self.assertLess(signal["band_position"], 0)
 

@@ -320,18 +320,27 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         signal["state"] = "unavailable"
         return signal
     span = high - low
-    signal["band_position"] = round((measured - low) / span, 4) if span else 0.0
+    # Everything below reads the number the envelope prints, not the one this was handed.
+    # A 20% decline computed from 10.10 to 8.08 is 19.999999999999996, which prints as 20.0
+    # against a range starting at 20 -- comparing the raw value there emits a signal saying a
+    # measurement of 20.0 fell below 20, and a reader who can only see the printed number has
+    # no way to tell that is arithmetic rather than a mistake. Ten decimal places is far below
+    # any precision price data carries, so agreeing with the print costs nothing real.
+    reported = signal["measured"]
+    signal["band_position"] = round((reported - low) / span, 4) if span else 0.0
     # The state says where the number sat and nothing else. Which edge is the good one is
     # what ``direction`` is for -- a base shallower than its depth range is outside it and
     # better for being outside; a company growing slower than its growth range is outside it
     # and worse. Folding that judgement into the state made the favourable side report
     # ``within_source_range`` about a measurement that never entered the range, which is a
-    # sentence the response standard cannot be written from.
+    # sentence the response standard cannot be written from. The words are positional for the
+    # same reason: "short of" and "beyond" carry a higher-is-better frame, and half the
+    # registered bands point the other way.
     signal["direction"] = specification["direction"]
-    if measured > high:
-        signal["state"] = "beyond_source_range"
-    elif measured < low:
-        signal["state"] = "short_of_source_range"
+    if reported > high:
+        signal["state"] = "above_source_range"
+    elif reported < low:
+        signal["state"] = "below_source_range"
     else:
         signal["state"] = "within_source_range"
     return signal

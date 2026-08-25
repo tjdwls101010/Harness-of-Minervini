@@ -14,12 +14,15 @@ outside is the favourable outcome here.
 
 from __future__ import annotations
 
+import math
 import unittest
 
 from scripts.minervini import doctrine
 
 DEPTH = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct")
 GROWTH = ("fundamentals.minimum_quarterly_earnings_growth", "minimum_yoy_earnings_growth_percent")
+# A percent band whose low edge is a round number, so a float computation can land beside it.
+DEPTH_LIKE = ("fundamentals.power_play_exception", "flag_maximum_decline_pct")
 
 
 def _band(claim_id: str, name: str) -> dict:
@@ -35,14 +38,14 @@ class WhereTheMeasurementSat(unittest.TestCase):
         low, _ = _band(*DEPTH)["range"]
         signal = doctrine.evaluate_band(*DEPTH, low - 8.0)
 
-        self.assertEqual(signal["state"], "short_of_source_range")
+        self.assertEqual(signal["state"], "below_source_range")
         self.assertLess(signal["band_position"], 0)
 
     def test_a_company_growing_faster_than_the_growth_range_is_above_it(self) -> None:
         _, high = _band(*GROWTH)["range"]
         signal = doctrine.evaluate_band(*GROWTH, high + 30.0)
 
-        self.assertEqual(signal["state"], "beyond_source_range")
+        self.assertEqual(signal["state"], "above_source_range")
         self.assertGreater(signal["band_position"], 1)
 
     def test_and_the_unfavourable_sides_already_read_that_way(self) -> None:
@@ -51,8 +54,8 @@ class WhereTheMeasurementSat(unittest.TestCase):
         _, deep = _band(*DEPTH)["range"]
         low, _ = _band(*GROWTH)["range"]
 
-        self.assertEqual(doctrine.evaluate_band(*DEPTH, deep + 8.0)["state"], "beyond_source_range")
-        self.assertEqual(doctrine.evaluate_band(*GROWTH, low - 8.0)["state"], "short_of_source_range")
+        self.assertEqual(doctrine.evaluate_band(*DEPTH, deep + 8.0)["state"], "above_source_range")
+        self.assertEqual(doctrine.evaluate_band(*GROWTH, low - 8.0)["state"], "below_source_range")
 
     def test_within_the_range_means_inside_the_range(self) -> None:
         for claim_id, name in (DEPTH, GROWTH):
@@ -99,21 +102,43 @@ class EveryBandTheRegistryCarries(unittest.TestCase):
 
         self.assertEqual(hidden, [])
 
-    def test_below_the_low_edge_is_short_of_the_range(self) -> None:
-        for claim_id, name, spec in self.bands:
-            low, high = spec["range"]
-            with self.subTest(band=f"{claim_id}.{name}", direction=spec["direction"]):
-                signal = doctrine.evaluate_band(claim_id, name, low - max(1.0, (high - low) / 2))
-                self.assertEqual(signal["state"], "short_of_source_range")
-                self.assertLess(signal["band_position"], 0)
+    @staticmethod
+    def _step(low: float, high: float) -> float:
+        """How far outside an edge to probe.
 
-    def test_above_the_high_edge_is_beyond_the_range(self) -> None:
+        Capped rather than scaled so the probe stays a measurement someone could actually
+        take: half a span outside [3, 60] weeks is a negative duration, and a probe nothing
+        could ever measure proves nothing about how a real one is read. Whole where the band
+        is whole, so a count band is probed with a count."""
+        return min(1.0, (high - low) / 2)
+
+    def test_under_the_low_edge_is_below_the_range(self) -> None:
         for claim_id, name, spec in self.bands:
             low, high = spec["range"]
             with self.subTest(band=f"{claim_id}.{name}", direction=spec["direction"]):
-                signal = doctrine.evaluate_band(claim_id, name, high + max(1.0, (high - low) / 2))
-                self.assertEqual(signal["state"], "beyond_source_range")
+                signal = doctrine.evaluate_band(claim_id, name, low - self._step(low, high))
+                self.assertEqual(signal["state"], "below_source_range")
+                self.assertLess(signal["band_position"], 0)
+                self.assertEqual(signal["direction"], spec["direction"])
+
+    def test_over_the_high_edge_is_above_the_range(self) -> None:
+        for claim_id, name, spec in self.bands:
+            low, high = spec["range"]
+            with self.subTest(band=f"{claim_id}.{name}", direction=spec["direction"]):
+                signal = doctrine.evaluate_band(claim_id, name, high + self._step(low, high))
+                self.assertEqual(signal["state"], "above_source_range")
                 self.assertGreater(signal["band_position"], 1)
+                self.assertEqual(signal["direction"], spec["direction"])
+
+    def test_no_probe_leaves_the_domain_its_unit_allows(self) -> None:
+        """Guard on the guard: every unit registered here counts something -- weeks, sessions,
+        percent, contractions -- and none of them goes negative. A sweep whose probes nobody
+        could ever measure is testing arithmetic rather than the harness. Zero is allowed,
+        because a window that has not opened is a real reading of one that has not."""
+        for claim_id, name, spec in self.bands:
+            low, high = spec["range"]
+            with self.subTest(band=f"{claim_id}.{name}", unit=spec["unit"]):
+                self.assertGreaterEqual(low - self._step(low, high), 0)
 
     def test_between_the_edges_is_within_the_range(self) -> None:
         for claim_id, name, spec in self.bands:
@@ -130,6 +155,76 @@ class EveryBandTheRegistryCarries(unittest.TestCase):
                 low, high = spec["range"]
                 signal = doctrine.evaluate_band(claim_id, name, (low + high) / 2)
                 self.assertEqual(signal["direction"], spec["direction"])
+
+
+class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
+    """A signal is read by whoever gets the envelope, and all they have is what it prints.
+
+    `measured` is reported at a fixed precision. Classifying the raw value instead let the two
+    disagree: a 20% decline computed from 10.10 to 8.08 is 19.999999999999996, printed 20.0,
+    and against a range starting at 20 the signal said a measurement of 20.0 fell below 20.
+    Arithmetic, but nothing in the envelope says so, and a reader cannot tell it from a
+    mistake. The rule is stated as a relation between two published fields rather than as a
+    rounding step, so it holds whatever the precision is set to."""
+
+    RAW = (
+        100.0 * (10.10 - 8.08) / 10.10,  # a real 20% decline, one ulp short of it
+        19.999999999999996,
+        20.0,
+        24.999999999999996,
+        25.000000000000004,
+        22.5,
+        19.99,
+        25.01,
+        0.0,
+        73.0,
+    )
+
+    def _signals(self):
+        for raw in self.RAW:
+            yield raw, doctrine.evaluate_band(*DEPTH_LIKE, raw)
+
+    def test_every_state_matches_what_the_signal_printed(self) -> None:
+        for raw, signal in self._signals():
+            low, high = signal["source_range"]
+            printed = signal["measured"]
+            expected = (
+                "above_source_range" if printed > high
+                else "below_source_range" if printed < low
+                else "within_source_range"
+            )
+            with self.subTest(raw=repr(raw), printed=printed):
+                self.assertEqual(signal["state"], expected)
+
+    def test_the_band_position_agrees_with_the_state_it_travels_with(self) -> None:
+        for raw, signal in self._signals():
+            with self.subTest(raw=repr(raw), state=signal["state"]):
+                if signal["state"] == "below_source_range":
+                    self.assertLess(signal["band_position"], 0)
+                elif signal["state"] == "above_source_range":
+                    self.assertGreater(signal["band_position"], 1)
+                else:
+                    self.assertGreaterEqual(signal["band_position"], 0)
+                    self.assertLessEqual(signal["band_position"], 1)
+                    # -0.0 is >= 0 to Python and reads as "just under the low edge" to a
+                    # person, which is the same contradiction one field further along.
+                    self.assertGreater(math.copysign(1.0, signal["band_position"]), 0)
+
+    def test_a_difference_a_reader_could_see_is_still_a_difference(self) -> None:
+        """Agreeing with the print must not become a tolerance wide enough to swallow a real
+        measurement.
+
+        Percentages here are computed from prices carrying two decimals of their own, so a
+        difference in the third decimal of a percentage point is an ordinary result rather
+        than float noise. Coarsening what the envelope prints would quietly widen the
+        classification with it -- at two decimals 19.999 prints as 20.0 and the band would
+        call it inside a range it is under."""
+        for measured in (19.99, 19.999):
+            with self.subTest(measured=measured):
+                signal = doctrine.evaluate_band(*DEPTH_LIKE, measured)
+
+                self.assertEqual(signal["measured"], measured)
+                self.assertEqual(signal["state"], "below_source_range")
 
 
 if __name__ == "__main__":

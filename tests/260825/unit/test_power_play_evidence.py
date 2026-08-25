@@ -204,7 +204,7 @@ class TheMachineChannelSaysWhatTheReducerSays(unittest.TestCase):
     """`signals` is read by machines, so a state the reducer refuses to use cannot sit in it.
 
     The reducer already declines a criterion it cannot trust -- but the signal it declined went
-    out unchanged, carrying `fail` on a depth the split manufactured and `beyond_source_range` on
+    out unchanged, carrying `fail` on a depth the split manufactured and `above_source_range` on
     the band beside it. A caller reading the machine channel got a confident rejection the
     verdict channel had already withdrawn.
     """
