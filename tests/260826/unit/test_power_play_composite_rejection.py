@@ -18,6 +18,7 @@ import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
+from tests.readings import power_play_answers
 from tests.series import two_tops_that_both_await_the_chart_series
 
 
@@ -31,7 +32,9 @@ class ARejectionReachedByDifferentRoutesIsStillARejection(unittest.TestCase):
             if (question["reading"], question["condition"]) in by_condition
         }
         self.assertEqual(len(keys), len(by_condition))
-        return evaluate_power_play(build_power_play_evidence(history, chart_readings=keys))
+        return evaluate_power_play(
+            build_power_play_evidence(history, **power_play_answers(history, keys))
+        )
 
     def test_the_highest_top_out_on_one_criterion_and_the_next_on_another(self) -> None:
         verdict = self._answer(

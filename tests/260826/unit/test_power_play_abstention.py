@@ -16,6 +16,7 @@ import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
+from tests.readings import power_play_answers
 from tests.series import (
     a_payout_decided_criterion_under_a_lower_top_series,
     two_tops_that_both_await_the_chart_series,
@@ -31,7 +32,7 @@ class AnUnreadTopAbstains(unittest.TestCase):
             if question["reading"] == index
         }
         self.assertTrue(keys)
-        return build_power_play_evidence(history, chart_readings=keys)
+        return build_power_play_evidence(history, **power_play_answers(history, keys))
 
     def test_answering_the_highest_top_does_not_dispute_the_peak(self) -> None:
         verdict = evaluate_power_play(self._answer_one(two_tops_that_both_await_the_chart_series(), 0))
@@ -85,6 +86,7 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
 
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+        from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = two_tops_that_both_await_the_chart_series()
         prices = ProviderSnapshot(
@@ -102,7 +104,11 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
         one = [
             f'{q["key"]}=observed' for q in first["data"]["chart_questions"] if q["reading"] == 0
         ]
-        payload = execute("ticker.power-play", {**request, "chart_readings": one}, runtime=runtime)
+        payload = execute(
+            "ticker.power-play",
+            {**request, "chart_readings": one, "drawn_bars": bars_fingerprint(frame)},
+            runtime=runtime,
+        )
 
         reasons = {item["reason"] for item in payload["missing"]}
         self.assertEqual(reasons, {"chart_unread_under_another_top"})

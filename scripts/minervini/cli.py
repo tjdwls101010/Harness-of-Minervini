@@ -195,6 +195,7 @@ def build_parser() -> JsonArgumentParser:
 
     power_play = _capability_parser(ticker_sub, "power-play", "ticker.power-play")
     power_play.add_argument("ticker", help=_input_help("ticker.power-play", "ticker"))
+    power_play.add_argument("--drawn-bars", help=_input_help("ticker.power-play", "drawn_bars"))
     power_play.add_argument(
         "--chart-reading",
         dest="chart_readings",

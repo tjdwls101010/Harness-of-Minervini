@@ -544,7 +544,17 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "power_play_state": state,
         "measured_bars": evidence.get("measured_bars"),
-        "chart_questions": evidence.get("chart_questions") or [],
+        "measured_from": evidence.get("measured_from"),
+        "readings_cover_other_bars": bool(evidence.get("readings_cover_other_bars")),
+        # A finished verdict asks nothing more. The answers it rests on stay, because they are the
+        # evidence behind it, but a question still open on a structure nothing can move is an
+        # envelope contradicting itself: `qualified` and `not_qualified` both mean nothing is
+        # outstanding, and a key printed underneath says otherwise.
+        "chart_questions": [
+            question
+            for question in (evidence.get("chart_questions") or [])
+            if state == "incomplete" or question["answered"] is not None
+        ],
         "required_evidence": list(_REQUIRED),
         "failed": failed,
         "missing": missing,

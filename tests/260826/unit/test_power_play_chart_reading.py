@@ -17,6 +17,7 @@ import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
+from tests.readings import power_play_answers
 from tests.series import power_play_series, two_tops_that_both_await_the_chart_series
 
 
@@ -51,12 +52,14 @@ class TheCapabilityAsksBeforeItIsAnswered(unittest.TestCase):
 class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
     def _both(self, history):
         evidence = build_power_play_evidence(history)
-        return {question["key"]: "observed" for question in evidence["chart_questions"]}
+        return power_play_answers(
+            history, {question["key"]: "observed" for question in evidence["chart_questions"]}
+        )
 
     def test_observed_makes_the_criterion_pass(self) -> None:
         history = power_play_series()
         keys = self._both(history)
-        answered = build_power_play_evidence(history, chart_readings=keys)
+        answered = build_power_play_evidence(history, **keys)
 
         states = {signal["id"]: signal["state"] for signal in answered["signals"]}
         self.assertEqual(states["fundamentals.power_play_exception.launch_volume_character"], "pass")
@@ -65,7 +68,7 @@ class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
     def test_a_pass_a_person_supplied_never_looks_like_one_the_numbers_reached(self) -> None:
         """The one thing an auditor of a qualified verdict has to be able to see."""
         history = power_play_series()
-        answered = build_power_play_evidence(history, chart_readings=self._both(history))
+        answered = build_power_play_evidence(history, **self._both(history))
 
         volume = next(
             signal for signal in answered["signals"]
@@ -75,7 +78,7 @@ class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
 
     def test_answering_both_is_what_makes_qualified_reachable(self) -> None:
         history = power_play_series()
-        verdict = evaluate_power_play(build_power_play_evidence(history, chart_readings=self._both(history)))
+        verdict = evaluate_power_play(build_power_play_evidence(history, **self._both(history)))
 
         self.assertEqual(verdict["power_play_state"], "qualified")
         self.assertEqual(verdict["missing"], [])
@@ -90,7 +93,7 @@ class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
         evidence = build_power_play_evidence(history)
         volume = _questions(evidence)["launch_volume_character"]
         verdict = evaluate_power_play(
-            build_power_play_evidence(history, chart_readings={volume["key"]: "absent"})
+            build_power_play_evidence(history, **power_play_answers(history, {volume["key"]: "absent"}))
         )
 
         self.assertEqual(verdict["power_play_state"], "not_qualified")
@@ -106,7 +109,8 @@ class AnApprovalIsBoundToWhatWasMeasured(unittest.TestCase):
         """
         evidence = build_power_play_evidence(power_play_series())
         key = evidence["chart_questions"][0]["key"]
-        other = build_power_play_evidence(power_play_series(flag_sessions=18), chart_readings={key: "observed"})
+        history = power_play_series(flag_sessions=18)
+        other = build_power_play_evidence(history, **power_play_answers(history, {key: "observed"}))
 
         self.assertEqual(other["unmatched_chart_readings"], [key])
 
@@ -177,7 +181,7 @@ class WhatAnApprovalCanNeverClose(unittest.TestCase):
     def _answer_everything(self, history):
         evidence = build_power_play_evidence(history)
         keys = {question["key"]: "observed" for question in evidence["chart_questions"]}
-        return build_power_play_evidence(history, chart_readings=keys), keys
+        return build_power_play_evidence(history, **power_play_answers(history, keys)), keys
 
     def test_a_flag_that_has_not_finished_stays_unfinished(self) -> None:
         """Twelve sessions is the least a flag can be, and no reading of the chart adds one."""
@@ -213,7 +217,7 @@ class WhatAnApprovalCanNeverClose(unittest.TestCase):
             if question["reading"] == index
         }
         self.assertTrue(keys)
-        return build_power_play_evidence(history, chart_readings=keys), keys
+        return build_power_play_evidence(history, **power_play_answers(history, keys)), keys
 
     def test_a_split_in_the_span_leaves_nothing_to_approve(self) -> None:
         """No key is issued, so the approval has nothing to attach to and says so.
@@ -282,7 +286,7 @@ class AnAnswerNeverRescuesARejectedReading(unittest.TestCase):
         history = power_play_series(flag_depth_pct=40.0)
         before = build_power_play_evidence(history)
         keys = {question["key"]: "observed" for question in before["chart_questions"]}
-        after = build_power_play_evidence(history, chart_readings=keys)
+        after = build_power_play_evidence(history, **power_play_answers(history, keys))
 
         self.assertEqual(before["chart_questions"], [])
         self.assertEqual(

@@ -267,6 +267,10 @@ CAPABILITIES = {
             inputs=_inputs(
                 {
                     "ticker": _field("string", "US-listed ticker symbol.", required=True),
+                    "drawn_bars": _field(
+                        "string",
+                        "The bars_fingerprint the chart was read from, as ticker.chart reports it in input_sha256 and every chart question carries it in drawn_bars. Required whenever chart_readings is supplied. A key binds an answer to the bars this verdict is measured on; it cannot attest that the picture in front of the reader came from those bars, and the two capabilities reach the provider through their own cache entry, so one can be drawn from a vintage the other never measured. A value that does not match does not fail the structure -- nothing is applied and the criteria come back open naming approval_covers_different_bars, with measured_from beside them to re-read from.",
+                    ),
                     "chart_readings": _field(
                         "string[]",
                         "Repeatable KEY=observed|absent, one per question this capability asked. The key comes from chart_questions and names the bars, the criterion, the reading of the tops and the measurement together, so an answer matching no open question is refused rather than dropped. Observed satisfies the criterion for the reading it was asked under and absent settles it against the stock for that same reading -- a top that may contest it goes on holding the criterion open until its own key is answered. A reader who could not tell supplies nothing.",

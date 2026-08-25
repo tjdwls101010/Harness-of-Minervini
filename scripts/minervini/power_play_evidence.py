@@ -442,7 +442,9 @@ def _walk_the_tops(
     }
 
 
-def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | None = None) -> dict[str, Any]:
+def build_power_play_evidence(
+    history: Any, chart_readings: Mapping[str, str] | None = None, drawn_bars: str | None = None
+) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
     The structure is found rather than declared, so the same bars are read from every top the
@@ -531,6 +533,19 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
     }
     given = dict(chart_readings or {})
     fingerprint = power_play_fingerprint(history)
+    # Which picture the reader looked at, in the form ticker.chart prints it. The key already
+    # binds an answer to the bars this verdict is measured on; what it cannot do is attest that
+    # the chart came from those bars, and the two capabilities reach the provider through their
+    # own cache entry, so one can be drawn from a vintage the other never measured. Answered
+    # anyway, the eyes corroborated one series and the machine qualified another.
+    #
+    # A mismatch withholds rather than refuses. The caller answered honestly about a picture that
+    # existed; it is the wrong picture for this reading, which is a gap and not a bad request --
+    # the same call a setup approval of another vintage gets.
+    measured_from = bars_fingerprint(read_bars(history)[0])
+    covers_other_bars = bool(given) and drawn_bars != measured_from
+    if covers_other_bars:
+        given = {}
     chart_questions: list[dict[str, Any]] = []
     answered: list[dict[str, str]] = [{} for _ in readings]
     for index, (criteria, reading) in enumerate(zip(every_criteria, readings)):
@@ -552,6 +567,9 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
                     "condition": condition,
                     "reading": index,
                     "measured_bars": fingerprint,
+                    # The digest to compare against the chart's manifest, so a reader can see in
+                    # one string whether the picture in front of them is this reading's.
+                    "drawn_bars": measured_from,
                     "peak_date": reading["peak_date"],
                     "advance_anchor_date": reading["advance_anchor_date"],
                     "flag_low_date": reading["flag_low_date"],
@@ -680,6 +698,10 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
         # The name of the input this verdict was reached on, prices and events together, so an
         # approval can be bound to it and a later reader can tell a rule change from a data one.
         "measured_bars": fingerprint,
+        # The price digest of the same bars, in the form ticker.chart prints it, so the picture a
+        # reader looked at and the bars this verdict was measured on can be compared in one string.
+        "measured_from": measured_from,
+        "readings_cover_other_bars": covers_other_bars,
         # What this run is still asking a reader, and what the reader would be answering about.
         # Issued rather than assembled: a key names one criterion under one reading of the tops,
         # measured off one set of bars, at one value -- and stops naming it the moment any of

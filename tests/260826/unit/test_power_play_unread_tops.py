@@ -16,13 +16,14 @@ import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
+from tests.readings import power_play_answers
 from tests.series import a_top_the_history_ends_before_series
 
 
 def answered(history):
     evidence = build_power_play_evidence(history)
     keys = {question["key"]: "observed" for question in evidence["chart_questions"]}
-    return build_power_play_evidence(history, chart_readings=keys)
+    return build_power_play_evidence(history, **power_play_answers(history, keys))
 
 
 class TheUnreadTopKeepsItsVote(unittest.TestCase):
@@ -44,6 +45,7 @@ class TheUnreadTopKeepsItsVote(unittest.TestCase):
 
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+        from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = a_top_the_history_ends_before_series()
         prices = ProviderSnapshot(
@@ -59,7 +61,11 @@ class TheUnreadTopKeepsItsVote(unittest.TestCase):
         request = {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "no_cache": True}
         first = execute("ticker.power-play", request, runtime=runtime)
         keys = [f'{q["key"]}=observed' for q in first["data"]["chart_questions"]]
-        payload = execute("ticker.power-play", {**request, "chart_readings": keys}, runtime=runtime)
+        payload = execute(
+            "ticker.power-play",
+            {**request, "chart_readings": keys, "drawn_bars": bars_fingerprint(frame)},
+            runtime=runtime,
+        )
 
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
         self.assertEqual(reasons["lower_top_left_unread"], "history_ends_before_lower_top")

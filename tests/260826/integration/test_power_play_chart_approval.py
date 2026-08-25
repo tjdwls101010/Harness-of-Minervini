@@ -13,10 +13,13 @@ import unittest
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import power_play_series, two_tops_that_both_await_the_chart_series
 
 
 def run(frame, **overrides) -> dict:
+    if "chart_readings" in overrides and "drawn_bars" not in overrides:
+        overrides["drawn_bars"] = bars_fingerprint(frame)
     prices = ProviderSnapshot(
         frame,
         SnapshotMeta(
@@ -64,6 +67,7 @@ class TheQuestionLeavesAndTheAnswerReturns(unittest.TestCase):
         self.assertIn("convention.power_play_chart_reading", payload["doctrine_ids"])
 
     def test_a_stale_answer_is_refused_by_name(self) -> None:
+        """Stale here means the key, not the picture: the caller named this run's own bars."""
         with self.assertRaises(RequestError) as caught:
             run(power_play_series(), chart_readings=["0000000000000000=observed"])
 

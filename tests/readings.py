@@ -40,3 +40,14 @@ def full(frame: pd.DataFrame, chain: Sequence[str], **overrides):
     }
     readings.update(overrides)
     return readings
+
+
+def power_play_answers(history, chart_readings):
+    """The arguments an answered Power Play reading now takes.
+
+    The digest travels with every answer, so a test that skips it is testing a call the request
+    boundary refuses. Kept in one place because five modules make the same call.
+    """
+    from scripts.minervini.setup_structure import bars_fingerprint, read_bars
+
+    return {"chart_readings": chart_readings, "drawn_bars": bars_fingerprint(read_bars(history)[0])}

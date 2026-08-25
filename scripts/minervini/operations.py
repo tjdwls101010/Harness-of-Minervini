@@ -567,6 +567,15 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     readings = _chart_readings(request)
+    drawn_bars = request.get("drawn_bars")
+    # Required with an answer, the way approved_bars is required with a complete chain, and for
+    # the same reason: a chart reading is a reading of one picture, and the harness never sees it.
+    if readings and not (isinstance(drawn_bars, str) and drawn_bars.strip()):
+        raise RequestError(
+            "drawn_bars is required with chart_readings: name the bars the chart was read from, "
+            "as ticker.chart reports them and every chart question carries them",
+            "drawn_bars",
+        )
     try:
         prices = _cached_provider(
             runtime,
@@ -598,7 +607,7 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing=[stale_price],
             sources=[_source(prices.meta)],
         )
-    evidence = build_power_play_evidence(prices.data, chart_readings=readings)
+    evidence = build_power_play_evidence(prices.data, chart_readings=readings, drawn_bars=drawn_bars)
     # Refused rather than dropped, and before the verdict is assembled. The ordinary way an
     # approval stops matching is a session closing between the chart and the request; a caller
     # told nothing would read the unchanged answer as the harness ignoring them.
@@ -674,6 +683,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # required flag may read as an instruction.
     decided = verdict["power_play_state"] == "not_qualified"
 
+    # An answer read from another vintage of the series. Nothing was applied, so every criterion
+    # it would have closed is open under that cause rather than under the chart it still waits on.
+    other_bars = verdict["readings_cover_other_bars"]
+
     def _reason(item: str) -> str:
         if item in reasons:
             return reasons[item]
@@ -704,6 +717,8 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # waived by a reading of the volume.
         if item == FLAG_STILL_FORMING:
             return "flag_still_forming"
+        if other_bars:
+            return "approval_covers_different_bars"
         # Two ways a chart criterion stops being something a chart closes. The structure was
         # rejected -- by the bars, or by this caller's own `absent` reading of another criterion --
         # and nothing supplied now moves it. Or no key was issued for it, because the reading it
@@ -718,8 +733,21 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # actually true of it -- a disputed peak on a rejected structure was still disputed -- but a
     # finished rejection owes nobody anything, and nine of twenty-three real tickers were coming
     # back `ok` with gaps marked required and no capability named to close them.
+    # `required` follows the verdict rather than the cause. Every gap keeps the reason that is
+    # actually true of it -- a disputed peak on a rejected structure was still disputed -- but a
+    # finished rejection owes nobody anything, and nine of twenty-three real tickers were coming
+    # back `ok` with gaps marked required and no capability named to close them.
+    #
+    # And a criterion whose own reading is out owes nothing either, whatever the verdict does. No
+    # key exists for it and none can, so it is unsatisfied evidence rather than evidence anybody
+    # still has to supply -- which is what `required` has meant everywhere else in this harness.
     missing = [
-        {"id": item, "reason": _reason(item), "required": not decided} for item in verdict["missing"]
+        {
+            "id": item,
+            "reason": (reason := _reason(item)),
+            "required": not decided and reason != "reading_rejected_before_a_chart_was_needed",
+        }
+        for item in verdict["missing"]
     ]
     # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
     # when a chart is what one of its gaps is actually waiting on.
