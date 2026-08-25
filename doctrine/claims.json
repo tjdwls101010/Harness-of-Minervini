@@ -10178,6 +10178,67 @@
       "provenance": {
         "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition. The one part of it that is not the harness's own is the base's left boundary: three price-only rules for it failed, because on price alone a rally above an earlier rally top inside a correction and a fresh consolidation under an old peak are the same picture at different magnitudes, and the source supplies no magnitude. It supplies the other half of the observation instead -- the buy point is price moving above the pivot on expanding volume -- so leaving a structure is read as a breakout out of it, per setup.structural_pivot_and_trigger. Which of those breakouts ended a structure is still a reading rather than a measurement -- holding either admits a pivot failure that reset or it does not, and the source says such a failure can recover -- so the edge is read every way and vouched for only where the readings agree. Every rule that picked one of them reached ready on a chain the detector had edited: bounding at an interior high deleted the contraction that widened, and not bounding at all let a structure the stock had left lend a contraction to the one above it."
       }
+    },
+    {
+      "id": "convention.trading_week",
+      "title": "How many completed sessions this harness counts as a week",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "power_play"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "sessions_per_trading_week": {
+          "value": 5,
+          "unit": "sessions",
+          "affects_verdict": true,
+          "note": "Sources state durations in weeks and this harness measures in completed sessions, so every one of those limits passes through this number. It is registered rather than written into the modules that convert because it decides verdicts: a Power Play flag is disqualified past six weeks, and whether a thirty-one session flag is inside or outside that limit is this parameter's answer. Five is the regular US session count for a full week; holiday weeks trade four, so a flag measured in sessions runs slightly long against a calendar reading of the same span, and the direction of that error is toward rejecting rather than qualifying."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there is nothing to segment."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "harness layer: the sources speak in weeks and the bars arrive as sessions, so the conversion is this harness's own and is registered where every consumer reads it rather than repeated as a constant"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.power-play"
+      ],
+      "tests": [
+        "tests/260825/doctrine/test_power_play_spec.py"
+      ],
+      "computability": "deterministic",
+      "rule": {
+        "summary": "A week of limits stated by a source is five completed US sessions in this harness's measurements.",
+        "conditions": []
+      }
     }
   ]
 }
