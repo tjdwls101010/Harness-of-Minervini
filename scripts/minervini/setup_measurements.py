@@ -135,6 +135,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     cleared = after_pivot.loc[after_pivot["Close"] > pivot]
     breakout_label = cleared.index[0] if len(cleared) else None
     breakout = bars.loc[breakout_label] if breakout_label is not None else None
+    # The baseline is the volume the breakout expanded against, so it is taken from the bars
+    # before it. A breakout with nothing before it has no baseline rather than a short one.
+    before = bars.loc[bars.index < breakout_label] if breakout_label is not None else bars.iloc[0:0]
     since_breakout = bars.loc[bars.index > breakout_label] if breakout_label is not None else bars.iloc[0:0]
     before_breakout = after_pivot.loc[after_pivot.index < breakout_label] if breakout_label is not None else after_pivot
     last = bars.iloc[-1]
@@ -194,13 +197,10 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,
         "pivot_extension_pct": (float(last["Close"]) - pivot) / pivot * 100,
         "breakout_volume_ratios": {
-            sessions: _ratio(
-                float(breakout["Volume"]),
-                _baseline(bars["Volume"].loc[bars.index < breakout_label], int(sessions), str(bars.index[bars.index < breakout_label][-1].date())),
-            )
+            sessions: _ratio(float(breakout["Volume"]), _baseline(before["Volume"], int(sessions), str(before.index[-1].date())))
             for sessions in breakout_baselines
         }
-        if breakout_label is not None
+        if breakout is not None and len(before)
         else {sessions: None for sessions in breakout_baselines},
         # "Closing range = (Close - Low / High - Low) * 100" is printed without the
         # parentheses the arithmetic needs; the surrounding worked example (high 100, low
