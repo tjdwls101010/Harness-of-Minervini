@@ -386,7 +386,10 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     contested = set(evidence.get("contested_criteria") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
-    settled = not contested and not payout_sensitive
+    # Only the tops speak to this. A payout withholds the criterion it decided and says so under
+    # its own name; calling it a question about which top the search landed on sends the reader
+    # looking at the chart for something the dividend calendar already answered.
+    settled = not contested
     failed: list[str] = []
     missing: list[str] = []
     for claim_id in _REQUIRED:
@@ -410,21 +413,28 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     if not settled:
         missing.append("peak_identity")
 
-    # Whatever the reducer declined, the machine channel declines too.
+    # Whatever the reducer declined, the machine channel declines too -- each under the cause that
+    # actually withdrew it, because a reader who fixes the wrong thing has not fixed anything.
+    withheld: dict[str, str] = {}
+
+    def _decline(claim_ids: set[str], cause: str) -> None:
+        for claim_id in claim_ids:
+            withheld.setdefault(claim_id, cause)
+            band = _BANDS_BESIDE.get(claim_id)
+            if band is not None:
+                withheld.setdefault(band, cause)
+
     if not unmoved:
         cause = (
             "corporate_action_evidence_missing"
             if evidence.get(_CORPORATE_ACTIONS) != "present"
             else "corporate_action_inside_the_measured_span"
         )
-        withheld = {str(signal["id"]) for signal in signals.values()}
-        withheld |= set(_BANDS_BESIDE.values())
-    else:
-        cause = "peak_identity_disputed"
-        withheld = {f"{_CLAIM}.{condition}" for condition in contested}
-        withheld |= {_BANDS_BESIDE[claim_id] for claim_id in withheld if claim_id in _BANDS_BESIDE}
+        _decline({str(signal["id"]) for signal in signals.values()} | set(_BANDS_BESIDE.values()), cause)
+    _decline({f"{_CLAIM}.{condition}" for condition in payout_sensitive}, "distribution_inside_the_measured_span")
+    _decline({f"{_CLAIM}.{condition}" for condition in contested}, "peak_identity_disputed")
     reported = [
-        _withhold(signal, cause) if str(signal["id"]) in withheld else dict(signal)
+        _withhold(signal, withheld[str(signal["id"])]) if str(signal["id"]) in withheld else dict(signal)
         for signal in evidence.get("signals") or []
     ]
 

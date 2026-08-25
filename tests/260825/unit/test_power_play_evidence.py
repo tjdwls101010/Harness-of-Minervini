@@ -347,3 +347,28 @@ class NoReadingRejectsOnWhatThePayoutDecided(unittest.TestCase):
         self.assertTrue(sensitive)
         for rejection in pack["reading_rejections"]:
             self.assertEqual(sensitive.intersection(rejection["failed"]), set())
+
+
+class APayoutWithholdsItsOwnSignalAndNothingElse(unittest.TestCase):
+    def _verdict(self):
+        # An advance far enough above the limit that no candidate top crosses it, so the only
+        # thing in question here is the payout.
+        return evaluate_power_play(
+            evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=4.5)
+        )
+
+    def test_the_machine_channel_stops_saying_what_the_reducer_stopped_saying(self):
+        verdict = self._verdict()
+        depth = next(
+            signal for signal in verdict["signals"]
+            if signal["id"] == "fundamentals.power_play_exception.flag_maximum_decline_gate_pct"
+        )
+
+        self.assertEqual(depth["state"], "unavailable")
+        self.assertEqual(depth["withheld"], "distribution_inside_the_measured_span")
+
+    def test_a_payout_is_not_a_question_about_which_top_the_search_landed_on(self):
+        verdict = self._verdict()
+
+        self.assertEqual(verdict["peak_identity"], "settled")
+        self.assertNotIn("peak_identity", verdict["missing"])
