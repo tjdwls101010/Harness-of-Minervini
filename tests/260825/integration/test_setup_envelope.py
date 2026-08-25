@@ -12,6 +12,8 @@ from datetime import date, datetime, timezone
 import tempfile
 import unittest
 
+import pandas as pd
+
 from scripts.minervini.chart import render_chart_artifacts
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.cli import format_payload
@@ -190,6 +192,31 @@ class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
                     {item["id"] for item in payload["signals"]},
                     {"setup.declared_chain_completeness"},
                 )
+
+
+class TheRenderersRefusalSurvivesToTheEnvelopeTests(unittest.TestCase):
+    def test_history_the_renderer_will_not_draw_is_typed_unavailability(self) -> None:
+        """An unhandled raise becomes internal_error, with the request and the as_of stripped.
+
+        The renderer refuses unusable history by naming the reason, and naming it is the whole
+        point -- a caller told only "internal error" cannot tell a data problem from a bug.
+        """
+
+        frame, _ = base_series()
+        frame.index = [pd.NaT, *frame.index[1:]]
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=date(2026, 6, 25), coverage={"completed_only": True})
+        runtime = Runtime(price_history=lambda ticker, requested: ProviderSnapshot(frame, meta))
+
+        with tempfile.TemporaryDirectory() as directory:
+            payload = execute("ticker.chart", {
+                "ticker": "TEST", "as_of": "2026-06-25", "output_dir": directory, "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["as_of"]["date"], "2026-06-25")
+        self.assertEqual(payload["request"]["ticker"], "TEST")
+        self.assertIn("history_index_is_not_dates", payload["missing"][0]["reason"])
 
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):

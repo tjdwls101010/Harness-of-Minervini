@@ -52,6 +52,12 @@ def render_chart_artifacts(
 
     # The same digest the segmentation carries, so an approval can be traced to its picture.
     input_sha256 = bars_fingerprint(daily)
+    # The bars a set of artifacts came from are part of where they are written. Keyed only by
+    # ticker and session, two renders of different history into one directory interleave: each
+    # file replaces atomically but the set does not, so a manifest could name one digest while
+    # the picture beside it came from another. That digest is what a setup approval cites, so a
+    # collision is a person approving a chart they never saw.
+    stamp = input_sha256[:12]
     weekly = _weekly_bars(daily, as_of_date)
     # The chart is where a person turns the detector's proposal into an approval, so it draws
     # what they are being asked to approve. A chart without the anchors makes that approval a
@@ -60,7 +66,7 @@ def render_chart_artifacts(
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
-        path = directory / f"{symbol}_{as_of_date.isoformat()}_{timeframe}.png"
+        path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_{timeframe}.png"
         drawn, pivot_drawn = _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
@@ -73,7 +79,7 @@ def render_chart_artifacts(
             "last_bar_partial": timeframe == "weekly" and _week_in_progress(daily, as_of_date),
         })
 
-    manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_manifest.json"
+    manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_manifest.json"
     manifest = {
         "renderer_version": RENDERER_VERSION,
         "ticker": symbol,

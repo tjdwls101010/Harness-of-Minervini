@@ -65,8 +65,10 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_has_no_completed_bars"
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
     # Booleans survive `to_numeric` as booleans, and comparing one with a price raises further
-    # down. Whole numbers are prices too, so only the boolean case is refused.
-    if any(pd.api.types.is_bool_dtype(bars[column]) for column in _REQUIRED_COLUMNS):
+    # down. Whole numbers are prices too, so only the boolean case is refused -- and it is refused
+    # by value, because an object column holds the same booleans while advertising a dtype that
+    # says nothing about them.
+    if any(_holds_a_boolean(bars[column]) for column in _REQUIRED_COLUMNS):
         return None, "history_contains_non_numeric_values"
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
@@ -85,8 +87,9 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     if bool(inverted.any()) or bool(outside.any()):
         return None, "history_contains_invalid_bar_ranges"
     # A positional index converts silently -- integers become nanoseconds since 1970 -- so a
-    # frame that never carried dates would be measured against dates it never had.
-    if pd.api.types.is_integer_dtype(bars.index) or pd.api.types.is_float_dtype(bars.index):
+    # frame that never carried dates would be measured against dates it never had. By value
+    # again: an object Index of the same integers reads as dates just as quietly.
+    if any(isinstance(label, (int, float)) and not isinstance(label, bool) for label in bars.index):
         return None, "history_index_is_not_dates"
     try:
         index = pd.DatetimeIndex(bars.index)
@@ -121,6 +124,14 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_repeats_a_session"
     bars.index = normalized
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
+
+
+def _holds_a_boolean(column: pd.Series) -> bool:
+    if pd.api.types.is_bool_dtype(column):
+        return True
+    if column.dtype != object:
+        return False
+    return any(isinstance(value, bool) for value in column)
 
 
 def bars_fingerprint(history: Any) -> str | None:

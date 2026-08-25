@@ -229,6 +229,13 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             for column in ("Open", "High", "Low", "Close"):
                 frame[column] = True
 
+        def boolean_in_an_object_column(frame):
+            frame["Volume"] = frame["Volume"].astype(object)
+            frame.iloc[3, frame.columns.get_loc("Volume")] = True
+
+        def positional_index_as_objects(frame):
+            frame.index = pd.Index([label.value for label in frame.index], dtype=object)
+
         def repeated_column(frame):
             frame["spare"] = frame["Close"]
             frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
@@ -253,7 +260,8 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             ("repeated session", repeated_session), ("missing column", missing_column),
             ("non-date index", non_date_index), ("repeated column", repeated_column),
             ("missing stamp", missing_stamp), ("positional index", positional_index),
-            ("boolean prices", boolean_prices),
+            ("boolean prices", boolean_prices), ("boolean in object column", boolean_in_an_object_column),
+            ("positional index as objects", positional_index_as_objects),
             ("late evening zone", late_evening_zone),
             ("two sessions one zone day", two_sessions_one_zone_day),
         ]
@@ -271,6 +279,30 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
                 except ValueError:
                     rendered = False
                 self.assertEqual(accepted, rendered)
+
+    def test_two_histories_in_one_directory_do_not_mix(self) -> None:
+        """Each file replaces atomically; the set of them does not.
+
+        Keyed only by ticker and session, two renders of different bars into one directory
+        interleave -- a manifest naming one digest beside a picture drawn from another. That
+        digest is what a setup approval cites, so a collision is a person approving a chart they
+        never saw.
+        """
+
+        first, _ = base_series()
+        second, _ = base_series(base_high=110.0)
+
+        with tempfile.TemporaryDirectory() as directory:
+            one = render_chart_artifacts(first, ticker="TEST", as_of=first.index[-1].date(), output_dir=directory)
+            two = render_chart_artifacts(second, ticker="TEST", as_of=second.index[-1].date(), output_dir=directory)
+
+            self.assertNotEqual(one["input_sha256"], two["input_sha256"])
+            self.assertFalse(set(one["paths"].values()) & set(two["paths"].values()))
+            self.assertNotEqual(one["manifest_path"], two["manifest_path"])
+            for manifest in (one, two):
+                written = json.loads(Path(manifest["manifest_path"]).read_text(encoding="utf-8"))
+                for path in written["paths"].values():
+                    self.assertIn(written["input_sha256"][:12], Path(path).name)
 
     def test_a_week_still_collecting_sessions_says_so(self) -> None:
         """Its volume bar is short because the week is short, not because the stock went quiet.

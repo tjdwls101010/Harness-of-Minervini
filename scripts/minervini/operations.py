@@ -1578,12 +1578,36 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
-    result = render_chart_artifacts(
-        prices.data,
+    try:
+        result = _render(prices.data, ticker, clock, destination)
+    except ValueError as error:
+        # The renderer refuses unusable history by raising, and an unhandled raise becomes an
+        # internal_error envelope with the request and the explicit as_of stripped off it. The
+        # reason it named is the whole point of naming one.
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[{"id": "renderable_price_history", "reason": str(error), "required": True}],
+            sources=[_source(prices.meta)],
+        )
+    return _chart_envelope(result, request, ticker, clock, prices)
+
+
+def _render(data: Any, ticker: str, clock: AnalysisClock, destination: Path) -> dict[str, Any]:
+    from .chart import render_chart_artifacts
+
+    return render_chart_artifacts(
+        data,
         ticker=ticker,
         as_of=clock.date.isoformat(),
         output_dir=destination,
     )
+
+
+def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticker: str, clock: AnalysisClock, prices: Any) -> dict[str, Any]:
     side_effects = [
         {
             "type": "chart_artifact",
