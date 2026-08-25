@@ -344,6 +344,10 @@ _CHART_KEY_LENGTH = 32
 # carries what it was asked under: re-register the tight limit at eleven percent and the sentence
 # offered to a reader changes while a key built from bars and boundaries alone does not, which
 # lets an answer given to the ten percent question satisfy the eleven percent one.
+# `_WEEK` is belt and braces: a different trading week gives different search windows, so the
+# reading's own boundary sessions move and the key moves with them either way. It is listed
+# because the digest is meant to be everything the question was asked under, not everything that
+# happens to be load-bearing today.
 _ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION)
 
 

@@ -64,6 +64,41 @@ class AKeyOutlivesNoRegistryEdit(unittest.TestCase):
 
         self.assertEqual(set(evidence["unmatched_chart_readings"]), set(self.answers))
 
+    def test_moving_the_week_the_windows_are_counted_in_retires_it_too(self) -> None:
+        """Belt and braces, and the belt is the boundaries.
+
+        A different trading week gives different search windows, so the reading's own boundary
+        sessions move and the key moves with them whether or not the week is in the digest --
+        which is why no test can isolate its membership there. What is worth pinning is the
+        behaviour: an answer given under one week's calendar does not satisfy another's.
+        """
+        with reregistered("convention.trading_week", "parameters", "sessions_per_trading_week", 4):
+            evidence = build_power_play_evidence(
+                self.history, **power_play_answers(self.history, self.answers)
+            )
+
+        self.assertEqual(set(evidence["unmatched_chart_readings"]), set(self.answers))
+
+
+class AKeyNamesOneQuestion(unittest.TestCase):
+    def test_it_is_long_enough_for_that_to_be_a_fact_rather_than_a_probability(self) -> None:
+        """A hundred and twenty-eight bits, written out rather than read from the module.
+
+        Shortened, two different questions collide and an answer to one settles the other -- which
+        the request boundary cannot catch, because a colliding key is a key this run really did
+        issue. The key is copied and never typed, so the length costs a caller nothing.
+        """
+        keys = [
+            question["key"]
+            for question in build_power_play_evidence(power_play_series())["chart_questions"]
+        ]
+
+        self.assertTrue(keys)
+        for key in keys:
+            with self.subTest(key=key):
+                self.assertEqual(len(key), 32)
+                self.assertEqual(set(key) - set("0123456789abcdef"), set())
+
 
 if __name__ == "__main__":
     unittest.main()
