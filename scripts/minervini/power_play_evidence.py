@@ -263,10 +263,14 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         else:
             surviving.append(reading["peak_date"])
 
-    # A rejection every top agrees on is a rejection whichever top the search landed on. Left at
-    # the two nearest tops it was not "every reading" at all, and it said so in its own name.
-    # A truncated chain has readings nobody took, so it cannot claim they agreed.
-    rejected_under_every_reading = (
+    # A rejection every top agrees on is a rejection whichever of them the search landed on.
+    #
+    # "Every top read", not "every reading": the chain stops at the registered distance, so tops
+    # beyond it were never taken and cannot have agreed to anything. `readings_cut_at` names the
+    # first of them. Left at the two nearest tops this claimed all of them and was wrong in its
+    # own name -- two ticks a hundredth of a percent apart hide a structure behind them -- and a
+    # count-truncated chain has the same problem for a different reason.
+    rejected_under_every_top_read = (
         bool(contested) and not exhausted and bool(readings) and not surviving and not unreadable
     )
 
@@ -312,7 +316,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
         "reading_rejections": reading_rejections,
-        "rejected_under_every_reading": rejected_under_every_reading,
+        "rejected_under_every_top_read": rejected_under_every_top_read,
         # Which criteria the choice of top actually moved. The reducer reads this rather than the
         # summary word, because agreeing on the verdict is not agreeing on every criterion: two
         # readings can both reject and still disagree about which limit did it, and reporting the

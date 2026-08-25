@@ -266,13 +266,13 @@ class BothReadingsRejectingIsAnAnswer(unittest.TestCase):
         verdict = evaluate_power_play(self._pack())
 
         self.assertEqual(verdict["failed"], [])
-        self.assertTrue(verdict["rejected_under_every_reading"])
+        self.assertTrue(verdict["rejected_under_every_top_read"])
 
     def test_one_reading_rejecting_alone_is_still_an_open_question(self):
         verdict = evaluate_power_play(evidence(marginal_new_high_at=-5))
 
         self.assertEqual(verdict["power_play_state"], "incomplete")
-        self.assertFalse(verdict["rejected_under_every_reading"])
+        self.assertFalse(verdict["rejected_under_every_top_read"])
 
 
 class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
@@ -322,7 +322,7 @@ class EveryTopTheSearchCouldHaveLandedOnIsRead(unittest.TestCase):
 
         self.assertEqual(verdict["power_play_state"], "incomplete")
         self.assertEqual(verdict["failed"], [])
-        self.assertFalse(verdict["rejected_under_every_reading"])
+        self.assertFalse(verdict["rejected_under_every_top_read"])
 
     def test_the_readings_it_took_are_reported(self):
         pack = evidence(flag_sessions=30, flag_depth_pct=8.0, marginal_new_high_at=(-8, -4))
@@ -422,3 +422,37 @@ class AReadingNobodyCouldReadIsNotAReadingThatSurvived(unittest.TestCase):
             self.assertNotIn(
                 "fundamentals.power_play_exception.flag_minimum_sessions", rejection["failed"]
             )
+
+
+class TheReadingCountsAccountForEveryTopTaken(unittest.TestCase):
+    """Three buckets and a count that has to add up, or the provenance is decorative."""
+
+    def test_every_reading_lands_in_exactly_one_bucket(self):
+        for kwargs in (
+            {},
+            {"flag_depth_pct": 40.0},
+            {"split_inside_the_flag": True},
+            {"flag_sessions": 30, "marginal_new_high_at": (-8, -4)},
+        ):
+            with self.subTest(**kwargs):
+                pack = evidence(**kwargs)
+
+                self.assertEqual(
+                    pack["readings"],
+                    len(pack["surviving_readings"])
+                    + len(pack["unreadable_readings"])
+                    + len(pack["reading_rejections"]),
+                )
+
+    def test_a_chain_the_bound_cut_does_not_claim_every_top(self):
+        """The name has to survive the convention that shortened the chain.
+
+        `readings_cut_at` names a top the bound removed, so a verdict resting on agreement among
+        the tops that were read cannot be called agreement among all of them. It is agreement
+        among the tops taken, and the field that says so points at the count and the cut.
+        """
+        pack = evidence(flag_depth_pct=40.0)
+
+        self.assertTrue(pack["readings_cut_at"])
+        self.assertIn("rejected_under_every_top_read", pack)
+        self.assertNotIn("rejected_under_every_reading", pack)

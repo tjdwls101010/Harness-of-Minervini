@@ -445,12 +445,12 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         for signal in evidence.get("signals") or []
     ]
 
-    # A criterion both readings agreed on, or a rejection both readings reached by their own
-    # routes. The second leaves nothing trustworthy to name -- reporting the primary reading's
-    # list would name limits the rival says were never exceeded -- but there is no reading of
-    # these bars under which the structure qualifies, and that is a finished answer.
-    rejected_under_every_reading = bool(evidence.get("rejected_under_every_reading"))
-    if failed or rejected_under_every_reading:
+    # A criterion every top read agreed on, or a rejection every one of them reached by its own
+    # route. The second leaves nothing trustworthy to name -- reporting the highest top's list
+    # would name limits the others say were never exceeded -- but no top the chain took reads
+    # these bars as a Power Play, and that is a finished answer.
+    rejected_under_every_top_read = bool(evidence.get("rejected_under_every_top_read"))
+    if failed or rejected_under_every_top_read:
         state = "not_qualified"
     elif missing:
         state = "incomplete"
@@ -471,7 +471,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "unreadable_readings": evidence.get("unreadable_readings"),
         "readings_cut_at": evidence.get("readings_cut_at"),
         "reading_rejections": evidence.get("reading_rejections"),
-        "rejected_under_every_reading": rejected_under_every_reading,
+        "rejected_under_every_top_read": rejected_under_every_top_read,
         "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "distribution_sessions": evidence.get("distribution_sessions"),
