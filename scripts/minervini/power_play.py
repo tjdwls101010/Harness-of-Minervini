@@ -469,6 +469,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),
         "unreadable_readings": evidence.get("unreadable_readings"),
+        "readings_cut_at": evidence.get("readings_cut_at"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_reading": rejected_under_every_reading,
         "alternate_peak": evidence.get("alternate_peak"),

@@ -21,6 +21,7 @@ from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
 
 _CLAIM = "fundamentals.power_play_exception"
 _WEEK = "convention.trading_week"
+_TOPS = "convention.power_play_top_candidates"
 # A runaway guard, not a doctrine limit: the longest chain any cached history produced was
 # nineteen tops. Hitting it is reported, never silently truncated into an agreement.
 _MOST_TOPS_READ = 200
@@ -36,6 +37,13 @@ def compile_power_play_spec() -> dict[str, Any]:
         # Carried rather than re-derived, so the module that reports durations in weeks converts
         # them the same way the windows were compiled.
         "sessions_per_trading_week": week,
+        # Where the chain of candidate tops stops. Registered at the harness layer rather than
+        # borrowed from the tight-action figure it happens to equal: that one describes a flag's
+        # decline after a peak has been chosen and offers VCP character as an alternative to it,
+        # and neither of those is a statement about which printed high the flag hangs from.
+        "candidate_top_maximum_distance_pct": float(
+            doctrine.parameter(_TOPS, "candidate_top_maximum_distance_pct")
+        ),
     }
 
 
@@ -186,22 +194,25 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     readings: list[dict[str, Any]] = []
     below, before = None, None
     top = measurements["peak_high"]
-    # Bounded twice. By price, because a top the stock later exceeded by more than the tightness
-    # this criterion itself allows was overtaken rather than consolidated against: the flag
-    # hanging from it contains sessions outside the range the criterion describes, so it is not a
-    # competing reading of this structure but a different, older one. Unbounded, the chain walks
-    # one bar at a time down an ordinary advance and every criterion ends up contested by a bar
-    # nobody would call a top -- measured across the cached histories, the bound takes the chains
-    # from one-to-nineteen readings down to one-to-fifteen and raises the tickers still rejecting
-    # on a named, agreed criterion from twenty-two of twenty-three to all of them.
+    # Bounded twice. By price, at the registered distance: past it a top is an older structure the
+    # stock has since overtaken rather than another reading of this one. Unbounded, the chain
+    # walks one bar at a time down an ordinary advance and every criterion ends up contested by a
+    # bar nobody would call a top.
     #
     # And by count, so a pathological history cannot spin here. Reaching that bound is reported
     # rather than passed over as agreement.
+    bound = spec["candidate_top_maximum_distance_pct"]
+    cut_at: dict[str, Any] | None = None
     while len(readings) < _MOST_TOPS_READ:
         reading = measurements if not readings else measure_power_play(history, spec, below=below, before=before)
         if reading["rejection"] is not None:
             break
-        if top is not None and (top - reading["peak_high"]) / top * 100 > tight_limit:
+        distance = None if top is None else (top - reading["peak_high"]) / top * 100
+        if distance is not None and distance > bound:
+            # The first top the bound excluded, reported with how far past it stands. The bound is
+            # a cliff -- a hundredth of a percent decides whether a structure is read at all -- so
+            # the reader is owed the edge the verdict was decided next to.
+            cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
             break
         readings.append(reading)
         below, before = reading["peak_high"], reading["peak_date"]
@@ -297,6 +308,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "peak_identity": "disputed" if contested else "settled",
         "readings": len(readings),
         "readings_exhausted": exhausted,
+        "readings_cut_at": cut_at,
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
         "reading_rejections": reading_rejections,

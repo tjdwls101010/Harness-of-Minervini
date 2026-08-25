@@ -53,3 +53,35 @@ class TheWindowsAreTheSourcesOwnLimits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheCandidateBoundIsThisHarnessSOwnConvention(unittest.TestCase):
+    """Where the chain stops is a choice about structure identity, not a limit the source stated.
+
+    The source's ten percent is the flag's decline after a peak has been chosen, and it is stated
+    as an alternative to VCP character rather than as an elimination. Reusing that number to
+    delete candidate tops applies one threshold to a different measurement, and a reader auditing
+    the verdict would be sent to a passage that says nothing about which top the flag hangs from.
+    """
+
+    def test_the_bound_is_registered_at_the_harness_layer(self):
+        claim = doctrine.get_claim("convention.power_play_top_candidates")
+
+        self.assertEqual(claim["claim"]["layer"], "harness")
+        self.assertEqual(claim["provenance"]["quotations"], [])
+
+    def test_the_bound_is_a_parameter_rather_than_a_gate(self):
+        claim = doctrine.get_claim("convention.power_play_top_candidates")
+
+        self.assertEqual(claim["claim"]["thresholds"], {})
+        self.assertIsNotNone(
+            doctrine.parameter("convention.power_play_top_candidates", "candidate_top_maximum_distance_pct")
+        )
+
+    def test_the_spec_carries_it_to_the_reading(self):
+        spec = compile_power_play_spec()
+
+        self.assertEqual(
+            spec["candidate_top_maximum_distance_pct"],
+            float(doctrine.parameter("convention.power_play_top_candidates", "candidate_top_maximum_distance_pct")),
+        )

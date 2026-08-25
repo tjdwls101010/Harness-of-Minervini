@@ -10239,6 +10239,65 @@
         "summary": "A week of limits stated by a source is five completed US sessions in this harness's measurements.",
         "conditions": []
       }
+    },
+    {
+      "id": "convention.power_play_top_candidates",
+      "title": "How far below the highest top this harness keeps reading candidate tops",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "power_play"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "candidate_top_maximum_distance_pct": {
+          "value": 10.0,
+          "unit": "percent",
+          "affects_verdict": true,
+          "note": "The peak a Power Play flag hangs from is found rather than declared, and no source names a size below which a new high stops counting -- a hundredth of a percent above the last high restarts the flag. So the bars are read from every top the search could have landed on, and this is where that chain stops: a top standing further than this below the highest one is treated as an older structure the stock has since overtaken rather than a competing reading of this one. It is registered here, at the harness layer, because it is this harness's convention about structure identity and not a limit any source stated. In particular it is not the sources' ten percent tight-action figure, which describes a flag's decline after a peak has been chosen and is stated as an alternative to VCP character rather than as an elimination; the two happen to share a value. Measured across every cached history, dropping the bound entirely runs the chain to nineteen tops and leaves twenty-two of twenty-three tickers rejecting on a criterion every reading agreed on, while this bound runs it to fifteen and leaves all twenty-three doing so. The cost is a cliff: a top a hundredth of a percent beyond the bound leaves the chain, so a structure it was hiding stops being read and a verdict can flip from incomplete to not_qualified. The first excluded top is reported with its distance for that reason."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there are no tops to enumerate."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "harness layer: the sources describe the structure without saying which printed high anchors it, so where one reading of the top stops and another begins is this harness's own convention, registered where the reading that uses it can be audited against it"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.power-play"
+      ],
+      "tests": [
+        "tests/260825/doctrine/test_power_play_spec.py"
+      ],
+      "computability": "deterministic",
+      "rule": {
+        "summary": "A top standing further than the registered distance below the highest top of the search span is a different structure, not another reading of this one.",
+        "conditions": []
+      }
     }
   ]
 }
