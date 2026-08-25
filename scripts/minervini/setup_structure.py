@@ -46,6 +46,12 @@ def completed_bars(history: Any) -> pd.DataFrame | None:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
     if bars.isna().any().any() or (bars <= 0).any().any():
         return None
+    index = pd.DatetimeIndex(bars.index)
+    # The production provider returns the exchange's own tz-aware index while the fixtures
+    # are naive, so a swing date parsed from a string matched one and missed the other.
+    if index.tz is not None:
+        index = index.tz_convert(None) if index.tz is not None else index
+    bars.index = index.normalize()
     return bars if bars.index.is_monotonic_increasing else bars.sort_index()
 
 

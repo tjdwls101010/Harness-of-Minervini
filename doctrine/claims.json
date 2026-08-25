@@ -9875,20 +9875,21 @@
       ],
       "required_inputs": [
         "pivot",
-        "entry_price"
+        "entry_price",
+        "chart_review"
       ],
       "thresholds": {},
       "rule": {
         "summary": "The entry belongs as close to the pivot as possible, and the source declines to say how far 'a few percentage points' reaches."
       },
-      "computability": "deterministic",
+      "computability": "chart_assisted",
       "failure": {
         "effect": "needs_review",
-        "meaning": "An extended entry is reported with its distance above the pivot; the source states the limit without a number, and inventing one would draw a line it refused to draw."
+        "meaning": "An entry the reader judges chased is not the entry the source describes, and the source states the limit without a number, so the reading is the reader's and the distance travels with it."
       },
       "missing": {
         "effect": "incomplete",
-        "meaning": "Without a pivot there is no distance to report."
+        "meaning": "The distance above the pivot is measured, but 'more than a few percentage points' has no number in it, so an unjudged distance is unfinished rather than acceptable."
       },
       "precedence": {
         "tier": "execution_defaults",
@@ -10031,6 +10032,57 @@
           }
         ],
         "resolution": "mined from Minervini row 3; the sentence carries two requirements at two strengths, and binding both to one hard gate let a clause the source hedged with 'should' reject a candidate. The volume clause stays the gate; this clause reports."
+      }
+    },
+    {
+      "id": "setup.declared_chain_completeness",
+      "title": "A declared swing chain must be vouched for as the base's whole structure",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "swing_chain",
+        "chart_review"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "Every anchor in a declared chain is checked against the bars, but whether the chain describes the base's whole structure is not something completed bars can settle, so it is read from the chart and declared."
+      },
+      "computability": "chart_assisted",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A chain declared as partial describes something other than the base being judged, so the setup cannot be ready on it; the reading is the caller's and the engine reports which one it got."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the reading, a chain that skipped or merged contractions is indistinguishable from one that did not, and the engine cannot tell the difference by measurement."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_round_three.py"
+      ],
+      "provenance": {
+        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement separates it from an honest one. An independent segmentation would, and building one is a later slice; until then the gap is declared rather than stepped over."
       }
     }
   ]

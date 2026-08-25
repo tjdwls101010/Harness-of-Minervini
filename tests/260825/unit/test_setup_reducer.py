@@ -20,13 +20,14 @@ from tests.series import anchor_dates, base_series
 def evidence_for(**kwargs):
     chain = kwargs.pop("chain", None)
     entry_kind = kwargs.pop("entry_kind", "completed_pivot")
-    judgment = kwargs.pop("right_side_development", "constructive")
+    readings = {"right_side_development": "constructive", "chain_completeness": "complete", "entry_proximity": "at_pivot"}
+    readings.update({key: kwargs.pop(key) for key in list(readings) if key in kwargs})
     frame, anchors = base_series(**kwargs)
     return build_setup_evidence(
         frame,
         chain if chain is not None else anchor_dates(frame, anchors),
         entry_kind=entry_kind,
-        right_side_development=judgment,
+        **readings,
     )
 
 
@@ -82,7 +83,7 @@ class MissingEvidenceTests(unittest.TestCase):
         dates = anchor_dates(frame, anchors)
         dates[1] = frame.index[anchors[1].position - 1].date().isoformat()
 
-        result = evaluate_setup(build_setup_evidence(frame, dates, entry_kind="completed_pivot", right_side_development="constructive"))
+        result = evaluate_setup(build_setup_evidence(frame, dates, entry_kind="completed_pivot", right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "incomplete")
         self.assertTrue(any(dates[1] in problem for problem in result["structure"]["problems"]))
@@ -108,7 +109,7 @@ class MissingEvidenceTests(unittest.TestCase):
             index=index,
         )
 
-        result = evaluate_setup(build_setup_evidence(frame, [], entry_kind="completed_pivot", right_side_development="constructive"))
+        result = evaluate_setup(build_setup_evidence(frame, [], entry_kind="completed_pivot", right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "incomplete")
 
@@ -169,6 +170,8 @@ class EarlyEntryTests(unittest.TestCase):
             entry_kind="tl_early",
             entry=declaration,
             right_side_development="constructive",
+            chain_completeness="complete",
+            entry_proximity="at_pivot",
             **overrides,
         )
 
@@ -202,7 +205,7 @@ class EarlyEntryTests(unittest.TestCase):
             entry_kind="tl_early",
             entry=TL_EARLY_DECLARATION,
             tactic_opt_in=True,
-            right_side_development="constructive",
+            right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot",
         )
 
         self.assertEqual(evaluate_setup(evidence)["setup_state"], "avoid")
@@ -213,13 +216,13 @@ class UnusableHistoryTests(unittest.TestCase):
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
 
-        result = evaluate_setup(build_setup_evidence(frame.drop(columns=["Volume"]), chain, right_side_development="constructive"))
+        result = evaluate_setup(build_setup_evidence(frame.drop(columns=["Volume"]), chain, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "incomplete")
         self.assertIn("base_structure", result["missing"])
 
     def test_a_history_that_is_not_a_frame_at_all_is_incomplete_rather_than_an_error(self) -> None:
-        result = evaluate_setup(build_setup_evidence(None, ["2026-03-19", "2026-04-06", "2026-04-20"], right_side_development="constructive"))
+        result = evaluate_setup(build_setup_evidence(None, ["2026-03-19", "2026-04-06", "2026-04-20"], right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "incomplete")
 
@@ -303,7 +306,7 @@ class ChainGamingTests(unittest.TestCase):
         frame, anchors = base_series()
         late = anchor_dates(frame, anchors)[2:]
 
-        result = evaluate_setup(build_setup_evidence(frame, late, right_side_development="constructive"))
+        result = evaluate_setup(build_setup_evidence(frame, late, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         supply = signal(result, "setup.overhead_supply_mechanism")
         self.assertEqual(supply["state"], "reported")
@@ -313,8 +316,11 @@ class ChainGamingTests(unittest.TestCase):
         result = evaluate_setup(evidence_for())
 
         chase = signal(result, "setup.chase_limit_above_pivot")
-        self.assertEqual(chase["state"], "reported")
-        self.assertEqual(round(chase["measured"], 2), round(result["measurements"]["pivot_extension_pct"], 2))
+        self.assertEqual(chase["state"], "pass")
+        self.assertEqual(
+            round(chase["measured"]["pivot_extension_pct"], 2),
+            round(result["measurements"]["pivot_extension_pct"], 2),
+        )
 
 
 if __name__ == "__main__":

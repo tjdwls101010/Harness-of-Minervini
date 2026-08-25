@@ -564,6 +564,8 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         tactic_opt_in=request.get("tactic_opt_in") is True,
         entry=entry,
         right_side_development=request.get("right_side_development"),
+        chain_completeness=request.get("chain_completeness"),
+        entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)
     missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]

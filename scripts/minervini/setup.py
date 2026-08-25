@@ -33,7 +33,6 @@ _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of
 # claim, so the reason a setup is not ready is always a sentence from the source.
 _BASE_EVIDENCE = (
     "setup.demand_supply_volume_asymmetry",
-    "setup.upside_spikes_dwarf_contractions",
     "setup.pivot_volume_contraction",
     "setup.contractions_must_contract",
     # Not the V-shape, which the source describes without a ratio, but its other named form:
@@ -41,6 +40,12 @@ _BASE_EVIDENCE = (
     # threshold to observe.
     "setup.time_compression_hazard",
     "market.correction_depth_healthy_leader.correction_failure_threshold",
+    # Not a measurement: the reading that the declared chain is the base's whole structure.
+    # Without it a chain that skipped an unfavourable contraction is indistinguishable from
+    # an honest one, and issuing READY over a gap the engine knows about is worse than the
+    # gap.
+    "setup.declared_chain_completeness",
+    "setup.chase_limit_above_pivot",
 )
 _ROUTES = {
     "completed_pivot": (*_BASE_EVIDENCE, "setup.structural_pivot_and_trigger"),

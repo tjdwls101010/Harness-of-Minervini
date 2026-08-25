@@ -18,6 +18,9 @@ from scripts.minervini.setup_evidence import build_setup_evidence
 from tests.series import anchor_dates, base_series
 
 
+READINGS = {"right_side_development": "constructive", "chain_completeness": "complete", "entry_proximity": "at_pivot"}
+
+
 def tail(frame: pd.DataFrame, sessions: int, *, close: float, volume: float) -> pd.DataFrame:
     added = pd.DataFrame(
         {"Open": close, "High": close * 1.005, "Low": close * 0.995, "Close": close, "Volume": volume},
@@ -26,30 +29,32 @@ def tail(frame: pd.DataFrame, sessions: int, *, close: float, volume: float) -> 
     return pd.concat([frame, added])
 
 
-class CorrectionMeasuredFromTheRealPeakTests(unittest.TestCase):
-    def test_a_chain_declared_after_a_collapse_is_still_measured_from_the_peak(self) -> None:
-        """"The correction for a healthy stock from peak to low" -- the peak, not the caller's rim.
+class CorrectionMeasuredFromTheLegItBelongsToTests(unittest.TestCase):
+    """The gate reads the decline this base emerged from, not the caller's declared rim.
 
-        Declaring the base to start after a sixty percent collapse made the depth gate read
-        ten percent, because the gate was handed the depth of whatever the caller called the
-        base instead of the decline the stock actually took.
-        """
+    The bound runs back to the last session that traded under the base's own low, because a
+    correction the stock fully recovered from belongs to the previous base: the overhead
+    supply it created is what the rally back to the old high worked off. What sits above the
+    entry now is measured separately, and what a caller left out of the chain is a reading no
+    measurement can take, which is why the completeness declaration exists.
+    """
 
+    def test_a_deeper_older_decline_the_stock_recovered_from_is_not_this_bases_correction(self) -> None:
         frame, anchors = base_series(depths=(60.0, 10.0, 5.0))
         late = anchor_dates(frame, anchors)[2:]
 
-        result = evaluate_setup(build_setup_evidence(frame, late))
+        measurements = build_setup_evidence(frame, late, **READINGS)["measurements"]
 
-        self.assertGreater(result["measurements"]["peak_to_low_correction_pct"], 50.0)
+        self.assertAlmostEqual(measurements["peak_to_low_correction_pct"], 10.0, places=4)
+
+    def test_a_correction_this_base_did_emerge_from_is_measured_whole_and_gates(self) -> None:
+        frame, anchors = base_series(depths=(55.0, 10.0, 5.0))
+
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READINGS))
+
+        self.assertAlmostEqual(result["measurements"]["peak_to_low_correction_pct"], 55.0, places=4)
+        self.assertIn("market.correction_depth_healthy_leader.correction_failure_threshold", result["unsatisfied"])
         self.assertNotEqual(result["setup_state"], "ready")
-
-    def test_the_declared_base_depth_is_still_reported_beside_it(self) -> None:
-        frame, anchors = base_series(depths=(60.0, 10.0, 5.0))
-        late = anchor_dates(frame, anchors)[2:]
-
-        measurements = build_setup_evidence(frame, late)["measurements"]
-
-        self.assertAlmostEqual(measurements["base_depth_pct"], 10.0, places=4)
 
 
 class BreakoutIsTheFirstCrossingTests(unittest.TestCase):
@@ -168,7 +173,7 @@ class RightSideJudgementTests(unittest.TestCase):
         frame, anchors = base_series()
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         )
 
         self.assertEqual(result["setup_state"], "ready")
@@ -188,7 +193,7 @@ class RightSideJudgementTests(unittest.TestCase):
         frame, anchors = base_series(depths=(25.0,), rallies=(3,))
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         )
 
         self.assertNotEqual(result["setup_state"], "ready")
@@ -197,7 +202,7 @@ class RightSideJudgementTests(unittest.TestCase):
 class SignalOwnershipTests(unittest.TestCase):
     def test_a_signal_with_no_binding_flag_at_all_cannot_answer_a_required_condition(self) -> None:
         frame, anchors = base_series()
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         smuggled = {**evidence, "signals": [
             item for item in evidence["signals"] if item["id"] != "setup.demand_supply_volume_asymmetry"
         ] + [{"id": "setup.demand_supply_volume_asymmetry", "state": "pass", "doctrine_id": "practitioners.x"}]}
@@ -209,7 +214,7 @@ class SignalOwnershipTests(unittest.TestCase):
 
     def test_a_signal_whose_doctrine_id_is_not_the_claim_it_answers_is_refused(self) -> None:
         frame, anchors = base_series()
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         smuggled = {**evidence, "signals": [
             item for item in evidence["signals"] if item["id"] != "setup.demand_supply_volume_asymmetry"
         ] + [{"id": "setup.demand_supply_volume_asymmetry", "state": "pass", "binds": True, "doctrine_id": "setup.closing_range_formula"}]}
@@ -275,20 +280,20 @@ class SentenceModalityTests(unittest.TestCase):
         final_high = frame.index.get_loc(anchor_dates(frame, anchors)[-3])
         frame.iloc[final_high:-1, frame.columns.get_loc("Volume")] = 200_000.0
         frame.iloc[-1, frame.columns.get_loc("Volume")] = 6_000_000.0
-        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
 
-    def test_the_must_clause_rejects_and_the_should_clause_does_not(self) -> None:
+    def test_the_should_clause_reports_and_never_blocks(self) -> None:
         result = evaluate_setup(self._spikes_reversed())
 
-        self.assertEqual(result["setup_state"], "wait")
         self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["failed"])
-        self.assertIn("setup.upside_spikes_dwarf_contractions", result["unsatisfied"])
+        self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["unsatisfied"])
+        self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["required_evidence"])
 
     def test_reversing_the_volume_totals_is_what_rejects(self) -> None:
         frame, anchors = base_series(volume_profile="distribution")
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         )
 
         self.assertEqual(result["setup_state"], "avoid")

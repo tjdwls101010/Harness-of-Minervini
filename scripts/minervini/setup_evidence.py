@@ -45,6 +45,7 @@ _CLOSING_RANGE = "setup.closing_range_formula"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
 _FOOTPRINT = "setup.consolidation_footprint_3_to_60_weeks"
 _FAILURE_RESET = "setup.failure_reset_types"
+_CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 _RYAN_BREAKOUT = ("practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal", "breakout_volume_increase_min")
 _ZANGER_BREAKOUT = ("practitioners.breakout_volume.zanger_50pct_over_20day_avg", "breakout_volume_increase_over_20d_avg_min")
@@ -90,14 +91,13 @@ def _observation(claim_id: str, state: str, measured: Any) -> dict[str, Any]:
     is still somebody's standard, and stamping every one of them as binding would be the
     same shortcut `evaluate_gate` refuses to take.
     """
-    claim = doctrine.get_claim(claim_id)["claim"]
-    binds = claim["layer"] == "canonical" and claim.get("attributed_to") == "Minervini"
+    binding = doctrine.binds(claim_id)
     return {
         "id": claim_id,
         "doctrine_id": claim_id,
         "role": "observation",
-        "binds": binds,
-        "state": state if binds else f"contrast_{state}" if state in {"pass", "fail"} else state,
+        "binds": binding,
+        "state": state if binding else f"contrast_{state}" if state in {"pass", "fail"} else state,
         "measured": _reported(measured),
         "required": _summary(claim_id),
     }
@@ -123,8 +123,12 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
     # already taken out the base's own low on its way there.
     if not expansion > 1:
         return "fail"
-    if not measurements.get("pause_low_held_to_breakout") or not measurements.get("breakout_held"):
+    if not measurements.get("pause_low_held_to_breakout") or not measurements.get("pivot_is_highest_to_breakout"):
         return "fail"
+    # `setup.failure_reset_types` says a pivot failure can reset and recover, so a breakout
+    # that gave the pivot back is timing that has not happened rather than a base disqualified.
+    if not measurements.get("breakout_held"):
+        return "not_triggered"
     return "pass"
 
 
@@ -137,18 +141,48 @@ def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
     return "pass" if total > 1 else "fail"
 
 
+def _completeness_state(structure: Mapping[str, Any], reading: str | None) -> str:
+    """Whether the caller vouched for the chain describing the base's whole structure."""
+
+    if str(structure.get("state")) != "resolved":
+        return "unavailable"
+    if reading == "partial":
+        return "fail"
+    if reading == "complete":
+        return "pass"
+    return "needs_chart"
+
+
+def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> str:
+    """The source states the limit and withholds the number, so the reader supplies the call.
+
+    What the measurement can still refuse is a reading of "at the pivot" on an entry the
+    stock left behind: if price has closed above the pivot for sessions since the breakout,
+    the entry under discussion is not the breakout's.
+    """
+    if measurements.get("pivot_extension_pct") is None:
+        return "unavailable"
+    if reading == "chased":
+        return "fail"
+    if reading == "at_pivot":
+        # The only reading the bars can refuse: there is no entry above a pivot price has not
+        # cleared. How far above it stops being "close" the source declines to say, so that
+        # part stays the reader's -- what this enforces is that the reader made the call, with
+        # the distance and the breakout's age printed beside it.
+        return "pass" if measurements.get("pivot_cleared") else "fail"
+    return "needs_chart"
+
+
 def _spike_state(measurements: Mapping[str, Any]) -> str:
-    """The clause the source states with "should", and it is about price, not volume.
+    """The clause the source states with "should", about price rather than volume, in the plural.
 
     An earlier version compared the largest up-day volume with the largest down-day volume,
-    which answers a sentence nobody wrote, and bound the answer to the same hard gate as the
-    "must" clause, which let a hair's difference reject a candidate.
+    which answers a sentence nobody wrote. Comparing the two largest returns answers the
+    right sentence in the singular. "A few of the price spikes ... dwarfing the contractions"
+    is plural and comparative, and neither the count nor the comparison with a multi-session
+    contraction has a threshold anywhere, so this reports what it counted.
     """
-    up_spike = measurements.get("largest_up_day_return_pct")
-    down_spike = measurements.get("largest_down_day_return_pct")
-    if up_spike is None or down_spike is None:
-        return "unavailable"
-    return "pass" if up_spike > down_spike else "fail"
+    return "unavailable" if measurements.get("up_days_exceeding_largest_decline") is None else "reported"
 
 
 def _right_side_state(measurements: Mapping[str, Any], judgment: str | None) -> str:
@@ -180,6 +214,8 @@ def build_setup_evidence(
     tactic_opt_in: bool = False,
     entry: Mapping[str, Any] | None = None,
     right_side_development: str | None = None,
+    chain_completeness: str | None = None,
+    entry_proximity: str | None = None,
 ) -> dict[str, Any]:
     """Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside it."""
 
@@ -200,8 +236,14 @@ def build_setup_evidence(
         _observation(
             _UPSIDE_SPIKES,
             _spike_state(measurements),
-            {"largest_up_day_return_pct": measurements["largest_up_day_return_pct"], "largest_down_day_return_pct": measurements["largest_down_day_return_pct"]},
+            {
+                "largest_up_day_return_pct": measurements["largest_up_day_return_pct"],
+                "largest_down_day_return_pct": measurements["largest_down_day_return_pct"],
+                "up_days_exceeding_largest_decline": measurements["up_days_exceeding_largest_decline"],
+                "contraction_depths_pct": measurements["contraction_depths_pct"],
+            },
         ),
+        _observation(_CHAIN_COMPLETENESS, _completeness_state(structure, chain_completeness), structure.get("state")),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(
@@ -233,8 +275,12 @@ def build_setup_evidence(
         ),
         _observation(
             _CHASE_LIMIT,
-            "unavailable" if measurements.get("pivot_extension_pct") is None else "reported",
-            measurements.get("pivot_extension_pct"),
+            _proximity_state(measurements, entry_proximity),
+            {
+                "pivot_extension_pct": measurements.get("pivot_extension_pct"),
+                "pivot_extension_at_breakout_pct": measurements.get("pivot_extension_at_breakout_pct"),
+                "sessions_since_breakout": measurements.get("sessions_since_breakout"),
+            },
         ),
         doctrine.evaluate_band(_CONTRACTION_COUNT, "contraction_count", measurements["contraction_count"] or None),
         doctrine.evaluate_marker(_HALVING, "successive_depth_ratio", measurements["successive_depth_ratios"][-1] if measurements["successive_depth_ratios"] else None),
