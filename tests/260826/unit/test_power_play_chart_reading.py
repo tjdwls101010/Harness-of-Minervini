@@ -40,13 +40,19 @@ class TheCapabilityAsksBeforeItIsAnswered(unittest.TestCase):
         )
 
     def test_the_question_carries_the_span_it_is_asked_about(self) -> None:
-        """A chart is drawn over sessions, so the question names them."""
-        evidence = build_power_play_evidence(power_play_series())
-        question = _questions(evidence)["launch_volume_character"]
+        """A chart is drawn over sessions, so the question names them.
 
-        self.assertEqual(question["peak_date"], evidence["measurements"]["peak_date"])
-        self.assertEqual(question["advance_anchor_date"], evidence["measurements"]["advance_anchor_date"])
-        self.assertEqual(question["measured_bars"], evidence["measured_bars"])
+        All three boundaries, on both questions. A reader sent to judge whether a flag shows VCP
+        character over a span whose end is missing is being asked about a picture nobody named.
+        """
+        evidence = build_power_play_evidence(power_play_series())
+        measurements = evidence["measurements"]
+
+        for condition, question in _questions(evidence).items():
+            with self.subTest(condition=condition):
+                for boundary in ("peak_date", "advance_anchor_date", "flag_low_date"):
+                    self.assertEqual(question[boundary], measurements[boundary])
+                self.assertEqual(question["measured_bars"], evidence["measured_bars"])
 
 
 class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):

@@ -100,7 +100,14 @@ def _label(bars: Any, position: int) -> str | None:
     return str(bars.index[position].date())
 
 
-def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | None = None, before: str | None = None) -> dict[str, Any]:
+def measure_power_play(
+    history: Any,
+    spec: Mapping[str, Any],
+    *,
+    below: float | None = None,
+    before: str | None = None,
+    excluding: frozenset[str] | None = None,
+) -> dict[str, Any]:
     """Reduce a history to the numbers the Power Play criteria are read against.
 
     ``below`` and ``before`` cap the peak search, which is how the same bars are read a second time
@@ -108,6 +115,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     lower top *inside* the flag is later than the peak the flag hangs from and cannot be an
     alternative reading of it -- it is the same structure with most of itself cut off. Nothing
     else about the measurement changes; it is the same arithmetic asked about another candidate.
+
+    ``excluding`` names sessions the caller has already looked at and declined, by date. Price
+    alone cannot advance a cursor past them: two sessions can print the same high, and lowering
+    the bound below one of them deletes the other. A caller walking a chain of candidate tops
+    passes the dates it has finished with; nothing else about the measurement changes.
     """
 
     bars, rejection = read_bars(history)
@@ -137,6 +149,8 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         window = window.loc[window["High"] < below]
     if before is not None:
         window = window.loc[window.index < pd.Timestamp(before)]
+    if excluding:
+        window = window.loc[[str(stamp.date()) not in excluding for stamp in window.index]]
     if not len(window):
         return _empty("history_has_no_earlier_top_to_read_from")
     peak_high = float(window["High"].max())

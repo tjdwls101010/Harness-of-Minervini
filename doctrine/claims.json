@@ -10299,7 +10299,8 @@
         "tests/260826/unit/test_power_play_candidate_sensitivity.py",
         "tests/260826/unit/test_power_play_segmentation_domain.py",
         "tests/260826/unit/test_power_play_unconfirmed_peak.py",
-        "tests/260826/unit/test_power_play_walked_past_bars.py"
+        "tests/260826/unit/test_power_play_walked_past_bars.py",
+        "tests/260826/unit/test_power_play_equal_highs_in_the_chain.py"
       ],
       "computability": "deterministic",
       "rule": {

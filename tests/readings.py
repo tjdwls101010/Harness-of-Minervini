@@ -73,3 +73,22 @@ def reregistered(claim_id, field, name, value):
         yield
     finally:
         slot["value"] = before
+
+
+@contextmanager
+def restated(claim_id, field, value):
+    """Replace one whole field of a registered claim for the duration of a reading.
+
+    `reregistered` moves a number inside a thresholds or parameters table. This moves what the
+    claim *says* -- its rule, what its failure means, what its absence means -- which is the half
+    a digest of numbers alone cannot see change.
+    """
+    from scripts.minervini import doctrine
+
+    record = next(claim for claim in doctrine._load_registry()["claims"] if claim["id"] == claim_id)
+    before = record[field]
+    record[field] = value
+    try:
+        yield
+    finally:
+        record[field] = before

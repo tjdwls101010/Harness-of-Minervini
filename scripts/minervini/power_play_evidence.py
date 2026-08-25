@@ -34,6 +34,7 @@ _CLAIM = "fundamentals.power_play_exception"
 _WEEK = "convention.trading_week"
 _TOPS = "convention.power_play_top_candidates"
 _SEGMENTATION = "setup.swing_segmentation_convention"
+_READING = "convention.power_play_chart_reading"
 # A runaway guard, not a doctrine limit: the longest chain any cached history produced was
 # nineteen tops. Hitting it is reported, never silently truncated into an agreement.
 _MOST_TOPS_READ = 200
@@ -364,19 +365,27 @@ _CHART_KEY_LENGTH = 32
 # `_WEEK` is belt and braces: a different trading week gives different search windows, so the
 # reading's own boundary sessions move and the key moves with them either way. It is listed
 # because the digest is meant to be everything the question was asked under, not everything that
-# happens to be load-bearing today.
-_ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION)
+# happens to be load-bearing today. `_READING` is the convention that decides what an answer *is*
+# -- which words are admissible, what one settles and how far -- and it was the one missing: it
+# registers no threshold and no parameter, so a digest of numbers alone could not see it change.
+_ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION, _READING)
 
 
 def _registry_digest() -> str:
+    """Every claim the question was asked under, whole.
+
+    Numbers were not enough. A claim states its rule, what its failure means and what its absence
+    means, and all three can change while every threshold stays put -- re-register the reading
+    convention to say an answer needs two independent readers and the old single-reader answer
+    still satisfied it, because the digest was looking at an empty threshold table.
+
+    Whole claims bind more than strictly decides a reading: a wording fix retires outstanding
+    keys. That is the right side to be wrong on here, and it costs a re-read rather than a
+    verdict -- re-reading the chart reissues the keys.
+    """
+
     payload = json.dumps(
-        {
-            claim_id: {
-                "thresholds": doctrine.get_claim(claim_id)["claim"].get("thresholds") or {},
-                "parameters": doctrine.get_claim(claim_id)["claim"].get("parameters") or {},
-            }
-            for claim_id in _ASKED_UNDER
-        },
+        {claim_id: doctrine.get_claim(claim_id)["claim"] for claim_id in _ASKED_UNDER},
         separators=(",", ":"),
         sort_keys=True,
         default=str,
@@ -487,6 +496,7 @@ def _walk_the_tops(
     unread_top: dict[str, Any] | None = None
     may_contest = 0
     steps = 0
+    walked_past: set[str] = set()
     # Whether the segmentation confirms the top the whole structure hangs from. The span's highest
     # bar is read whatever the answer -- it is found by the measurement rather than by descending,
     # so the question the filter below asks ("is this descending high a top, or a bar inside the
@@ -498,7 +508,11 @@ def _walk_the_tops(
     peak_confirmed = turning_points is not None and str(first["peak_date"]) in turning_points
     while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
         steps += 1
-        reading = first if not readings else measure_power_play(history, spec, below=below, before=before)
+        reading = (
+            first
+            if not readings
+            else measure_power_play(history, spec, below=below, before=before, excluding=walked_past)
+        )
         if reading["rejection"] is not None:
             # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
             # anything else is a top that exists with too little history behind it to measure --
@@ -524,14 +538,14 @@ def _walk_the_tops(
                     "distance_pct": None if distance is None else round(distance, 4),
                 }
             break
-        # Walked past rather than read. The price ceiling moves -- the tops below it are found by
-        # descending -- and the date the next search must precede does not, because this bar is
-        # not a reading of the structure and a non-reading must not decide which readings exist. A
-        # confirmed top lower than it and later than it is behind it forever otherwise, and two
-        # reviewers reproduced `qualified` over exactly that: a six-week violation the chain never
-        # reached because a taller bar nothing confirms stood in front of it.
+        # Walked past rather than read, and named by date rather than by price. A bar this chain
+        # declined is not a reading of the structure, so it must not decide which readings exist:
+        # moving the date bound past it strands every confirmed top later than it, and lowering
+        # the price bound below it deletes any confirmed top that printed the same high. Both were
+        # reproduced as `qualified` over a top failing the six-week limit. Excluding the session
+        # itself advances the search and takes nothing else with it.
         if readings and turning_points is not None and str(reading["peak_date"]) not in turning_points:
-            below = reading["peak_high"]
+            walked_past |= {str(reading["peak_date"])}
             continue
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:

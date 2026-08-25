@@ -14,7 +14,7 @@ from __future__ import annotations
 import unittest
 
 from scripts.minervini.power_play_evidence import build_power_play_evidence
-from tests.readings import power_play_answers, reregistered
+from tests.readings import power_play_answers, reregistered, restated
 from tests.series import power_play_series
 
 
@@ -73,6 +73,40 @@ class AKeyOutlivesNoRegistryEdit(unittest.TestCase):
         behaviour: an answer given under one week's calendar does not satisfy another's.
         """
         with reregistered("convention.trading_week", "parameters", "sessions_per_trading_week", 4):
+            evidence = build_power_play_evidence(
+                self.history, **power_play_answers(self.history, self.answers)
+            )
+
+        self.assertEqual(set(evidence["unmatched_chart_readings"]), set(self.answers))
+
+    def test_moving_what_an_answer_means_retires_it_too(self) -> None:
+        """The convention that decides what an answer *is* registers no threshold at all.
+
+        Which words are admissible, what one settles and how far it reaches are stated in that
+        claim's rule, not in a number -- so a digest of thresholds and parameters could not see it
+        change, and an answer given under "one reader settles it" went on satisfying "two
+        independent readers must agree".
+        """
+        with restated(
+            "convention.power_play_chart_reading",
+            "rule",
+            {
+                "summary": "An observed answer needs two independent readers; one leaves it open.",
+                "conditions": [],
+            },
+        ):
+            evidence = build_power_play_evidence(
+                self.history, **power_play_answers(self.history, self.answers)
+            )
+
+        self.assertEqual(set(evidence["unmatched_chart_readings"]), set(self.answers))
+
+    def test_and_so_does_moving_what_its_absence_means(self) -> None:
+        with restated(
+            "convention.power_play_chart_reading",
+            "missing",
+            {"effect": "reject", "meaning": "no reading, no exception"},
+        ):
             evidence = build_power_play_evidence(
                 self.history, **power_play_answers(self.history, self.answers)
             )
