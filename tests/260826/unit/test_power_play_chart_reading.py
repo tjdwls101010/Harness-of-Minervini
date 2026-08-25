@@ -55,6 +55,24 @@ class TheCapabilityAsksBeforeItIsAnswered(unittest.TestCase):
                 self.assertEqual(question["measured_bars"], evidence["measured_bars"])
 
 
+    def test_each_question_carries_the_measurement_its_own_criterion_turns_on(self) -> None:
+        """A chart approved at a nine percent flag is not an approval of the same flag re-measured
+        at eleven -- which is only true while each question carries *its* number.
+
+        Written out rather than read from the mapping the implementation uses: taken from there,
+        swapping the two criteria's measurements swaps the expectation in the same stroke.
+        """
+        evidence = build_power_play_evidence(power_play_series())
+        measurements = evidence["measurements"]
+        questions = _questions(evidence)
+
+        for condition, measured in (
+            ("launch_volume_character", "advance_peak_volume_ratio"),
+            ("flag_tightness_or_vcp", "flag_depth_pct"),
+        ):
+            with self.subTest(condition=condition):
+                self.assertEqual(questions[condition]["measured"], {measured: measurements[measured]})
+
 class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
     def _both(self, history):
         evidence = build_power_play_evidence(history)

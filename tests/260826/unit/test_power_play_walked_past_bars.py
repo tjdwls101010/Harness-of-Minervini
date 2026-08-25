@@ -1,10 +1,11 @@
 """A bar the chain walked past is not a reading, so it cannot narrow what gets read.
 
 The descent looks for the highest session below the last one and before it. Walking past a bar
-that is not a confirmed turning point has to move the price ceiling -- the tops beneath it are
-found by descending -- but moving the *date* as well makes a non-reading decide which readings
-exist: a confirmed top that is lower in price and later in time than the bar walked past is behind
-it forever.
+that is not a confirmed turning point has to advance the search, and the bar is named by date to
+do it -- moving the *date bound* instead makes a non-reading decide which readings exist, and a
+confirmed top lower in price and later in time than the bar walked past is behind it forever.
+(Lowering the *price* bound past it is the other way to get this wrong, and loses any confirmed
+top that printed the same high; that half is pinned beside this one.)
 
 Two reviewers reproduced the same thing from different frames, and both ended at `ok qualified`
 over a top whose own flag runs past the six-week limit.
