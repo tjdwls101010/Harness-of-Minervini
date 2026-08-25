@@ -27,6 +27,11 @@
       "doctrine_id": "eligibility.standard_trend_template"
     },
     {
+      "id": "trend_template.price_above_sma_50",
+      "state": "pass",
+      "doctrine_id": "eligibility.standard_trend_template"
+    },
+    {
       "id": "trend_template.price_above_52_week_low",
       "state": "pass",
       "doctrine_id": "eligibility.standard_trend_template"
@@ -39,11 +44,6 @@
     {
       "id": "trend_template.relative_strength_minimum",
       "state": "fail",
-      "doctrine_id": "eligibility.standard_trend_template"
-    },
-    {
-      "id": "trend_template.price_above_sma_50",
-      "state": "pass",
       "doctrine_id": "eligibility.standard_trend_template"
     }
   ]

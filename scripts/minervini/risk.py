@@ -8,6 +8,14 @@ from copy import deepcopy
 from datetime import date
 from typing import Any
 
+from . import doctrine
+
+
+# Enough places to strip binary-float noise from a reported figure and far too many
+# to soften any limit the registry states.
+_REPORTED_PRECISION = 10
+_ENTRY_RISK = "risk.initial_stop_and_reward"
+_PROFIT_PROTECTION = "risk.profit_protection_at_3r"
 
 _PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence", "waived_by_exception"}
 _FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
@@ -89,14 +97,17 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     stop = _number(_risk_value(payload, "stop_price"))
     upside = _number(_risk_value(payload, "upside_price")) or _number(_risk_value(payload, "target_price"))
     average_gain = _number(_risk_value(payload, "average_gain_pct"))
+    stop_ceiling = doctrine.threshold(_ENTRY_RISK, "initial_stop_ceiling_pct")
+    average_gain_multiple = doctrine.threshold(_ENTRY_RISK, "half_average_gain_multiple")
     controls: dict[str, Any] = {
         "initial_stop_pct": None,
-        "initial_stop_cap_pct": 10.0,
-        "half_average_gain_cap_pct": round(average_gain / 2, 4) if average_gain else None,
-        "loss_target_context": None,
+        "initial_stop_cap_pct": stop_ceiling,
+        "half_average_gain_cap_pct": round(average_gain * average_gain_multiple, 4) if average_gain else None,
+        "loss_target": None,
         "reward_to_risk": None,
-        "minimum_reward_to_risk": 2.0,
-        "breakeven_at_r": 3.0,
+        "minimum_reward_to_risk": doctrine.threshold(_ENTRY_RISK, "reward_to_risk_minimum"),
+        "preferred_reward_to_risk": doctrine.threshold(_ENTRY_RISK, "reward_to_risk_preferred"),
+        "breakeven_at_r": doctrine.threshold(_PROFIT_PROTECTION, "breakeven_protection_trigger_r"),
     }
 
     if risk_state == "fail":
@@ -120,20 +131,21 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         if stop >= entry:
             failed.append("initial_stop_price")
         else:
+            # Rounded for the reader, never for the comparison: a value tidied to the
+            # limit before it is checked is a tolerance the gate design forbids.
             stop_pct = (entry - stop) / entry * 100
-            controls["initial_stop_pct"] = round(stop_pct, 4)
-            if stop_pct <= 7:
-                controls["loss_target_context"] = "within_6_to_7_pct_target" if stop_pct >= 6 else "tighter_than_6_to_7_pct_target"
-            else:
-                controls["loss_target_context"] = "wider_than_6_to_7_pct_target"
-            if stop_pct > 10:
+            controls["initial_stop_pct"] = round(stop_pct, _REPORTED_PRECISION)
+            # The source gives the ordinary loss target as a range, so the reading
+            # travels with its range instead of collapsing to a pass.
+            controls["loss_target"] = doctrine.evaluate_band(_ENTRY_RISK, "ordinary_loss_target_pct", stop_pct)
+            if doctrine.evaluate_gate(_ENTRY_RISK, "initial_stop_ceiling_pct", stop_pct)["state"] == "fail":
                 failed.append("initial_stop_pct")
-            if average_gain is not None and stop_pct > average_gain / 2:
+            if average_gain is not None and stop_pct > average_gain * average_gain_multiple:
                 failed.append("half_average_gain_cap")
             if upside is not None:
                 reward_to_risk = (upside - entry) / (entry - stop)
-                controls["reward_to_risk"] = round(reward_to_risk, 4)
-                if reward_to_risk < 2:
+                controls["reward_to_risk"] = round(reward_to_risk, _REPORTED_PRECISION)
+                if doctrine.evaluate_gate(_ENTRY_RISK, "reward_to_risk_minimum", reward_to_risk)["state"] == "fail":
                     failed.append("reward_to_risk")
     elif entry is not None and upside is not None and upside <= entry:
         failed.append("upside_price")
@@ -334,7 +346,8 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             # harness never evaluated cannot be part of that assertion.
             gaps.append("invalidation_condition_not_audited")
 
-    controls = {"breakeven_at_r": 3.0, "breakeven_protection_required": False}
+    breakeven_at_r = doctrine.threshold(_PROFIT_PROTECTION, "breakeven_protection_trigger_r")
+    controls = {"breakeven_at_r": breakeven_at_r, "breakeven_protection_required": False}
     reasons: list[str] = []
     if anchors:
         verdict = "INCOMPLETE"
@@ -351,7 +364,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         missing = []
         if entry is not None and stop is not None and current is not None and stop < entry:
             initial_risk = entry - stop
-            if initial_risk > 0 and (current - entry) / initial_risk >= 3:
+            if initial_risk > 0 and doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", (current - entry) / initial_risk)["state"] == "pass":
                 controls["breakeven_protection_required"] = True
     return {
         "mode": "active",

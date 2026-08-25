@@ -57,7 +57,13 @@ class RiskReducerPublicSeamTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "BUY-READY")
         self.assertEqual(result["risk_controls"]["initial_stop_pct"], 6.0)
         self.assertEqual(result["risk_controls"]["reward_to_risk"], 2.0)
-        self.assertEqual(result["risk_controls"]["loss_target_context"], "within_6_to_7_pct_target")
+        # The source gives the ordinary loss target as a range, so the reading carries
+        # its range and where in it the stop landed, not a single pass/fail word.
+        loss_target = result["risk_controls"]["loss_target"]
+        self.assertEqual(loss_target["state"], "within_source_range")
+        self.assertEqual(loss_target["source_range"], [6, 7])
+        self.assertEqual(loss_target["measured"], 6.0)
+        self.assertEqual(loss_target["band_position"], 0.0)
 
     def test_complete_price_risk_evidence_does_not_need_a_duplicate_pass_flag(self) -> None:
         evidence = fixture("prospective_ready.json")

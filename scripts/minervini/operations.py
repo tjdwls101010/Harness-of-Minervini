@@ -487,6 +487,10 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         primary_base_long_correction=request.get("primary_base_long_correction"),
     )
     result = evaluate_eligibility(EligibilityEvidence.from_mapping(measured)).to_dict()
+    # A band the harness measured has to reach the caller, or the rule that every band
+    # is reported with its range is prose nothing carries out.
+    primary_base = measured.get("primary_base") or {}
+    bands = {"primary_base.depth": primary_base["depth_band"]} if primary_base.get("depth_band") else {}
     next_capabilities = ["ticker.setup", "ticker.fundamentals"] if result["eligibility_state"] == "eligible" else []
     if result["eligibility_state"] == "incomplete" and result["route"] == "recent_ipo_primary_base":
         next_capabilities = ["ticker.chart"]
@@ -503,6 +507,7 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "price_as_of": measured["as_of"],
             "rs_rating": rating,
             "rs_rating_date": rating_date,
+            "bands": bands,
         },
         signals=result["signals"],
         missing=missing,

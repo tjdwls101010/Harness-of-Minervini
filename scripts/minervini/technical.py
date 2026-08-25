@@ -7,12 +7,19 @@ from typing import Any
 
 import pandas as pd
 
+from . import doctrine
 from .eligibility import TREND_TEMPLATE_CRITERIA
 
 
 DOCTRINE_TREND = "eligibility.standard_trend_template"
 DOCTRINE_STAGE = "eligibility.standard_stage2"
 DOCTRINE_IPO = "eligibility.recent_ipo_primary_base"
+# Completed US sessions in a calendar month, used only to read a source duration the
+# book states in months into the bar count this module actually counts.
+_SESSIONS_PER_MONTH = 21
+# Enough places to strip binary-float noise from a reported figure and far too many
+# to soften any limit the registry states.
+_REPORTED_PRECISION = 10
 
 
 def _signal(identifier: str, state: str, measured: Any, required: str, doctrine_id: str = DOCTRINE_TREND) -> dict[str, Any]:
@@ -22,6 +29,17 @@ def _signal(identifier: str, state: str, measured: Any, required: str, doctrine_
         "doctrine_id": doctrine_id,
         "basis": {"measured": measured, "required": required},
     }
+
+
+def _gate(identifier: str, name: str, measured: float | None, doctrine_id: str = DOCTRINE_TREND) -> dict[str, Any]:
+    """Decide one criterion with the registry's own number and the registry's own wording.
+
+    Reading both from the same place is what keeps the limit a verdict used and the
+    limit its help text advertises from ever being two different numbers.
+    """
+    gate = doctrine.evaluate_gate(doctrine_id, name, measured)
+    reported = round(gate["measured"], _REPORTED_PRECISION) if isinstance(gate["measured"], float) else gate["measured"]
+    return _signal(identifier, gate["state"], reported, gate["required"], doctrine_id)
 
 
 def _comparison(identifier: str, measured: float | None, comparator: float | None, required: str) -> dict[str, Any]:
@@ -36,6 +54,36 @@ def _sma(close: pd.Series, length: int) -> float | None:
     return float(close.rolling(length).mean().iloc[-1])
 
 
+def _depth_claim(depth: float | None, duration: int | None, long_correction: str | None) -> dict[str, Any]:
+    """Decide the base's depth with gates only.
+
+    The source states a tighter ceiling for a three-week consolidation, a ceiling for
+    anything longer, and a deeper allowance for a correction lasting about a year. Each
+    is a limit it states in filter language, so each is a gate. The 25-35 range travels
+    separately, because where inside a range a base sat is worth reporting and is not
+    something a range can decide.
+    """
+    if depth is None or duration is None:
+        return _signal("primary_base.duration_depth", "unavailable", depth, "source-defined duration/depth band", DOCTRINE_IPO)
+    if duration <= doctrine.threshold(DOCTRINE_IPO, "minimum_base_duration_sessions"):
+        return _gate("primary_base.duration_depth", "three_week_base_depth_pct", depth, DOCTRINE_IPO)
+    ceiling = _gate("primary_base.duration_depth", "base_depth_ceiling_pct", depth, DOCTRINE_IPO)
+    if ceiling["state"] == "pass":
+        return ceiling
+    year_long = _gate("primary_base.duration_depth", "year_long_correction_depth_pct", depth, DOCTRINE_IPO)
+    if year_long["state"] == "fail":
+        return year_long
+    # The deeper allowance is for a correction lasting about a year, which a base only a
+    # few weeks long is not, whatever the caller confirms.
+    if _gate("primary_base.duration_depth", "year_long_exception_minimum_duration_sessions", duration, DOCTRINE_IPO)["state"] != "pass":
+        return ceiling
+    # Between the two ceilings the source never says how many sessions "about a year" is,
+    # so the caller confirms it from the weekly chart rather than the module resolving it
+    # with an invented cutoff.
+    resolved = {"confirmed": "pass", "not_confirmed": "fail"}.get(str(long_correction), "unavailable")
+    return _signal("primary_base.duration_depth", resolved, depth, year_long["basis"]["required"] + " only for a chart-confirmed year-long correction", DOCTRINE_IPO)
+
+
 def _primary_base(
     close: pd.Series,
     quality: str | None,
@@ -45,7 +93,7 @@ def _primary_base(
     count = len(close)
     prior = close.iloc[:-1]
     claims: list[dict[str, Any]] = []
-    claims.append(_signal("primary_base.minimum_history", "pass" if count >= 40 else "fail", count, ">= 40 completed sessions", DOCTRINE_IPO))
+    claims.append(_gate("primary_base.minimum_history", "minimum_trading_history_sessions", count, DOCTRINE_IPO))
     if prior.empty:
         duration = None
         depth = None
@@ -57,32 +105,14 @@ def _primary_base(
         base_slice = prior.iloc[peak_position:]
         depth = (prior_peak - float(base_slice.min())) / prior_peak * 100 if prior_peak > 0 else None
         ath_breakout = float(close.iloc[-1]) > prior_peak
-    claims.append(_signal("primary_base.minimum_duration", "unavailable" if duration is None else "pass" if duration >= 15 else "fail", duration, ">= 15 completed sessions", DOCTRINE_IPO))
-    if depth is None or duration is None:
-        depth_state = "unavailable"
-        depth_required = "source-defined duration/depth band"
-    elif duration <= 15:
-        depth_state = "pass" if depth <= 25 else "fail"
-        depth_required = "<= 25% for a three-week base"
-    elif duration <= 25:
-        depth_state = "pass" if depth <= 35 else "fail"
-        depth_required = "<= 35% for a three-to-five-week base"
-    elif depth <= 35:
-        depth_state = "pass"
-        depth_required = "<= 35% for a base longer than five weeks"
-    elif depth <= 50:
-        # The source allows as much as 50% only for a correction lasting about a year and
-        # gives no session count for "about", so the caller confirms that from the weekly
-        # chart rather than the module resolving it with an invented cutoff.
-        depth_state = {"confirmed": "pass", "not_confirmed": "fail"}.get(str(long_correction), "unavailable")
-        depth_required = "35-50% requires weekly-chart confirmation that the correction lasted about a year"
-    else:
-        depth_state = "fail"
-        depth_required = "<= 50% at any duration"
-    claims.append(_signal("primary_base.duration_depth", depth_state, round(depth, 4) if depth is not None else None, depth_required, DOCTRINE_IPO))
+    claims.append(_gate("primary_base.minimum_duration", "minimum_base_duration_sessions", duration, DOCTRINE_IPO))
+    claims.append(_depth_claim(depth, duration, long_correction))
     quality_state = quality if quality in {"supports", "contradicts", "needs_chart"} else "needs_chart"
     return {
         "quantitative_claims": claims,
+        # Reported beside the gates, never as one: two bases inside the same range are
+        # not the same picture, and a bare pass throws that difference away.
+        "depth_band": doctrine.evaluate_band(DOCTRINE_IPO, "three_to_five_week_base_depth_pct", depth),
         # The source accepts emergence to an all-time high or from a constructive
         # consolidation near it, so an unbroken high is timing that has not happened
         # yet, and the second route needs the caller's chart confirmation.
@@ -129,7 +159,11 @@ def build_eligibility_evidence(
 
     current = float(close.iloc[-1])
     sma50, sma150, sma200 = (_sma(close, length) for length in (50, 150, 200))
-    sma200_month_ago = float(close.iloc[:-21].rolling(200).mean().iloc[-1]) if len(close) >= 221 else None
+    # The source states the 200-day average must have been rising for at least a month;
+    # the session count is this module's reading of "a month", so it is derived here
+    # rather than hard-coded beside it.
+    rising_sessions = round(doctrine.threshold(DOCTRINE_TREND, "sma_200_rising_minimum_months") * _SESSIONS_PER_MONTH)
+    sma200_month_ago = float(close.iloc[:-rising_sessions].rolling(200).mean().iloc[-1]) if len(close) >= 200 + rising_sessions else None
     window = close.tail(min(252, len(close)))
     low_52, high_52 = float(window.min()), float(window.max())
     above_low_pct = (current / low_52 - 1) * 100 if low_52 > 0 else None
@@ -139,16 +173,17 @@ def build_eligibility_evidence(
     trend = [
         _signal(TREND_TEMPLATE_CRITERIA[0], first_state, round(current, 4), "price > 150 SMA and 200 SMA"),
         _comparison(TREND_TEMPLATE_CRITERIA[1], sma150, sma200, "150 SMA > 200 SMA"),
-        _signal(TREND_TEMPLATE_CRITERIA[2], "unavailable" if sma200 is None or sma200_month_ago is None else "pass" if sma200 > sma200_month_ago else "fail", round(sma200, 4) if sma200 is not None else None, "200 SMA higher than 21 completed sessions earlier"),
+        _signal(TREND_TEMPLATE_CRITERIA[2], "unavailable" if sma200 is None or sma200_month_ago is None else "pass" if sma200 > sma200_month_ago else "fail", round(sma200, 4) if sma200 is not None else None, f"200 SMA higher than {rising_sessions} completed sessions earlier"),
         _signal(TREND_TEMPLATE_CRITERIA[3], "unavailable" if sma50 is None or sma150 is None or sma200 is None else "pass" if sma50 > sma150 and sma50 > sma200 else "fail", round(sma50, 4) if sma50 is not None else None, "50 SMA > 150 SMA and 200 SMA"),
-        _signal(TREND_TEMPLATE_CRITERIA[4], "unavailable" if above_low_pct is None else "pass" if above_low_pct >= 30 else "fail", round(above_low_pct, 4) if above_low_pct is not None else None, ">= 30% above 52-week low"),
-        _signal(TREND_TEMPLATE_CRITERIA[5], "unavailable" if below_high_pct is None else "pass" if below_high_pct <= 25 else "fail", round(below_high_pct, 4) if below_high_pct is not None else None, "within 25% of 52-week high"),
-        _signal(TREND_TEMPLATE_CRITERIA[6], "unavailable" if rs_rating is None else "pass" if 1 <= rs_rating <= 99 and rs_rating >= 70 else "fail", rs_rating, "first-party SEPA RS percentile >= 70"),
-        _comparison(TREND_TEMPLATE_CRITERIA[7], current, sma50, "price > 50 SMA"),
+        _comparison(TREND_TEMPLATE_CRITERIA[4], current, sma50, "price > 50 SMA"),
+        _gate(TREND_TEMPLATE_CRITERIA[5], "minimum_pct_above_52_week_low", above_low_pct),
+        _gate(TREND_TEMPLATE_CRITERIA[6], "maximum_pct_below_52_week_high", below_high_pct),
+        _gate(TREND_TEMPLATE_CRITERIA[7], "relative_strength_minimum", rs_rating if rs_rating is None or 1 <= rs_rating <= 99 else -1),
     ]
     history_state = "sufficient" if len(close) >= 200 else "insufficient"
     if history_state == "sufficient":
-        stage_state = "pass" if all(signal["state"] == "pass" for signal in (trend[0], trend[1], trend[2], trend[3], trend[7])) else "fail" if any(signal["state"] == "fail" for signal in (trend[0], trend[1], trend[2], trend[3], trend[7])) else "unavailable"
+        stage_signals = (trend[0], trend[1], trend[2], trend[3], trend[4])
+        stage_state = "pass" if all(signal["state"] == "pass" for signal in stage_signals) else "fail" if any(signal["state"] == "fail" for signal in stage_signals) else "unavailable"
     else:
         stage_state = "unavailable"
     result: dict[str, Any] = {

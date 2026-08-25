@@ -55,9 +55,12 @@
     },
     "limitations": [
       "This is runtime doctrine, not a full book transcript or citation browser.",
-      "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time."
+      "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time.",
+      "A threshold's role bounds what it may do: a gate decides pass or fail, a band reports a measurement inside a range the source stated as a range, and a reference is a population statistic never evaluated against a ticker.",
+      "A claim on the practice layer or attributed to a named practitioner other than Minervini is contrast material, never a gate.",
+      "A claim marked out_of_scope records doctrine this harness may not act on, such as position sizing, and no capability consumes it."
     ],
-    "output": "The executable claim plus separated provenance metadata.",
+    "output": "The executable claim, its registered thresholds with each one's role, and separated provenance carrying the source quotations the claim rests on.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
