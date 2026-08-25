@@ -223,7 +223,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
   - **슬라이스 ② 머지 완료** (PR #6, `b516bd1`). 호출자가 주장 대신 좌표를 선언하고, READY가 경로별 양의 증거 집합으로 바뀌었다. codex 적대 리뷰 **10라운드** — blocker 22건 + 그 밖 31건, 그중 **여섯 건은 앞 라운드 수정이 만든 회귀**. main에서 528 tests OK.
     - 반복된 병 둘: **(1)** 측정은 맞는데 숫자를 어디서 읽는지가 틀림(돌파 볼륨을 마지막 바에서, 깊이를 선언된 베이스에서, `at_pivot`을 "언젠가 돌파했다"는 기록에서). **(2)** 구멍을 막는 규칙이 단어로 막음(독립 분할을 요구하고 그 이름을 플래그로 공개, 분할을 받고 "더 촘촘한 체인"을 정제라며 허용 → 불리한 수축을 재분할해 삭제 가능).
     - **표준 경로는 지금 READY에 도달하지 못한다.** 완결성을 보증할 독립 분할이 없기 때문이고, 그것이 슬라이스 ③이다.
-  - **슬라이스 ③ 진행 중** (브랜치 `feat/swing-detector`, 미머지). 결정 35~40에 확정 내용. 551 tests OK.
+  - **슬라이스 ③ 머지 완료** (PR #7, `3c07577`). main에서 613 tests OK, 인용 207+6/139, `validate_harness.py` 0 errors. codex 적대 리뷰 **19라운드** 끝에 "이 브랜치에는 머지를 막을 blocker가 없다". 결정 35~44.
     - 완료: `swings.py`(검출기 + `base_chain` + `canonical_chain`), `parameters` 레지스트리 필드와 `doctrine.parameter()`, `setup`이 검출기를 **내부에서** 실행(seam 제거), `ticker.swings` capability, 차트가 앵커·피벗 오버레이.
     - codex diff 리뷰 1라운드에서 blocker 2건(모호 세션을 알면서 보증 / 돌파 고점이 피벗을 빼앗아 베이스 소멸)과 major 3(±0.5% 정확 일치가 노이즈를 veto) 수정 완료.
     - **1라운드 지적 7건 전부 처리 완료** (커밋 `5ff84e3` `542bd6c` `7072cd0`). 564 tests OK, 인용 207+6/139 claims, `validate_harness.py` 0 errors.
