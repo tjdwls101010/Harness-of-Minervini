@@ -12,12 +12,6 @@ from typing import Any, Mapping
 
 SEC_SOURCE = "sec_filed_facts"
 FMP_SOURCE = "fmp_enrichment"
-POWER_PLAY_REQUIRED_PROOF = {
-    "technical_eligibility",
-    "price_volume_structure",
-    "market_alignment",
-    "risk_controls",
-}
 
 
 def evaluate_fundamentals(
@@ -25,7 +19,6 @@ def evaluate_fundamentals(
     *,
     as_of: str,
     fmp_enrichment: Mapping[str, Any] | None = None,
-    power_play: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Evaluate normalized SEC filings available on ``as_of``.
 
@@ -47,7 +40,6 @@ def evaluate_fundamentals(
     leader_category = _leader_category(filings)
     growth_quality, growth_missing = _growth_quality(quarterly, annual_growth)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
-    full_power_play_proof = _has_full_power_play_proof(power_play)
 
     missing = [
         *safety_missing,
@@ -59,15 +51,7 @@ def evaluate_fundamentals(
         growth_quality=growth_quality,
         safety_missing=safety_missing,
         growth_missing=growth_missing,
-        full_power_play_proof=full_power_play_proof,
     )
-    if fundamentals_state == "waived_by_exception":
-        growth_quality = {
-            **growth_quality,
-            "state": "waived_by_exception",
-            "reason": "Power Play proof waives verified fundamentals only.",
-        }
-        missing = [item for item in missing if item not in growth_missing]
 
     return {
         "as_of": as_of_date.isoformat(),
@@ -324,28 +308,23 @@ def _fmp_discrepancies(quarters: list[dict[str, Any]], enrichment: Mapping[str, 
     return discrepancies
 
 
-def _has_full_power_play_proof(power_play: Mapping[str, Any] | None) -> bool:
-    if not isinstance(power_play, Mapping):
-        return False
-    exception = power_play.get("fundamentals_exception")
-    return (
-        power_play.get("detected") is True
-        and power_play.get("quality") in {"textbook", "acceptable"}
-        and isinstance(exception, Mapping)
-        and exception.get("status") == "map_authorized_only_for_this_vcp-qualified_setup"
-        and "verified_fundamentals" in exception.get("may_omit", [])
-        and all(power_play.get(key) == "pass" for key in POWER_PLAY_REQUIRED_PROOF)
-    )
+def _fundamentals_state(*, integrity: Mapping[str, Any], growth_quality: Mapping[str, Any], safety_missing: list[str], growth_missing: list[str]) -> str:
+    """No branch here waives anything.
 
+    A `power_play` argument used to arrive beside these facts and, when five of its fields said
+    "pass", turned missing growth data into `waived_by_exception`. All five were the caller's
+    own word about controls verified somewhere else, and nothing in the path read a price bar.
+    The exception the source describes is real, but it is earned by a measured structure and an
+    approved chart, and this evaluator sees neither: it holds SEC filings.
 
-def _fundamentals_state(*, integrity: Mapping[str, Any], growth_quality: Mapping[str, Any], safety_missing: list[str], growth_missing: list[str], full_power_play_proof: bool) -> str:
+    So the gap stays a gap. What may lift it is a Power Play the harness measured itself, and
+    the surface that measures one is `ticker.power-play`.
+    """
     safety_states = [item["state"] for item in integrity.values()]
     if "contradicts" in safety_states:
         return "does_not_support_convergence"
-    if safety_missing:
+    if safety_missing or growth_missing:
         return "incomplete"
-    if growth_missing:
-        return "waived_by_exception" if full_power_play_proof else "incomplete"
     return "supports_convergence" if growth_quality["state"] == "supports" else "does_not_support_convergence"
 
 

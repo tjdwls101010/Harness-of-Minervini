@@ -596,8 +596,8 @@
       "rule": {
         "summary": "A qualifying Power Play may proceed despite weak or unavailable verified growth data only when technical eligibility, VCP quality, market alignment, and risk controls remain intact.",
         "conditions": [
-          "advance is at least 100 percent in under eight weeks",
-          "flag lasts three to six weeks and at least twelve trading days",
+          "advance is at least 100 percent in less than eight weeks",
+          "flag lasts at most six weeks and at least twelve trading days",
           "flag declines no more than 20 to 25 percent",
           "flag is no more than 10 percent tight or has clear VCP characteristics"
         ],
@@ -624,7 +624,7 @@
           "role": "gate",
           "value": 8,
           "unit": "weeks",
-          "comparator": "<=",
+          "comparator": "<",
           "exact": false,
           "quote_index": 2
         },
@@ -661,6 +661,22 @@
         "tight_action_maximum_pct": {
           "role": "gate",
           "value": 10,
+          "unit": "percent",
+          "comparator": "<=",
+          "exact": false,
+          "quote_index": 2
+        },
+        "flag_maximum_weeks": {
+          "role": "gate",
+          "value": 6,
+          "unit": "weeks",
+          "comparator": "<=",
+          "exact": false,
+          "quote_index": 2
+        },
+        "flag_maximum_decline_gate_pct": {
+          "role": "gate",
+          "value": 25,
           "unit": "percent",
           "comparator": "<=",
           "exact": false,
@@ -710,7 +726,7 @@
             "supports": "the Power Play fundamentals waiver is scoped: entered as the sole no-fundamentals situation, but still requires VCP characteristics and proper supply/demand digestion"
           }
         ],
-        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound"
+        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound; advance_maximum_weeks was compiled with <= against a quotation that says \"in less than eight weeks\", so exactly eight weeks passed a criterion the source excludes; the two ranges the quotation states inside \"the following criteria must be met\" now carry their loose end as a gate beside the band that reports position -- six weeks and 25 percent. Without them a ten-week flag and a forty percent correction met every registered limit; without the bands a 20 percent correction and a 25 percent one read identically. The band's report about a short flag is not a verdict about it either: the source's own \"some can emerge after only 12 days\" is what flag_minimum_sessions carries"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -10161,6 +10177,126 @@
       ],
       "provenance": {
         "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition. The one part of it that is not the harness's own is the base's left boundary: three price-only rules for it failed, because on price alone a rally above an earlier rally top inside a correction and a fresh consolidation under an old peak are the same picture at different magnitudes, and the source supplies no magnitude. It supplies the other half of the observation instead -- the buy point is price moving above the pivot on expanding volume -- so leaving a structure is read as a breakout out of it, per setup.structural_pivot_and_trigger. Which of those breakouts ended a structure is still a reading rather than a measurement -- holding either admits a pivot failure that reset or it does not, and the source says such a failure can recover -- so the edge is read every way and vouched for only where the readings agree. Every rule that picked one of them reached ready on a chain the detector had edited: bounding at an interior high deleted the contraction that widened, and not bounding at all let a structure the stock had left lend a contraction to the one above it."
+      }
+    },
+    {
+      "id": "convention.trading_week",
+      "title": "How many completed sessions this harness counts as a week",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "power_play"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "sessions_per_trading_week": {
+          "value": 5,
+          "unit": "sessions",
+          "affects_verdict": true,
+          "note": "Sources state durations in weeks and this harness measures in completed sessions, so every one of those limits passes through this number. It is registered rather than written into the modules that convert because it decides verdicts: a Power Play flag is disqualified past six weeks, and whether a thirty-one session flag is inside or outside that limit is this parameter's answer. Five is the regular US session count for a full week; holiday weeks trade four, so a flag measured in sessions runs slightly long against a calendar reading of the same span, and the direction of that error is toward rejecting rather than qualifying."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "This registers a conversion, not a filter: a week of limits stated by a source is this many completed sessions. There is nothing here to fail, and the limits it converts carry their own failure effects."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there is nothing to segment."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "harness layer: the sources speak in weeks and the bars arrive as sessions, so the conversion is this harness's own and is registered where every consumer reads it rather than repeated as a constant"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.power-play"
+      ],
+      "tests": [
+        "tests/260825/doctrine/test_power_play_spec.py"
+      ],
+      "computability": "deterministic",
+      "rule": {
+        "summary": "A week of limits stated by a source is five completed US sessions in this harness's measurements.",
+        "conditions": []
+      }
+    },
+    {
+      "id": "convention.power_play_top_candidates",
+      "title": "How far below the highest top this harness keeps reading candidate tops",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "power_play"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "candidate_top_maximum_distance_pct": {
+          "value": 10.0,
+          "unit": "percent",
+          "affects_verdict": true,
+          "note": "The peak a Power Play flag hangs from is found rather than declared, and no source names a size below which a new high stops counting -- a hundredth of a percent above the last high restarts the flag. So the bars are read from every top the search could have landed on, and this distance decides which of those tops may *contest* a criterion: a top standing further than this below the highest is treated as an older structure the stock has since overtaken rather than a competing reading of this one. It is registered here, at the harness layer, because it is this harness's convention about structure identity and not a limit any source stated. In particular it is not the sources' ten percent tight-action figure, which describes a flag's decline after a peak has been chosen and is stated as an alternative to VCP character rather than as an elimination; the two happen to share a value. What it does not do is end the chain. Every top in the span is read whatever its distance, and a rejection stands only where all of them reach one -- a structure the distance excluded from contesting is still a reading of these bars under which nothing decisive failed. Bounding the walk itself is what a hundredth of a percent could turn into a verdict, and that is why it no longer does. Measured through ticker.power-play itself on the completed session of 2026-08-24, across the twenty-three tickers this repository has provider history for, the chain runs one to nineteen tops and twenty-one of them reject on a criterion every top read agreed on. What the bound changes is how often the top is settled rather than whether a rejection lands: nine tickers read a settled top at this distance against six with no bound at all, and the same twenty-one reject either way. It earns its place by what it refuses rather than by what it moves -- unbounded contesting lets a top far below the highest dispute a limit, and a criterion disputed by a structure the stock has long since overtaken never decides. The first top past the distance is reported with its distance so the boundary a contest was decided next to can be audited. The path matters as much as the numbers: both windows are anchored at the last completed bar, so a frame ending on a different session finds a different peak and a different chain, and a frame carrying no corporate-action columns leaves every reading unreadable and every rejection withheld. Reproduce this through the capability with --as-of 2026-08-24, never by handing stored bars to the evidence builder."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "This registers which readings may dispute a criterion, not a filter and not where the chain ends. A top past the distance is not evidence anybody withheld -- it is a top this harness reads and declines to let contest, and the reading reports it with its distance so the boundary the verdict was decided next to can be audited."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there are no tops to enumerate."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "harness layer: the sources describe the structure without saying which printed high anchors it, so where one reading of the top stops and another begins is this harness's own convention, registered where the reading that uses it can be audited against it"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.power-play"
+      ],
+      "tests": [
+        "tests/260825/doctrine/test_power_play_spec.py"
+      ],
+      "computability": "deterministic",
+      "rule": {
+        "summary": "A top standing further than the registered distance below the highest top of the search span is a different structure, not another reading of this one.",
+        "conditions": []
       }
     }
   ]

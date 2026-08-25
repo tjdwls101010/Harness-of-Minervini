@@ -77,9 +77,38 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(ticker.calls[0]["end"], "2026-08-15")
         self.assertEqual(ticker.calls[0]["start"], "2023-08-10")
         self.assertFalse(ticker.calls[0]["auto_adjust"])
-        self.assertFalse(ticker.calls[0]["actions"])
+        # Actions on, adjustment still off. The prices stay the ones the tape printed, and the
+        # split events come with them: without the events a one-for-two reverse split is
+        # indistinguishable from a hundred percent overnight advance.
+        self.assertTrue(ticker.calls[0]["actions"])
+        # Requested here; whether they arrived is a separate fact this frame does not carry, and
+        # coverage reports the frame rather than the request.
+        self.assertIs(snapshot.meta.coverage["corporate_actions"], False)
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
         self.assertIsInstance(snapshot.meta, SnapshotMeta)
+
+    def test_a_blank_corporate_action_cell_is_an_incomplete_row_like_any_other(self) -> None:
+        """The measurement boundary refuses a non-finite value in any column it carries.
+
+        Checked here for OHLCV alone, one blank split cell reached that boundary and took the
+        whole history down -- for the setup and the chart too, neither of which reads the column.
+        """
+        index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0, 11.0, 12.0],
+                "High": [10.5, 11.5, 12.5],
+                "Low": [9.5, 10.5, 11.5],
+                "Close": [10.0, 11.0, 12.0],
+                "Volume": [100.0, 100.0, 100.0],
+                "Stock Splits": [0.0, 0.0, float("nan")],
+            },
+            index=index,
+        )
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
+
+        self.assertEqual(snapshot.data.index[-1].date().isoformat(), "2026-08-13")
 
     def test_an_unfinished_final_bar_is_dropped_and_the_session_gap_is_declared(self) -> None:
         index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
@@ -414,3 +443,30 @@ class ProviderContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverageReportsWhatTheFrameActuallyCarries(unittest.TestCase):
+    """Asking for the events and receiving them are different facts.
+
+    `actions=True` is a request. A feed that answers without the columns leaves a frame that
+    cannot say whether a split or a distribution happened, and a coverage flag hardcoded to true
+    tells every consumer the opposite.
+    """
+
+    def test_a_frame_without_the_event_columns_does_not_claim_them(self) -> None:
+        index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0, 11.0, 12.0],
+                "High": [10.5, 11.5, 12.5],
+                "Low": [9.5, 10.5, 11.5],
+                "Close": [10.0, 11.0, 12.0],
+                "Volume": [100.0, 100.0, 100.0],
+            },
+            index=index,
+        )
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
+
+        self.assertIs(snapshot.meta.coverage["corporate_actions"], False)
+        self.assertIs(snapshot.meta.coverage["distributions"], False)

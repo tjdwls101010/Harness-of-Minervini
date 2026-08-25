@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..clock import resolve_as_of
+from ..setup_structure import _CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 
 
@@ -17,14 +18,19 @@ OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 
 
 def _complete_rows(frame: pd.DataFrame) -> np.ndarray:
-    """Mark the rows whose every present OHLCV value is a finite number.
+    """Mark the rows whose every present value the measurements read is a finite number.
 
     Positional rather than label-indexed: a provider may repeat a session, and a
     label slice would then keep or drop every row sharing that timestamp.
+
+    The corporate-action column counts because the measurement boundary refuses a frame with a
+    non-finite value in any column it carries. Checked here only for OHLCV, a single blank split
+    cell reached that boundary and took the whole history down -- for the setup and the chart as
+    well, neither of which reads the column.
     """
 
     complete = np.ones(len(frame), dtype=bool)
-    for column in OHLCV_COLUMNS:
+    for column in (*OHLCV_COLUMNS, _CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN):
         if column in frame:
             values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
             complete &= np.isfinite(values)
@@ -133,7 +139,11 @@ def completed_daily_bars(
     frame = fetch_with_one_retry(
         "yfinance",
         "daily_bars",
-        lambda: ticker.history(start=start, end=end, interval="1d", auto_adjust=False, actions=False),
+        # Actions on, adjustment off: the prices stay the ones the tape printed, and the split
+        # events arrive beside them. Without the events a reverse split is indistinguishable from
+        # a hundred percent overnight advance, which is the exact size the Power Play criteria
+        # ask about, and the frame alone cannot tell a caller that it does not know.
+        lambda: ticker.history(start=start, end=end, interval="1d", auto_adjust=False, actions=True),
     )
     if not isinstance(frame, pd.DataFrame):
         raise ProviderUnavailable("yfinance", "invalid_daily_bar_response", operation="daily_bars")
@@ -174,6 +184,11 @@ def completed_daily_bars(
                 "requested_start": start,
                 "requested_end_exclusive": end,
                 "adjusted": False,
+                # What the frame carries, not what was asked for. `actions=True` is a request,
+                # and a feed that answers without the columns leaves a history that cannot say
+                # whether a split or a distribution happened.
+                "corporate_actions": _CORPORATE_ACTION_COLUMN in completed,
+                "distributions": _DISTRIBUTION_COLUMN in completed,
                 "requested_session": clock.date.isoformat(),
                 "last_completed_bar": last_completed_bar.isoformat(),
             },

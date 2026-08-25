@@ -32,6 +32,8 @@ from .providers.nasdaq import SecurityRecord, current_security_master, historica
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
+from .power_play import FLAG_STILL_FORMING, evaluate_power_play
+from .power_play_evidence import build_power_play_evidence
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -522,6 +524,133 @@ _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
+def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    try:
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.power-play",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.power-play",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "power_play_state": "incomplete"},
+            missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.power-play",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "power_play_state": "incomplete"},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
+        )
+    verdict = evaluate_power_play(build_power_play_evidence(prices.data))
+    rejection = verdict["structure"].get("rejection")
+    if rejection is not None:
+        return envelope(
+            "ticker.power-play",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "power_play_state": "incomplete"},
+            missing=[{"id": "usable_daily_bars", "reason": rejection, "required": True}],
+            sources=[_source(prices.meta)],
+            doctrine_ids=["fundamentals.power_play_exception", "scope.data_integrity"],
+        )
+    # Each gap names its own cause. Wrapping them all as one reason -- the shape the fundamentals
+    # operation still uses for filed evidence -- would report a chart reading nobody has made and
+    # a history that cannot say whether a split happened as the same kind of absence.
+    reasons = {
+        "corporate_action_evidence": (
+            "corporate_action_inside_the_measured_span"
+            if verdict["corporate_action_sessions"]
+            else "corporate_action_evidence_missing"
+        ),
+        "peak_identity": "peak_identity_disputed",
+        "distribution_evidence": "distribution_evidence_missing",
+    }
+    contested = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["contested_criteria"]
+    }
+    payout_sensitive = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["payout_sensitive_criteria"]
+    }
+    # While an action stands, no criterion here was measured on one coordinate system, so the
+    # cause of every gap is the action rather than anything a reader could supply.
+    unreadable = (
+        verdict["corporate_action_evidence"] != "present"
+        or verdict["corporate_action_sessions"]
+        or verdict["distribution_evidence"] != "present"
+    )
+
+    def _reason(item: str) -> str:
+        if item in reasons:
+            return reasons[item]
+        if unreadable:
+            if verdict["corporate_action_evidence"] != "present":
+                return "corporate_action_evidence_missing"
+            if verdict["distribution_evidence"] != "present":
+                return "distribution_evidence_missing"
+            return "corporate_action_inside_the_measured_span"
+        if item in set(verdict["held_by_short_history"]):
+            return "history_ends_before_lower_top"
+        if item in set(verdict["held_by_another_top"]):
+            return "structure_stands_under_another_top"
+        if item in payout_sensitive:
+            return "distribution_inside_the_measured_span"
+        if item in contested:
+            return "peak_identity_disputed"
+        # The one gap that closes by itself. Reported as a chart reading, it would be closed by
+        # whatever approval seam answers the chart -- and a twelve-session minimum would have been
+        # waived by a reading of the volume.
+        if item == FLAG_STILL_FORMING:
+            return "flag_still_forming"
+        return "chart_reading_required"
+
+    missing = [{"id": item, "reason": _reason(item), "required": True} for item in verdict["missing"]]
+    # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
+    # when a chart is what one of its gaps is actually waiting on.
+    awaits_a_chart = verdict["power_play_state"] == "incomplete" and any(
+        item["reason"] == "chart_reading_required" for item in missing
+    )
+    return envelope(
+        "ticker.power-play",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        status="ok" if verdict["power_play_state"] == "not_qualified" else "partial",
+        data={"ticker": ticker, **verdict},
+        signals=verdict["signals"],
+        missing=missing,
+        sources=[_source(prices.meta)],
+        # The two conventions belong here too: one converts every limit the source states in
+        # weeks, the other decides where one reading of the structure stops and another begins.
+        # Both move verdicts, so a reader auditing this one has to be able to reach them.
+        doctrine_ids=[
+            "fundamentals.power_play_exception",
+            "convention.trading_week",
+            "convention.power_play_top_candidates",
+            "scope.data_integrity",
+        ],
+        next_capabilities=["ticker.chart"] if awaits_a_chart else [],
+    )
+
+
 def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -786,9 +915,6 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[{"id": "cik", "reason": "stable_historical_identity_required", "required": True}],
         )
-    power_play = request.get("power_play")
-    if power_play is not None and not isinstance(power_play, Mapping):
-        raise RequestError("power_play must be an object", "power_play")
     try:
         snapshot = _cached_provider(
             runtime,
@@ -809,12 +935,10 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[_missing_provider(error)],
         )
-    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat(), power_play=power_play)
+    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat())
     missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
     status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
     doctrine_ids = ["scope.data_integrity"]
-    if power_play is not None:
-        doctrine_ids.append("fundamentals.power_play_exception")
     return envelope(
         "ticker.fundamentals",
         request=_clean_request({**request, "ticker": ticker}),
@@ -1727,6 +1851,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _swings(request, runtime)
     if operation == "ticker.setup":
         return _setup(request, runtime)
+    if operation == "ticker.power-play":
+        return _power_play(request, runtime)
     if operation == "ticker.fundamentals":
         return _fundamentals(request, runtime)
     if operation == "ticker.peers":
