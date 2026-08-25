@@ -74,6 +74,11 @@ class TheGapsUnderOneUnreadTopEachNameTheirOwnCause(unittest.TestCase):
         might have stood -- more history closes that. The two chart criteria never got a key,
         because the reading they belong to was already out when the questions were handed round;
         reading a chart closes nothing there.
+
+        The reason names the *reading* rather than the structure, and the distinction is the whole
+        point of the word: the structure is not rejected here, it is one rejected reading held
+        open by a top nobody could reach behind. `structure_is_already_rejected` is the finished
+        answer and rides on an `ok` envelope; this one rides on a `partial`.
         """
         from datetime import datetime, timezone
 
@@ -98,9 +103,60 @@ class TheGapsUnderOneUnreadTopEachNameTheirOwnCause(unittest.TestCase):
 
         reasons = {item["id"].split(".")[-1]: item["reason"] for item in payload["missing"]}
         self.assertEqual(reasons["flag_maximum_decline_gate_pct"], "history_ends_before_lower_top")
-        self.assertEqual(reasons["launch_volume_character"], "rejected_before_a_chart_was_needed")
+        self.assertEqual(
+            reasons["launch_volume_character"], "reading_rejected_before_a_chart_was_needed"
+        )
         self.assertEqual(reasons["lower_top_left_unread"], "history_ends_before_lower_top")
         self.assertEqual(payload["next_capabilities"], [])
+
+
+class TheGapDoesClose(unittest.TestCase):
+    """Said to close on more history, so shown closing on more history.
+
+    Not by the top becoming readable -- it never does, there is nothing behind it -- but by the
+    stock trading on until that top falls out of the span the search looks in. Both windows are
+    anchored at the last completed bar, so a top far enough back is not a candidate reading of
+    this structure at all, which is the same rule that keeps the answer still when a caller loads
+    a different amount of history.
+
+    The window that opens is one session wide here, and that is the fixture rather than the rule:
+    this structure's flag is already at the six-week limit, so the session after the one that
+    frees it is the session the flag runs past it. A structure with room in its flag has as many
+    sessions as it has room.
+    """
+
+    def _extend(self, frame, sessions):
+        import pandas as pd
+
+        index = pd.bdate_range(
+            start=frame.index[-1] + pd.tseries.offsets.BDay(1), periods=sessions
+        )
+        last = frame.iloc[-1]
+        tail = pd.DataFrame(
+            {column: [float(last[column])] * sessions for column in frame.columns}, index=index
+        )
+        tail["Stock Splits"] = 0.0
+        tail["Dividends"] = 0.0
+        return pd.concat([frame, tail])
+
+    def _state(self, sessions):
+        history = self._extend(a_top_the_history_ends_before_series(), sessions)
+        return evaluate_power_play(answered(history))
+
+    def test_the_top_stays_unread_while_it_is_still_a_candidate(self) -> None:
+        verdict = self._state(17)
+
+        self.assertTrue(verdict["readings_ran_out_of_history"])
+        self.assertIn("lower_top_left_unread", verdict["missing"])
+
+    def test_one_more_session_puts_it_outside_the_span_and_the_gap_closes(self) -> None:
+        verdict = self._state(18)
+
+        self.assertFalse(verdict["readings_ran_out_of_history"])
+        self.assertEqual(verdict["power_play_state"], "qualified")
+
+    def test_and_the_session_after_that_the_flag_runs_past_its_limit(self) -> None:
+        self.assertEqual(self._state(19)["power_play_state"], "not_qualified")
 
 
 if __name__ == "__main__":

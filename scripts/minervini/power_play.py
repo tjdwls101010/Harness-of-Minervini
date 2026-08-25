@@ -423,6 +423,10 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # dispute and closes like a chart gap, so it is carried separately all the way to the reason a
     # reader acts on.
     awaiting_elsewhere = set(evidence.get("awaiting_chart_under_another_top") or ())
+    # And the same shape for the dividend: a top that may contest this criterion had its answer
+    # decided by a payout, so it never gave one. Carried separately from the highest top's own
+    # payout gap because the reader is owed which reading the calendar moved.
+    payout_elsewhere = set(evidence.get("payout_decided_under_another_top") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
     # Only the tops speak to this. A payout withholds the criterion it decided and says so under
@@ -451,6 +455,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
             condition not in contested
             and condition not in payout_sensitive
             and condition not in awaiting_elsewhere
+            and condition not in payout_elsewhere
         )
         trusted = agreed and unmoved
         if state == "pass" and trusted:
@@ -511,6 +516,10 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         {f"{_CLAIM}.{condition}" for condition in awaiting_elsewhere},
         "chart_unread_under_another_top",
     )
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in payout_elsewhere},
+        "distribution_under_another_top",
+    )
     _decline(set(held_by_short_history), "history_ends_before_lower_top")
     _decline(set(held_by_another_top), "structure_stands_under_another_top")
     reported = [
@@ -522,7 +531,11 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # route. The second leaves nothing trustworthy to name -- reporting the highest top's list
     # would name limits the others say were never exceeded -- but no top the chain took reads
     # these bars as a Power Play, and that is a finished answer.
-    if failed or rejected_under_every_top_read:
+    # Every top read reached a rejection, whether they agreed on which limit did it or not. The
+    # `failed` list is the agreed half and `rejected_under_every_top_read` explains the other, but
+    # neither is the rejection -- reading the state off `failed` alone lost a rejection nobody
+    # disputed the moment two tops reached it by different routes.
+    if every_top_rejects:
         state = "not_qualified"
     elif missing:
         state = "incomplete"
@@ -540,6 +553,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "peak_identity": evidence.get("peak_identity"),
         "contested_criteria": sorted(contested),
         "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
+        "payout_decided_under_another_top": sorted(payout_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),

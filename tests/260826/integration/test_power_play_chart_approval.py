@@ -119,10 +119,6 @@ class ARejectedStructureAsksNothing(unittest.TestCase):
         self.assertEqual(payload["next_capabilities"], [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AGapOnARejectedStructureIsNotAnInstruction(unittest.TestCase):
     """`required` and the reason both say what is left to do, so on a finished answer both stop.
 
@@ -155,3 +151,7 @@ class AGapOnARejectedStructureIsNotAnInstruction(unittest.TestCase):
 
         self.assertEqual(payload["missing"], [])
         self.assertEqual(payload["next_capabilities"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

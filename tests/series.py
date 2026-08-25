@@ -885,7 +885,9 @@ def a_payout_decided_criterion_under_a_lower_top_series(
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
-def two_tops_that_both_await_the_chart_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+def two_tops_that_both_await_the_chart_series(
+    *, flag_low: float = 100.0, start: str = "2026-01-02"
+) -> pd.DataFrame:
     """Two candidate tops that agree on every measurable criterion and both ask about volume.
 
     A pullback inside the advance leaves a confirmed turning point a few percent under the peak,
@@ -894,7 +896,7 @@ def two_tops_that_both_await_the_chart_series(*, start: str = "2026-01-02") -> p
     the fixture for what a reading of one top's chart does to the other's.
     """
 
-    dormant, mid, dip, peak, flag_low, flag_end = 50.0, 103.0, 96.0, 108.0, 100.0, 105.0
+    dormant, mid, dip, peak, flag_end = 50.0, 103.0, 96.0, 108.0, 105.0
     closes = (
         [dormant] * 60
         + [dormant + (mid - dormant) * (step + 1) / 16 for step in range(16)]

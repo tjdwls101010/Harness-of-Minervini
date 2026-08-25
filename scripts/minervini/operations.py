@@ -647,6 +647,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         f"fundamentals.power_play_exception.{condition}"
         for condition in verdict["awaiting_chart_under_another_top"]
     }
+    payout_elsewhere = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["payout_decided_under_another_top"]
+    }
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
@@ -693,6 +697,8 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # closes it is that top's chart, not settling which top the structure hangs from.
         if item in awaiting_elsewhere:
             return "chart_unread_under_another_top"
+        if item in payout_elsewhere:
+            return "distribution_under_another_top"
         # The one gap that closes by itself. Reported as a chart reading, it would be closed by
         # whatever approval seam answers the chart -- and a twelve-session minimum would have been
         # waived by a reading of the volume.
@@ -705,12 +711,15 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         if decided:
             return "structure_is_already_rejected"
         if item not in awaited:
-            return "rejected_before_a_chart_was_needed"
+            return "reading_rejected_before_a_chart_was_needed"
         return "chart_reading_required"
 
+    # `required` follows the verdict rather than the cause. Every gap keeps the reason that is
+    # actually true of it -- a disputed peak on a rejected structure was still disputed -- but a
+    # finished rejection owes nobody anything, and nine of twenty-three real tickers were coming
+    # back `ok` with gaps marked required and no capability named to close them.
     missing = [
-        {"id": item, "reason": (reason := _reason(item)), "required": reason != "structure_is_already_rejected"}
-        for item in verdict["missing"]
+        {"id": item, "reason": _reason(item), "required": not decided} for item in verdict["missing"]
     ]
     # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
     # when a chart is what one of its gaps is actually waiting on.

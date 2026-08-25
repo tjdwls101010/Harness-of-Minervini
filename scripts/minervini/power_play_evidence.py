@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from . import doctrine
@@ -121,6 +121,41 @@ def _tightness_state(depth: float | None, limit: float) -> str:
 # same bars can only dispute a criterion by both answering it: a payout that decided one of them
 # withdrew that answer, and a chart nobody has read never gave one.
 _ABSTAINS = ("unavailable", "needs_chart")
+# What a contesting reading did instead of agreeing, strongest first. The order is the precedence:
+# a reading that gave a different answer has disputed the criterion whatever the others did, and
+# only where nobody disputed it does the question become which kind of silence is holding it.
+_DISAGREEMENTS = ("dissent", "payout", "chart")
+
+
+def _how_the_tops_disagree(
+    primary: Mapping[str, str], contesting: Sequence[Mapping[str, str]]
+) -> dict[str, str]:
+    """Per criterion, whether a top that may contest it failed to agree, and why.
+
+    Qualification is every contesting reading affirmatively agreeing, never an absence of
+    objections -- the same rule the required-evidence lists are built on. Read as "nobody
+    objected", a reading that abstained counts as agreement, and the criterion closes on the
+    strength of a top whose answer the dividend withdrew or whose chart nobody opened.
+
+    So the three ways of not agreeing are separated rather than pooled, because each closes on a
+    different action: another reading of the tops, the dividend calendar, or a chart.
+    """
+    disagreement: dict[str, str] = {}
+    for condition, answer in primary.items():
+        # The primary's own gap already blocks this criterion under its own name, and comparing
+        # an abstention with anything says nothing about the tops.
+        if answer in _ABSTAINS:
+            continue
+        causes = {
+            "payout" if state == "unavailable" else "chart" if state == "needs_chart" else "dissent"
+            for state in (criteria[condition] for criteria in contesting)
+            if state != answer
+        }
+        for cause in _DISAGREEMENTS:
+            if cause in causes:
+                disagreement[condition] = cause
+                break
+    return disagreement
 
 
 def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
@@ -538,27 +573,16 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
     # A reading whose answer the payout decided abstains rather than dissents. It has not disputed
     # the top reading's answer; it has declined to give one, and counting that as disagreement
     # sends the reader to the chart to settle a top when the dividend calendar is what moved.
-    contested = {
-        condition
-        for condition in primary_criteria
-        if primary_criteria[condition] not in _ABSTAINS
-        and any(
-            criteria[condition] not in _ABSTAINS and criteria[condition] != primary_criteria[condition]
-            for criteria in every_criteria[:may_contest]
-        )
-    }
-    # Not a dispute, and not nothing either. The highest top's answer stands and a top that may
-    # contest it has not been looked at, so the criterion cannot close -- but what closes it is
-    # reading that top's chart, not settling which top the structure hangs from. Reported as a
-    # disputed peak it would send the reader to a question the bars answer and no chart can.
-    awaiting_elsewhere = {
-        condition
-        for condition in primary_criteria
-        if primary_criteria[condition] not in _ABSTAINS
-        and any(criteria[condition] == "needs_chart" for criteria in every_criteria[1:may_contest])
-    }
+    # Three buckets rather than one, because a criterion the highest top answered can be held open
+    # by a top that disputed it, by a top whose answer the dividend decided, or by a top whose
+    # chart nobody has read -- and a reader sent to settle the wrong one has not settled anything.
+    disagreement = _how_the_tops_disagree(primary_criteria, every_criteria[1:may_contest])
+    contested = {condition for condition, cause in disagreement.items() if cause == "dissent"}
+    payout_elsewhere = {condition for condition, cause in disagreement.items() if cause == "payout"}
+    awaiting_elsewhere = {condition for condition, cause in disagreement.items() if cause == "chart"}
     if reordered:
         contested = set(primary_criteria)
+        payout_elsewhere = set()
         awaiting_elsewhere = set()
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
@@ -605,7 +629,20 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
         # A lower top the loaded history cannot reach behind is still a top nobody read.
         and not ran_out_of_history
     )
-    rejected_under_every_top_read = every_top_rejects and bool(contested)
+    # Every top rejected and no one criterion carries it, so there is nothing trustworthy to name:
+    # reporting the highest top's list would name limits the others say were never exceeded. This
+    # explains a rejection rather than reaching one -- `every_top_rejects` is the rejection, and a
+    # criterion every reading failed is named through the reducer's own `failed` list.
+    #
+    # It used to be `every_top_rejects and bool(contested)`, which read "the tops disagree about
+    # which limit did it" off the contested set. That proxy broke the moment an unanswered chart
+    # stopped counting as disagreement: two tops that each reject on their own `absent` reading
+    # agree about nothing and contest nothing, and the composite rejection vanished.
+    rejected_under_every_top_read = every_top_rejects and not any(
+        all(criteria[condition] == "fail" for criteria in every_criteria)
+        for condition in primary_criteria
+        if f"{_CLAIM}.{condition}" != FLAG_STILL_FORMING
+    )
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -669,8 +706,9 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
         # readings can both reject and still disagree about which limit did it, and reporting the
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
-        # Separate from the contested set because it closes on a different action.
+        # Separate from the contested set because each closes on a different action.
         "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
+        "payout_decided_under_another_top": sorted(payout_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".

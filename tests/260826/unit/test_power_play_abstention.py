@@ -111,3 +111,49 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhichSilenceIsHoldingTheCriterion(unittest.TestCase):
+    """The three ways a contesting top can fail to agree, each read off the same comparison.
+
+    Tested against the classification directly rather than through a fixture per case. Two of the
+    three arrive through fixtures elsewhere in this module; the payout one is a shape no fixture
+    in this repository produces -- a payout that decides a *lower* top's answer while leaving the
+    highest top's alone and the chain's ordering intact -- and a rule nothing exercises is a rule
+    nothing checks. What is pinned here is the contract the function states: which cause wins when
+    several tops disagree in different ways, and that agreement is required rather than assumed.
+    """
+
+    def _classify(self, primary, *contesting):
+        from scripts.minervini.power_play_evidence import _how_the_tops_disagree
+
+        return _how_the_tops_disagree(primary, [dict(other) for other in contesting])
+
+    def test_a_different_answer_is_a_dissent(self) -> None:
+        self.assertEqual(self._classify({"a": "pass"}, {"a": "fail"}), {"a": "dissent"})
+
+    def test_an_answer_the_payout_withdrew_is_not(self) -> None:
+        self.assertEqual(self._classify({"a": "pass"}, {"a": "unavailable"}), {"a": "payout"})
+
+    def test_nor_is_a_chart_nobody_read(self) -> None:
+        self.assertEqual(self._classify({"a": "pass"}, {"a": "needs_chart"}), {"a": "chart"})
+
+    def test_a_top_that_agrees_holds_nothing(self) -> None:
+        self.assertEqual(self._classify({"a": "pass"}, {"a": "pass"}), {})
+
+    def test_a_dissent_outranks_a_silence(self) -> None:
+        """Whatever the quiet tops did, one of them said the criterion reads the other way."""
+        self.assertEqual(
+            self._classify({"a": "pass"}, {"a": "needs_chart"}, {"a": "fail"}),
+            {"a": "dissent"},
+        )
+
+    def test_the_highest_top_s_own_gap_is_not_reported_as_the_tops_disagreeing(self) -> None:
+        """It already blocks under its own name, and comparing an abstention says nothing."""
+        self.assertEqual(self._classify({"a": "needs_chart"}, {"a": "pass"}), {})
+        self.assertEqual(self._classify({"a": "unavailable"}, {"a": "pass"}), {})
+
+    def test_a_criterion_no_top_may_contest_is_never_held(self) -> None:
+        """The caller passes only the readings inside the contest distance, so an empty list is
+        the whole of what "no top may contest this" means here."""
+        self.assertEqual(self._classify({"a": "pass"}), {})

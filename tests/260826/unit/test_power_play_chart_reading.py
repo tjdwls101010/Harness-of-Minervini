@@ -117,19 +117,33 @@ class AnApprovalIsBoundToWhatWasMeasured(unittest.TestCase):
         that no component is decorative -- a boundary that never reaches the digest would let an
         approval of one reading answer for another.
         """
-        from scripts.minervini.power_play_evidence import _BOUNDARIES, _CHART_CONDITIONS, _chart_key
+        from scripts.minervini.power_play_evidence import _chart_key
 
-        reading = dict.fromkeys(_BOUNDARIES, "2026-01-02")
-        reading.update({name: 1.0 for name in _CHART_CONDITIONS.values()})
+        # Written out rather than read from the module. Taken from `_BOUNDARIES`, the list is
+        # whatever the implementation currently digests, so dropping a boundary drops it from the
+        # expectation in the same stroke and the test goes on passing.
+        boundaries = (
+            "peak_date",
+            "advance_anchor_date",
+            "flag_low_date",
+            "baseline_first_session",
+            "baseline_last_session",
+            "measured_span_first_session",
+        )
+        reading = {
+            **dict.fromkeys(boundaries, "2026-01-02"),
+            "advance_peak_volume_ratio": 1.0,
+            "flag_depth_pct": 1.0,
+        }
         base = _chart_key("digest", "launch_volume_character", reading)
 
         self.assertNotEqual(base, _chart_key("other-digest", "launch_volume_character", reading))
         self.assertNotEqual(base, _chart_key("digest", "flag_tightness_or_vcp", reading))
-        for boundary in _BOUNDARIES:
+        for boundary in boundaries:
             with self.subTest(boundary=boundary):
                 moved = {**reading, boundary: "2026-01-03"}
                 self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", moved))
-        remeasured = {**reading, _CHART_CONDITIONS["launch_volume_character"]: 1.01}
+        remeasured = {**reading, "advance_peak_volume_ratio": 1.01}
         self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", remeasured))
 
     def test_a_payout_inside_the_span_changes_the_key(self) -> None:
