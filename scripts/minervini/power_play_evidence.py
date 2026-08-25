@@ -17,6 +17,8 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import pandas as pd
+
 from . import doctrine
 from .setup_structure import (
     _CORPORATE_ACTION_COLUMN,
@@ -381,17 +383,62 @@ def _turning_points(history: Any) -> frozenset[str] | None:
         return None
     multiple = float(doctrine.parameter(_SEGMENTATION, "retracement_range_multiple"))
     offsets = [0.0, *(float(value) for value in doctrine.parameter(_SEGMENTATION, "sensitivity_offsets"))]
+    # The same guard the segmentation beside this one applies before it runs anything. A history
+    # whose ordinary session spans a large fraction of its own close gives a scale the segmenter
+    # has no domain for, and the upper neighbour leaves that domain first. Nothing here is a
+    # turning point then, which puts every descending high back in the candidate set -- more tops
+    # may contest, which is the safe direction for a measurement nobody can take.
+    if not all(0 < (multiple + offset) * typical < 100 for offset in offsets):
+        return None
     found: set[str] = set()
     for offset in offsets:
-        retracement = (multiple + offset) * typical
-        if retracement <= 0:
-            continue
-        found |= {
-            str(anchor["date"])
-            for anchor in segment(bars, retracement_pct=retracement)["anchors"]
-            if anchor["kind"] == "high"
-        }
+        run = segment(bars, retracement_pct=(multiple + offset) * typical)
+        found |= {str(anchor["date"]) for anchor in run["anchors"] if anchor["kind"] == "high"}
+        found |= _tops_the_order_would_have_confirmed(bars, run)
     return frozenset(found)
+
+
+def _tops_the_order_would_have_confirmed(bars: Any, run: Mapping[str, Any]) -> set[str]:
+    """The highs the segmenter had to choose against, because a daily bar does not say what came
+    first.
+
+    A session that both made a new high and retraced far enough to end the swing is two readings
+    of one bar, and the segmenter records it as ambiguous rather than deciding. Whichever way it
+    resolved it, the other resolution anchors a different top: extension first leaves the swing
+    running and no top before that bar, reversal first ends the swing at the highest bar before
+    it.
+
+    Read off the anchors alone, that choice arrives here as a settled fact, and the top it decided
+    against never contests anything. Measured, one such bar removed a top whose own reading fails
+    the six-week limit and the structure came back qualified -- a known uncertainty about intraday
+    order resolved into a pass. So the top the other order would have confirmed is a candidate
+    too, which is the same thing the chain does everywhere else: read the structure from every top
+    the search could have landed on.
+
+    Ambiguity is ordinary -- twelve of the twenty-four tickers this repository has history for
+    carry one inside the measured span -- so this names the tops actually at risk rather than
+    abandoning the turning-point filter. Abandoning it puts every descending bar of a flag back in
+    the chain: measured, nineteen readings, four fewer settled tops and a rejection lost.
+    """
+
+    ambiguous = [str(session) for session in (run.get("ambiguous_sessions") or ())]
+    if not ambiguous:
+        return set()
+    anchors = sorted(str(anchor["date"]) for anchor in run["anchors"])
+    dates = [str(stamp.date()) for stamp in bars.index]
+    at_risk: set[str] = set()
+    for session in ambiguous:
+        if session not in dates:
+            continue
+        earlier = [anchor for anchor in anchors if anchor < session]
+        start = earlier[-1] if earlier else dates[0]
+        window = bars.loc[
+            (bars.index > pd.Timestamp(start)) & (bars.index < pd.Timestamp(session))
+        ]
+        if not len(window):
+            continue
+        at_risk.add(str(window["High"].idxmax().date()))
+    return at_risk
 
 
 def _walk_the_tops(

@@ -218,6 +218,22 @@ class HowFarBelowTheUnreadTopStandsDecidesWhetherItBlocks(unittest.TestCase):
         self.assertAlmostEqual(far["unread_top"]["distance_pct"], 28.5714, places=3)
         self.assertFalse(far["unread_top_may_contest"])
 
+    def test_a_top_exactly_at_the_distance_still_contests(self) -> None:
+        """The boundary itself, which nothing else here stands on.
+
+        The registered figure is where a top stops being a candidate, so a top standing exactly
+        that far below is the last one that is still one. Both prices are chosen to put the
+        distance on the float grid: 18.81 under a peak of 20.9 divides out to exactly ten, where
+        the default peak of 21.0 has no price ten percent below it that arithmetic can reach.
+        """
+        history = a_top_the_history_ends_before_series(advance_pct=109.0, unread_top_price=18.81)
+        evidence = build_power_play_evidence(history)
+
+        self.assertEqual(evidence["unread_top"]["peak_high"], 18.81)
+        self.assertEqual(evidence["unread_top"]["distance_pct"], 10.0)
+        self.assertTrue(evidence["unread_top_may_contest"])
+        self.assertIn("lower_top_left_unread", evaluate_power_play(answered(history))["missing"])
+
     def test_a_top_too_far_below_to_contest_does_not_block(self) -> None:
         history = a_top_the_history_ends_before_series(unread_top_price=15.0)
         evidence = answered(history)

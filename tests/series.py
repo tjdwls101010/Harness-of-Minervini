@@ -916,7 +916,11 @@ def two_tops_that_both_await_the_chart_series(
 
 
 def a_top_the_history_ends_before_series(
-    *, flag_depth_pct: float = 12.0, unread_top_price: float = 20.1, start: str = "2026-01-02"
+    *,
+    flag_depth_pct: float = 12.0,
+    unread_top_price: float = 20.1,
+    advance_pct: float = 110.0,
+    start: str = "2026-01-02",
 ) -> pd.DataFrame:
     """A clean structure whose next candidate top sits behind the first loaded bar.
 
@@ -925,6 +929,10 @@ def a_top_the_history_ends_before_series(
     it never made would have had a vote is what ``unread_top_price`` sets: the default stands a
     few percent under the peak, inside the distance a top may contest from, and a lower value puts
     it far enough below to be a structure the stock has since overtaken.
+
+    ``advance_pct`` moves the peak, which is only ever worth doing to land the pair of prices on a
+    distance the float grid can represent exactly: at the default peak of 21.0 no price stands
+    exactly ten percent below it, and a boundary that cannot be reached cannot be tested.
     """
 
     frame = power_play_series(
@@ -932,6 +940,7 @@ def a_top_the_history_ends_before_series(
         advance_sessions=1,
         flag_sessions=12,
         flag_depth_pct=flag_depth_pct,
+        advance_pct=advance_pct,
         start=start,
     )
     columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
@@ -973,6 +982,63 @@ def a_top_only_a_neighbour_confirms_series(*, dip_pct: float = 0.30, flag_sessio
     frame["High"] = frame["Close"] * 1.001
     frame["Low"] = frame["Close"] * 0.999
     frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 21 + [800_000.0] * flag_sessions
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_top_hidden_by_an_ambiguous_session_series(*, flag_sessions: int = 26, start: str = "2026-01-02") -> pd.DataFrame:
+    """A top the segmenter had to choose against, because one bar reads two ways.
+
+    The session after the lower top both prints a new high and retraces far enough to end the
+    swing, and a daily bar does not say which happened first. The segmenter records the ambiguity
+    and resolves it one way, which leaves no anchor at the top before it. Under the other order
+    that top is confirmed -- and read from there the flag runs past six weeks and the structure is
+    out.
+
+    Same geometry as the neighbour-only fixture beside it, with the shallow pullback replaced by
+    the ambiguous bar, so the two differ only in *why* the top goes missing.
+    """
+
+    dormant, lower_top, peak, flag_low, flag_end = 50.0, 103.0, 108.0, 100.0, 105.0
+    ambiguous_low = 102.30
+    sink = flag_sessions // 2
+    closes = [dormant] * 60
+    closes += [dormant + (lower_top - dormant) * (step + 1) / 16 for step in range(16)]
+    closes += [ambiguous_low]
+    closes += [lower_top + (peak - lower_top) * (step + 1) / 4 for step in range(4)]
+    closes += [peak - (peak - flag_low) * (step + 1) / sink for step in range(sink)]
+    closes += [
+        flag_low + (flag_end - flag_low) * (step + 1) / (flag_sessions - sink)
+        for step in range(flag_sessions - sink)
+    ]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame.iloc[76, frame.columns.get_loc("High")] = 103.30
+    frame.iloc[76, frame.columns.get_loc("Low")] = ambiguous_low * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 21 + [800_000.0] * flag_sessions
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_range_too_wide_to_segment_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """Bars whose ordinary session spans so much of its own close that the upper neighbour
+    retracement leaves the segmenter's domain.
+
+    Valid OHLCV throughout. The middle reading still runs; the neighbour the convention also
+    registers does not, and running only the ones that happen to fit is reading a measurement
+    nobody could take.
+    """
+
+    closes = [100.0 + (step % 7) for step in range(90)]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = [close * 1.2 for close in closes]
+    frame["Low"] = [close * 0.81 for close in closes]
+    frame["Volume"] = [1_000_000.0] * len(closes)
     frame["Stock Splits"] = [0.0] * len(closes)
     frame["Dividends"] = [0.0] * len(closes)
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

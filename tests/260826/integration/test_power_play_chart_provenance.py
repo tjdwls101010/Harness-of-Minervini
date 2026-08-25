@@ -139,9 +139,6 @@ class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ADigestIsWhatIsAskedFor(unittest.TestCase):
     """Any non-empty string used to count, so a typo arrived as a reading of another vintage.
@@ -173,6 +170,30 @@ class ADigestIsWhatIsAskedFor(unittest.TestCase):
         with self.assertRaises(RequestError):
             execute("ticker.power-play", {**self.request, "drawn_bars": "nope"}, runtime=self.runtime)
 
+    def test_a_padded_digest_is_not_quietly_read_as_another_vintage(self) -> None:
+        """The check strips; the comparison downstream did not.
+
+        A trailing newline is what a shell pipeline hands you, and it passed validation and then
+        missed the digest it was checked against -- so a correct answer about the right picture
+        came back as an honest reading of a series that never existed.
+        """
+        payload = execute(
+            "ticker.power-play",
+            {
+                **self.request,
+                "chart_readings": [
+                    f'{q["key"]}=observed'
+                    for q in execute("ticker.power-play", self.request, runtime=self.runtime)["data"][
+                        "chart_questions"
+                    ]
+                ],
+                "drawn_bars": f" {bars_fingerprint(self.frame)}\n",
+            },
+            runtime=self.runtime,
+        )
+
+        self.assertEqual(payload["data"]["power_play_state"], "qualified")
+
 
 class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):
     def test_a_wrong_vintage_still_points_at_the_capability_that_draws_one(self) -> None:
@@ -197,3 +218,7 @@ class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):
         )
 
         self.assertIn("ticker.chart", payload["next_capabilities"])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -21,6 +21,7 @@ may contest a qualification, and a rejection needs all of them to agree.
 from __future__ import annotations
 
 import unittest
+from contextlib import contextmanager
 
 from scripts.minervini import doctrine
 from scripts.minervini.power_play import evaluate_power_play
@@ -30,6 +31,31 @@ from scripts.minervini.setup_structure import read_bars
 from tests.readings import power_play_answers
 from tests.series import a_top_only_a_neighbour_confirms_series
 
+
+def _registered_offsets():
+    return doctrine.parameter("setup.swing_segmentation_convention", "sensitivity_offsets")
+
+
+@contextmanager
+def _offsets(values):
+    """Re-register the convention's offsets for the duration of one reading.
+
+    The registry is what the walk is meant to be reading, so the test moves the registry rather
+    than the function that reads it -- a patched-out lookup would pass against a hardcoded list
+    just as happily.
+    """
+    record = next(
+        claim
+        for claim in doctrine._load_registry()["claims"]
+        if claim["id"] == "setup.swing_segmentation_convention"
+    )
+    slot = record["parameters"]["sensitivity_offsets"]
+    before = slot["value"]
+    slot["value"] = list(values)
+    try:
+        yield
+    finally:
+        slot["value"] = before
 
 class EveryNeighbouringReadingsTopsAreCandidates(unittest.TestCase):
     def _highs(self, frame, offset):
@@ -42,6 +68,24 @@ class EveryNeighbouringReadingsTopsAreCandidates(unittest.TestCase):
         offsets = doctrine.parameter("setup.swing_segmentation_convention", "sensitivity_offsets")
 
         self.assertEqual([float(value) for value in offsets], [-0.1, 0.1])
+
+    def test_moving_the_registered_offsets_moves_the_candidates(self) -> None:
+        """The reading above only says what the registry holds -- the same pass a literal
+        ``[-0.1, 0.1]`` in the walk would get. What couples the two is the candidates changing
+        when the registered value does, so a re-registration reaches the measurement instead of
+        leaving a stale copy of an old convention deciding verdicts.
+        """
+        frame = a_top_only_a_neighbour_confirms_series()
+        registered = _registered_offsets()
+
+        with _offsets([0.0]):
+            narrowed = _turning_points(frame)
+        with _offsets([float(value) for value in registered]):
+            restored = _turning_points(frame)
+
+        self.assertEqual(restored, _turning_points(frame))
+        self.assertLess(narrowed, restored)
+        self.assertEqual(narrowed, self._highs(frame, 0.0))
 
     def test_a_top_only_a_neighbour_confirms_is_still_a_candidate(self) -> None:
         frame = a_top_only_a_neighbour_confirms_series()
