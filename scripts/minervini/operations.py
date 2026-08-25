@@ -656,6 +656,7 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             else "corporate_action_evidence_missing"
         ),
         "peak_identity": "peak_identity_disputed",
+        "peak_confirmation": "peak_not_a_confirmed_turning_point",
         "distribution_evidence": "distribution_evidence_missing",
     }
     contested = {
@@ -731,22 +732,24 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # waived by a reading of the volume.
         if item == FLAG_STILL_FORMING:
             return "flag_still_forming"
-        if other_bars:
-            return "approval_covers_different_bars"
         # Two ways a chart criterion stops being something a chart closes. The structure was
         # rejected -- by the bars, or by this caller's own `absent` reading of another criterion --
         # and nothing supplied now moves it. Or no key was issued for it, because the reading it
         # belongs to was already out when the questions were handed round.
+        #
+        # Ahead of the vintage, because a rejection is not waiting on a picture of any vintage.
+        # Read the other way round, a rejected structure answered from the wrong bars reported
+        # every criterion as `approval_covers_different_bars` and sent a reader to redraw a chart
+        # for a verdict that was finished -- the same mistake as reporting a still-forming flag
+        # under the chart's name, one layer further out.
         if decided:
             return "structure_is_already_rejected"
+        if other_bars:
+            return "approval_covers_different_bars"
         if item not in awaited:
             return "reading_rejected_before_a_chart_was_needed"
         return "chart_reading_required"
 
-    # `required` follows the verdict rather than the cause. Every gap keeps the reason that is
-    # actually true of it -- a disputed peak on a rejected structure was still disputed -- but a
-    # finished rejection owes nobody anything, and nine of twenty-three real tickers were coming
-    # back `ok` with gaps marked required and no capability named to close them.
     # `required` follows the verdict rather than the cause. Every gap keeps the reason that is
     # actually true of it -- a disputed peak on a rejected structure was still disputed -- but a
     # finished rejection owes nobody anything, and nine of twenty-three real tickers were coming

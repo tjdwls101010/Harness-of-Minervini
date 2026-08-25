@@ -195,6 +195,34 @@ class ADigestIsWhatIsAskedFor(unittest.TestCase):
         self.assertEqual(payload["data"]["power_play_state"], "qualified")
 
 
+class ARejectionIsNotWaitingOnAPicture(unittest.TestCase):
+    def test_a_finished_rejection_keeps_its_own_reason_whatever_vintage_arrives(self) -> None:
+        """The vintage is only ever a reason for a criterion a chart could still close.
+
+        Read the other way round, a structure the bars already rejected reported every criterion
+        as `approval_covers_different_bars`, which sends a reader to redraw a chart for a verdict
+        that is finished -- the same mistake as reporting a still-forming flag under the chart's
+        name, one layer further out.
+        """
+        frame = power_play_series(advance_pct=40.0)
+        runtime = Runtime(price_history=lambda ticker, requested: snapshot(frame))
+        payload = execute(
+            "ticker.power-play",
+            {
+                "ticker": "TEST",
+                "as_of": frame.index[-1].date().isoformat(),
+                "no_cache": True,
+                "chart_readings": ["some-key-this-run-never-issued=observed"],
+                "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18)),
+            },
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["power_play_state"], "not_qualified")
+        self.assertEqual(
+            {item["reason"] for item in payload["missing"]}, {"structure_is_already_rejected"}
+        )
+
 class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):
     def test_a_wrong_vintage_still_points_at_the_capability_that_draws_one(self) -> None:
         """The gap closes by reading the right picture, so the envelope names where to get it.

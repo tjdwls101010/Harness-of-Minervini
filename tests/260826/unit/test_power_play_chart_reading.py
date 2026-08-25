@@ -139,16 +139,17 @@ class AnApprovalIsBoundToWhatWasMeasured(unittest.TestCase):
             "advance_peak_volume_ratio": 1.0,
             "flag_depth_pct": 1.0,
         }
-        base = _chart_key("digest", "launch_volume_character", reading)
+        base = _chart_key("digest", "launch_volume_character", reading, "asked")
 
-        self.assertNotEqual(base, _chart_key("other-digest", "launch_volume_character", reading))
-        self.assertNotEqual(base, _chart_key("digest", "flag_tightness_or_vcp", reading))
+        self.assertNotEqual(base, _chart_key("other-digest", "launch_volume_character", reading, "asked"))
+        self.assertNotEqual(base, _chart_key("digest", "flag_tightness_or_vcp", reading, "asked"))
         for boundary in boundaries:
             with self.subTest(boundary=boundary):
                 moved = {**reading, boundary: "2026-01-03"}
-                self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", moved))
+                self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", moved, "asked"))
         remeasured = {**reading, "advance_peak_volume_ratio": 1.01}
-        self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", remeasured))
+        self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", remeasured, "asked"))
+        self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", reading, "asked differently"))
 
     def test_a_payout_inside_the_span_changes_the_key(self) -> None:
         """Same prices on the tape, different prices on one scale.

@@ -7,6 +7,8 @@ broke every file at once; collecting it here means a test names only the reading
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from collections.abc import Sequence
 
 import pandas as pd
@@ -51,3 +53,23 @@ def power_play_answers(history, chart_readings):
     from scripts.minervini.setup_structure import bars_fingerprint, read_bars
 
     return {"chart_readings": chart_readings, "drawn_bars": bars_fingerprint(read_bars(history)[0])}
+
+
+@contextmanager
+def reregistered(claim_id, field, name, value):
+    """Move one registered value for the duration of a reading, then put it back.
+
+    Tests that couple a measurement to the registry have to move the registry, not the function
+    that reads it: a patched-out lookup passes just as happily against a value hardcoded in the
+    module under test.
+    """
+    from scripts.minervini import doctrine
+
+    record = next(claim for claim in doctrine._load_registry()["claims"] if claim["id"] == claim_id)
+    slot = record[field][name]
+    before = slot["value"]
+    slot["value"] = value
+    try:
+        yield
+    finally:
+        slot["value"] = before

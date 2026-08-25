@@ -489,6 +489,12 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # short. Only more history closes it.
     if ran_out_of_history and evidence.get("unread_top_may_contest"):
         missing.append("lower_top_left_unread")
+    # And the same asymmetry for the top the segmentation never confirmed. The bars are read from
+    # it because the measurement found it rather than the descent did, and a failure it measures
+    # stands -- what it cannot do is carry a qualification, because a structure hanging from a bar
+    # no registered retracement confirms is not a structure this harness has identified a top for.
+    if not evidence.get("peak_is_a_confirmed_turning_point", True):
+        missing.append("peak_confirmation")
 
     # Whatever the reducer declined, the machine channel declines too -- each under the cause that
     # actually withdrew it, because a reader who fixes the wrong thing has not fixed anything.
@@ -561,6 +567,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "structure": evidence.get("structure") or {},
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
+        "peak_is_a_confirmed_turning_point": evidence.get("peak_is_a_confirmed_turning_point"),
         "contested_criteria": sorted(contested),
         "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
         "payout_decided_under_another_top": sorted(payout_elsewhere),

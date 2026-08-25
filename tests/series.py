@@ -1042,3 +1042,19 @@ def a_range_too_wide_to_segment_series(*, start: str = "2026-01-02") -> pd.DataF
     frame["Stock Splits"] = [0.0] * len(closes)
     frame["Dividends"] = [0.0] * len(closes)
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_flag_tighter_than_one_days_range_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A structure whose flag corrects less than an ordinary session spans.
+
+    Nothing here is malformed: the advance is real, the flag is the tightest one this exception
+    describes, and every criterion the bars can settle is satisfied. What the segmentation cannot
+    do is confirm the peak as a turning point, because no retracement it registers is smaller than
+    a single day's range on these bars -- so the structure hangs from a high the harness has not
+    identified as a top.
+    """
+
+    frame = power_play_series(flag_depth_pct=0.1, start=start)
+    frame["High"] = frame["Close"] * 1.02
+    frame["Low"] = frame["Close"] * 0.98
+    return frame

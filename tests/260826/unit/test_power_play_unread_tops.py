@@ -17,7 +17,7 @@ import unittest
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
 from tests.readings import power_play_answers
-from tests.series import a_top_the_history_ends_before_series
+from tests.series import a_top_the_history_ends_before_series, power_play_series
 
 
 def answered(history):
@@ -169,6 +169,32 @@ class TheGapDoesClose(unittest.TestCase):
 
     def test_and_the_session_after_that_the_flag_runs_past_its_limit(self) -> None:
         self.assertEqual(self._state(19)["power_play_state"], "not_qualified")
+
+
+class TheDistanceIsInclusiveOnBothSidesOfTheChain(unittest.TestCase):
+    """A top standing exactly the registered distance below the highest is the last one that may
+    still contest. The unread top a few tests up is one half of that; this is the other, and they
+    have to agree -- one comparison holds the boundary and the other excludes it, so a reader
+    auditing a verdict next to the line would be told two different things about the same number.
+
+    Both prices sit on the float grid deliberately: 18.81 under a peak of 20.9 divides out to
+    exactly ten, where 21.0 has no price ten percent below it that arithmetic can reach.
+    """
+
+    def test_a_readable_top_exactly_at_the_distance_is_not_the_first_non_contesting_one(self) -> None:
+        from scripts.minervini.power_play import measure_power_play
+        from scripts.minervini.power_play_evidence import compile_power_play_spec
+
+        history = power_play_series(advance_pct=88.1, later_high=20.9)
+        spec = compile_power_play_spec()
+        top = measure_power_play(history, spec)
+        under = measure_power_play(history, spec, below=top["peak_high"], before=top["peak_date"])
+        self.assertEqual((top["peak_high"] - under["peak_high"]) / top["peak_high"] * 100, 10.0)
+
+        evidence = build_power_play_evidence(history)
+
+        self.assertEqual(evidence["readings"], 2)
+        self.assertIsNone(evidence["first_non_contesting_reading"])
 
 
 if __name__ == "__main__":

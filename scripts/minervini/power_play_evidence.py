@@ -330,17 +330,49 @@ CHART_READING_WORDS = tuple(_CHART_ANSWERS)
 _CHART_KEY_LENGTH = 32
 
 
-def _chart_key(fingerprint: str, condition: str, reading: Mapping[str, Any]) -> str:
+# Every registered value the reading depends on, in one digest. The registry is editable and the
+# capability is not versioned against it, so an answer outlives the question unless the question
+# carries what it was asked under: re-register the tight limit at eleven percent and the sentence
+# offered to a reader changes while a key built from bars and boundaries alone does not, which
+# lets an answer given to the ten percent question satisfy the eleven percent one.
+_ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION)
+
+
+def _registry_digest() -> str:
+    payload = json.dumps(
+        {
+            claim_id: {
+                "thresholds": doctrine.get_claim(claim_id)["claim"].get("thresholds") or {},
+                "parameters": doctrine.get_claim(claim_id)["claim"].get("parameters") or {},
+            }
+            for claim_id in _ASKED_UNDER
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _chart_key(fingerprint: str, condition: str, reading: Mapping[str, Any], asked: str) -> str:
     """The name of one question, which is everything answering it would have to be about.
 
     A key is issued rather than assembled by the caller, so an approval cannot be partly right.
     Echoing four fields lets a caller match the ones they kept and miss the one that moved; a
     digest either is the question that was asked or is not.
+
+    The sentence and the registry it was written from are in the key beside the measurement,
+    because the criterion is not a constant. Strengthen the wording, or re-register the limit it
+    quotes, and a key built from the bars alone still matches -- so an answer given to a weaker
+    question satisfies a stronger one that was never put to anybody.
     """
     payload = json.dumps(
         {
             "measured_bars": fingerprint,
             "condition": condition,
+            "asked": asked,
+            "doctrine": _registry_digest(),
             "boundaries": {name: reading[name] for name in _BOUNDARIES},
             "measured": reading[_CHART_CONDITIONS[condition]],
         },
@@ -415,6 +447,12 @@ def _tops_the_order_would_have_confirmed(bars: Any, run: Mapping[str, Any]) -> s
     too, which is the same thing the chain does everywhere else: read the structure from every top
     the search could have landed on.
 
+    Both orders, because either can be the one the segmenter declined. It resolved one bar toward
+    reversal-first and the extension-first reading -- where the ambiguous bar is itself the top --
+    was the one that went missing; that shape reproduces on a down leg and reached `qualified`
+    over a top failing all three of advance, duration and depth. Neither order is the safe one to
+    assume, so both tops are candidates and the readings decide between them.
+
     Ambiguity is ordinary -- twelve of the twenty-four tickers this repository has history for
     carry one inside the measured span -- so this names the tops actually at risk rather than
     abandoning the turning-point filter. Abandoning it puts every descending bar of a flag back in
@@ -435,6 +473,7 @@ def _tops_the_order_would_have_confirmed(bars: Any, run: Mapping[str, Any]) -> s
         window = bars.loc[
             (bars.index > pd.Timestamp(start)) & (bars.index < pd.Timestamp(session))
         ]
+        at_risk.add(session)
         if not len(window):
             continue
         at_risk.add(str(window["High"].idxmax().date()))
@@ -466,6 +505,15 @@ def _walk_the_tops(
     unread_top: dict[str, Any] | None = None
     may_contest = 0
     steps = 0
+    # Whether the segmentation confirms the top the whole structure hangs from. The span's highest
+    # bar is read whatever the answer -- it is found by the measurement rather than by descending,
+    # so the question the filter below asks ("is this descending high a top, or a bar inside the
+    # flag?") does not arise for it, and refusing to read it costs three of the twenty-four
+    # rejections this repository can currently reach and leaves nothing read in their place.
+    # Reading it and calling its top *settled* is the part that was false: a flag tighter than one
+    # day's ordinary range confirms no turning point at all, and answering a chart there qualified
+    # a structure hanging from a bar nothing confirmed.
+    peak_confirmed = turning_points is not None and str(first["peak_date"]) in turning_points
     while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
         steps += 1
         reading = first if not readings else measure_power_play(history, spec, below=below, before=before)
@@ -515,6 +563,7 @@ def _walk_the_tops(
         "unread_top_may_contest": unread_may_contest,
         "unread_top": unread_top,
         "may_contest": may_contest,
+        "peak_confirmed": peak_confirmed,
     }
 
 
@@ -524,19 +573,22 @@ def build_power_play_evidence(
     """Measure a history and read the criteria against it, deciding nothing.
 
     The structure is found rather than declared, so the same bars are read from every top the
-    search could have landed on: the highest of the span, then the highest below that, and down
-    until a top stands further below the highest than the registered candidate distance. The
-    source names no size below which a new high stops counting -- a hundredth of a percent above
-    the last high restarts the flag and turns thirty sessions into four -- so a criterion decides
-    only where every top read answers it the same way, and a rejection stands only where every
-    one of them reaches one.
+    search could have landed on: the highest of the span, then the highest below that, down to the
+    end of the span. A top is a confirmed turning point, at any retracement the segmentation
+    convention registers. The source names no size below which a new high stops counting -- a
+    hundredth of a percent above the last high restarts the flag and turns thirty sessions into
+    four -- so a criterion decides only where every top read answers it the same way, and a
+    rejection stands only where every one of them reaches one.
 
     Two readings were not enough, and the shortfall was not theoretical: two ticks a hundredth of
     a percent apart inside one flag hand the search three tops, and both of the first two reject
-    while the structure they sit inside has nothing decisive against it. Nor is the chain left
-    open: unbounded it runs to nineteen tops across the cached histories and walks an ordinary
-    advance one bar at a time, and twenty-two of twenty-three tickers still reject on an agreed
-    criterion; bounded it runs to fifteen and all twenty-three do.
+    while the structure they sit inside has nothing decisive against it. The registered candidate
+    distance does not end the chain -- it decides only which of those tops may *contest* a
+    criterion, because contesting is a claim about one structure and a top the stock overtook long
+    ago is a different one. Measured through the capability on 2026-08-24 across the twenty-four
+    in-scope tickers this repository has history for, the chain runs one to five tops either way
+    and twenty-three reject either way; what the distance changes is how often the top is settled,
+    fifteen against nine.
     """
 
     spec = compile_power_play_spec()
@@ -635,7 +687,7 @@ def build_power_play_evidence(
         for condition, measured in _CHART_CONDITIONS.items():
             if criteria[condition] != "needs_chart":
                 continue
-            key = _chart_key(fingerprint, condition, reading)
+            key = _chart_key(fingerprint, condition, reading, asks[condition])
             answer = given.get(key)
             chart_questions.append(
                 {
@@ -800,6 +852,11 @@ def build_power_play_evidence(
         "readings_ran_out_of_history": ran_out_of_history,
         "unread_top_may_contest": unread_top_may_contest,
         "unread_top": walk["unread_top"],
+        # Whether the segmentation confirms the top the structure hangs from. False is not a
+        # rejection -- the bars still measure and a failure among them still stands -- but it is
+        # not a top this harness can name either, so it withholds a qualification the way a top
+        # nobody read does.
+        "peak_is_a_confirmed_turning_point": walk["peak_confirmed"],
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,

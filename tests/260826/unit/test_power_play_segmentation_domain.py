@@ -53,10 +53,22 @@ class OneBarThatReadsTwoWays(unittest.TestCase):
     def test_the_top_the_other_order_would_confirm_is_a_candidate(self) -> None:
         self.assertIn("2026-04-17", _turning_points(a_top_hidden_by_an_ambiguous_session_series()))
 
+    def test_so_is_the_ambiguous_bar_itself(self) -> None:
+        """The other resolution, which the first fix left out.
+
+        Reversal-first ends the swing at the highest bar before the ambiguous session;
+        extension-first makes the ambiguous bar the top. The segmenter picked one, so both are
+        candidates -- reproduced on a down leg, the missing one reached `qualified` over a reading
+        that fails advance, duration and depth together.
+        """
+        self.assertIn("2026-04-20", _turning_points(a_top_hidden_by_an_ambiguous_session_series()))
+
     def test_that_top_is_read_and_its_flag_runs_past_the_six_week_limit(self) -> None:
         evidence = build_power_play_evidence(a_top_hidden_by_an_ambiguous_session_series())
 
-        self.assertEqual(evidence["readings"], 2)
+        # Three: the anchored top, the ambiguous bar itself, and the top before it. Both orders
+        # are candidates because either can be the one the segmenter declined.
+        self.assertEqual(evidence["readings"], 3)
         self.assertEqual(
             evidence["reading_rejections"],
             [
