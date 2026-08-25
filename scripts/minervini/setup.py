@@ -31,6 +31,7 @@ _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of
 
 # What each route must positively have before it can be called ready. Every entry names a
 # claim, so the reason a setup is not ready is always a sentence from the source.
+_CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 _BASE_EVIDENCE = (
     "setup.demand_supply_volume_asymmetry",
     "setup.pivot_volume_contraction",
@@ -45,7 +46,7 @@ _BASE_EVIDENCE = (
     # an honest one, and issuing READY over a gap the engine knows about is worse than the
     # gap.
     "setup.failure_reset_types",
-    "setup.declared_chain_completeness",
+    _CHAIN_COMPLETENESS,
     "setup.chase_limit_above_pivot",
 )
 _ROUTES = {

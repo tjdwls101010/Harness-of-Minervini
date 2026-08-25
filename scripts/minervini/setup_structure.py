@@ -65,6 +65,12 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # chart renders while the fingerprint it is supposed to be approved by comes back empty.
     if (bars[prices] <= 0).any().any() or (bars["Volume"] < 0).any():
         return None, "history_contains_non_positive_values"
+    inverted = bars["High"] < bars["Low"]
+    outside = (bars["Open"] < bars["Low"]) | (bars["Open"] > bars["High"]) | (bars["Close"] < bars["Low"]) | (bars["Close"] > bars["High"])
+    # The chart boundary refuses these already. Accepting them here would let a setup measure and
+    # fingerprint bars no chart would render, which is the opposite of one digest across both.
+    if bool(inverted.any()) or bool(outside.any()):
+        return None, "history_contains_invalid_bar_ranges"
     index = pd.DatetimeIndex(bars.index)
     # Two rows under one label make a bar lookup return a Series, and reading a price off it
     # raises inside the detector -- an internal contract failure where the envelope should carry
@@ -75,7 +81,13 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # are naive, so a swing date parsed from a string matched one and missed the other.
     if index.tz is not None:
         index = index.tz_convert(None) if index.tz is not None else index
-    bars.index = index.normalize()
+    normalized = index.normalize()
+    # Two intraday stamps on one date are not duplicates until the time is dropped, and dropping
+    # it is what the rest of the engine reads. Checking only before normalising let that pair
+    # through and folded the cause back into "this history segments into no base".
+    if normalized.has_duplicates:
+        return None, "history_repeats_a_session"
+    bars.index = normalized
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
 
 

@@ -69,7 +69,7 @@ class DeterministicRulesTests(unittest.TestCase):
     def test_the_first_of_two_equal_extremes_is_the_one_named(self) -> None:
         index = pd.bdate_range(end="2026-08-21", periods=6)
         frame = pd.DataFrame(
-            {"Open": [10.0] * 6, "High": [10.0, 12.0, 12.0, 11.0, 10.0, 9.0],
+            {"Open": [10.0, 11.5, 11.5, 10.8, 9.8, 8.8], "High": [10.0, 12.0, 12.0, 11.0, 10.0, 9.0],
              "Low": [9.5, 11.0, 11.0, 10.5, 9.5, 8.5], "Close": [10.0, 12.0, 12.0, 11.0, 10.0, 9.0],
              "Volume": [1e6] * 6},
             index=index,
@@ -294,6 +294,40 @@ class UnusableHistoryTests(unittest.TestCase):
 
         self.assertEqual(canonical_chain(halted)["state"], "resolved")
         self.assertEqual(len(bars_fingerprint(halted)), 64)
+
+    def test_two_stamps_on_one_date_are_a_repeated_session_too(self) -> None:
+        """They are not duplicates until the time is dropped, and dropping it is what runs."""
+
+        frame, _ = base_series()
+        collided = frame.iloc[:3].copy()
+        collided.index = [
+            pd.Timestamp("2026-01-02 09:30"), pd.Timestamp("2026-01-02 16:00"), pd.Timestamp("2026-01-05 16:00"),
+        ]
+
+        self.assertEqual(canonical_chain(collided)["rejection"], "history_repeats_a_session")
+
+    def test_a_bar_no_chart_would_render_is_not_measured_either(self) -> None:
+        """One digest across the chart and the setup means one idea of a valid bar."""
+
+        frame, _ = base_series()
+        broken = frame.copy()
+        broken.iloc[5, broken.columns.get_loc("Open")] = float(broken["Low"].iloc[5]) * 0.5
+
+        self.assertEqual(canonical_chain(broken)["rejection"], "history_contains_invalid_bar_ranges")
+
+    def test_a_range_too_wide_to_scale_from_leaves_as_unavailable(self) -> None:
+        """A derived retracement outside the segmenter's domain is data, not an exception."""
+
+        index = pd.bdate_range("2026-01-02", periods=8)
+        frame = pd.DataFrame(
+            {"Open": [1.5] * 8, "High": [2.0] * 8, "Low": [1.0] * 8, "Close": [1.0] * 8, "Volume": [1e6] * 8},
+            index=index,
+        )
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unavailable")
+        self.assertEqual(chain["rejection"], "typical_daily_range_leaves_no_usable_retracement")
 
     def test_a_retracement_that_is_not_a_positive_percentage_is_refused(self) -> None:
         frame, _ = base_series()

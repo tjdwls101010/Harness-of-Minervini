@@ -96,6 +96,25 @@ class RefusedBeforeAnythingIsFetchedTests(unittest.TestCase):
         self.assertEqual(raised.exception.field, "approved_bars")
         self.assertEqual(calls, [])
 
+    def test_every_shape_the_request_can_fail_on_is_checked_there_too(self) -> None:
+        """One field moved ahead of the fetch and the rest stayed behind it."""
+
+        calls = []
+
+        def provider(ticker, requested):
+            calls.append(ticker)
+            raise ProviderUnavailable("down")
+
+        runtime = Runtime(price_history=provider)
+
+        with self.assertRaises(RequestError) as raised:
+            execute("ticker.setup", {
+                "ticker": "TEST", "as_of": "2026-06-25", "swing": "not-a-list", "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(raised.exception.field, "swing")
+        self.assertEqual(calls, [])
+
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
     def test_it_outranks_a_verdict_read_off_the_chain_nothing_vouched_for(self) -> None:
@@ -110,6 +129,10 @@ class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
         self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
         self.assertEqual(payload["status"], "unavailable")
         self.assertEqual(payload["next_capabilities"], [])
+        # And the verdict itself, not only the status around it: leaving AVOID in the payload
+        # published a finding about the stock that rested on a chain nothing vouched for.
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        self.assertEqual(payload["data"]["uncorroborated_verdict"], "avoid")
 
     def test_a_segmentation_nothing_will_vouch_for_stops_the_route_rather_than_routing_on(self) -> None:
         """The same gap, answered two different ways by two capabilities.

@@ -60,5 +60,22 @@ class ParameterSeamTests(unittest.TestCase):
                     self.assertIsInstance(specification.get("affects_verdict"), bool)
 
 
+class TheValuesThemselvesArePinnedTests(unittest.TestCase):
+    """Fixtures derived from the registry test the wiring, not the numbers.
+
+    `hidden_bounce` and the neighbour fixture read the multiple and the offsets back so they
+    follow the parameter instead of being retuned behind it -- which also means they keep passing
+    whatever those values become. Something has to make a change to them deliberate, and this is
+    it: the values a whole slice was calibrated against, written down once.
+    """
+
+    def test_the_segmentation_runs_at_the_values_this_slice_was_measured_against(self) -> None:
+        convention = "setup.swing_segmentation_convention"
+
+        self.assertEqual(doctrine.parameter(convention, "retracement_range_multiple"), 2.5)
+        self.assertEqual(doctrine.parameter(convention, "sensitivity_offsets"), [-0.1, 0.1])
+        self.assertEqual(doctrine.parameter(convention, "breakout_volume_reference_sessions"), 50)
+
+
 if __name__ == "__main__":
     unittest.main()

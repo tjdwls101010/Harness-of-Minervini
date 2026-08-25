@@ -31,9 +31,6 @@ from .setup_structure import bars_fingerprint, read_bars
 
 _CONVENTION = "setup.swing_segmentation_convention"
 _TRIGGER = "setup.structural_pivot_and_trigger"
-# The window Minervini names when he says he likes to see volume eclipse an average. His figure
-# is a marker, so what it lends here is the span to average over, never a level to clear.
-_BREAKOUT_VOLUME_SESSIONS = 50
 
 
 def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
@@ -210,7 +207,8 @@ def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
     Minervini's own figure -- volume eclipsing its fifty-day average -- is registered as a marker
     rather than a gate, so it supplies the window to look over and never the amount to clear.
     """
-    prior = volumes.loc[:stamp].iloc[-(_BREAKOUT_VOLUME_SESSIONS + 1) : -1]
+    sessions = int(doctrine.parameter(_CONVENTION, "breakout_volume_reference_sessions"))
+    prior = volumes.loc[:stamp].iloc[-(sessions + 1) : -1]
     return bool(len(prior)) and float(volumes.at[stamp]) > float(prior.mean())
 
 
@@ -277,6 +275,16 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     closes = None if bars is None else bars["Close"]
     lows = None if bars is None else bars["Low"]
     volumes = None if bars is None else bars["Volume"]
+    if not 0 < multiple * typical < 100:
+        # A history whose ordinary session spans a large fraction of its own close gives a scale
+        # the segmenter has no domain for. That is a fact about the data, so it leaves as typed
+        # unavailability rather than as an exception out of a boundary.
+        return {
+            "state": "unavailable", "anchors": [], "live_leg": None, "ambiguous_sessions": [],
+            "sensitivity": [], "ambiguous_sessions_in_base": [], "parameters": parameters,
+            "sessions": sessions, "bars_fingerprint": bars_fingerprint(source),
+            "rejection": "typical_daily_range_leaves_no_usable_retracement",
+        }
     primary = segment(source, retracement_pct=retracement)
     anchors = base_chain(primary["anchors"], closes, lows, volumes)
 

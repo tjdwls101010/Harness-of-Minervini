@@ -10116,7 +10116,13 @@
           ],
           "unit": "multiple_of_typical_daily_range",
           "affects_verdict": true,
-          "note": "Neighbouring multiples the segmentation is re-run at, one unit of the multiple's own stated precision either side. A chain that changes when the multiple moves within the precision it was named at is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading. The size is the multiple's precision rather than a figure chosen to make more names resolve: on real histories most do not, because real price structure has no single canonical scale, and an unsettled segmentation is the honest answer for those."
+          "note": "Neighbouring multiples the segmentation is re-run at. A chain that changes when the multiple moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading. The size has no source behind it and no derivation worth claiming -- an earlier note justified it by the multiple's written precision, which is circular, since the same value written 2.50 would imply a different radius. It is a chosen number, small against the multiple, registered here so that what it is and what it costs are both visible: on real histories most names come back unsettled at this radius, because real price structure has no single canonical scale, and an unsettled segmentation is the honest answer for those rather than a defect to tune away. Agreement at three points does not prove stability across the interval between them."
+        },
+        "breakout_volume_reference_sessions": {
+          "value": 50,
+          "unit": "sessions",
+          "affects_verdict": true,
+          "note": "The span the breakout session's volume is compared against when deciding that price left a structure. Minervini names this window when he says he likes to see volume eclipse its own fifty-day average; his figure is registered as a marker, so what it lends here is the window to average over and never the amount to clear. The comparison itself is the number-free half of 'moves above the pivot point on expanding volume'. The whole window is required: comparing against whatever part of it exists is not the observation the source describes, and on a short history it let one busy session cut a base."
         }
       },
       "rule": {

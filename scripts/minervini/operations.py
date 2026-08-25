@@ -632,11 +632,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             sources=[_source(prices.meta)],
         )
     swings = request.get("swing")
-    if swings is not None and not isinstance(swings, list):
-        raise RequestError("swing must be a list of completed session dates", "swing")
     entry = request.get("entry")
-    if entry is not None and not isinstance(entry, Mapping):
-        raise RequestError("entry must be an object", "entry")
     evidence = build_setup_evidence(
         prices.data,
         swings or [],
@@ -651,10 +647,16 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)
+    unvouched = evidence["segmentation"].get("state") != "resolved"
+    if unvouched:
+        # Every measurement was read off the declared chain, so a segmentation nothing vouched
+        # for disqualifies what was measured from it -- a hard gate's failure included. Leaving
+        # the reducer's AVOID in the payload while the envelope said unavailable published a
+        # finding about the stock that rested on a data-integrity gap.
+        result = {**result, "setup_state": "incomplete", "uncorroborated_verdict": result["setup_state"]}
     # A reading nobody declared and a reading nothing will corroborate are different absences.
     # The first is fixed by declaring one; the second is fixed by nothing the caller can type,
     # and reporting both as "evidence required" sends a reader looking for an argument.
-    unvouched = evidence["segmentation"].get("state") != "resolved"
     missing = [{"id": item, "reason": _missing_reason(item, evidence), "required": True} for item in result["missing"]]
     if unvouched:
         # The same gap ticker.swings calls unavailable, and for the same reason: the parameters
@@ -696,6 +698,12 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 def _refuse_unusable_setup_request(request: Mapping[str, Any]) -> None:
     """What no amount of price history could make valid."""
 
+    swings = request.get("swing")
+    if swings is not None and not isinstance(swings, list):
+        raise RequestError("swing must be a list of completed session dates", "swing")
+    entry = request.get("entry")
+    if entry is not None and not isinstance(entry, Mapping):
+        raise RequestError("entry must be an object", "entry")
     for reserved in ("completeness_source", "detected_chain", "segmentation"):
         if request.get(reserved) is not None:
             # Naming a supplier is not being one, and neither is handing in a segmentation and
