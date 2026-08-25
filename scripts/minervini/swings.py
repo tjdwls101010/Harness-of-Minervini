@@ -346,11 +346,18 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     left_edge_disputed = any(reading != dates[0] for reading in dates[1:])
 
     sensitivity: list[dict[str, Any]] = []
+    unordered = list(primary["ambiguous_sessions"])
     for offset in offsets:
         neighbour = (multiple + offset) * typical
         if neighbour <= 0:
             continue
-        found = base_chain(segment(source, retracement_pct=neighbour)["anchors"], closes, lows, volumes)
+        run = segment(source, retracement_pct=neighbour)
+        # A neighbour's own unreadable sessions count too. Comparing only the anchor dates threw
+        # away the one thing that run said about itself -- that a bar inside the base could have
+        # turned either way -- and two runs that lost the same evidence then matched. That is the
+        # failure closed for the volume window, in the path beside it.
+        unordered.extend(run["ambiguous_sessions"])
+        found = base_chain(run["anchors"], closes, lows, volumes)
         # The same chain, not a chain the same anchors survive into. Accepting a neighbour that
         # cut an extra contraction between the same endpoints would wave through exactly what a
         # declared chain is refused for downstream: an unfavourable contraction re-cut into
@@ -362,7 +369,7 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     # daily bar does not say which. One inside the base means a turning point may be missing
     # from the chain, so the chain is not something to check a declaration against.
     span = (
-        [date for date in primary["ambiguous_sessions"] if anchors and anchors[0]["date"] <= date <= anchors[-1]["date"]]
+        sorted({date for date in unordered if anchors[0]["date"] <= date <= anchors[-1]["date"]})
         if anchors
         else []
     )

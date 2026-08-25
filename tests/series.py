@@ -425,3 +425,36 @@ def unstable_series(**kwargs) -> tuple[pd.DataFrame, list[Anchor]]:
     # resolver reject the fixture before the detector is ever consulted.
     kwargs.setdefault("daily_range_pct", 0.5)
     return base_series(hidden_bounce=True, **kwargs)
+
+
+def neighbour_only_ambiguity_series() -> tuple[pd.DataFrame, str]:
+    """One session a neighbouring multiple cannot order, where every chain still matches.
+
+    The sensitivity sweep used to compare anchor dates and nothing else, so a neighbour run that
+    had itself reported "this bar could have turned either way" was read as agreement. Both runs
+    had lost the same evidence, which is not the same as both having found the same thing.
+
+    The give-back is sized from the registry to fall between the primary multiple and its lower
+    neighbour: below the primary's retracement, so that run sees an ordinary bar, and above the
+    neighbour's, so that one sees a bar which both extended the move and reversed it.
+    """
+
+    from scripts.minervini import doctrine
+
+    convention = "setup.swing_segmentation_convention"
+    multiple = float(doctrine.parameter(convention, "retracement_range_multiple"))
+    lower = multiple + min(float(value) for value in doctrine.parameter(convention, "sensitivity_offsets"))
+    frame, anchors = base_series(daily_range_pct=0.5)
+    typical = float(((frame["High"] - frame["Low"]) / frame["Close"] * 100).median())
+    give_back = (multiple + lower) / 2 * typical / 100
+
+    at = anchors[0].position + 1
+    for position in range(anchors[0].position + 1, anchors[-1].position):
+        label = frame.index[position]
+        peak = float(frame["High"].iloc[:position].max())
+        high, low = peak * 1.0005, peak * (1 - give_back)
+        frame.loc[label, "High"], frame.loc[label, "Low"] = high, low
+        frame.loc[label, ["Open", "Close"]] = (high + low) / 2
+        at = position
+        break
+    return frame, frame.index[at].date().isoformat()

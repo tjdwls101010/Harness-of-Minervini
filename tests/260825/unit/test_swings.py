@@ -19,7 +19,7 @@ import pandas as pd
 
 from scripts.minervini.setup_structure import bars_fingerprint
 from scripts.minervini.swings import _volume_expanded, base_chain, canonical_chain, segment
-from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, turn_between_neighbours_series, two_bases_series, unstable_series
+from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, neighbour_only_ambiguity_series, turn_between_neighbours_series, two_bases_series, unstable_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
@@ -153,6 +153,24 @@ class CanonicalChainTests(unittest.TestCase):
         self.assertEqual(chain["state"], "unstable")
         self.assertTrue(chain["sensitivity"])
 
+    def test_a_neighbour_that_could_not_order_a_session_is_not_agreement(self) -> None:
+        """Both runs losing the same evidence is not both finding the same thing.
+
+        The sweep compared anchor dates and dropped what each neighbour said about itself, so a
+        run that had reported an unreadable bar inside the base counted as confirmation. That is
+        the failure closed for the volume window, in the path beside it.
+        """
+
+        frame, session = neighbour_only_ambiguity_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unstable")
+        self.assertIn(session, chain["ambiguous_sessions_in_base"])
+        # Not the chain comparison refusing: the neighbour agreed on every anchor date.
+        self.assertEqual(chain["sensitivity"], [])
+        self.assertNotIn(session, chain["ambiguous_sessions"])
+
     def test_the_parameters_it_used_travel_with_the_answer(self) -> None:
         frame, _ = base_series()
 
@@ -278,7 +296,13 @@ class OneBaseAtATimeTests(unittest.TestCase):
             noisy.loc[label, "Low"] = low
         noisy.iloc[30, noisy.columns.get_loc("Volume")] = float(noisy["Volume"].iloc[:30].mean()) * 3
 
-        self.assertEqual(canonical_chain(noisy)["anchors"], canonical_chain(frame)["anchors"])
+        settled = canonical_chain(frame)
+        with_noise = canonical_chain(noisy)
+
+        self.assertEqual(settled["state"], "resolved")
+        self.assertEqual(with_noise["state"], "resolved")
+        self.assertEqual(len(with_noise["anchors"]), 7)
+        self.assertEqual(with_noise["anchors"], settled["anchors"])
 
     def test_a_seam_between_two_structures_shows_up_as_a_contraction_that_widens(self) -> None:
         """What rejects a spliced history, where the left edge is not itself in dispute.
