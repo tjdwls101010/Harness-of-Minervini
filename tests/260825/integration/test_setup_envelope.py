@@ -45,6 +45,36 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
     return execute("ticker.setup", request, runtime=runtime)
 
 
+class WhatDecidedItIsNamedTests(unittest.TestCase):
+    """`doctrine_ids` is where a reader finds the sentences a verdict rests on."""
+
+    def test_the_segmentation_convention_is_named_because_it_decided_the_chain(self) -> None:
+        """The detector's own rules answered a required condition, so they are cited.
+
+        Deriving the list from the signals alone left the one convention that is the harness's
+        rather than the source's out of the answer -- the reader could see that completeness
+        passed and not what the chain it passed against was produced by.
+        """
+
+        payload = run()
+
+        self.assertIn("setup.swing_segmentation_convention", payload["doctrine_ids"])
+
+    def test_a_chain_nothing_will_vouch_for_says_so_rather_than_asking_for_a_reading(self) -> None:
+        """Two different absences reached the caller under one word.
+
+        A completeness reading nobody declared is fixed by declaring one. A completeness
+        reading the detector refuses to corroborate is not fixed by anything the caller types,
+        and telling them "evidence required" sends them to look for an argument.
+        """
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "segmentation_unstable")
+
+
 class EnvelopeTests(unittest.TestCase):
     def test_a_fully_read_setup_corroborated_by_the_harnesss_own_segmentation_is_ready(self) -> None:
         payload = run()

@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import unittest
 
+from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 from tests.series import anchor_dates, base_series
@@ -64,13 +65,68 @@ class ProposesAChainTests(unittest.TestCase):
 
 
 class DeclinesToProposeTests(unittest.TestCase):
-    def test_a_segmentation_neighbouring_parameters_disagree_with_is_needs_input(self) -> None:
+    def test_a_segmentation_neighbouring_parameters_disagree_with_proposes_nothing(self) -> None:
         payload = run(depths=(25.0, 10.0, 1.2))
 
-        self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["state"], "unstable")
         self.assertEqual(payload["data"]["anchors"], [])
         self.assertTrue(payload["data"]["sensitivity"])
+
+    def test_it_does_not_ask_the_caller_for_something_they_cannot_supply(self) -> None:
+        """`needs_input` names a caller who can act. This one cannot.
+
+        The parameters are deliberately not caller inputs, so there is no argument that turns
+        an unstable segmentation into a stable one. Saying needs_input sends a reader looking
+        for a flag that does not exist and was never going to.
+        """
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        self.assertEqual(payload["status"], "unavailable")
+
+    def test_the_reason_names_which_of_the_two_causes_it_was(self) -> None:
+        """Parameter disagreement and an unreadable session are different problems."""
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        self.assertEqual([item["reason"] for item in payload["missing"]], ["neighbouring_parameters_disagree"])
+
+    def test_it_does_not_point_at_a_chart_that_would_draw_no_anchors(self) -> None:
+        """The chart is where a proposal becomes an approval, and there is no proposal."""
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        self.assertEqual(payload["next_capabilities"], [])
+
+
+class CompactKeepsTheAnswerTests(unittest.TestCase):
+    """Compact is allowed to drop detail. The proposal itself is not detail."""
+
+    def test_the_compact_form_still_carries_the_chain_it_proposed(self) -> None:
+        """A blanket omit-by-key-name list deleted this capability's whole answer.
+
+        `anchors` is supporting detail inside a setup's segmentation and is the entire output
+        here, so a filter that reads only the key name cannot tell the two apart.
+        """
+
+        payload = run()
+
+        compact = format_payload(payload, "compact")
+
+        self.assertEqual(
+            [anchor["date"] for anchor in compact["data"]["anchors"]],
+            [anchor["date"] for anchor in payload["data"]["anchors"]],
+        )
+
+    def test_compact_and_full_still_mean_the_same_thing(self) -> None:
+        payload = run()
+
+        compact = format_payload(payload, "compact")
+
+        for key in ("status", "signals", "missing"):
+            with self.subTest(key=key):
+                self.assertEqual(compact[key], payload[key])
+        self.assertEqual(compact["data"]["state"], payload["data"]["state"])
 
 
 class DecidesNothingTests(unittest.TestCase):

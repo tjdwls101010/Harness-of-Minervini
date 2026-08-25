@@ -518,6 +518,10 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     )
 
 
+_SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
+_CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
+
+
 def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -553,19 +557,38 @@ def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             sources=[_source(prices.meta)],
         )
     chain = canonical_chain(prices.data)
-    status = "ok" if chain["state"] == "resolved" else "needs_input"
+    resolved = chain["state"] == "resolved"
     return envelope(
         "ticker.swings",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
-        status=status,
+        # Not needs_input: the parameters are deliberately out of the caller's reach, so there
+        # is no argument that turns an unstable segmentation into a stable one. What is absent
+        # is the evidence this capability exists to produce.
+        status="ok" if resolved else "unavailable",
         data={"ticker": ticker, **chain},
-        missing=[] if status == "ok" else [{"id": "stable_segmentation", "reason": "evidence_required", "required": True}],
+        missing=[] if resolved else [{"id": "stable_segmentation", "reason": _segmentation_reason(chain), "required": True}],
         sources=[_source(prices.meta)],
-        doctrine_ids=["setup.swing_segmentation_convention"],
-        # A proposal is not an approval, and the chart is where a person turns one into the other.
-        next_capabilities=["ticker.chart"],
+        doctrine_ids=[_SEGMENTATION_CONVENTION],
+        # A proposal is not an approval, and the chart is where a person turns one into the
+        # other. With nothing proposed the chart draws no anchors, so pointing at it would send
+        # a reader to a picture that cannot answer what they came for.
+        next_capabilities=["ticker.chart"] if resolved else [],
     )
+
+
+def _segmentation_reason(chain: Mapping[str, Any]) -> str:
+    """Which of the ways a segmentation can fail this one failed.
+
+    A chain that moves with the parameter and a chain with a session no daily bar can order
+    are different problems, and a single reason word would hide which one a reader is looking
+    at.
+    """
+    if chain.get("ambiguous_sessions_in_base"):
+        return "ambiguous_session_inside_the_base"
+    if chain.get("sensitivity"):
+        return "neighbouring_parameters_disagree"
+    return "history_segments_into_no_base"
 
 
 def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -626,7 +649,18 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)
-    missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]
+    # A reading nobody declared and a reading nothing will corroborate are different absences.
+    # The first is fixed by declaring one; the second is fixed by nothing the caller can type,
+    # and reporting both as "evidence required" sends a reader looking for an argument.
+    unvouched = evidence["segmentation"].get("state") != "resolved"
+    missing = [
+        {
+            "id": item,
+            "reason": "segmentation_unstable" if unvouched and item == _CHAIN_COMPLETENESS else "evidence_required",
+            "required": True,
+        }
+        for item in result["missing"]
+    ]
     status = "needs_input" if result["setup_state"] == "incomplete" else "ok"
     return envelope(
         "ticker.setup",
@@ -640,7 +674,13 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         signals=result["signals"],
         missing=missing,
         sources=[_source(prices.meta)],
-        doctrine_ids=sorted({str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}),
+        # The detector's own convention decided the chain every measurement was read off, so it
+        # is cited alongside the claims the signals name. Deriving the list from signals alone
+        # left the one rule that is the harness's rather than the source's out of the answer.
+        doctrine_ids=sorted(
+            {str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}
+            | {_SEGMENTATION_CONVENTION}
+        ),
         next_capabilities=["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 

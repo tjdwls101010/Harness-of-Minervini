@@ -35,11 +35,11 @@ class JsonArgumentParser(argparse.ArgumentParser):
 _COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies", "measurements", "anchors", "contractions"})
 
 
-def _compact_data(value: Any) -> Any:
+def _compact_data(value: Any, keep: frozenset[str] = frozenset()) -> Any:
     if isinstance(value, dict):
-        return {key: _compact_data(item) for key, item in value.items() if key not in _COMPACT_OMIT_KEYS}
+        return {key: _compact_data(item, keep) for key, item in value.items() if key not in _COMPACT_OMIT_KEYS - keep}
     if isinstance(value, list):
-        return [_compact_data(item) for item in value]
+        return [_compact_data(item, keep) for item in value]
     return value
 
 
@@ -52,7 +52,8 @@ def format_payload(payload: dict[str, Any], mode: str) -> dict[str, Any]:
     if mode == "full":
         return formatted
     if "data" in formatted:
-        formatted["data"] = _compact_data(formatted["data"])
+        contract = CAPABILITIES.get(str(formatted.get("operation")))
+        formatted["data"] = _compact_data(formatted["data"], contract.compact_keeps if contract else frozenset())
     if isinstance(formatted.get("sources"), list):
         formatted["sources"] = [
             {key: source.get(key) for key in ("provider", "as_of", "stale")}
