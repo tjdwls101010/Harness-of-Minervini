@@ -17,7 +17,13 @@ _REPORTED_PRECISION = 10
 _ENTRY_RISK = "risk.initial_stop_and_reward"
 _PROFIT_PROTECTION = "risk.profit_protection_at_3r"
 
-_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence", "waived_by_exception"}
+# `waived_by_exception` is deliberately absent. It is the one word in this vocabulary that
+# claims an absence of evidence has been forgiven, and it was reachable by writing it: with
+# nothing else supplied, `--fundamentals-state waived_by_exception` produced BUY-READY on a
+# ticker whose fundamentals nobody had looked at and whose Power Play nothing had measured.
+# The exception is real, but it is earned by measurement plus an approved chart, and no
+# reducer that reads caller-supplied state words is in a position to check that it was.
+_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence"}
 _FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
 _WAIT = {"wait", "pending", "watch", "not_triggered", "cautious", "defensive"}
 _MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"}
@@ -87,11 +93,6 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         missing.append("market")
     elif components["market"] in {"fail", "wait"}:
         waiting.append("market")
-
-    setup = _mapping(payload.get("setup"))
-    fundamentals = _mapping(payload.get("fundamentals"))
-    if components["fundamentals"] == "unavailable" and fundamentals.get("power_play_exception") is True and setup.get("power_play_qualified") is True:
-        missing.remove("fundamentals")
 
     entry = _number(_risk_value(payload, "entry_price"))
     stop = _number(_risk_value(payload, "stop_price"))

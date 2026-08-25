@@ -27,6 +27,13 @@ import pandas as pd
 
 
 _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
+# Carried when the provider supplies it, validated by the same rules, and deliberately absent
+# from the fingerprint: the digest names the five columns every surface reads, and a history that
+# happens to carry a sixth must not be a different input to a chart that never looks at it. What
+# reads this is the one measurement the raw tape cannot make -- a corporate action moves every
+# printed price without moving anyone's money, and a one-for-two reverse split prints exactly the
+# hundred percent advance the Power Play criteria ask for.
+_CORPORATE_ACTION_COLUMN = "Adj Close"
 # Two bars can legitimately tie for a span's extreme, and the anchor's own value is the
 # one the maximum was taken from, so this only absorbs float representation noise.
 _EXTREME_TOLERANCE = 1e-12
@@ -64,25 +71,28 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_repeats_a_column"
     if history.empty:
         return None, "history_has_no_completed_bars"
-    bars = history.loc[:, _REQUIRED_COLUMNS].copy()
+    carried = (*_REQUIRED_COLUMNS, _CORPORATE_ACTION_COLUMN) if _CORPORATE_ACTION_COLUMN in history else _REQUIRED_COLUMNS
+    bars = history.loc[:, list(carried)].copy()
     # `to_numeric` launders anything it can cast, and several things it can cast are not prices:
     # a boolean becomes 1.0, a complex number loses its imaginary part, a datetime becomes epoch
     # nanoseconds. Each was accepted and measured, and the complex case fingerprinted identically
     # to a real history with the same real part -- a provenance collision, not a rounding one.
     # So the column has to already be real numbers, or strings of them, rather than merely
     # castable to them.
-    if any(not _holds_real_numbers(bars[column]) for column in _REQUIRED_COLUMNS):
+    if any(not _holds_real_numbers(bars[column]) for column in carried):
         return None, "history_contains_non_numeric_values"
-    for column in _REQUIRED_COLUMNS:
+    for column in carried:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
     if bars.isna().any().any() or not bool(np.isfinite(bars.to_numpy(dtype=float)).all()):
         return None, "history_contains_non_numeric_values"
-    prices = [column for column in _REQUIRED_COLUMNS if column != "Volume"]
+    prices = [column for column in carried if column != "Volume"]
     # A halted session really does trade nothing, so zero volume is data rather than a fault. A
     # zero price is not: the chart boundary already refuses those, and the two have to agree or a
     # chart renders while the fingerprint it is supposed to be approved by comes back empty.
     if (bars[prices] <= 0).any().any() or (bars["Volume"] < 0).any():
         return None, "history_contains_non_positive_values"
+    # The adjusted close is a corrected price rather than one the session traded at, so it is
+    # held to being a positive real number and to nothing about the bar's range.
     inverted = bars["High"] < bars["Low"]
     outside = (bars["Open"] < bars["Low"]) | (bars["Open"] > bars["High"]) | (bars["Close"] < bars["Low"]) | (bars["Close"] > bars["High"])
     # The chart boundary refuses these already. Accepting them here would let a setup measure and

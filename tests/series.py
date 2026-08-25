@@ -489,6 +489,7 @@ def power_play_series(
     advance_volume_multiple: float = 6.0,
     spike_above_peak_pct: float | None = None,
     tie_the_peak_at: int | None = None,
+    ancient_equal_high: bool = False,
     start: str = "2026-01-02",
 ) -> pd.DataFrame:
     """Dormancy, then an explosive advance, then a flag that ends on the last bar.
@@ -528,6 +529,11 @@ def power_play_series(
     frame.iloc[launch, frame.columns.get_loc("Low")] = dormant_price
     for position, column in ((apex, "High"), (trough, "Low")):
         frame.iloc[position, frame.columns.get_loc(column)] = closes[position]
+    if ancient_equal_high:
+        # One session at the very start of the loaded history that printed exactly the same high
+        # this structure later reached, with an unrelated decline between them. Nothing connects
+        # the two but the price being equal.
+        frame.iloc[1, frame.columns.get_loc("High")] = peak
     if tie_the_peak_at is not None:
         # A later session that prints exactly the peak's high without exceeding it. Nothing
         # explosive happened there, so a rule that reads the flag from the last equal high
@@ -547,4 +553,58 @@ def power_play_series(
         + [800_000.0] * flag_sessions
     )
     frame["Volume"] = volumes[: len(closes)]
+    return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+
+def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> pd.DataFrame:
+    """A flat stock through a 1-for-`factor` reverse split, carrying the adjusted closes.
+
+    Nothing happens to the company or to anyone's money. The raw tape doubles overnight and
+    then goes sideways, which is the shape of every number the first Power Play criterion
+    reads: a hundred percent advance, inside a week, followed by a tight flag. The adjusted
+    column is what says the advance was zero -- it back-scales the pre-split sessions by the
+    same factor, so the two readings of the same move disagree by exactly the split.
+    """
+
+    before = [5.0] * 40
+    after = [5.0 * factor] * 30
+    closes = before + after
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.004
+    frame["Low"] = frame["Close"] * 0.996
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    # One shakeout inside the flat stretch, so the advance has a single lowest session to start
+    # from rather than forty tied ones.
+    frame.iloc[len(before) - 5, frame.columns.get_loc("Low")] = 4.9
+    frame["Adj Close"] = [price * factor for price in before] + after
+    return frame[["Open", "High", "Low", "Close", "Volume", "Adj Close"]]
+
+
+def wide_launch_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A Power Play whose first advancing session is itself a very wide bar.
+
+    The move begins where the source says it begins -- on huge volume, out of dormancy at 90 --
+    and the launch session travels from 80 to 160 before closing at 150. Reading the advance
+    from that session's close throws the whole first day away and reports thirty-three percent
+    on a stock that went from 90 to 200 in two weeks.
+    """
+
+    # Long enough that the launch has a full baseline window in front of it; a partial one is
+    # reported as no baseline at all.
+    dormant = [90.0] * 45
+    closes = dormant + [150.0] + _leg(150.0, 200.0, 9)
+    index = pd.bdate_range(start=start, periods=len(closes) + 12)
+    closes = closes + [198.0] * 12
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    launch = len(dormant)
+    frame.iloc[launch, frame.columns.get_loc("Open")] = 90.0
+    frame.iloc[launch, frame.columns.get_loc("Low")] = 80.0
+    frame.iloc[launch, frame.columns.get_loc("High")] = 160.0
+    peak = launch + 9
+    frame.iloc[peak, frame.columns.get_loc("High")] = 200.0
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    frame.iloc[launch, frame.columns.get_loc("Volume")] = 10_000_000.0
     return frame[["Open", "High", "Low", "Close", "Volume"]]

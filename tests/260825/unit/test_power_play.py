@@ -11,7 +11,7 @@ from __future__ import annotations
 import unittest
 
 from scripts.minervini.power_play import measure_power_play
-from tests.series import power_play_series
+from tests.series import power_play_series, reverse_split_series, wide_launch_bar_series
 
 
 # Six weeks of flag and eight of advance, in sessions. Checked against the registry by
@@ -97,6 +97,74 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
 
         self.assertIsNotNone(full["advance_volume_ratio"])
         self.assertIsNone(clipped["advance_volume_ratio"])
+
+    def test_a_reverse_split_advances_the_tape_and_nothing_else(self):
+        """The advance is read three ways because the raw tape cannot tell a move from a split.
+
+        A one-for-two reverse split doubles every printed price overnight. Extremes and raw
+        closes both report the hundred percent the first criterion asks for, on a stock whose
+        holders gained nothing. The provider does not adjust for corporate actions -- its own
+        coverage says so -- so the adjusted closes are the only reading that knows.
+        """
+        measured = measure_power_play(reverse_split_series(), SPEC)
+
+        self.assertAlmostEqual(measured["advance_pct_closes"], 100.0, places=6)
+        self.assertAlmostEqual(measured["advance_pct_adjusted"], 0.0, places=6)
+
+    def test_a_history_without_adjusted_closes_has_no_adjusted_reading(self):
+        """Absent, not zero. A missing correction is a gap, and a gap is not a measurement."""
+
+        measured = measure_power_play(power_play_series(), SPEC)
+
+        self.assertIsNone(measured["advance_pct_adjusted"])
+        self.assertIsNotNone(measured["advance_pct_closes"])
+
+    def test_an_equal_high_from_before_the_structure_is_not_this_flag_s_start(self):
+        """Reading the peak from the first equal high anywhere is the mirror of reading the last.
+
+        The rule that stops a later equal high from re-labelling the flag as advance will, left
+        unbounded, glue this structure to a session months earlier that merely printed the same
+        price. Both are the same mistake about what a tie means. The peak is looked for inside
+        the longest structure the criteria describe and nowhere else.
+        """
+        bars = power_play_series(ancient_equal_high=True)
+
+        measured = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measured["flag_sessions"], 20)
+
+    def test_the_closes_reading_starts_before_the_move_not_inside_it(self):
+        """"An explosive price move commences on huge volume" -- the launch bar is part of it.
+
+        Measured from the launch session's own close, the first day of the advance is discarded:
+        a stock that went from ninety to two hundred in two weeks reports thirty-three percent,
+        because the session that did half the work is where the reading starts. The price before
+        the move is the last close before it.
+        """
+        measured = measure_power_play(wide_launch_bar_series(), SPEC)
+
+        self.assertAlmostEqual(measured["advance_pct_closes"], (200.0 - 90.0) / 90.0 * 100, places=6)
+
+    def test_a_launch_with_nothing_before_it_has_no_closes_reading(self):
+        """Absent, not zero -- the price before the move is missing, so the reading is."""
+
+        bars = wide_launch_bar_series()
+        measured = measure_power_play(bars.iloc[45:], SPEC)
+
+        self.assertIsNone(measured["advance_pct_closes"])
+
+    def test_the_launch_session_carries_the_volume_clause_not_the_whole_advance(self):
+        """"commences on huge volume" is about the session it commenced on.
+
+        Averaged across the advance, a launch that printed ten times its baseline is diluted by
+        the quiet sessions behind it: one session at 10M followed by nineteen at 0.5M averages
+        under a 1M baseline and reads as no expansion at all, on a stock that began exactly the
+        way the criterion describes.
+        """
+        measured = measure_power_play(wide_launch_bar_series(), SPEC)
+
+        self.assertAlmostEqual(measured["launch_volume_ratio"], 10.0, places=6)
+        self.assertLess(measured["advance_volume_ratio"], 10.0)
 
 
 if __name__ == "__main__":

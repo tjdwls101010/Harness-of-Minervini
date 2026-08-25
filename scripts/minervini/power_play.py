@@ -26,21 +26,43 @@ from typing import Any
 
 import pandas as pd
 
-from .setup_structure import read_bars
+from .setup_structure import _CORPORATE_ACTION_COLUMN, read_bars
 
 
 _SESSIONS_PER_WEEK = 5
 
 
+def _change(bars: pd.DataFrame, column: str, start: int, end: int) -> float | None:
+    """One column's percentage move between two positions, or nothing if it is not carried.
+
+    ``start`` is the session before the move, not its first session. "An explosive price move
+    commences on huge volume" makes the launch bar part of the advance, so reading from its own
+    close throws away whatever it did: a stock that ran from ninety to two hundred in two weeks
+    reported thirty-three percent, because the session that travelled from eighty to one hundred
+    and sixty was where the reading began. With nothing in front of it there is no price before
+    the move, which is a gap rather than a zero.
+    """
+    if column not in bars or start < 0:
+        return None
+    first = float(bars.iloc[start][column])
+    return (float(bars.iloc[end][column]) - first) / first * 100 if first > 0 else None
+
+
 def _empty(reason: str | None) -> dict[str, Any]:
+    baseline_volume = float(baseline["Volume"].mean()) if len(baseline) else None
+    measurable = baseline_volume is not None and baseline_volume > 0
+
     return {
         "peak_date": None,
         "peak_high": None,
         "advance_low": None,
         "advance_low_date": None,
         "advance_pct": None,
+        "advance_pct_closes": None,
+        "advance_pct_adjusted": None,
         "advance_sessions": None,
         "advance_weeks": None,
+        "launch_volume_ratio": None,
         "advance_volume_ratio": None,
         "flag_sessions": None,
         "flag_weeks": None,
@@ -74,8 +96,12 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     # what it is supposed to reject: a flag that really ran ten weeks measures ten.
     window = bars.iloc[-(advance_window + flag_window + 1):]
     peak_high = float(window["High"].max())
-    exceeded = bars.index[bars["High"] > peak_high]
-    since = bars.loc[exceeded[-1]:].iloc[1:] if len(exceeded) else bars
+    exceeded = window.index[window["High"] > peak_high]
+    since = window.loc[exceeded[-1]:].iloc[1:] if len(exceeded) else window
+    # Inside the search span and nowhere else. Taking the first equal high anywhere in the loaded
+    # history is the mirror of taking the last: one glues the flag to a session months earlier
+    # that merely printed the same price, the other re-labels the flag as advance. A tie says
+    # nothing about whether two sessions belong to one structure.
     peak_label = since.index[since["High"] == peak_high][0]
     peak = int(bars.index.get_loc(peak_label))
 
@@ -97,19 +123,36 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     # the launch to average -- a short average wearing a full one's name.
     baseline = bars.iloc[launch - advance_window:launch] if launch >= advance_window else bars.iloc[0:0]
 
+    baseline_volume = float(baseline["Volume"].mean()) if len(baseline) else None
+    measurable = baseline_volume is not None and baseline_volume > 0
+
     return {
         "peak_date": peak_label.date().isoformat(),
         "peak_high": peak_high,
         "advance_low": advance_low,
         "advance_low_date": low_label.date().isoformat(),
+        # Three readings of one move, because the raw tape cannot tell a move from a corporate
+        # action or from a single wick. Extremes take the session's own low against the peak's
+        # own high and are the widest; the closes reading is the same move between two prices the
+        # tape settled at; the adjusted reading is that one corrected for splits and dividends.
+        #
+        # Reported apart rather than reduced to one number here. Which reading a criterion is
+        # read against is doctrine, and taking the smallest -- the first thing tried -- turns the
+        # source's single hundred percent condition into a new three-way AND: on real bars the
+        # extremes reading runs a median of 5.4 points above the closes one, and on the one
+        # ticker whose advance actually reached a hundred percent it was 101.8 against 96.4.
         "advance_pct": (peak_high - advance_low) / advance_low * 100 if advance_low > 0 else None,
+        "advance_pct_closes": _change(bars, "Close", launch - 1, peak),
+        "advance_pct_adjusted": _change(bars, _CORPORATE_ACTION_COLUMN, launch - 1, peak),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / _SESSIONS_PER_WEEK,
-        "advance_volume_ratio": (
-            float(bars.iloc[launch:peak + 1]["Volume"].mean()) / float(baseline["Volume"].mean())
-            if len(baseline) and float(baseline["Volume"].mean()) > 0
-            else None
-        ),
+        # The clause is about the session the move commenced on, so that session is what it is
+        # measured on. Averaged across the whole advance instead, a launch that printed ten times
+        # its baseline is diluted by the quiet sessions behind it -- one bar at 10M followed by
+        # nineteen at 0.5M averages below a 1M baseline and reads as no expansion at all. The
+        # advance's own average is reported beside it because the two answer different questions.
+        "launch_volume_ratio": float(bars.iloc[launch]["Volume"]) / baseline_volume if measurable else None,
+        "advance_volume_ratio": float(bars.iloc[launch:peak + 1]["Volume"].mean()) / baseline_volume if measurable else None,
         "flag_sessions": int(len(flag)),
         "flag_weeks": len(flag) / _SESSIONS_PER_WEEK,
         "flag_depth_pct": (peak_high - float(flag["Low"].min())) / peak_high * 100 if len(flag) else None,
