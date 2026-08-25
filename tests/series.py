@@ -476,3 +476,75 @@ def distribution_only_in_the_tail_series() -> tuple[pd.DataFrame, list[str], lis
     heavier = (frame["Close"] < frame["Close"].shift(1)) & (frame.index >= pd.Timestamp(suffix[0]))
     frame.loc[heavier, "Volume"] = frame.loc[heavier, "Volume"] * 3
     return frame, whole, suffix
+
+
+def power_play_series(
+    *,
+    dormant_price: float = 10.0,
+    advance_pct: float = 110.0,
+    advance_sessions: int = 25,
+    dormancy_sessions: int = 60,
+    flag_sessions: int = 20,
+    flag_depth_pct: float = 12.0,
+    advance_volume_multiple: float = 6.0,
+    spike_above_peak_pct: float | None = None,
+    tie_the_peak_at: int | None = None,
+    start: str = "2026-01-02",
+) -> pd.DataFrame:
+    """Dormancy, then an explosive advance, then a flag that ends on the last bar.
+
+    Built so the numbers a Power Play test asserts are the numbers the builder was given: the
+    peak bar's high is exactly the peak, the last dormant bar's low is exactly the launch price,
+    and the flag's low bar is exactly the depth asked for. Everything else carries a wick
+    narrower than the smallest leg step, so no neighbour's range can reach a pinned extreme.
+
+    The flag runs to the end of the frame because that is the only shape the question is asked
+    in: a Power Play is read forward from a peak toward the session being traded, and a flag
+    with bars after it is a different structure that already resolved.
+    """
+
+    peak = dormant_price * (1 + advance_pct / 100)
+    flag_low = peak * (1 - flag_depth_pct / 100)
+    # Dormancy sits just above the launch price and its last bar undercuts it once. A flat floor
+    # would tie every dormant session for the lowest low, and which one a tie resolves to is not
+    # something a fixture should be teaching a measurement.
+    closes = [dormant_price * 1.01] * dormancy_sessions
+    launch = len(closes) - 1
+    closes += _leg(dormant_price * 1.01, peak, advance_sessions)
+    apex = len(closes) - 1
+    # Down to the flag's low and back toward the peak without reaching it, so the peak stays the
+    # last session that printed the maximum high.
+    sink = max(1, flag_sessions // 2)
+    closes += _leg(peak, flag_low, sink)
+    trough = len(closes) - 1
+    closes += _leg(flag_low, peak * 0.98, flag_sessions - sink)
+
+    steps = [abs(later - earlier) for earlier, later in zip(closes, closes[1:])]
+    wick = 0.15 * min(step for step in steps if step > 0)
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] + wick
+    frame["Low"] = frame["Close"] - wick
+    frame.iloc[launch, frame.columns.get_loc("Low")] = dormant_price
+    for position, column in ((apex, "High"), (trough, "Low")):
+        frame.iloc[position, frame.columns.get_loc(column)] = closes[position]
+    if tie_the_peak_at is not None:
+        # A later session that prints exactly the peak's high without exceeding it. Nothing
+        # explosive happened there, so a rule that reads the flag from the last equal high
+        # re-labels everything before it as advance.
+        frame.iloc[tie_the_peak_at, frame.columns.get_loc("High")] = peak
+    if spike_above_peak_pct is not None:
+        # One session inside the advance that traded above the peak the flag hangs from. The
+        # flag then sits under a high the structure already made, which is the shape a search
+        # anchored at the last bar cannot see from the flag alone.
+        position = launch + max(1, advance_sessions // 2)
+        frame.iloc[position, frame.columns.get_loc("High")] = peak * (1 + spike_above_peak_pct / 100)
+    # Dormancy is quiet, the advance "commences on huge volume", and the flag settles between
+    # the two -- the volume shape the criterion describes rather than a flat series.
+    volumes = (
+        [400_000.0] * dormancy_sessions
+        + [400_000.0 * advance_volume_multiple] * advance_sessions
+        + [800_000.0] * flag_sessions
+    )
+    frame["Volume"] = volumes[: len(closes)]
+    return frame[["Open", "High", "Low", "Close", "Volume"]]

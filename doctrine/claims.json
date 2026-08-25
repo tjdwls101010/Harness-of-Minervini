@@ -624,7 +624,7 @@
           "role": "gate",
           "value": 8,
           "unit": "weeks",
-          "comparator": "<=",
+          "comparator": "<",
           "exact": false,
           "quote_index": 2
         },
@@ -710,7 +710,7 @@
             "supports": "the Power Play fundamentals waiver is scoped: entered as the sole no-fundamentals situation, but still requires VCP characteristics and proper supply/demand digestion"
           }
         ],
-        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound"
+        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound; advance_maximum_weeks was compiled with <= against a quotation that says \"in less than eight weeks\", so exactly eight weeks passed a criterion the source excludes"
       },
       "quarantine": {
         "is_quarantined": false,
