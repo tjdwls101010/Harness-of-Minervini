@@ -136,3 +136,28 @@ class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):
+    def test_a_wrong_vintage_still_points_at_the_capability_that_draws_one(self) -> None:
+        """The gap closes by reading the right picture, so the envelope names where to get it.
+
+        Every other gap a chart closes points at ticker.chart. This one is the same errand and was
+        the one case that pointed nowhere -- the reader is told their picture was the wrong series
+        and left to work out that a picture is still what they need.
+        """
+        frame = power_play_series()
+        runtime = Runtime(price_history=lambda ticker, requested: snapshot(frame))
+        request = {"ticker": "TEST", "as_of": frame.index[-1].date().isoformat(), "no_cache": True}
+        questions = execute("ticker.power-play", request, runtime=runtime)["data"]["chart_questions"]
+        payload = execute(
+            "ticker.power-play",
+            {
+                **request,
+                "chart_readings": [f'{q["key"]}=observed' for q in questions],
+                "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18)),
+            },
+            runtime=runtime,
+        )
+
+        self.assertIn("ticker.chart", payload["next_capabilities"])

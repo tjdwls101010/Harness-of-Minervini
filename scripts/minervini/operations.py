@@ -751,11 +751,12 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ]
     # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
     # when a chart is what one of its gaps is actually waiting on.
-    # Both chart gaps, because both are closed by looking at a picture -- one at the highest top's
-    # chart and one at a contesting top's. Pointing at the capability for the first and not the
-    # second would leave a reader told to read a chart with nowhere sent to draw it.
+    # Every gap a picture closes, because they are the same errand: read the highest top's chart,
+    # read a contesting top's, or read the right vintage of either. Naming the capability for some
+    # of them leaves a reader told to look at a chart with nowhere sent to draw it.
     awaits_a_chart = verdict["power_play_state"] == "incomplete" and any(
-        item["reason"] in ("chart_reading_required", "chart_unread_under_another_top")
+        item["reason"]
+        in ("chart_reading_required", "chart_unread_under_another_top", "approval_covers_different_bars")
         for item in missing
     )
     return envelope(

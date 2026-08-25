@@ -584,6 +584,9 @@ def build_power_play_evidence(
     # Refused rather than dropped. The ordinary way an approval goes stale is a session closing
     # between the chart and the request, and a caller told nothing would read the unchanged
     # `incomplete` as the harness ignoring them rather than as their answer not applying.
+    # Read off what was actually applied, so an answer withheld for coming from another vintage is
+    # not also refused for naming a key this run never issued. The vintage is the deeper problem
+    # and re-reading the right picture reissues the keys, so one answer is enough to act on.
     unmatched = sorted(set(given) - {question["key"] for question in chart_questions})
 
     primary_criteria = every_criteria[0] if readings else _criteria(measurements, tight_limit)
