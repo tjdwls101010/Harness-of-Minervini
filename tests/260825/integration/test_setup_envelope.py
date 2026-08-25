@@ -158,6 +158,39 @@ class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
             {item["id"] for item in misdeclared["data"]["signals"]},
         )
 
+    def test_the_chain_is_compared_however_the_reading_and_the_approval_came_out(self) -> None:
+        """Absence of a mismatch is not agreement when two earlier returns skip the comparison.
+
+        Corroboration was read off the completeness signal's basis, which only carries the
+        difference when the comparison was reached. Declaring the chain partial, or approving it
+        from another vintage of the bars, returns before that -- so the same wrong chain came
+        back corroborated, and its hard-gate failure was published as AVOID.
+        """
+
+        frame, _, suffix = distribution_only_in_the_tail_series()
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        prices = ProviderSnapshot(frame, meta)
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        for label, extra in (
+            ("partial", {"chain_completeness": "partial"}),
+            ("stale approval", {"chain_completeness": "complete", "approved_bars": "0" * 64}),
+        ):
+            with self.subTest(reading=label):
+                payload = execute("ticker.setup", {
+                    "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": suffix,
+                    "right_side_development": "constructive", "entry_proximity": "at_pivot",
+                    "no_cache": True, **extra,
+                }, runtime=runtime)
+
+                self.assertEqual(payload["data"]["setup_state"], "incomplete")
+                self.assertEqual(payload["data"]["uncorroborated_verdict"], "avoid")
+                self.assertEqual(
+                    {item["id"] for item in payload["signals"]},
+                    {"setup.declared_chain_completeness"},
+                )
+
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
     def test_it_outranks_a_verdict_read_off_the_chain_nothing_vouched_for(self) -> None:

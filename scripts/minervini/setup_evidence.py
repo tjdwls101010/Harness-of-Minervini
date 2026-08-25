@@ -225,6 +225,21 @@ def _completeness_state(
     return ("pass", basis) if reading == "complete" else ("needs_chart", basis)
 
 
+def _chain_matches_detector(structure: Mapping[str, Any], detected: Mapping[str, Any]) -> bool:
+    """Whether the declared chain is the one the detector produced over the same bars.
+
+    A structure the bars contradict, or none at all, is a separate absence: there is no chain to
+    have measured anything off, and the reducer already answers that with missing base structure.
+    """
+    if str(structure.get("state")) != "resolved":
+        return True
+    if detected.get("state") != "resolved":
+        return False
+    declared = [str(anchor["date"]) for anchor in structure.get("anchors") or []]
+    found = [str(anchor["date"]) for anchor in detected.get("anchors") or []]
+    return declared == found
+
+
 def _iso_day(value: Any) -> str:
     """One date spelling for both sides, so a detector's Timestamps compare with ISO strings."""
 
@@ -468,18 +483,18 @@ def build_setup_evidence(
         doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", measurements["closing_range_pct"]),
     ]
 
-    completeness = next(item for item in signals if item.get("id") == _CHAIN_COMPLETENESS)
     return {
         "structure": structure,
         "segmentation": detected,
         # Whether the chain everything else was measured off is the base. A declared chain the
         # detector did not produce measures some other span, so what comes back from it is a
         # finding about that span rather than about the stock.
-        "chain_corroborated": str(structure.get("state")) != "resolved"
-        or (
-            "differs" not in (completeness.get("measured") or {})
-            and detected.get("state") == "resolved"
-        ),
+        #
+        # Compared here rather than read off the completeness signal's basis. That basis only
+        # carries `differs` when the comparison was reached, and two earlier returns -- a chain
+        # declared partial, and an approval of other bars -- skip it, so absence of the key meant
+        # three different things and two of them were not agreement.
+        "chain_corroborated": _chain_matches_detector(structure, detected),
         "measurements": measurements,
         # Named separately from the measurements so a reader can see at a glance how much of
         # this verdict came from a person. Everything else is measured and cannot be declared
