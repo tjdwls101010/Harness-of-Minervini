@@ -37,7 +37,7 @@ class BindingAuthorityTests(unittest.TestCase):
             record = claims[claim_id]
             with self.subTest(threshold=f"{claim_id}.{name}"):
                 self.assertEqual(record["layer"], "canonical")
-                self.assertIn(record.get("attributed_to"), (None, "Minervini"))
+                self.assertEqual(record.get("attributed_to"), "Minervini")
 
     def test_a_reducer_cannot_be_pointed_at_a_non_binding_threshold(self) -> None:
         broken = registry()

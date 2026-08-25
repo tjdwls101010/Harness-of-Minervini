@@ -2642,8 +2642,8 @@
         "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
-        "effect": "not_applicable",
-        "meaning": "No missing-evidence handling applies; this is context rather than a per-ticker measurement."
+        "effect": "incomplete",
+        "meaning": "Without the measurement, \"TraderLion's screener implementation of the Minervini Trend Template uses RS(12M) > 69, not the book's RS >= 70\" is unanswered and stays an explicit gap rather than an assumed pass or fail."
       },
       "precedence": {
         "tier": "verified_exceptions",
@@ -2669,7 +2669,7 @@
             "assembled_from": "the source's own filter order is preserved; the ellipsis marks one intervening filter item ('Include Type: Common Stock, American Depository Receipt Common') that this quotation does not cite, not a reordering"
           }
         ],
-        "resolution": "mined and normalized from TraderLion; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from TraderLion; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -3057,7 +3057,7 @@
             "supports": "A healthy leader's correction stays within 25-35% peak to low; severe bear markets can stretch that to 50%; beyond 50% the stock is generally unbuyable on the next new high"
           }
         ],
-        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -4099,8 +4099,8 @@
         "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
-        "effect": "not_applicable",
-        "meaning": "No missing-evidence handling applies; this is context rather than a per-ticker measurement."
+        "effect": "incomplete",
+        "meaning": "Without the measurement, \"TraderLion's example swing-trading market-cycle system: begin on a close above the 21 EMA, end on two closes below the 21 EMA with the second below the prior day's low\" is unanswered and stays an explicit gap rather than an assumed pass or fail."
       },
       "precedence": {
         "tier": "execution_defaults",
@@ -4130,7 +4130,7 @@
             "supports": "TraderLion's example swing-trading market-cycle system: begin on a close above the 21 EMA, end on two closes below the 21 EMA with the second below the prior day's low"
           }
         ],
-        "resolution": "mined and normalized from TraderLion; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from TraderLion; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -4972,7 +4972,7 @@
             "supports": "Code 33: three consecutive quarters of simultaneous acceleration in earnings, sales, and profit margins"
           }
         ],
-        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -5542,7 +5542,7 @@
             "assembled_from": "a chapter running head ('CHAPTER 6 CATEGORIES, INDUSTRY GROUPS, AND CATALYSTS 105') interrupts the sentence mid-word in the extraction; the ellipsis marks the break, the words on both sides are unchanged"
           }
         ],
-        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -5639,7 +5639,7 @@
             "supports": "Numeric growth-rate bar for a turnaround's recent-quarter earnings, stated in two chapters with slightly different quarter windows"
           }
         ],
-        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -6502,7 +6502,7 @@
             "supports": "Inventory and receivables growing faster than sales is a red flag; growing at twice the sales rate or more (unexplained) in both simultaneously is 'double trouble'"
           }
         ],
-        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, never promoted to a gate"
+        "resolution": "mined and normalized from Minervini; carried as band/reference evidence, the quotation states the limit as a filter, so it is registered as a gate"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -6885,7 +6885,7 @@
             "supports": "Ryan defines uptrend as 50MA>200MA both rising, concentrates on stocks with IBD RS > 80"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -7152,7 +7152,7 @@
             "supports": "Ryan requires at least a week of very quiet, tight price action before a stock breaks out"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -7568,7 +7568,7 @@
             "supports": "Ryan requires breakout volume up at least 25%, with 100-200% signaling institutional buying, off a base of 4+ weeks"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -7638,7 +7638,7 @@
             "supports": "Zanger requires a volume surge greater than 50% of the 20-day average by end of day"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Zanger; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Zanger; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -7802,7 +7802,8 @@
       "required_inputs": [
         "entry_price",
         "current_price",
-        "pullback_day_volume"
+        "pullback_day_volume",
+        "consecutive_follow_through_sessions"
       ],
       "rule": {
         "summary": "Ryan tolerates up to a 5-8% pullback loss after breakout absent a huge-volume breakdown"
@@ -7833,8 +7834,8 @@
         "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
-        "effect": "not_applicable",
-        "meaning": "No missing-evidence handling applies; this is context rather than a per-ticker measurement."
+        "effect": "incomplete",
+        "meaning": "Without the measurement, \"Ryan tolerates up to a 5-8% pullback loss after breakout absent a huge-volume breakdown\" is unanswered and stays an explicit gap rather than an assumed pass or fail."
       },
       "precedence": {
         "tier": "execution_defaults",
@@ -7852,7 +7853,7 @@
             "supports": "Ryan tolerates up to a 5-8% pullback loss after breakout absent a huge-volume breakdown"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Ryan; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -9122,7 +9123,7 @@
             "supports": "Zanger uses a proprietary Zanger Volume Ratio (ZVR) tool and requires 50%+ above recent volume history by close"
           }
         ],
-        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Zanger; never merged with the other practitioners' answers on the same topic and never promoted to a gate"
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Zanger; never merged with the other practitioners' answers on the same topic and the quotation states the limit as a filter, so it is registered as a gate that reports contrast and never binds this harness"
       },
       "quarantine": {
         "is_quarantined": false,

@@ -59,6 +59,12 @@
 
 21. **Phase 1이 남긴 레지스트리 부채(설계 리뷰가 발견).** Power Play의 `flag_duration_weeks`·`flag_maximum_decline_pct`는 밴드로 등록돼 있으나 인용문이 "To qualify as a power play, the following criteria **must be met**"로 시작한다 — 느슨한 끝(6주/25%)에 게이트를 두고 밴드는 보고용으로 병존시킨다(결정 10의 적용). `setup.consolidation_footprint_3_to_60_weeks`는 원전이 하나의 범위로 준 것을 reference 두 개로 쪼갰다 → 밴드. 실무자 돌파볼륨 셋은 reference가 아니라 비구속 게이트.
 
+22. **슬라이스 ①이 남긴 것 — 이어지는 슬라이스가 처리할 항목.** 2라운드 적대 리뷰가 blocker 없이 major 6건을 냈고, 그중 넷은 슬라이스 ①의 경계 밖이라 여기 기록한다.
+   - **`contrast_*` 상태를 기존 리듀서에 그냥 연결하면 안 된다(슬라이스 ②).** `setup._state()`와 `risk._state()`는 모르는 상태를 기본값 `unavailable`로 낮추고, eligibility는 허용 집합 밖의 값으로 거부한다. 즉 비구속 증거가 무시되는 게 아니라 **누락으로 변질된다.** 비구속 게이트의 측정치가 없을 때 나오는 평범한 `unavailable`도 core completeness를 오염시킨다. `binds:false` 신호는 리듀서 진입 **전에** 별도 채널(`contrast_signals` 또는 `observations`)로 분기하고, core verdict 입력에는 binding 신호만 넣는다. 최소 테스트: contrast pass/fail/unavailable을 각각 모든 리듀서에 투입해 core verdict가 완전히 동일하고 contrast 증거만 보존되는지.
+   - **marker의 `distance`는 의도적으로 노출된다.** 응답 표준이 "측정치와 출처가 명명한 값까지의 거리"를 요구하므로 부호 있는 거리는 없앨 수 없다. 닫힌 것은 *우발적* 오용(상태 어휘가 판정어가 아니고, `threshold()`가 원시값을 안 준다)이고, 부호를 읽어 판정을 만드는 *의도적* 사용은 막지 못한다. "가능한 경로를 전부 차단했다"고 주장하지 않는다.
+   - **claim 단위 귀속은 혼합 소유권을 정확히 표현하지 못한다.** `eligibility.recent_ipo_primary_base`의 40세션은 claim 스스로 "하네스의 환산"이라고 밝히는데 `attributed_to: Minervini` 때문에 `_binds()`가 그 환산값까지 Minervini 게이트로 취급한다. 정확히 하려면 임계 단위 provenance가 필요하고, 그건 새 스키마 변경이다. 지금은 알려진 한계로 둔다 — 40세션은 실제로 판정에 쓰이고 구속돼야 하므로 harness 유래로 표기하면 eligibility가 깨진다.
+   - **복합 조건 게이트는 단독 평가하면 원전을 훼손한다(슬라이스 ④).** `turnaround_min_strong_quarters >= 2`는 원문이 "2개 분기 **또는** 1개 분기가 TTM EPS를 이전 고점 근처/위로"라는 OR이라 첫 가지만 평가하면 유효한 두 번째 경로가 fail이 된다. `receivables_and_inventory_vs_sales_double_trouble_ratio < 2`는 "두 비율이 **모두** 2배 이상이고 설명이 없을 때"라는 AND+예외다. 두 claim의 `rule.summary`가 이 구조를 기록하고 있으니 배선 시 반드시 읽을 것. 설명 유무는 정성 입력이라 `required_inputs`에 유령 항목을 넣지 않았다.
+
 ## 실행 단계
 
 각 단계 공통 게이트: `tdd` 스킬 선행(공개 시임 합의 → RED → GREEN, 테스트는 `./tests` 아래 레포 관례대로 — 기존 `tests/260817`은 보존하고 이번 재작성 스위트는 새 날짜 디렉터리 `tests/2608xx/`에 작성) → codex(sol, xhigh) diff 리뷰 → `validate_harness.py` 0 에러 → `harness-spec.md` Change history 동기 갱신 → 브랜치/PR(한국어 커밋 규칙, 스쿼시 머지). 큰 단계는 구현 전 codex 설계 리뷰 추가.

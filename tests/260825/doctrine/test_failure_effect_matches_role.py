@@ -51,3 +51,55 @@ class FailureEffectMatchesRoleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MissingEffectMatchesRoleTests(unittest.TestCase):
+    def test_no_registered_claim_holds_a_gate_while_saying_missing_evidence_does_not_apply(self) -> None:
+        """A filter with no measurement is an unanswered filter, not an irrelevant one."""
+
+        for record in registry()["claims"]:
+            thresholds = record.get("thresholds") or {}
+            if any(specification["role"] == "gate" for specification in thresholds.values()):
+                with self.subTest(claim=record["id"]):
+                    self.assertNotEqual(record["missing"]["effect"], "not_applicable")
+
+    def test_validate_rejects_a_gate_on_a_claim_that_says_missing_evidence_does_not_apply(self) -> None:
+        broken = registry()
+        record = next(item for item in broken["claims"] if item["id"] == "eligibility.standard_trend_template")
+        record["missing"]["effect"] = "not_applicable"
+
+        result = doctrine.validate(broken)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("missing effect" in error for error in result["errors"]), result["errors"])
+
+
+class HarnessRejectionIsNamedNotInferredTests(unittest.TestCase):
+    def test_only_the_named_harness_contract_rule_may_reject(self) -> None:
+        """The early-entry contract legitimately refuses a malformed setup; the exemption stops there."""
+
+        broken = registry()
+        record = next(item for item in broken["claims"] if item["id"] == "scope.data_integrity")
+        record["failure"]["effect"] = "reject"
+
+        result = doctrine.validate(broken)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("reject" in error for error in result["errors"]), result["errors"])
+
+    def test_the_early_entry_contract_still_rejects(self) -> None:
+        record = doctrine.get_claim("tactic.early_entry_confirmation_debt")["claim"]
+
+        self.assertEqual(record["failure"]["effect"], "reject")
+        self.assertTrue(doctrine.validate()["valid"])
+
+
+class ProvenanceMatchesRoleTests(unittest.TestCase):
+    def test_no_claim_holding_a_gate_still_says_it_was_never_promoted_to_one(self) -> None:
+        """`doctrine show` prints provenance, so a stale resolution is a lie the reader sees."""
+
+        for record in registry()["claims"]:
+            thresholds = record.get("thresholds") or {}
+            if any(specification["role"] == "gate" for specification in thresholds.values()):
+                with self.subTest(claim=record["id"]):
+                    self.assertNotIn("never promoted to a gate", record["provenance"]["resolution"])

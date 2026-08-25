@@ -74,6 +74,10 @@ _COMPARATORS = {
 }
 _VALID_CORPORA = frozenset({"Minervini", "TraderLion"})
 _MINIMUM_QUOTATION_LENGTH = 20
+# The one rule whose rejection is about this harness's own request contract rather than a
+# market judgment: an early entry without its confirmation debt is a malformed setup, not a
+# stock that failed somebody's standard.
+_HARNESS_CONTRACT_REJECTIONS = frozenset({"tactic.early_entry_confirmation_debt"})
 
 
 @lru_cache(maxsize=1)
@@ -145,11 +149,12 @@ def threshold(claim_id: str, name: str) -> Any:
     # must never carry one do not come out of here at all. A marker leaves through
     # `evaluate_marker`, where the distance travels with it; another practitioner's filter
     # leaves through `evaluate_gate`, where it is stamped as contrast.
-    if role == "marker":
-        raise ValueError(f"{claim_id}.{name} is a marker; read it through evaluate_marker so its distance travels with it")
+    if role in {"marker", "band"}:
+        evaluator = "evaluate_marker" if role == "marker" else "evaluate_band"
+        raise ValueError(f"{claim_id}.{name} is a {role}; read it through {evaluator} so where the measurement sits travels with it")
     if not _binds(claim):
         raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
-    return specification["range"] if role == "band" else specification["value"]
+    return specification["value"]
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
@@ -223,12 +228,6 @@ def _binds(record: Mapping[str, Any]) -> bool:
     """
 
     return record.get("layer") == "canonical" and record.get("attributed_to") == "Minervini"
-
-
-def _is_contrast(record: Mapping[str, Any]) -> bool:
-    """Whether this claim is somebody else's standard, read here for comparison."""
-
-    return record.get("layer") == "practice" or record.get("attributed_to") not in (None, "Minervini")
 
 
 def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -338,7 +337,7 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             errors.append(f"{label} executable record requires a test reference")
         if record["layer"] not in _VALID_LAYERS:
             errors.append(f"{label}.layer is invalid")
-        if record["layer"] == "canonical" and not isinstance(record.get("attributed_to"), str):
+        if record["layer"] == "canonical" and not str(record.get("attributed_to") or "").strip():
             # Only the canonical layer can bind, so this is where a missing name would be
             # read as the house voice rather than as an incomplete record.
             errors.append(f"{label} is canonical and must name its attributed_to")
@@ -389,12 +388,18 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             # A gate is an executable pass/fail rule by definition, so a claim holding one
             # and also saying failure does not apply describes itself two ways at once.
             errors.append(f"{label} holds a gate and cannot declare a failure effect of not_applicable")
-        if record["failure"].get("effect") == "reject" and _is_contrast(record):
+        if record["missing"].get("effect") == "not_applicable" and any(
+            isinstance(specification, Mapping) and specification.get("role") == "gate"
+            for specification in thresholds.values()
+        ):
+            # A filter with no measurement is unanswered, not irrelevant.
+            errors.append(f"{label} holds a gate and cannot declare a missing effect of not_applicable")
+        if record["failure"].get("effect") == "reject" and not _binds(record) and claim_id not in _HARNESS_CONTRACT_REJECTIONS:
             # A contrast filter reports; the rejection words belong to the standard this
-            # harness actually follows. A harness-layer rule is exempt because it is not
-            # another practitioner's standard -- it is this harness's own contract, and
-            # refusing a malformed early entry is exactly what it is for.
-            errors.append(f"{label} is contrast material and cannot declare a failure effect of reject")
+            # harness actually follows. The exemption is named rather than inferred from the
+            # layer, because a harness-layer record is exempt only when its rejection is
+            # about the request contract, and nothing in the record says which those are.
+            errors.append(f"{label} does not bind and cannot declare a failure effect of reject")
         for name, specification in thresholds.items():
             if not isinstance(specification, Mapping):
                 errors.append(f"{label}.thresholds.{name} must be an object")

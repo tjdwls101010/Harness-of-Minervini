@@ -68,8 +68,13 @@ class ContrastGateCannotRejectTests(unittest.TestCase):
 
 
 class ReducerManifestTests(unittest.TestCase):
-    def test_the_reducer_manifest_cannot_name_a_marker(self) -> None:
-        """A marker read as a threshold is a signed distance one comparison away from a verdict."""
+    def test_the_declared_reducer_manifest_cannot_name_a_marker(self) -> None:
+        """A marker read as a threshold is a signed distance one comparison away from a verdict.
+
+        This checks the declaration. A reducer that called `evaluate_marker` directly and
+        read the sign of `distance` would be past this and past `threshold()` too; what
+        stops that being an accident is that the marker's state is never a verdict word.
+        """
 
         manifest = doctrine.REQUIRED_THRESHOLDS
         self.assertTrue(all(role != "marker" for _claim, _name, role in manifest))
@@ -78,7 +83,10 @@ class ReducerManifestTests(unittest.TestCase):
 
 
 class PublicSurfaceTests(unittest.TestCase):
-    def test_every_evaluator_the_reducers_call_is_exported(self) -> None:
+    def test_every_evaluator_a_caller_is_meant_to_reach_is_exported(self) -> None:
+        """Not "every evaluator a reducer calls": no reducer reads a marker yet, and the
+        seam is still public because reporting one is what the response standard asks for."""
+
         for name in ("threshold", "evaluate_gate", "evaluate_band", "evaluate_marker", "validate", "get_claim"):
             with self.subTest(name=name):
                 self.assertIn(name, doctrine.__all__)
@@ -86,3 +94,26 @@ class PublicSurfaceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AttributionMustNameSomeoneTests(unittest.TestCase):
+    def test_a_blank_attribution_does_not_satisfy_naming_the_voice(self) -> None:
+        broken = registry()
+        record = next(item for item in broken["claims"] if item["id"] == "eligibility.standard_trend_template")
+        record["attributed_to"] = "   "
+
+        result = doctrine.validate(broken)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(any("attributed_to" in error for error in result["errors"]), result["errors"])
+
+
+class BandValueSeamTests(unittest.TestCase):
+    def test_a_band_range_cannot_be_taken_raw_and_compared_by_hand(self) -> None:
+        """A band's meaning is where the measurement sits, which only `evaluate_band` reports."""
+
+        with self.assertRaises(ValueError):
+            doctrine.threshold("risk.initial_stop_and_reward", "ordinary_loss_target_pct")
+
+    def test_a_reference_is_still_readable_because_nothing_compares_it(self) -> None:
+        self.assertEqual(doctrine.threshold("risk.initial_stop_and_reward", "reward_to_risk_preferred"), 3)
