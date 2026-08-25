@@ -188,6 +188,16 @@ def _left_behind(
     left. Any qualifying crossing counts, not the first -- a level poked through once and
     reclaimed later has been left, and reading only the first attempt kept the older structure
     spliced on forever after one failure.
+
+    Holding admits no reset, and that is a known and deliberate gap. The source says a pivot
+    failure can reset and recover, so a breakout, a shallow one-day slip, and a recovery on
+    ordinary volume is a departure it would recognise and this does not -- a recovery has no
+    reason to expand again, so no later crossing qualifies either. Relaxing it to "above the
+    level now, and since the last time it was under" was tried and moved a case a review round
+    had specifically pinned. What the strict reading costs is a chain that keeps the older
+    structure, which the contraction gate then judges; what the relaxed one costs is anchors
+    deleted on a marginal reading. Between two wrong directions this is the one that deletes
+    nothing.
     """
     level = float(anchor["price"])
     window = closes.loc[pd.Timestamp(anchor["date"]) : before].iloc[1:-1]
