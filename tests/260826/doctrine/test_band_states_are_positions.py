@@ -18,6 +18,7 @@ import json
 import math
 import pathlib
 import unittest
+import unittest.mock
 
 from scripts.minervini import doctrine
 
@@ -27,6 +28,8 @@ DEPTH = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_p
 GROWTH = ("fundamentals.minimum_quarterly_earnings_growth", "minimum_yoy_earnings_growth_percent")
 # A percent band whose low edge is a round number, so a float computation can land beside it.
 DEPTH_LIKE = ("fundamentals.power_play_exception", "flag_maximum_decline_pct")
+# A band one unit wide, so a position is the measurement's own distance from the low edge.
+STOP = ("risk.initial_stop_and_reward", "ordinary_loss_target_pct")
 
 
 def _band(claim_id: str, name: str) -> dict:
@@ -268,6 +271,45 @@ class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
                 self.assertEqual(signal["state"], "below_source_range")
 
 
+class TheEdgesAreNotAPlaceToRoundTo(unittest.TestCase):
+    """Being on an edge is a distinct fact from being near one, in both directions.
+
+    The first version of this rule only kept a measurement outside the range from rounding
+    onto the boundary. The mirror case is just as wrong and reads worse: a 6.0000000001%
+    stop is inside a 6-7% range, and a position of exactly 0.0 beside a printed measurement
+    of 6.0000000001 says it is sitting on the low edge it is above."""
+
+    def test_a_measurement_just_inside_does_not_report_sitting_on_the_edge(self) -> None:
+        signal = doctrine.evaluate_band(*STOP, 6.0000000001)
+
+        self.assertEqual(signal["state"], "within_source_range")
+        self.assertGreater(signal["band_position"], 0)
+        self.assertLess(signal["band_position"], 1)
+
+    def test_the_same_holds_coming_down_from_the_high_edge(self) -> None:
+        signal = doctrine.evaluate_band(*STOP, 6.9999999999)
+
+        self.assertEqual(signal["state"], "within_source_range")
+        self.assertLess(signal["band_position"], 1)
+        self.assertGreater(signal["band_position"], 0)
+
+    def test_sitting_exactly_on_an_edge_still_says_so(self) -> None:
+        """The rule preserves where the value is, so a measurement that really is on an edge
+        must keep reporting the edge rather than being nudged off it."""
+        self.assertEqual(doctrine.evaluate_band(*STOP, 6.0)["band_position"], 0.0)
+        self.assertEqual(doctrine.evaluate_band(*STOP, 7.0)["band_position"], 1.0)
+
+    def test_no_position_comes_back_as_a_binary_artefact(self) -> None:
+        """Running out of places and handing over the raw double is the readability failure
+        the rule exists to avoid. 25.0000000001 against [20, 25] needs eleven places, because
+        dividing by a span of five moves the distinction one place further out than the
+        measurement's own precision."""
+        signal = doctrine.evaluate_band(*DEPTH_LIKE, 25.0000000001)
+
+        self.assertEqual(signal["state"], "above_source_range")
+        self.assertEqual(signal["band_position"], 1.00000000002)
+
+
 class ARangeWithNoWidthIsNotARange(unittest.TestCase):
     """A band whose edges are equal is a single value the source named, which is a marker.
 
@@ -303,6 +345,19 @@ class ARangeWithNoWidthIsNotARange(unittest.TestCase):
                     low, high = specification["range"]
                     with self.subTest(band=f"{record['claim']['id']}.{name}"):
                         self.assertGreater(high, low)
+
+    def test_evaluating_one_anyway_says_which_band_and_why(self) -> None:
+        """The validator is the gate, but nothing forces a caller to have run it, and dying
+        inside the arithmetic names neither the band nor the problem."""
+        registry, name = self._registry_with_a_point_band()
+        record = next(item for item in registry["claims"] if name in (item.get("thresholds") or {}))
+
+        with unittest.mock.patch.object(doctrine, "_load_registry", return_value=registry):
+            with self.assertRaises(ValueError) as caught:
+                doctrine.evaluate_band(record["id"], name, 19.0)
+
+        self.assertIn("no width", str(caught.exception))
+        self.assertIn(name, str(caught.exception))
 
     def test_validate_refuses_a_band_whose_range_has_no_width(self) -> None:
         registry, label = self._registry_with_a_point_band()

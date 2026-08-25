@@ -295,20 +295,44 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     return signal
 
 
-def _band_position(value: float) -> float:
-    """Round the position for a reader without rounding it onto an edge it is not on.
+def _where_in_the_span(position: float) -> int:
+    """Which of the five things a position can be, ordered low to high.
+
+    Below the range, on its low edge, strictly inside, on its high edge, above it. The edges
+    are their own answers rather than the ends of the interior, because "sat exactly on the
+    limit" and "sat just past it" are different sentences and only one of them is true.
+    """
+    if position < 0:
+        return -2
+    if position == 0:
+        return -1
+    if position < 1:
+        return 0
+    if position == 1:
+        return 1
+    return 2
+
+
+def _band_position(value: float, span: float) -> float:
+    """Round the position for a reader without moving it somewhere it is not.
 
     Four places is the right resolution for a person reading where a base sat in its range,
-    and it is the wrong resolution at the very edges: a measurement 0.0000014 of a span above
-    the high edge is genuinely above it and rounds to exactly 1.0, so the position and the
-    state end up saying different things about the same number. Widening the field to ten
-    places everywhere would only move that collision inward. Instead the position keeps
-    whichever side of the range it is on, spending extra places only where four would erase
-    the distinction -- which is at the edges and nowhere else.
+    and it is the wrong resolution near the edges, in both directions. A measurement a
+    millionth of a span above the high edge is genuinely above it and rounds to exactly 1.0;
+    a stop of 6.0000000001% is genuinely inside 6-7% and rounds to exactly 0.0. Either way
+    the position and the state end up saying different things about one number, and reporting
+    an edge is the specific claim that the measurement sat on it. Widening the field to ten
+    places everywhere would only move the collision inward, so the position instead keeps
+    where it actually is and spends extra places only where four would erase the distinction.
+
+    It can need more places than the measurement itself. A position is a distance divided by
+    the span, so a range five wide pushes the last meaningful digit one place further out
+    than ``_REPORTED_PRECISION``; the ceiling follows the span rather than guessing at it.
     """
-    for places in range(4, _REPORTED_PRECISION + 1):
+    finest = _REPORTED_PRECISION + max(0, math.ceil(math.log10(span)))
+    for places in range(4, finest + 1):
         rounded = round(value, places)
-        if (rounded < 0) == (value < 0) and (rounded > 1) == (value > 1):
+        if _where_in_the_span(rounded) == _where_in_the_span(value):
             return rounded
     return value
 
@@ -327,6 +351,12 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     """
     specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
+    if high == low:
+        # validate() refuses this at registration, so reaching it means a registry nobody ran
+        # the validator over. Say which band and why rather than dying inside the arithmetic.
+        raise ValueError(
+            f"{claim_id}.{name} is a band whose range has no width; a position in it is undefined"
+        )
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
@@ -351,7 +381,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     # no way to tell that is arithmetic rather than a mistake. Ten decimal places is far below
     # any precision price data carries, so agreeing with the print costs nothing real.
     reported = signal["measured"]
-    signal["band_position"] = _band_position((reported - low) / span) if span else 0.0
+    signal["band_position"] = _band_position((reported - low) / span, span)
     # The state says where the number sat and nothing else. Which edge is the good one is
     # what ``direction`` is for -- a base shallower than its depth range is outside it and
     # better for being outside; a company growing slower than its growth range is outside it
