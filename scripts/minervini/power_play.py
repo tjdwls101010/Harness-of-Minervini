@@ -49,9 +49,6 @@ def _change(bars: pd.DataFrame, column: str, start: int, end: int) -> float | No
 
 
 def _empty(reason: str | None) -> dict[str, Any]:
-    baseline_volume = float(baseline["Volume"].mean()) if len(baseline) else None
-    measurable = baseline_volume is not None and baseline_volume > 0
-
     return {
         "peak_date": None,
         "peak_high": None,
@@ -63,6 +60,8 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_sessions": None,
         "advance_weeks": None,
         "launch_volume_ratio": None,
+        "advance_peak_volume_ratio": None,
+        "advance_peak_volume_date": None,
         "advance_volume_ratio": None,
         "flag_sessions": None,
         "flag_weeks": None,
@@ -96,13 +95,16 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     # what it is supposed to reject: a flag that really ran ten weeks measures ten.
     window = bars.iloc[-(advance_window + flag_window + 1):]
     peak_high = float(window["High"].max())
-    exceeded = window.index[window["High"] > peak_high]
-    since = window.loc[exceeded[-1]:].iloc[1:] if len(exceeded) else window
     # Inside the search span and nowhere else. Taking the first equal high anywhere in the loaded
     # history is the mirror of taking the last: one glues the flag to a session months earlier
     # that merely printed the same price, the other re-labels the flag as advance. A tie says
-    # nothing about whether two sessions belong to one structure.
-    peak_label = since.index[since["High"] == peak_high][0]
+    # nothing about whether two sessions belong to one structure, so the span decides which ties
+    # are even candidates and the first of those starts the flag.
+    #
+    # A version of this also looked for the last session that traded *above* the peak and started
+    # from there. Nothing can trade above the maximum of the window it is the maximum of, so that
+    # search never found anything and the clause described a rule the code did not run.
+    peak_label = window.index[window["High"] == peak_high][0]
     peak = int(bars.index.get_loc(peak_label))
 
     before = bars.iloc[max(0, peak - advance_window):peak]
@@ -146,12 +148,25 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         "advance_pct_adjusted": _change(bars, _CORPORATE_ACTION_COLUMN, launch - 1, peak),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / _SESSIONS_PER_WEEK,
-        # The clause is about the session the move commenced on, so that session is what it is
-        # measured on. Averaged across the whole advance instead, a launch that printed ten times
-        # its baseline is diluted by the quiet sessions behind it -- one bar at 10M followed by
-        # nineteen at 0.5M averages below a 1M baseline and reads as no expansion at all. The
-        # advance's own average is reported beside it because the two answer different questions.
+        # Three readings of the volume clause, because "commences on huge volume" asks about a
+        # session and the search cannot say for certain which session that was.
+        #
+        # The average across the advance answers a different question and answers it wrongly: one
+        # bar at ten times its baseline followed by nineteen quiet ones averages below the
+        # baseline and reads as no expansion at all. The lowest bar is not reliably the one the
+        # move began on either -- a quiet undercut five weeks before the peak wins the lowest-low
+        # search, and reading the clause there reported no expansion on a stock that went from
+        # ninety to two hundred in nine sessions at ten times its usual volume.
+        #
+        # So the heaviest session of the advance is reported with its date, and it is the reading
+        # a numberless observation can be taken on: an advance with no expanded session anywhere
+        # in it did not commence on huge volume under any identification of its first bar. Whether
+        # the expansion was *huge*, and whether it came at the commencement rather than in the
+        # middle, is what the chart is asked -- and the date beside the ratio is what that
+        # question is asked about.
         "launch_volume_ratio": float(bars.iloc[launch]["Volume"]) / baseline_volume if measurable else None,
+        "advance_peak_volume_ratio": float(bars.iloc[launch:peak + 1]["Volume"].max()) / baseline_volume if measurable else None,
+        "advance_peak_volume_date": bars.index[launch + int(bars.iloc[launch:peak + 1]["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
         "advance_volume_ratio": float(bars.iloc[launch:peak + 1]["Volume"].mean()) / baseline_volume if measurable else None,
         "flag_sessions": int(len(flag)),
         "flag_weeks": len(flag) / _SESSIONS_PER_WEEK,

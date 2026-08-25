@@ -10,8 +10,15 @@ from __future__ import annotations
 
 import unittest
 
+import pandas as pd
+
 from scripts.minervini.power_play import measure_power_play
-from tests.series import power_play_series, reverse_split_series, wide_launch_bar_series
+from tests.series import (
+    dormancy_low_before_the_launch_series,
+    power_play_series,
+    reverse_split_series,
+    wide_launch_bar_series,
+)
 
 
 # Six weeks of flag and eight of advance, in sessions. Checked against the registry by
@@ -165,6 +172,40 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
 
         self.assertAlmostEqual(measured["launch_volume_ratio"], 10.0, places=6)
         self.assertLess(measured["advance_volume_ratio"], 10.0)
+
+    def test_a_history_the_boundary_refuses_comes_back_as_a_reason(self):
+        """Typed unavailability, not an exception out of a measurement.
+
+        The refusal path had never been exercised: every test reached the measurement, so a
+        reference to a name that only exists further down the function sat in it unnoticed and
+        would have raised inside a capability instead of filling its envelope.
+        """
+        measured = measure_power_play(pd.DataFrame(), SPEC)
+
+        self.assertEqual(measured["rejection"], "history_missing_required_columns")
+        self.assertIsNone(measured["peak_date"])
+
+    def test_a_history_that_stops_at_the_peak_has_no_advance_to_measure(self):
+        """The other refusal: bars exist, and none of them come before the peak."""
+
+        bars = power_play_series().iloc[:1]
+
+        measured = measure_power_play(bars, SPEC)
+
+        self.assertIsNotNone(measured["rejection"])
+
+    def test_the_volume_clause_is_not_read_off_whichever_bar_was_lowest(self):
+        """The lowest session of the eight weeks and the session the move began on are not the same.
+
+        A quiet undercut five weeks before the peak wins the lowest-low search, and reading the
+        volume clause there reports no expansion on a stock that moved ninety to two hundred in
+        nine sessions at ten times its usual volume. The advance is where the clause is looked
+        for; whether that expansion was huge, and whether it came at the commencement, is what
+        the chart is asked.
+        """
+        measured = measure_power_play(dormancy_low_before_the_launch_series(), SPEC)
+
+        self.assertAlmostEqual(measured["advance_peak_volume_ratio"], 10.0, places=6)
 
 
 if __name__ == "__main__":

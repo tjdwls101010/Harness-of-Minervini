@@ -608,3 +608,30 @@ def wide_launch_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     frame["Volume"] = [1_000_000.0] * len(closes)
     frame.iloc[launch, frame.columns.get_loc("Volume")] = 10_000_000.0
     return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+
+def dormancy_low_before_the_launch_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """The lowest session of the eight weeks is not the session the move began on.
+
+    A quiet undercut to 89 five weeks before the peak, then more dormancy around 90, then the
+    real move: ten times the usual volume, ninety to two hundred in nine sessions. Read the
+    volume clause off the lowest bar and this stock reports no expansion at all, because the
+    lowest bar was a quiet one.
+    """
+
+    quiet = [90.0] * 45 + [90.0] * 20
+    undercut = 45
+    closes = quiet + _leg(90.0, 200.0, 9)
+    peak = len(closes) - 1
+    launch = len(quiet)
+    closes = closes + [196.0] * 20
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    frame.iloc[undercut, frame.columns.get_loc("Low")] = 89.0
+    frame.iloc[peak, frame.columns.get_loc("High")] = 200.0
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    for position in range(launch, peak + 1):
+        frame.iloc[position, frame.columns.get_loc("Volume")] = 10_000_000.0
+    return frame[["Open", "High", "Low", "Close", "Volume"]]
