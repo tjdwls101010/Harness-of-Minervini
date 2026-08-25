@@ -296,7 +296,7 @@ class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
         )
 
     def test_an_ordinary_payout_leaves_the_criterion_deciding(self):
-        pack = evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=0.05)
+        pack = evidence(flag_depth_pct=40.0, distribution_in_the_flag=0.05)
 
         verdict = evaluate_power_play(pack)
 
@@ -483,3 +483,49 @@ class APayoutCanChooseTheTopItself(unittest.TestCase):
         pack = evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=0.05)
 
         self.assertEqual(pack["peak_identity"], "settled")
+
+
+class ATopTheBoundExcludedStillPreventsARejection(unittest.TestCase):
+    """The distance says which tops may contest a criterion. It cannot say which may object.
+
+    Contesting is a claim about one structure -- a top far below the highest is a different one,
+    and letting it dispute a limit would leave every criterion open. Objecting is weaker and
+    survives the distance: a structure the chain walked past is still a reading of these bars
+    under which nothing decisive failed, and rejecting while holding its date in hand is deciding
+    against evidence already in the envelope.
+    """
+
+    def _pack(self, later_high):
+        return build_power_play_evidence(
+            power_play_series(dormant_price=10.0, flag_sessions=20, flag_depth_pct=8.0, later_high=later_high)
+        )
+
+    def test_a_top_just_inside_the_distance_keeps_the_structure_read(self):
+        pack = self._pack(21.0 / 0.9)
+
+        self.assertEqual(evaluate_power_play(pack)["power_play_state"], "incomplete")
+
+    def test_a_top_a_cent_outside_it_does_not_turn_the_verdict(self):
+        just_outside = self._pack(21.0 / 0.9 + 0.01)
+
+        verdict = evaluate_power_play(just_outside)
+
+        self.assertTrue(just_outside["readings_cut_at"])
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertEqual(verdict["failed"], [])
+
+
+class AnUnreadableTopBlocksTheRejectionItCannotVoteOn(unittest.TestCase):
+    def test_a_split_in_one_candidate_s_span_leaves_nothing_deciding(self):
+        """A candidate nobody could read has not agreed to a rejection by being silent.
+
+        Its raw criteria still fed the agreement calculation while its verdict was excluded from
+        the rejection list, so a value measured across two share counts was counted as consent.
+        """
+        pack = evidence(flag_sessions=30, marginal_new_high_at=-3, split_at=19)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertTrue(pack["unreadable_readings"])
+        self.assertEqual(verdict["failed"], [])
+        self.assertEqual(verdict["power_play_state"], "incomplete")

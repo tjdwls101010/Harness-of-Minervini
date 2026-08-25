@@ -497,6 +497,7 @@ def power_play_series(
     distribution_in_the_flag: float | None = None,
     distribution_after_the_flag_low: float | None = None,
     payout_that_reorders_the_tops: bool = False,
+    later_high: float | None = None,
     volume_spike_before_the_launch: float | None = None,
     corporate_actions: bool = True,
     marginal_new_high_at: int | Sequence[int] | None = None,
@@ -589,6 +590,11 @@ def power_play_series(
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if later_high is not None:
+        # One session late in the flag printing a caller-chosen high. Just inside the candidate
+        # distance it is another reading of the same structure; a cent outside it, the structure
+        # below leaves the chain entirely.
+        frame.iloc[apex + 15, frame.columns.get_loc("High")] = later_high
     if payout_that_reorders_the_tops:
         # An earlier session two percent under the top, and a payout of three percent taken out of
         # every print from the top onward. On the tape the earlier session now prints the higher

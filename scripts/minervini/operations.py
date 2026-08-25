@@ -629,7 +629,15 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         signals=verdict["signals"],
         missing=missing,
         sources=[_source(prices.meta)],
-        doctrine_ids=["fundamentals.power_play_exception", "scope.data_integrity"],
+        # The two conventions belong here too: one converts every limit the source states in
+        # weeks, the other decides where one reading of the structure stops and another begins.
+        # Both move verdicts, so a reader auditing this one has to be able to reach them.
+        doctrine_ids=[
+            "fundamentals.power_play_exception",
+            "convention.trading_week",
+            "convention.power_play_top_candidates",
+            "scope.data_integrity",
+        ],
         next_capabilities=["ticker.chart"] if awaits_a_chart else [],
     )
 

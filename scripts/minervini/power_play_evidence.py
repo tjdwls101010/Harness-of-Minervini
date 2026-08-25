@@ -218,26 +218,31 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     readings: list[dict[str, Any]] = []
     below, before = None, None
     top = measurements["peak_high"]
-    # Bounded twice. By price, at the registered distance: past it a top is an older structure the
-    # stock has since overtaken rather than another reading of this one. Unbounded, the chain
-    # walks one bar at a time down an ordinary advance and every criterion ends up contested by a
-    # bar nobody would call a top.
+    # The chain is walked to the end of the span, and the registered distance decides only which
+    # of those tops may *contest* a criterion. Contesting is a claim about one structure, so a top
+    # far below the highest is a different structure and letting it dispute a limit would leave
+    # every criterion permanently open -- unbounded contesting walks an ordinary advance one bar
+    # at a time and nothing ever decides.
     #
-    # And by count, so a pathological history cannot spin here. Reaching that bound is reported
-    # rather than passed over as agreement.
+    # Objecting is weaker and survives the distance. A structure the chain walked past is still a
+    # reading of these bars under which nothing decisive failed, and rejecting while holding its
+    # date in hand decides against evidence already in the envelope: one cent on a later high used
+    # to delete a hundred-and-eight percent advance in five weeks from consideration entirely.
+    #
+    # The count bound is a runaway guard. Reaching it is reported rather than passed over.
     bound = spec["candidate_top_maximum_distance_pct"]
     cut_at: dict[str, Any] | None = None
+    may_contest = 0
     while len(readings) < _MOST_TOPS_READ:
         reading = measurements if not readings else measure_power_play(history, spec, below=below, before=before)
         if reading["rejection"] is not None:
             break
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
-            # The first top the bound excluded, reported with how far past it stands. The bound is
-            # a cliff -- a hundredth of a percent decides whether a structure is read at all -- so
-            # the reader is owed the edge the verdict was decided next to.
-            cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
-            break
+            if cut_at is None:
+                cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
+        else:
+            may_contest = len(readings) + 1
         readings.append(reading)
         below, before = reading["peak_high"], reading["peak_date"]
     exhausted = len(readings) >= _MOST_TOPS_READ
@@ -247,15 +252,16 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     every_criteria, every_payout_sensitive = map(
         list, zip(*(_read_criteria(reading, tight_limit) for reading in readings))
     ) if readings else ([], [])
-    primary_criteria, payout_sensitive = (
-        (every_criteria[0], every_payout_sensitive[0])
-        if readings
-        else _read_criteria(measurements, tight_limit)
-    )
+    primary_criteria = every_criteria[0] if readings else _read_criteria(measurements, tight_limit)[0]
+    # Every reading's, not the highest top's alone. The tops sit at different sessions, so a
+    # criterion a payout decided for one of them would otherwise reach the envelope as a question
+    # about which top the search landed on -- and send the reader to the chart for something the
+    # dividend calendar already answered.
+    payout_sensitive = set().union(*every_payout_sensitive) if readings else _read_criteria(measurements, tight_limit)[1]
     contested = {
         condition
         for condition in primary_criteria
-        if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria)
+        if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria[:may_contest])
     }
     # And the ordering itself. If the tops keep their places once every print is on one scale, the
     # search read the stock; if they do not, it read the dividend, and no amount of adding cash
@@ -305,16 +311,14 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # first of them. Left at the two nearest tops this claimed all of them and was wrong in its
     # own name -- two ticks a hundredth of a percent apart hide a structure behind them -- and a
     # count-truncated chain has the same problem for a different reason.
-    rejected_under_every_top_read = (
-        bool(contested)
-        and not exhausted
-        # A chain that read the dividend's ordering read the wrong tops, so agreement among them
-        # is agreement about nothing.
-        and not reordered
-        and bool(readings)
-        and not surviving
-        and not unreadable
+    # Every top in the span, read and rejecting. Nothing weaker will do: a top nobody could read
+    # has not consented to a rejection by being silent, and a top the distance excluded from
+    # contesting is still a reading under which the structure stands. And a chain that read the
+    # dividend's ordering read the wrong tops, so agreement among them is agreement about nothing.
+    every_top_rejects = (
+        bool(readings) and not exhausted and not reordered and not surviving and not unreadable
     )
+    rejected_under_every_top_read = every_top_rejects and bool(contested)
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -359,6 +363,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "unreadable_readings": unreadable,
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
+        "every_top_rejects": every_top_rejects,
         # Which criteria the choice of top actually moved. The reducer reads this rather than the
         # summary word, because agreeing on the verdict is not agreeing on every criterion: two
         # readings can both reject and still disagree about which limit did it, and reporting the

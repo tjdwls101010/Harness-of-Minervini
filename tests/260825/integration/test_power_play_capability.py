@@ -114,3 +114,17 @@ class AGapNamesWhatWouldActuallyCloseIt(unittest.TestCase):
                 reasons[f"fundamentals.power_play_exception.{condition}"],
                 "peak_identity_disputed",
             )
+
+
+class TheEnvelopeCitesWhatDecidedIt(unittest.TestCase):
+    def test_the_candidate_convention_is_in_the_doctrine_ids(self):
+        """It moves verdicts, so it belongs in the provenance a reader audits against.
+
+        Where the chain of tops stops decides which criteria may be contested and, through that,
+        whether a rejection stands. Leaving it out cites only the source's own claim for a verdict
+        this harness's own convention helped reach.
+        """
+        payload = run(power_play_series())
+
+        self.assertIn("convention.power_play_top_candidates", payload["doctrine_ids"])
+        self.assertIn("convention.trading_week", payload["doctrine_ids"])

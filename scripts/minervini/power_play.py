@@ -390,6 +390,11 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # can reach the same conclusion by different routes: throwing away everything they agreed on
     # reports a forty percent advance as an open question, and trusting everything reports a limit
     # the rival reading says was never exceeded.
+    rejected_under_every_top_read = bool(evidence.get("rejected_under_every_top_read"))
+    # A criterion names a rejection only where the structure was rejected under every top in the
+    # span. Agreement among the tops that happened to be readable, or the tops the distance let
+    # contest, is not agreement that this is not a Power Play.
+    every_top_rejects = bool(evidence.get("every_top_rejects"))
     contested = set(evidence.get("contested_criteria") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
@@ -407,7 +412,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
-        if state == "fail" and claim_id != _STILL_FORMING and trusted:
+        if state == "fail" and claim_id != _STILL_FORMING and trusted and every_top_rejects:
             failed.append(claim_id)
         else:
             missing.append(claim_id)
@@ -449,7 +454,6 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # route. The second leaves nothing trustworthy to name -- reporting the highest top's list
     # would name limits the others say were never exceeded -- but no top the chain took reads
     # these bars as a Power Play, and that is a finished answer.
-    rejected_under_every_top_read = bool(evidence.get("rejected_under_every_top_read"))
     if failed or rejected_under_every_top_read:
         state = "not_qualified"
     elif missing:
@@ -472,6 +476,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "readings_cut_at": evidence.get("readings_cut_at"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,
+        "every_top_rejects": every_top_rejects,
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "distribution_sessions": evidence.get("distribution_sessions"),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
