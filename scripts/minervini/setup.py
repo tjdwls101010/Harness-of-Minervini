@@ -77,6 +77,38 @@ _SHARED_TACTIC_INPUTS = frozenset(
 )
 
 
+def _tactic_declarations(
+    tactic: str, entry: Mapping[str, Any]
+) -> tuple[list[str], list[str], dict[str, Any]]:
+    """This tactic's conditions, sorted into answered, denied, and still owed.
+
+    The bars do not measure these, so what the caller says is what there is, and it is listed back
+    so the share of the verdict that came from a person stays visible -- the rule every other
+    declared reading in this reducer already follows. What it is not is a rubber stamp: an answer
+    saying the condition did not happen is evidence against the tactic, and counting any non-empty
+    value as satisfaction would make "the stock never gapped below yesterday's low" and "it gapped
+    below and reclaimed it" the same input. A denial goes to unsatisfied rather than failed,
+    because TraderLion is read for contrast here and a contradicted practice claim is a matter for
+    review rather than a rejection this harness issues.
+    """
+
+    owed: list[str] = []
+    denied: list[str] = []
+    declared: dict[str, Any] = {}
+    for condition in _tactic_conditions(tactic):
+        answer = entry.get(condition.rsplit(".", 1)[1])
+        if answer in (None, "", {}, []):
+            owed.append(condition)
+            continue
+        declared[condition] = answer
+        state = _state(answer, default="pass") if isinstance(answer, (Mapping, bool, str)) else "pass"
+        if state in _FAIL or state in _WAIT:
+            denied.append(condition)
+        elif state in _MISSING:
+            owed.append(condition)
+    return owed, denied, declared
+
+
 def _tactic_conditions(tactic: str) -> tuple[str, ...]:
     """The evidence this tactic and no other tactic needs, read off its registered claim.
 
@@ -231,6 +263,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     kind = _canonical_kind(entry.get("kind")) or "completed_pivot"
     entry["kind"] = kind
     entry_missing: list[str] = []
+    entry_unsatisfied: list[str] = []
     tactic = kind if kind in _TACTICS else None
     if tactic is not None or kind == "tl_early":
         price = measurements.get("last_close")
@@ -245,8 +278,12 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
         elif tactic is not None:
             # Each tactic's own conditions, and only its own. Declared rather than measured: the
             # source states them as things a trader reads off the chart, and a caller who has read
-            # them says so here.
-            entry_missing = [*entry_missing, *_tactic_conditions(tactic)]
+            # them says so here. Left unanswerable, five named dead ends would only be a better
+            # spelling of the one this route replaced.
+            owed, denied, declared_here = _tactic_declarations(tactic, entry)
+            entry_missing = [*entry_missing, *owed]
+            entry_unsatisfied = denied
+            declared = {**declared, **declared_here}
         elif kind != "tl_early":
             entry_missing = [*entry_missing, "entry_trigger"]
 
@@ -271,6 +308,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     if str(structure.get("state")) != "resolved":
         missing.append("base_structure")
     missing.extend(entry_missing)
+    unsatisfied.extend(entry_unsatisfied)
 
     if failed:
         setup_state = "avoid"

@@ -98,3 +98,107 @@ class OptingInIsStillRequired(unittest.TestCase):
         )
 
         self.assertIn("tl_early_opt_in", result["missing"])
+
+
+class ADeclaredConditionIsAnsweredRatherThanRenamed(unittest.TestCase):
+    """Naming the conditions is only half of it if none of them can ever be met.
+
+    The route this replaced was a dead end: an early entry always came back owing a trigger
+    nothing could supply. Splitting that into five named dead ends would rename the problem and
+    keep it. What the source describes are things a trader reads off the chart, so the caller
+    declares them and the declaration is listed back beside the verdict.
+    """
+
+    def test_declaring_every_condition_answers_them(self) -> None:
+        result = verdict(
+            "oops_reversal",
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"observed": True, "condition": "opened below 98.0"},
+        )
+
+        self.assertEqual([item for item in result["missing"] if item.startswith("tactic.")], [])
+
+    def test_what_the_caller_said_is_listed_back(self) -> None:
+        result = verdict(
+            "oops_reversal",
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"observed": True, "condition": "opened below 98.0"},
+        )
+
+        self.assertIn("tactic.oops_reversal.prior_day_low", result["declared_readings"])
+
+    def test_another_tactic_s_conditions_answer_nothing_here(self) -> None:
+        result = verdict(
+            "oops_reversal",
+            respected_moving_average={"price": 98.0, "condition": "the 21 ema"},
+            pullback_volume={"observed": True, "condition": "below average"},
+        )
+
+        self.assertIn("tactic.oops_reversal.prior_day_low", result["missing"])
+        self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
+
+
+class DeclaringATacticIsNotTheSameAsDenyingIt(unittest.TestCase):
+    """A declaration that says the condition did not happen is evidence against, not evidence for.
+
+    Counting any non-empty answer as satisfaction makes "the stock never gapped below yesterday's
+    low" and "it gapped below and reclaimed it" the same input. The registry calls a contradicted
+    practice claim a matter for review rather than a rejection, because TraderLion is read for
+    contrast; what it must never be is a pass.
+    """
+
+    def test_a_condition_the_caller_says_did_not_happen_does_not_satisfy_it(self) -> None:
+        result = verdict(
+            "oops_reversal",
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"state": "fail", "condition": "the stock opened above 98.0"},
+        )
+
+        self.assertNotEqual(result["setup_state"], "ready")
+        self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["unsatisfied"])
+        self.assertNotIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
+
+
+class EveryTacticCanActuallyBeCompleted(unittest.TestCase):
+    """The positive case, five times.
+
+    Without it, "each tactic names what it owes" is satisfied just as well by a route that can
+    never be paid, which is the route this slice replaced.
+    """
+
+    ANSWERS = {
+        "key_support_level_reclaim": {
+            "undercut_support_level": {"price": 96.0, "condition": "the 50-day average"},
+            "prior_basing_weeks": {"weeks": 7, "condition": "consolidating since May"},
+        },
+        "consolidation_pivot_breakout": {
+            "consolidation_pivot_level": {"price": 103.0, "condition": "the swing high of 12 June"},
+            "traditional_base_pivot": {"price": 104.5, "condition": "the base pivot"},
+        },
+        "key_moving_average_pullback": {
+            "respected_moving_average": {"price": 99.0, "condition": "the 21 ema, respected twice"},
+            "pullback_volume": {"state": "pass", "condition": "below the 50-day average"},
+            "relative_strength": {"state": "pass", "condition": "higher low against a lower market low"},
+        },
+        "oops_reversal": {
+            "prior_day_low": {"price": 98.0, "condition": "yesterday's low"},
+            "gap_below_prior_low": {"state": "pass", "condition": "opened below 98.0 and reclaimed it"},
+        },
+        "key_support_level_pullback": {
+            "prior_pivot_level": {"price": 100.0, "condition": "the prior consolidation pivot"},
+            "pullback_volume": {"state": "pass", "condition": "below the 50-day average"},
+        },
+    }
+
+    def test_a_fully_declared_tactic_owes_nothing_of_its_own(self) -> None:
+        for tactic, answers in self.ANSWERS.items():
+            with self.subTest(tactic=tactic):
+                result = verdict(tactic, **answers)
+
+                self.assertEqual([item for item in result["missing"] if item.startswith("tactic.")], [])
+                self.assertEqual([item for item in result["unsatisfied"] if item.startswith("tactic.")], [])
+
+    def test_a_fully_declared_tactic_over_a_sound_base_is_ready(self) -> None:
+        for tactic, answers in self.ANSWERS.items():
+            with self.subTest(tactic=tactic):
+                self.assertEqual(verdict(tactic, **answers)["setup_state"], "ready")

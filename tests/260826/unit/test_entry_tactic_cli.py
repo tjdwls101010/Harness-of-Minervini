@@ -52,3 +52,27 @@ class TheChoicesAreTheTactics(unittest.TestCase):
         for label in ("opening_range_breakout", "intraday_base", "high_volume_close_pivot"):
             with self.subTest(label=label):
                 self.assertNotIn(label, choices)
+
+
+class TheConditionsAreDeclarableFromOutside(unittest.TestCase):
+    """A route only the test suite can complete is not a route the harness offers.
+
+    One repeatable flag rather than eleven, because the eleven belong to five different tactics
+    and only one of them is in play at a time. Naming the condition is what the flag is for, so a
+    name the declared tactic does not have is refused rather than carried.
+    """
+
+    def test_ticker_setup_takes_tactic_evidence(self) -> None:
+        parser = build_parser()
+        setup = parser._subparsers._group_actions[0].choices["ticker"]._subparsers._group_actions[0].choices["setup"]
+        self.assertIn("tactic_evidence", {action.dest for action in setup._actions})
+
+    def test_it_can_be_given_more_than_once(self) -> None:
+        parsed = build_parser().parse_args([
+            "ticker", "setup", "TEST",
+            "--entry-kind", "oops_reversal",
+            "--tactic-evidence", "prior_day_low=yesterday's low, 98.00",
+            "--tactic-evidence", "gap_below_prior_low=opened below it and reclaimed it",
+        ])
+
+        self.assertEqual(len(parsed.tactic_evidence), 2)

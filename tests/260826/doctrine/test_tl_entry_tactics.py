@@ -72,11 +72,13 @@ class TheSourceIsTheOnlyAuthorHere(unittest.TestCase):
         self.assertEqual(unsourced, [])
 
     def test_the_labels_the_source_never_defined_are_not_registered_as_tactics(self) -> None:
-        """Named on annotated charts, defined nowhere.
+        """Named often, given a contract nowhere.
 
-        "This includes highlighting early entries such as upside reversals, range breakouts, inside
-        days and more" is the whole of what the source says about three of them, in a chapter of
-        chart captions. Registering a tactic on that would put a trigger in the harness's mouth.
+        These three are not absent from the source -- they label annotated charts, and one trade
+        post-mortem enters an upside reversal on the next day's push over the prior high. What
+        none of them has is what makes the other five tactics: a stated trigger and a risk level
+        that belong to the tactic rather than to the example. Registering one on a worked example
+        would put a rule in the source's mouth that it never generalised.
         """
         invented = [name for name in claims()
                     if name.startswith("tactic.")
