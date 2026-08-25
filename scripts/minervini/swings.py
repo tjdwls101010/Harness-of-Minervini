@@ -350,6 +350,10 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     for offset in offsets:
         neighbour = (multiple + offset) * typical
         if neighbour <= 0:
+            # A neighbour that cannot be run is a reading that was not taken, and a reading not
+            # taken never disagrees. Skipping it silently would leave the sweep looking unanimous
+            # for the same reason a missing volume window once did.
+            sensitivity.append({"retracement_pct": neighbour, "anchors": None})
             continue
         run = segment(source, retracement_pct=neighbour)
         # A neighbour's own unreadable sessions count too. Comparing only the anchor dates threw

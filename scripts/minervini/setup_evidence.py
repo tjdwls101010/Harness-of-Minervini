@@ -301,7 +301,13 @@ def _failure_state(measurements: Mapping[str, Any], reading: str | None) -> str:
         return "unavailable"
     if failed:
         return "fail"
-    if not measurements.get("failed_pivot_attempts"):
+    attempts = measurements.get("failed_pivot_attempts")
+    # Explicitly, because `not None` is True: an unmeasured count would read as no failure. It
+    # is computed alongside the flag checked above, so it cannot be None here -- but that is an
+    # invariant elsewhere, and this slice broke three of those by leaning on them.
+    if attempts is None:
+        return "unavailable"
+    if not attempts:
         return "pass"
     # A pivot failure did happen, and whether it reset "within a small number of days" is a
     # question the source asks and declines to answer with a number. Reporting the longest
@@ -418,7 +424,13 @@ def build_setup_evidence(
         # would put a value the registry marked undecidable back into a verdict.
         _observation(
             _PIVOT_VOLUME,
-            _direction(measurements["pivot_area_volume_ratio_to_base"], (measurements["pivot_area_volume_ratio_to_base"] or 0) < 1),
+            _direction(
+                measurements["pivot_area_volume_ratio_to_base"],
+                # Guarded rather than defaulted: `None or 0` is 0, which reads as contracted.
+                # `_direction` returns unavailable first, so it never surfaces -- state it anyway.
+                measurements["pivot_area_volume_ratio_to_base"] is not None
+                and measurements["pivot_area_volume_ratio_to_base"] < 1,
+            ),
             measurements["pivot_area_volume_ratio_to_base"],
         ),
         _observation(
