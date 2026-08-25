@@ -174,16 +174,18 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
 
     The structure is found rather than declared, so the same bars are read from every top the
     search could have landed on: the highest of the span, then the highest below that, and down
-    until the span holds no more. The source names no size below which a new high stops counting
-    -- a hundredth of a percent above the last high restarts the flag and turns thirty sessions
-    into four -- so a criterion decides only where every reading answers it the same way, and a
-    rejection stands only where every reading reaches one.
+    until a top stands further below the highest than the registered candidate distance. The
+    source names no size below which a new high stops counting -- a hundredth of a percent above
+    the last high restarts the flag and turns thirty sessions into four -- so a criterion decides
+    only where every top read answers it the same way, and a rejection stands only where every
+    one of them reaches one.
 
     Two readings were not enough, and the shortfall was not theoretical: two ticks a hundredth of
     a percent apart inside one flag hand the search three tops, and both of the first two reject
-    while the structure they sit inside has nothing decisive against it. Across every cached
-    history the chain runs one to nineteen tops, and twenty-two of twenty-three still reject on a
-    criterion every reading agreed on.
+    while the structure they sit inside has nothing decisive against it. Nor is the chain left
+    open: unbounded it runs to nineteen tops across the cached histories and walks an ordinary
+    advance one bar at a time, and twenty-two of twenty-three tickers still reject on an agreed
+    criterion; bounded it runs to fifteen and all twenty-three do.
     """
 
     spec = compile_power_play_spec()
