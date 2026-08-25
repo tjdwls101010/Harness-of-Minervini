@@ -71,6 +71,8 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "pivot_extension_pct": None,
             "breakout_volume_ratios": {},
             "closing_range_pct": None,
+            "overhead_supply_high": None,
+            "overhead_supply_above_pivot_pct": None,
         }
 
     depths = [float(item["depth_pct"]) for item in contractions]
@@ -101,6 +103,12 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
 
     last = bars.iloc[-1]
     pivot = float(base["pivot"])
+    # A chain declared from a late high leaves whatever traded higher before it above the
+    # entry, and the source is explicit about what that is: buyers waiting to get out at
+    # breakeven. Every anchor is checked against its own span, so this is the one thing the
+    # structure check cannot see, and it is reported rather than decided.
+    prior = bars.loc[: pd.Timestamp(base["start"])].iloc[:-1]
+    prior_high = float(prior["High"].max()) if len(prior) else None
     breakout_baselines = tuple(spec.get("breakout_volume_baseline_sessions") or (20, 30, 50))
     span = float(last["High"]) - float(last["Low"])
 
@@ -109,8 +117,10 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         "successive_depth_ratios": ratios,
         "contraction_count": len(depths),
         # Reported as its own fact because a "VCP" whose contractions widen is not a
-        # narrower VCP; it is a different pattern wearing the name.
-        "contractions_contract": all(later < earlier for earlier, later in zip(depths, depths[1:])),
+        # narrower VCP; it is a different pattern wearing the name. One contraction has no
+        # successive pair in it, so the rule is unobserved rather than vacuously satisfied --
+        # otherwise the shortest possible declaration clears what a longer one has to earn.
+        "contractions_contract": None if len(depths) < 2 else all(later < earlier for earlier, later in zip(depths, depths[1:])),
         "base_depth_pct": float(base["depth_pct"]),
         "base_duration_weeks": round(int(base["duration_sessions"]) / _SESSIONS_PER_WEEK, 4),
         "final_contraction_volume_baseline_sessions": baseline_sessions,
@@ -138,6 +148,8 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # parentheses the arithmetic needs; the surrounding worked example (high 100, low
         # 90, close 98 gives 80 percent) settles which grouping the source meant.
         "closing_range_pct": (float(last["Close"]) - float(last["Low"])) / span * 100 if span > 0 else None,
+        "overhead_supply_high": prior_high,
+        "overhead_supply_above_pivot_pct": None if prior_high is None else max(0.0, (prior_high - pivot) / pivot * 100),
     }
 
 

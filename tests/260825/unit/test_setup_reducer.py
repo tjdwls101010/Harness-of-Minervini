@@ -259,3 +259,46 @@ class GoldenDiscriminationTests(unittest.TestCase):
 
         self.assertEqual(compression["state"], "reported")
         self.assertLess(compression["measured"], 0.5)
+
+
+class SingleContractionTests(unittest.TestCase):
+    def test_one_contraction_cannot_satisfy_the_rule_that_contractions_narrow(self) -> None:
+        """With nothing to compare, "smaller from left to right" is unobserved, not satisfied.
+
+        A caller who declares only high, low, high gets a sequence with no successive pair
+        in it. Reading that as the rule holding would let the shortest possible declaration
+        clear the condition the longest one has to earn.
+        """
+
+        result = evaluate_setup(evidence_for(depths=(25.0,)))
+
+        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "unavailable")
+        self.assertEqual(result["setup_state"], "incomplete")
+        self.assertIn("setup.contractions_must_contract", result["missing"])
+
+
+class ChainGamingTests(unittest.TestCase):
+    """What a validated chain still cannot stop, reported so the reader sees it.
+
+    Every anchor is checked against the span its neighbours bound, so a misread swing is
+    refused. Starting the chain late is not a misread swing -- each anchor in the shortened
+    chain is genuinely its span's extreme. What changes is what sits above the entry, and
+    that is measurable and named by the source.
+    """
+
+    def test_a_chain_started_past_an_older_high_still_reports_the_supply_above_the_entry(self) -> None:
+        frame, anchors = base_series()
+        late = anchor_dates(frame, anchors)[2:]
+
+        result = evaluate_setup(build_setup_evidence(frame, late))
+
+        supply = signal(result, "setup.overhead_supply_mechanism")
+        self.assertEqual(supply["state"], "reported")
+        self.assertGreater(supply["measured"], 0)
+
+    def test_the_distance_the_entry_sits_above_the_pivot_travels_with_the_verdict(self) -> None:
+        result = evaluate_setup(evidence_for())
+
+        chase = signal(result, "setup.chase_limit_above_pivot")
+        self.assertEqual(chase["state"], "reported")
+        self.assertEqual(round(chase["measured"], 2), round(result["measurements"]["pivot_extension_pct"], 2))

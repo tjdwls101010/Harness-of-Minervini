@@ -33,6 +33,8 @@ _PIVOT_VOLUME = "setup.pivot_volume_contraction"
 _CONTRACTIONS_CONTRACT = "setup.contractions_must_contract"
 _PIVOT_TRIGGER = "setup.structural_pivot_and_trigger"
 _TIME_COMPRESSION = "setup.time_compression_hazard"
+_OVERHEAD_SUPPLY = "setup.overhead_supply_mechanism"
+_CHASE_LIMIT = "setup.chase_limit_above_pivot"
 
 _CONTRACTION_COUNT = "setup.vcp_contraction_count"
 _HALVING = "setup.successive_contraction_halving"
@@ -136,6 +138,16 @@ def build_setup_evidence(
             _TIME_COMPRESSION,
             "unavailable" if measurements["right_to_left_session_ratio"] is None else "reported",
             measurements["right_to_left_session_ratio"],
+        ),
+        _observation(
+            _OVERHEAD_SUPPLY,
+            "unavailable" if measurements["overhead_supply_above_pivot_pct"] is None else "reported",
+            measurements["overhead_supply_above_pivot_pct"],
+        ),
+        _observation(
+            _CHASE_LIMIT,
+            "unavailable" if measurements.get("pivot_extension_pct") is None else "reported",
+            measurements.get("pivot_extension_pct"),
         ),
         doctrine.evaluate_band(_CONTRACTION_COUNT, "contraction_count", measurements["contraction_count"] or None),
         doctrine.evaluate_marker(_HALVING, "successive_depth_ratio", measurements["successive_depth_ratios"][-1] if measurements["successive_depth_ratios"] else None),

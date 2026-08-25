@@ -146,3 +146,35 @@ class BreakoutTests(unittest.TestCase):
         structure = resolve_structure(frame, anchor_dates(frame, anchors))
 
         self.assertIsNone(measure(frame, structure, SPEC)["closing_range_pct"])
+
+
+class OverheadSupplyTests(unittest.TestCase):
+    """What sits above the entry is the thing the caller's chain can quietly leave out.
+
+    Every anchor is checked against the span its neighbours bound, which is what stops a
+    misread swing. It does not stop a caller from starting the chain late, past a high the
+    stock still has to work through. That high is measurable, and the source names exactly
+    what it is: trapped buyers waiting to get out around their breakeven point.
+    """
+
+    def test_a_base_declared_from_its_own_left_rim_carries_no_supply_above_the_pivot(self) -> None:
+        numbers = measured()
+
+        self.assertEqual(numbers["overhead_supply_above_pivot_pct"], 0.0)
+
+    def test_a_chain_that_starts_past_an_older_high_reports_that_high_above_the_pivot(self) -> None:
+        frame, anchors = base_series()
+        late = anchor_dates(frame, anchors)[2:]
+        structure = resolve_structure(frame, late)
+
+        numbers = measure(frame, structure, SPEC)
+
+        self.assertGreater(numbers["overhead_supply_above_pivot_pct"], 0)
+        self.assertGreater(numbers["overhead_supply_high"], numbers["pivot"])
+
+    def test_with_no_history_before_the_base_the_measurement_is_unavailable(self) -> None:
+        frame, anchors = base_series()
+        trimmed = frame.loc[frame.index[anchors[0].position] :]
+        structure = resolve_structure(trimmed, anchor_dates(frame, anchors))
+
+        self.assertIsNone(measure(trimmed, structure, SPEC)["overhead_supply_above_pivot_pct"])

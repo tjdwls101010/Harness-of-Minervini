@@ -2422,7 +2422,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_measurements.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -9846,6 +9847,63 @@
           }
         ],
         "resolution": "mined from TraderLion rows 6; 'around 25%' declines to draw a line, so both ratios are markers, and the two windows select which series to compute rather than being compared with anything"
+      }
+    },
+    {
+      "id": "setup.chase_limit_above_pivot",
+      "title": "Buy as close to the pivot as possible, without chasing more than a few percentage points",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "pivot",
+        "entry_price"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "The entry belongs as close to the pivot as possible, and the source declines to say how far 'a few percentage points' reaches."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "An extended entry is reported with its distance above the pivot; the source states the limit without a number, and inventing one would draw a line it refused to draw."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a pivot there is no distance to report."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_reducer.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "You want to buy as close to the pivot point as possible without chasing the stock up more than a few percentage points.",
+            "supports": "the limit and the source's refusal to put a number on it"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; 'a few percentage points' is a limit without a magnitude, so the extension above the pivot is reported beside the sentence and no threshold is registered"
       }
     }
   ]
