@@ -252,3 +252,44 @@ def hidden_turn_series(*, turn_pct: float = 0.4) -> tuple[pd.DataFrame, list[str
     frame.iloc[at + 1, frame.columns.get_loc("Low")] = bounce - wick
     finer = [chain[0], frame.index[at].date().isoformat(), frame.index[at + 1].date().isoformat(), *chain[1:]]
     return frame, chain, finer
+
+
+def borrowed_contraction_series() -> tuple[pd.DataFrame, list[str], list[str]]:
+    """A current structure with one contraction, sitting above a structure price left.
+
+    One contraction is no sequence, so `contractions_contract` comes back unavailable and the
+    setup cannot be ready. Reach back past the departure and the older decline supplies the
+    missing one: forty, fifteen, seven reads as a textbook progression, and a base that had no
+    sequence to judge is promoted on contractions belonging to a structure the stock is already
+    out of.
+    """
+
+    closes = _leg(55.0, 100.0, 55)
+    left = [Anchor(len(closes) - 1, "high", 100.0)]
+    for target, kind, sessions in ((60.0, "low", 25), (80.0, "high", 20), (68.0, "low", 12)):
+        closes.extend(_leg(closes[-1], target, sessions))
+        left.append(Anchor(len(closes) - 1, kind, target))
+
+    current: list[Anchor] = []
+    for target, kind, sessions in ((95.0, "high", 18), (88.0, "low", 10), (94.8, "high", 10)):
+        closes.extend(_leg(closes[-1], target, sessions))
+        current.append(Anchor(len(closes) - 1, kind, target))
+    closes.extend(_leg(94.8, 92.8, 3))
+
+    index = pd.bdate_range(start="2026-01-02", periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] + 0.1
+    frame["Low"] = frame["Close"] - 0.1
+    for anchor in left + current:
+        label = index[anchor.position]
+        frame.loc[label, "High" if anchor.kind == "high" else "Low"] = frame.loc[label, "Close"]
+    span = len(closes)
+    frame["Volume"] = [
+        2_000_000 * (1 - 0.7 * position / span) * (1.8 if position and closes[position] > closes[position - 1] else 0.5)
+        for position in range(span)
+    ]
+    return (
+        frame[["Open", "High", "Low", "Close", "Volume"]],
+        [index[anchor.position].date().isoformat() for anchor in left],
+        [index[anchor.position].date().isoformat() for anchor in current],
+    )

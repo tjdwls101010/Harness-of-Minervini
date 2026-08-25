@@ -21,7 +21,7 @@ from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.readings import detected
-from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, hidden_turn_series
+from tests.series import anchor_dates, base_series, borrowed_contraction_series, hidden_turn_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
@@ -336,28 +336,30 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class TwoStructuresUnderOnePeakTests(unittest.TestCase):
-    """What rejects a messy history, now that the detector no longer tidies it.
+class NoBorrowingFromTheLastStructureTests(unittest.TestCase):
+    """One contraction is no sequence, and the fix for that is not an older structure's."""
 
-    Cutting the chain to the newer structure made its contractions read four and a half then
-    two and a half percent, where the history's own were twenty-five then thirty. The gate the
-    source supplies is what has to see that, so the chain has to still contain it.
-    """
-
-    def test_a_history_of_two_structures_fails_the_gate_rather_than_being_trimmed_past_it(self) -> None:
-        frame, _, _ = bases_under_an_older_high_series()
+    def test_a_base_with_one_contraction_does_not_borrow_the_missing_one(self) -> None:
+        frame, left_behind, current = borrowed_contraction_series()
         chain = detected(frame)
 
         result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
 
-        contraction = signal(result, "setup.contractions_must_contract")
-        self.assertEqual(contraction["state"], "fail")
+        self.assertEqual(chain, current)
+        self.assertEqual(len(result["measurements"]["contraction_depths_pct"]), 1)
+        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "unavailable")
         self.assertNotEqual(result["setup_state"], "ready")
-        # The widening contraction is in the measured sequence rather than deleted from it, and
-        # so is the older structure's own decline.
-        depths = result["measurements"]["contraction_depths_pct"]
-        self.assertTrue(any(later > earlier for earlier, later in zip(depths, depths[1:])))
-        self.assertGreater(max(depths), 30.0)
+
+    def test_reaching_back_would_have_supplied_it(self) -> None:
+        """What the boundary is worth, stated as the thing it prevents rather than asserted."""
+
+        frame, left_behind, current = borrowed_contraction_series()
+
+        spliced = evaluate_setup(build_setup_evidence(frame, [*left_behind, *current], **vouched(frame, current)))
+
+        depths = spliced["measurements"]["contraction_depths_pct"]
+        self.assertEqual([round(depth) for depth in depths], [40, 15, 7])
+        self.assertTrue(all(later < earlier for earlier, later in zip(depths, depths[1:])))
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):

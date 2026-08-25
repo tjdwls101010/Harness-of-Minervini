@@ -176,9 +176,6 @@ def _completeness_state(
     if str(structure.get("state")) != "resolved":
         return "unavailable", {"structure": structure.get("state")}
     declared = [str(anchor["date"]) for anchor in structure.get("anchors") or []]
-    if reading == "partial":
-        return "fail", {"declared_anchors": len(declared)}
-
     basis: dict[str, Any] = {
         "declared_anchors": len(declared),
         "segmentation": detected.get("state"),
@@ -188,8 +185,17 @@ def _completeness_state(
         # A chain that moves when the parameter moves a half point is not something to check
         # anything against, and reporting the instability while passing one of the readings is
         # the failure this harness spent a slice learning to name.
+        #
+        # Ahead of the partial branch, because the harness's own gap outranks the caller's
+        # admission of theirs. Behind it, a caller who said partial got `fail` -- a verdict about
+        # their reading -- and the envelope came back ok, wait, and pointing at ticker.risk, with
+        # the gap the engine already knew about nowhere in it.
         basis["sensitivity"] = detected.get("sensitivity")
         return "needs_chart", basis
+    if reading == "partial":
+        # Admitting a gap costs the caller nothing and tells the truth, and it fails on its own
+        # terms whichever vintage of the bars they read it from.
+        return "fail", {"declared_anchors": len(declared)}
     # A reading is of one picture. Comparing only the dates let a chain approved from another
     # vintage of the series vouch for this one, with every date matching while the pivot, the
     # depths and the base the reader looked at had all moved.

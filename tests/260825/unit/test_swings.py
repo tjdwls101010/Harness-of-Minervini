@@ -186,13 +186,11 @@ class OneBaseAtATimeTests(unittest.TestCase):
 
         self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
 
-    def test_two_structures_under_one_peak_come_back_whole_rather_than_tidied(self) -> None:
-        """The flattering half is not the honest answer, and cutting to it is the forgery.
+    def test_a_structure_price_left_is_not_reached_back_into(self) -> None:
+        """The contractions of a structure the stock departed are not this base's contractions.
 
-        A trim that cut the older structure away was written for exactly this shape. What it
-        actually removed were the anchors carrying the contraction that widened, so the chain
-        came back clean and the detector vouched for its own edit. Left whole the chain says
-        what the history is, and the contraction gate is what rejects it.
+        Leaving is clearing a high and then holding above it, so the rim search stops there
+        rather than at the highest high in the whole history.
         """
 
         frame, left_behind, current = bases_under_an_older_high_series()
@@ -201,8 +199,51 @@ class OneBaseAtATimeTests(unittest.TestCase):
         dates = [item["date"] for item in chain["anchors"]]
 
         self.assertEqual(chain["state"], "resolved")
-        self.assertTrue(set(left_behind) <= set(dates))
         self.assertTrue(set(current) <= set(dates))
+        self.assertFalse(set(left_behind) & set(dates))
+
+    def test_a_level_cleared_only_on_the_pivot_bar_was_not_held(self) -> None:
+        """Nothing that held is not the same as nothing that failed.
+
+        With no session after the crossing there is no evidence either way, and reading the
+        empty run as holding turned a poke on the pivot bar itself into a departure -- which
+        left the rim search with one anchor and no base at all.
+        """
+
+        prices = [80.0, 100.0, 80.0, 90.0, 85.0, 92.0, 88.0]
+        index = pd.bdate_range("2026-01-02", periods=len(prices))
+        frame = pd.DataFrame(
+            {"Open": prices, "High": prices, "Low": prices, "Close": prices, "Volume": [1e6] * len(prices)},
+            index=index,
+        )
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual([round(item["price"], 1) for item in chain["anchors"]], [100.0, 80.0, 90.0, 85.0, 92.0])
+
+    def test_a_level_that_failed_once_can_still_be_left_later(self) -> None:
+        """Any close that was held, not the first one.
+
+        Reading only the first crossing meant a level price poked through and fell back from
+        could never afterwards be left, however decisively it was later cleared -- so the older
+        structure stayed spliced onto the current base forever after one failed attempt.
+        """
+
+        legs = [(60.0, 100.0, 30), (100.0, 70.0, 12), (70.0, 105.0, 14), (105.0, 95.0, 8),
+                (95.0, 104.0, 10), (104.0, 101.5, 6), (101.5, 103.8, 6), (103.8, 102.5, 3)]
+        closes: list[float] = []
+        for start_price, end_price, sessions in legs:
+            step = (end_price - start_price) / sessions
+            closes += [start_price + step * (position + 1) for position in range(sessions)]
+        index = pd.bdate_range("2026-01-02", periods=len(closes))
+        frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+        frame["High"] = frame["Close"] + 0.05
+        frame["Low"] = frame["Close"] - 0.05
+        frame["Volume"] = 1e6
+
+        chain = canonical_chain(frame)
+
+        self.assertTrue(all(item["price"] > 94.0 for item in chain["anchors"]))
 
 
 class UnusableHistoryTests(unittest.TestCase):

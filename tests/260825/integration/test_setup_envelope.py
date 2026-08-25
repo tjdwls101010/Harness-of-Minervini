@@ -32,7 +32,8 @@ def snapshot(**kwargs) -> tuple[ProviderSnapshot, list[str]]:
     return ProviderSnapshot(frame, meta), anchor_dates(frame, anchors)
 
 
-def run(*, swings=None, as_of=None, approved_bars=None, **kwargs) -> dict:
+def run(*, swings=None, as_of=None, approved_bars=None, chain_completeness="complete", **kwargs) -> dict:
+    completeness = chain_completeness
     prices, chain = snapshot(**kwargs)
     runtime = Runtime(price_history=lambda ticker, requested: prices)
     request = {
@@ -40,13 +41,31 @@ def run(*, swings=None, as_of=None, approved_bars=None, **kwargs) -> dict:
         "as_of": as_of or prices.meta.as_of.isoformat(),
         "swing": chain if swings is None else swings,
         "right_side_development": "constructive",
-        "chain_completeness": "complete",
+        "chain_completeness": completeness,
         "approved_bars": approved_bars or bars_fingerprint(prices.data),
         "entry_proximity": "at_pivot",
         "entry_price": float(prices.data["Close"].iloc[-1]),
         "no_cache": True,
     }
     return execute("ticker.setup", request, runtime=runtime)
+
+
+class AGapTheEngineKnowsAboutOutranksTheCallersTests(unittest.TestCase):
+    def test_a_caller_admitting_a_gap_does_not_cover_the_one_the_detector_found(self) -> None:
+        """Two different absences, and the caller's answered first.
+
+        Declaring the chain partial returned `fail` -- a verdict about the reading -- and with a
+        verdict there the envelope came back ok, wait, and pointing at ticker.risk, with the
+        segmentation the detector refused to vouch for nowhere in it.
+        """
+
+        payload = run(depths=(25.0, 10.0, 1.2), chain_completeness="partial")
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        self.assertEqual(payload["status"], "needs_input")
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "segmentation_unstable")
 
 
 class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
