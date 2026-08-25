@@ -180,7 +180,10 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
 - **Phase 0 — 머지 완료** (PR #3, `b3aca97`). 계획의 버그 4건으로 시작해 codex 적대 리뷰 7라운드(6→4→3→3→2→1건 후 ACCEPT)에서 12건이 추가로 나왔고 전부 수정. 마지막 세 커밋은 증상이 아니라 뿌리를 제거했다 — 같은 판단을 두 곳에서 각자의 말로 내리던 사본 3쌍(`settled_breach`, `declares_exit_plan`, `_status_word`)을 리듀서 단독 소유로 통합.
 - **Phase 1 — 머지 완료** (PR #4, `56654ec`). 레지스트리 12 → 124 claims, role gate 18 / band 25 / reference 77, 인용 190 verified + 6 declared. codex 적대 리뷰 5라운드(8→10→6→2→1건). main에서 366 tests OK.
-- **Phase 2~7 — 미착수.** 다음은 Phase 2(셋업/VCP 정량 엔진). 계획이 "큰 단계는 구현 전 codex 설계 리뷰"를 요구하므로 착수 전에 설계 리뷰를 먼저 받는다.
+- **Phase 2 — 설계 리뷰 완료, 5개 슬라이스로 분할.** 설계 리뷰가 blocker 6건으로 구현 착수를 막았고(결정 17~21), 사용자가 세 갈래를 확정했다. 슬라이스 진행 상황은 트래커 #9~#13.
+  - **슬라이스 ① 머지 완료** (PR #5, `d6b370a`). role에 `marker` 추가, 구속 여부를 `layer`/`attributed_to`에서 파생, 레지스트리 130개 임계값 전량 재감사(gate 18/band 25/reference 77 → gate 35/band 30/marker 4/reference 47), 원시값 seam 차단, 검증기 규칙 5종 추가. codex 적대 리뷰 2라운드(blocker 1 + major 6 → blocker 0 + major 6). main에서 398 tests OK.
+  - **슬라이스 ② 다음** — 표준 VCP 구조검증→측정→판정→CLI. 시작 전에 결정 22의 `contrast_*` 채널 분리를 먼저 설계할 것.
+- **Phase 3~7 — 미착수.**
 
 ### Phase 2가 Phase 1 덕에 줄어드는 부분
 
