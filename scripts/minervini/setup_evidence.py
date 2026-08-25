@@ -164,19 +164,45 @@ def _completeness_state(structure: Mapping[str, Any], reading: str | None, detec
     """
     if str(structure.get("state")) != "resolved":
         return "unavailable", {"structure": structure.get("state")}
-    declared = {str(anchor["date"]) for anchor in structure.get("anchors") or []}
+    declared = [str(anchor["date"]) for anchor in structure.get("anchors") or []]
     if reading == "partial":
         return "fail", {"declared_anchors": len(declared)}
     if not detected:
         return "needs_chart", {"declared_anchors": len(declared), "detected_anchors": None}
-    omitted = sorted({str(date) for date in detected} - declared)
-    basis = {"declared_anchors": len(declared), "detected_anchors": len(set(detected)), "omitted": omitted}
+    found = [_iso_day(date) for date in detected]
+    basis: dict[str, Any] = {"declared_anchors": len(declared), "detected_anchors": len(found)}
+    # A subset check throws away order and ends, which let a caller keep every detected date
+    # and append two more -- moving the pivot to a lower high while reporting nothing omitted.
+    # A refinement of a structure keeps that structure's start, its pivot, and the order of
+    # everything between.
+    omitted = [date for date in found if date not in declared]
+    basis["omitted"] = omitted
     if omitted:
+        return "fail", basis
+    if found and (declared[0] != found[0] or declared[-1] != found[-1]):
+        basis["endpoints"] = {"declared": [declared[0], declared[-1]], "detected": [found[0], found[-1]]}
+        return "fail", basis
+    if not _is_subsequence(found, declared):
+        basis["ordering"] = "detected turning points do not appear in order inside the declared chain"
         return "fail", basis
     return ("pass", basis) if reading == "complete" else ("needs_chart", basis)
 
 
-def _proximity_state(measurements: Mapping[str, Any], reading: str | None, buffer_signal: Mapping[str, Any]) -> str:
+def _iso_day(value: Any) -> str:
+    """One date spelling for both sides, so a detector's Timestamps compare with ISO strings."""
+
+    try:
+        return pd.Timestamp(value).normalize().date().isoformat()
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _is_subsequence(inner: Sequence[str], outer: Sequence[str]) -> bool:
+    iterator = iter(outer)
+    return all(any(item == candidate for candidate in iterator) for item in inner)
+
+
+def _proximity_state(measurements: Mapping[str, Any], reading: str | None, executable: bool | None) -> str:
     """The source states the limit and withholds the number, so the reader supplies the call.
 
     What the measurement can still refuse is a reading of "at the pivot" on an entry the
@@ -195,9 +221,16 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None, buffe
         # to trade five, ten, or even twenty cents above the pivot. An entry beyond that is
         # not at the pivot by the only measure the source ever put on the distance -- which is
         # a check on the reading, not a limit deciding the setup.
-        if buffer_signal["state"] == "unavailable":
+        if executable is None:
             return "needs_chart"
-        return "fail" if buffer_signal["state"] == "beyond_source_range" else "pass"
+        # The band that reports this distance is registered as a band and its own record says
+        # it was never promoted to a gate; using its edge as a ceiling made it decide a
+        # required condition, and put the boundary in an absurd place besides -- an entry a
+        # dollar *below* the pivot read as inside the range while twenty-one cents above it
+        # read as chased. What the bars can say is whether the price is one the stock is
+        # trading at: an entry outside the latest completed session's range is not an entry
+        # available now, whatever it would have been worth on the day it was available.
+        return "pass" if executable else "fail"
     return "needs_chart"
 
 
@@ -308,6 +341,17 @@ def build_setup_evidence(
     # only measure the source ever put on the distance is refused by his number, not by one
     # invented here.
     entry_buffer = doctrine.evaluate_band(*_MINERVINI_BUFFER, entry_buffer_cents)
+    session = measurements.get("latest_session_range")
+    entry_executable = (
+        None
+        if entry_price is None or not session
+        else bool(session[0] <= float(entry_price) <= session[1])
+    )
+    entry_extension_pct = (
+        (float(entry_price) - float(pivot)) / float(pivot) * 100
+        if entry_price is not None and isinstance(pivot, (int, float)) and pivot
+        else None
+    )
     ratios = measurements.get("breakout_volume_ratios") or {}
     position_sessions = spec["breakout_volume_baseline_sessions"][1]
     swing_sessions = spec["breakout_volume_baseline_sessions"][0]
@@ -368,10 +412,12 @@ def build_setup_evidence(
         ),
         _observation(
             _CHASE_LIMIT,
-            _proximity_state(measurements, entry_proximity, entry_buffer),
+            _proximity_state(measurements, entry_proximity, entry_executable),
             {
                 "entry_price": entry_price,
+                "entry_available_in_latest_session": entry_executable,
                 "entry_buffer_above_pivot_cents": entry_buffer_cents,
+                "entry_extension_above_pivot_pct": entry_extension_pct,
                 "pivot_extension_pct": measurements.get("pivot_extension_pct"),
                 "pivot_extension_at_breakout_pct": measurements.get("pivot_extension_at_breakout_pct"),
                 "sessions_since_breakout": measurements.get("sessions_since_breakout"),

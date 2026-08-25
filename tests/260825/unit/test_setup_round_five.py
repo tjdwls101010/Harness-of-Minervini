@@ -73,8 +73,8 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 runtime=runtime,
             )
 
-    def test_no_request_can_reach_ready_on_the_standard_route_yet(self) -> None:
-        """The seam exists for the detector to fill; nothing else can fill it."""
+    def test_completeness_alone_is_what_stands_between_a_read_setup_and_ready(self) -> None:
+        """Every other reading satisfied, so the ceiling is this one and not a second gap."""
 
         frame, anchors = base_series()
         runtime = Runtime(price_history=lambda ticker, requested: _snapshot(frame))
@@ -88,13 +88,14 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 "right_side_development": "constructive",
                 "chain_completeness": "complete",
                 "entry_proximity": "at_pivot",
+                "entry_price": float(frame["Close"].iloc[-1]),
                 "no_cache": True,
             },
             runtime=runtime,
         )
 
         self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertIn("setup.declared_chain_completeness", {item["id"] for item in payload["missing"]})
+        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
 
 
 class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
@@ -106,36 +107,45 @@ class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
     distance, and Minervini's own stated buffer beside it.
     """
 
-    def test_a_normal_follow_through_session_is_not_refused(self) -> None:
+    def test_an_entry_inside_todays_range_is_a_price_someone_can_pay(self) -> None:
         frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
         after = tail(frame, 1, close=float(frame["Close"].iloc[-1]) * 1.0001, volume=800_000.0)
+        available = float(after["Close"].iloc[-1])
 
-        result = evaluate_setup(build_setup_evidence(after, anchor_dates(frame, anchors), **vouched(frame, anchor_dates(frame, anchors))))
+        result = evaluate_setup(build_setup_evidence(after, chain, **vouched(frame, chain, entry_price=available)))
 
         self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "pass")
 
-    def test_an_entry_far_above_the_pivot_cannot_be_read_as_at_the_pivot(self) -> None:
-        """Refused by the only number the source ever put on this distance, not by a new one."""
+    def test_an_entry_the_stock_is_not_trading_at_is_not_an_entry(self) -> None:
+        """The refusal the bars support is availability, not distance.
+
+        Using the five-to-twenty-cent band as a ceiling made a band decide a required
+        condition, which its own record forbids, and put the boundary somewhere absurd: a
+        dollar below the pivot read as inside the range, twenty-one cents above it as chased.
+        """
 
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
-        far = vouched(frame, chain, entry_price=float(frame["Close"].iloc[-1]))
+        extended = tail(frame, 40, close=150.0, volume=400_000.0)
+        stale_price = float(frame.loc[chain[-1], "High"]) * 1.001
 
-        result = evaluate_setup(build_setup_evidence(frame, chain, **far))
+        result = evaluate_setup(build_setup_evidence(extended, chain, **vouched(frame, chain, entry_price=stale_price)))
 
-        buffer_signal = next(item for item in result["signals"] if "minervini_5_to_20_cents" in item["id"])
-        self.assertEqual(buffer_signal["role"], "band")
-        self.assertEqual(buffer_signal["state"], "beyond_source_range")
-        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
+        chase = signal(result, "setup.chase_limit_above_pivot")
+        self.assertFalse(chase["measured"]["entry_available_in_latest_session"])
+        self.assertEqual(chase["state"], "fail")
         self.assertNotEqual(result["setup_state"], "ready")
 
-    def test_an_entry_inside_that_buffer_reads_as_at_the_pivot(self) -> None:
+    def test_the_distance_is_still_reported_against_the_buffer_the_source_named(self) -> None:
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
 
-        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
+        evidence = build_setup_evidence(frame, chain, **vouched(frame, chain))
 
-        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "pass")
+        buffer_signal = next(item for item in evidence["signals"] if "minervini_5_to_20_cents" in item["id"])
+        self.assertEqual(buffer_signal["role"], "band")
+        self.assertEqual(buffer_signal["state"], "within_source_range")
 
     def test_without_an_entry_price_the_reading_has_nothing_to_be_about(self) -> None:
         frame, anchors = base_series()
@@ -170,8 +180,11 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         pivot = float(frame.loc[chain[-1], "High"])
         slipped = tail(frame, 3, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(slipped, 2, close=pivot * 1.03, volume=1_800_000.0)
+        available = float(recovered["Close"].iloc[-1])
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(
+            build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset", entry_price=available))
+        )
 
         self.assertFalse(result["measurements"]["base_failed_after_pivot"])
         self.assertEqual(result["measurements"]["sessions_below_pivot_after_breakout"], 3)
@@ -277,6 +290,82 @@ class SkippedChainAgainstADetectorTests(unittest.TestCase):
         self.assertEqual(completeness["state"], "fail")
         self.assertTrue(completeness["measured"]["omitted"])
         self.assertNotEqual(result["setup_state"], "ready")
+
+
+
+
+class RefinementKeepsTheStructureTests(unittest.TestCase):
+    """A subset check threw away order and endpoints, which let the pivot be replaced.
+
+    Appending two later swings to a chain the detector agrees with keeps every detected date
+    present -- and moves the pivot to a lower high the stock clears more easily. A refinement
+    of a structure keeps that structure's start, its pivot, and the order of what lies between.
+    """
+
+    def _refined_past_the_pivot(self):
+        frame, anchors = base_series(breakout=False)
+        detected = anchor_dates(frame, anchors)
+        drift = tail(frame, 1, close=97.0, volume=500_000.0)
+        lower_high = tail(drift, 1, close=98.5, volume=500_000.0)
+        cleared = tail(lower_high, 1, close=99.0, volume=2_500_000.0)
+        extended_chain = [*detected, drift.index[-1].date().isoformat(), lower_high.index[-1].date().isoformat()]
+        return cleared, detected, extended_chain
+
+    def test_appending_swings_past_the_pivot_is_not_a_refinement(self) -> None:
+        frame, detected, extended_chain = self._refined_past_the_pivot()
+
+        result = evaluate_setup(
+            build_setup_evidence(
+                frame,
+                extended_chain,
+                right_side_development="constructive",
+                chain_completeness="complete",
+                detected_chain=detected,
+                entry_proximity="at_pivot",
+                entry_price=99.0,
+            )
+        )
+
+        completeness = signal(result, "setup.declared_chain_completeness")
+        self.assertEqual(completeness["state"], "fail")
+        self.assertIn("endpoints", completeness["measured"])
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_a_finer_chain_between_the_same_endpoints_is_a_refinement(self) -> None:
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+
+        result = evaluate_setup(
+            build_setup_evidence(frame, chain, **vouched(frame, chain, detected_chain=[chain[0], chain[3], chain[-1]]))
+        )
+
+        self.assertEqual(signal(result, "setup.declared_chain_completeness")["state"], "pass")
+
+
+class ChaseAfterAGapBreakoutTests(unittest.TestCase):
+    """The price path a reviewer named twice and I twice failed to build.
+
+    A breakout that gaps twenty percent above the pivot and then eases back one percent is
+    still twenty percent from the pivot. Nothing here refuses that reading -- the source gives
+    no number -- but the number a reader would need is in the signal, and this fixes the price
+    path so a later change cannot quietly stop reporting it.
+    """
+
+    def test_a_gap_breakout_that_eased_back_still_reports_its_whole_distance(self) -> None:
+        frame, anchors = base_series(breakout=False)
+        chain = anchor_dates(frame, anchors)
+        pivot = float(frame.loc[chain[-1], "High"])
+        gapped = tail(frame, 1, close=pivot * 1.20, volume=4_000_000.0)
+        eased = tail(gapped, 1, close=pivot * 1.19, volume=1_200_000.0)
+        available = float(eased["Close"].iloc[-1])
+
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain, entry_price=available)))
+
+        chase = signal(result, "setup.chase_limit_above_pivot")
+        self.assertGreater(chase["measured"]["entry_extension_above_pivot_pct"], 18.0)
+        self.assertEqual(chase["measured"]["sessions_since_breakout"], 1)
+        buffer_signal = next(item for item in result["signals"] if "minervini_5_to_20_cents" in item["id"])
+        self.assertEqual(buffer_signal["state"], "beyond_source_range")
 
 
 if __name__ == "__main__":

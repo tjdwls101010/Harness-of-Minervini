@@ -7186,8 +7186,8 @@
         "setup"
       ],
       "required_inputs": [
-        "pivot_price",
-        "current_price"
+        "pivot",
+        "entry_price"
       ],
       "rule": {
         "summary": "Minervini typically waits for price 5-20 cents above the pivot before buying, and states there is no magic number"
@@ -9933,13 +9933,14 @@
       ],
       "required_inputs": [
         "price_contractions",
-        "pivot"
+        "pivot",
+        "chart_review"
       ],
       "thresholds": {},
       "rule": {
-        "summary": "A failure at the pivot can reset and recover within a small number of days, while a failure of the base itself requires building a whole new base before the stock can be bought again."
+        "summary": "A failure at the pivot can reset and recover within a small number of days, while a failure of the base itself requires building a whole new base; how small a number of days is small enough is read from the chart, and the longest spell below the pivot is reported for that reading."
       },
-      "computability": "deterministic",
+      "computability": "chart_assisted",
       "failure": {
         "effect": "needs_review",
         "meaning": "Earlier attempts at the pivot are counted beside the current one rather than disqualifying it; the source says a pivot failure can reset, and gives no count at which it stops being able to."

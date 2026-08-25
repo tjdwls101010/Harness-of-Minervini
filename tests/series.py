@@ -98,7 +98,15 @@ def base_series(
         volumes = [1_000_000.0] * span
     frame["Volume"] = volumes
     if breakout:
-        frame.loc[index[-1], "Volume"] = float(pd.Series(volumes[-51:-1]).mean()) * 2.0
+        # A breakout session opens near the pivot and travels, so its range spans the entry a
+        # trader would actually have taken. Giving it the same narrow wick as every other bar
+        # made the pivot unreachable inside the bar that cleared it.
+        label = index[-1]
+        pivot = anchors[-1].price
+        frame.loc[label, "Open"] = pivot * 1.001
+        frame.loc[label, "Low"] = pivot * 0.999
+        frame.loc[label, "High"] = frame.loc[label, "Close"] * 1.004
+        frame.loc[label, "Volume"] = float(pd.Series(volumes[-51:-1]).mean()) * 2.0
     return frame[["Open", "High", "Low", "Close", "Volume"]], anchors
 
 

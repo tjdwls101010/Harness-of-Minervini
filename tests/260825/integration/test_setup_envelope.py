@@ -39,6 +39,7 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
         "right_side_development": "constructive",
         "chain_completeness": "complete",
         "entry_proximity": "at_pivot",
+        "entry_price": float(prices.data["Close"].iloc[-1]),
         "no_cache": True,
     }
     return execute("ticker.setup", request, runtime=runtime)
@@ -53,7 +54,7 @@ class EnvelopeTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertIn("setup.declared_chain_completeness", payload["data"]["missing"])
+        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
         self.assertEqual(payload["data"]["measurements"]["contraction_count"], 3)
 
     def test_no_signal_in_the_envelope_carries_a_state_or_a_flag_the_verdict_must_ignore(self) -> None:
@@ -168,6 +169,7 @@ class CompactFormatTests(unittest.TestCase):
             "right_side_development": "constructive",
             "chain_completeness": "complete",
             "entry_proximity": "at_pivot",
+        "entry_price": float(prices.data["Close"].iloc[-1]),
             "no_cache": True,
         }
 
