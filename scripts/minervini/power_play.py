@@ -29,25 +29,6 @@ import pandas as pd
 from .setup_structure import _CORPORATE_ACTION_COLUMN, read_bars
 
 
-_SESSIONS_PER_WEEK = 5
-
-
-def _change(bars: pd.DataFrame, column: str, start: int, end: int) -> float | None:
-    """One column's percentage move between two positions, or nothing if it is not carried.
-
-    ``start`` is the session before the move, not its first session. "An explosive price move
-    commences on huge volume" makes the launch bar part of the advance, so reading from its own
-    close throws away whatever it did: a stock that ran from ninety to two hundred in two weeks
-    reported thirty-three percent, because the session that travelled from eighty to one hundred
-    and sixty was where the reading began. With nothing in front of it there is no price before
-    the move, which is a gap rather than a zero.
-    """
-    if column not in bars or start < 0:
-        return None
-    first = float(bars.iloc[start][column])
-    return (float(bars.iloc[end][column]) - first) / first * 100 if first > 0 else None
-
-
 def _corporate_actions(bars: pd.DataFrame, start: int, end: int) -> list[str] | None:
     """The dated split events inside a span, or nothing when the input could not say."""
 
@@ -65,6 +46,7 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_low_date": None,
         "advance_pct": None,
         "advance_pct_closes": None,
+        "advance_low_close": None,
         "corporate_action_evidence": None,
         "corporate_action_sessions": None,
         "advance_sessions": None,
@@ -82,8 +64,15 @@ def _empty(reason: str | None) -> dict[str, Any]:
     }
 
 
-def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
-    """Reduce a history to the numbers the Power Play criteria are read against."""
+def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | None = None, before: str | None = None) -> dict[str, Any]:
+    """Reduce a history to the numbers the Power Play criteria are read against.
+
+    ``below`` and ``before`` cap the peak search, which is how the same bars are read a second time
+    from the highest top preceding the one they were first read from. Both bounds are needed: a
+    lower top *inside* the flag is later than the peak the flag hangs from and cannot be an
+    alternative reading of it -- it is the same structure with most of itself cut off. Nothing
+    else about the measurement changes; it is the same arithmetic asked about another candidate.
+    """
 
     bars, rejection = read_bars(history)
     if bars is None:
@@ -91,6 +80,10 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
 
     flag_window = int(spec["flag_window_sessions"])
     advance_window = int(spec["advance_window_sessions"])
+    # The same conversion the windows were compiled through. Divided by a constant here instead,
+    # the two owners agree only as long as the registered value stays five: at four, a
+    # twenty-five session flag is six and a quarter weeks and this would pass it as five.
+    week = int(spec["sessions_per_trading_week"])
 
     # The peak the flag hangs from is the highest bar of the longest structure the criteria
     # describe -- an advance of up to eight weeks and a flag of up to six -- and then the FIRST
@@ -104,6 +97,12 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     # session flag becomes twelve and clears the limit that way. Together the limit rejects
     # what it is supposed to reject: a flag that really ran ten weeks measures ten.
     window = bars.iloc[-(advance_window + flag_window + 1):]
+    if below is not None:
+        window = window.loc[window["High"] < below]
+    if before is not None:
+        window = window.loc[window.index < pd.Timestamp(before)]
+    if not len(window):
+        return _empty("history_has_no_earlier_top_to_read_from")
     peak_high = float(window["High"].max())
     # Inside the search span and nowhere else. Taking the first equal high anywhere in the loaded
     # history is the mirror of taking the last: one glues the flag to a session months earlier
@@ -126,16 +125,27 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     low_label = before["Low"].idxmin()
     advance_low = float(before.loc[low_label, "Low"])
     launch = int(bars.index.get_loc(low_label))
-    # The volume the advance "commences on", against what the same stock traded before it. The
-    # source gives the clause no magnitude, so this is the ratio and nothing decides on it.
+    # Which session the move began on is not something the bars settle, so neither reading is
+    # anchored on a guess about it. Both are taken across the window the criterion allows.
     #
-    # The window is required in full rather than taken as far as it reaches. Sliced to a shorter
-    # lookback, five real tickers reported the same peak, advance and flag while this ratio
-    # moved, because the only thing that had changed was how many sessions were left in front of
-    # the launch to average -- a short average wearing a full one's name.
-    baseline = bars.iloc[launch - advance_window:launch] if launch >= advance_window else bars.iloc[0:0]
+    # Anchored on the lowest low instead, a bar that wicked to forty-nine three days after a
+    # launch from fifty started the reading inside the advance: the price move measured from
+    # seventy-five rather than fifty and reported forty-seven percent, while the ten-times-volume
+    # session that began it fell outside the window the volume was looked for in. Both halves of
+    # that failed together, and both came from the same guess.
+    advance_low_close = float(before["Close"].min())
+    # What the same stock traded before the whole window, so no session of the advance is in its
+    # own baseline. Required in full rather than taken as far as it reaches: sliced to a shorter
+    # lookback, five real tickers reported the same peak, advance and flag while this ratio moved,
+    # because the only thing that had changed was how many sessions were left to average.
+    #
+    # The median, not the mean. One 400M session in an otherwise 400K history lifts the mean to
+    # 10M, and a genuine ten-fold expansion to 4M then measures as 0.38 of it -- an advance that
+    # plainly expanded, removed as a known failure by an outlier behind it.
+    start = peak - advance_window
+    baseline = bars.iloc[start - advance_window:start] if start >= advance_window else bars.iloc[0:0]
 
-    baseline_volume = float(baseline["Volume"].mean()) if len(baseline) else None
+    baseline_volume = float(baseline["Volume"].median()) if len(baseline) else None
     measurable = baseline_volume is not None and baseline_volume > 0
 
     return {
@@ -154,7 +164,8 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         # extremes reading runs a median of 5.4 points above the closes one, and on the one
         # ticker whose advance actually reached a hundred percent it was 101.8 against 96.4.
         "advance_pct": (peak_high - advance_low) / advance_low * 100 if advance_low > 0 else None,
-        "advance_pct_closes": _change(bars, "Close", launch - 1, peak),
+        "advance_pct_closes": (float(bars.iloc[peak]["Close"]) - advance_low_close) / advance_low_close * 100 if advance_low_close > 0 else None,
+        "advance_low_close": advance_low_close,
         # Whether a corporate action sits anywhere the measurements read, and -- separately --
         # whether the input was in a position to say. A history that does not carry the event
         # column has not reported "no split"; it has reported nothing, and folding those together
@@ -171,7 +182,7 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
         "corporate_action_sessions": _corporate_actions(bars, max(0, launch - advance_window), len(bars) - 1),
         "advance_sessions": peak - launch,
-        "advance_weeks": (peak - launch) / _SESSIONS_PER_WEEK,
+        "advance_weeks": (peak - launch) / week,
         # Three readings of the volume clause, because "commences on huge volume" asks about a
         # session and the search cannot say for certain which session that was.
         #
@@ -189,11 +200,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         # middle, is what the chart is asked -- and the date beside the ratio is what that
         # question is asked about.
         "launch_volume_ratio": float(bars.iloc[launch]["Volume"]) / baseline_volume if measurable else None,
-        "advance_peak_volume_ratio": float(bars.iloc[launch:peak + 1]["Volume"].max()) / baseline_volume if measurable else None,
-        "advance_peak_volume_date": bars.index[launch + int(bars.iloc[launch:peak + 1]["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
-        "advance_volume_ratio": float(bars.iloc[launch:peak + 1]["Volume"].mean()) / baseline_volume if measurable else None,
+        "advance_peak_volume_ratio": float(before["Volume"].max()) / baseline_volume if measurable else None,
+        "advance_peak_volume_date": before.index[int(before["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
+        "advance_volume_ratio": float(before["Volume"].mean()) / baseline_volume if measurable else None,
         "flag_sessions": int(len(flag)),
-        "flag_weeks": len(flag) / _SESSIONS_PER_WEEK,
+        "flag_weeks": len(flag) / week,
         "flag_depth_pct": (peak_high - float(flag["Low"].min())) / peak_high * 100 if len(flag) else None,
         "flag_low": float(flag["Low"].min()) if len(flag) else None,
         "flag_low_date": flag["Low"].idxmin().date().isoformat() if len(flag) else None,
@@ -218,6 +229,30 @@ _REQUIRED = (
     f"{_CLAIM}.flag_tightness_or_vcp",
 )
 _CORPORATE_ACTIONS = "corporate_action_evidence"
+# What a split moves and what it does not. A corporate action rescales every printed price and
+# every share count, so a depth, an advance and a volume ratio measured across one are arithmetic
+# about the action rather than about the stock. How many sessions elapsed is untouched by it.
+#
+# Detecting an action and then letting the depth it manufactured reject the stock is worse than
+# not detecting it: a fifty-five percent flag that never happened comes back as a confident
+# finding. So these criteria stop deciding while the action stands, and the measurements stay in
+# the payload for a person to read -- the same separation an uncorroborated chain gets in the
+# setup path, and for the same reason.
+# The one criterion a structure can miss by not having happened yet. Twelve sessions is the least
+# a flag can be and still be one, so a shorter flag has not failed the criterion -- it has not
+# finished, and the only thing it needs is time.
+#
+# That distinction decides real cases here because the peak is found rather than declared. A new
+# high a hundredth of a percent above the last one restarts the flag, and the source names no size
+# below which a new high stops counting; calling the four sessions after it a failure removes a
+# twenty-session flag from consideration on the strength of one cent.
+_STILL_FORMING = f"{_CLAIM}.flag_minimum_sessions"
+_MOVED_BY_A_CORPORATE_ACTION = (
+    f"{_CLAIM}.advance_minimum_pct",
+    f"{_CLAIM}.flag_maximum_decline_gate_pct",
+    f"{_CLAIM}.flag_tightness_or_vcp",
+    f"{_CLAIM}.launch_volume_character",
+)
 
 
 def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
@@ -230,14 +265,18 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     candidates deterministically and assembles the evidence for the ones it cannot remove.
     """
     signals = {str(signal["id"]): signal for signal in evidence.get("signals") or []}
+    unmoved = evidence.get(_CORPORATE_ACTIONS) == "present" and not evidence.get("corporate_action_sessions")
+    # A verdict resting on which of two tops the search landed on is a verdict about the search.
+    settled = evidence.get("peak_identity") != "disputed"
     failed: list[str] = []
     missing: list[str] = []
     for claim_id in _REQUIRED:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
-        if state == "pass":
+        trusted = settled and (unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION)
+        if state == "pass" and trusted:
             continue
-        if state == "fail":
+        if state == "fail" and claim_id != _STILL_FORMING and trusted:
             failed.append(claim_id)
         else:
             missing.append(claim_id)
@@ -247,6 +286,8 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # is a finding about the stock, so both are gaps rather than failures.
     if evidence.get(_CORPORATE_ACTIONS) != "present" or evidence.get("corporate_action_sessions"):
         missing.append(_CORPORATE_ACTIONS)
+    if not settled:
+        missing.append("peak_identity")
 
     if failed:
         state = "not_qualified"
@@ -261,6 +302,8 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "missing": missing,
         "structure": evidence.get("structure") or {},
         "measurements": evidence.get("measurements") or {},
+        "peak_identity": evidence.get("peak_identity"),
+        "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
         "signals": list(evidence.get("signals") or []),

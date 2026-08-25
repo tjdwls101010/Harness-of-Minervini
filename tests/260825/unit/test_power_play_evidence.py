@@ -36,13 +36,6 @@ class TheMeasurableLimitsDecideWhatTheyCanDecide(unittest.TestCase):
             verdict["failed"],
         )
 
-    def test_a_flag_shorter_than_twelve_sessions_is_not_a_power_play(self):
-        pack = evidence(flag_sessions=6)
-
-        verdict = evaluate_power_play(pack)
-
-        self.assertEqual(verdict["power_play_state"], "not_qualified")
-
     def test_an_advance_under_a_hundred_percent_is_not_a_power_play(self):
         pack = evidence(advance_pct=40.0)
 
@@ -78,11 +71,79 @@ class WhatTheBarsCannotSettleStaysUnsettled(unittest.TestCase):
         )
 
     def test_a_history_that_cannot_say_whether_a_split_happened_says_so(self):
-        pack = evidence()
+        pack = evidence(corporate_actions=False)
 
         verdict = evaluate_power_play(pack)
 
         self.assertIn("corporate_action_evidence", verdict["missing"])
+class AFlagStillFormingHasNotFailed(unittest.TestCase):
+    """"a period of three to six weeks (some can emerge after only 12 days)."
+
+    Twelve sessions is the least a flag can be and still be one, which makes a shorter flag an
+    unfinished flag rather than a failed structure. Time is the only thing it needs, and no
+    amount of it has passed yet.
+
+    The distinction is load-bearing here because the peak is found rather than declared: a new
+    high a hundredth of a percent above the last one restarts the flag, and the source names no
+    size below which a new high stops counting. Calling the four sessions that follow a failure
+    removes a twenty-session flag from consideration on the strength of one cent.
+    """
+
+    def test_a_flag_shorter_than_the_minimum_is_unfinished_rather_than_failed(self):
+        pack = evidence(flag_sessions=6)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertIn("fundamentals.power_play_exception.flag_minimum_sessions", verdict["missing"])
+
+    def test_a_marginal_new_high_does_not_remove_the_flag_it_restarted(self):
+        pack = evidence(marginal_new_high_at=-5)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertEqual(verdict["failed"], [])
+
+
+class ACorporateActionInvalidatesWhatItMoved(unittest.TestCase):
+    """A split moves every printed price and moves nobody's money.
+
+    Detecting one and then letting the depth it manufactured reject the stock is worse than not
+    detecting it: the answer comes back as a confident finding about price action that never
+    happened. What a split cannot touch is how many sessions elapsed, so those criteria still
+    decide -- the distinction is between measurements the action moved and measurements it did not.
+    """
+
+    def test_a_split_cannot_produce_a_confident_failure_on_depth(self):
+        pack = build_power_play_evidence(power_play_series(split_inside_the_flag=True))
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertNotIn(
+            "fundamentals.power_play_exception.flag_maximum_decline_gate_pct",
+            verdict["failed"],
+        )
+
+    def test_a_split_leaves_the_session_counts_deciding(self):
+        """Sixty-five sessions is sixty-five sessions whatever the prices did."""
+
+        pack = build_power_play_evidence(
+            power_play_series(flag_sessions=65, split_inside_the_flag=True)
+        )
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["power_play_state"], "not_qualified")
+        self.assertIn("fundamentals.power_play_exception.flag_maximum_weeks", verdict["failed"])
+
+    def test_the_measurements_stay_where_a_person_can_read_them(self):
+        pack = build_power_play_evidence(power_play_series(split_inside_the_flag=True))
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertIsNotNone(verdict["measurements"]["flag_depth_pct"])
 
 
 if __name__ == "__main__":

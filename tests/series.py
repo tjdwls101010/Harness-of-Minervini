@@ -491,6 +491,8 @@ def power_play_series(
     tie_the_peak_at: int | None = None,
     ancient_equal_high: bool = False,
     split_inside_the_flag: bool = False,
+    corporate_actions: bool = True,
+    marginal_new_high_at: int | None = None,
     start: str = "2026-01-02",
 ) -> pd.DataFrame:
     """Dormancy, then an explosive advance, then a flag that ends on the last bar.
@@ -535,6 +537,11 @@ def power_play_series(
         # this structure later reached, with an unrelated decline between them. Nothing connects
         # the two but the price being equal.
         frame.iloc[1, frame.columns.get_loc("High")] = peak
+    if marginal_new_high_at is not None:
+        # A hundredth of a percent above the peak, late in an otherwise ordinary flag. Nothing in
+        # the source says how large a new high has to be before it means something, so the search
+        # takes it and the flag before it becomes advance.
+        frame.iloc[marginal_new_high_at, frame.columns.get_loc("High")] = peak * 1.0001
     if tie_the_peak_at is not None:
         # A later session that prints exactly the peak's high without exceeding it. Nothing
         # explosive happened there, so a rule that reads the flag from the last equal high
@@ -554,16 +561,19 @@ def power_play_series(
         + [800_000.0] * flag_sessions
     )
     frame["Volume"] = volumes[: len(closes)]
+    if not corporate_actions:
+        # A history that cannot say whether a split happened. The provider supplies the column,
+        # so this is the shape of an input from somewhere that does not.
+        return frame[["Open", "High", "Low", "Close", "Volume"]]
+    frame["Stock Splits"] = [0.0] * len(closes)
     if split_inside_the_flag:
         # A two-for-one forward split partway through the flag: every printed price halves, so
         # the flag reads as a fifty percent correction that never happened.
-        frame["Stock Splits"] = [0.0] * len(closes)
         cut = trough + 1
         frame.iloc[cut, frame.columns.get_loc("Stock Splits")] = 2.0
         columns = ["Open", "High", "Low", "Close"]
         frame.iloc[cut:, [frame.columns.get_loc(name) for name in columns]] /= 2
-        return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
-    return frame[["Open", "High", "Low", "Close", "Volume"]]
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
 
 
 def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> pd.DataFrame:
@@ -603,9 +613,9 @@ def wide_launch_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     on a stock that went from 90 to 200 in two weeks.
     """
 
-    # Long enough that the launch has a full baseline window in front of it; a partial one is
+    # Long enough that the advance window has a full baseline in front of it; a partial one is
     # reported as no baseline at all.
-    dormant = [90.0] * 45
+    dormant = [90.0] * 90
     closes = dormant + [150.0] + _leg(150.0, 200.0, 9)
     index = pd.bdate_range(start=start, periods=len(closes) + 12)
     closes = closes + [198.0] * 12
@@ -632,7 +642,7 @@ def dormancy_low_before_the_launch_series(*, start: str = "2026-01-02") -> pd.Da
     lowest bar was a quiet one.
     """
 
-    quiet = [90.0] * 45 + [90.0] * 20
+    quiet = [90.0] * 90 + [90.0] * 20
     undercut = 45
     closes = quiet + _leg(90.0, 200.0, 9)
     peak = len(closes) - 1
@@ -648,3 +658,31 @@ def dormancy_low_before_the_launch_series(*, start: str = "2026-01-02") -> pd.Da
     for position in range(launch, peak + 1):
         frame.iloc[position, frame.columns.get_loc("Volume")] = 10_000_000.0
     return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+
+def wick_after_the_launch_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """The lowest low of the eight weeks prints days after the move already began.
+
+    Fifty for forty sessions, then the launch: ten times the volume, fifty to seventy-five in one
+    session, and on to a hundred and ten. Three days later one bar wicks to forty-nine and never
+    closes there. Anchoring the advance on the lowest low starts the reading after the launch --
+    the price move measures from seventy-five instead of fifty, and the ten-times session falls
+    outside the window the volume is looked for in.
+    """
+
+    closes = [50.0] * 90 + [75.0, 76.0, 80.0, 84.0, 88.0, 92.0, 97.0, 102.0, 106.0, 110.0]
+    peak = len(closes) - 1
+    closes = closes + [106.0] * 21
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    launch = 90
+    frame.iloc[launch, frame.columns.get_loc("Low")] = 50.0
+    frame.iloc[launch, frame.columns.get_loc("High")] = 80.0
+    frame.iloc[launch + 1, frame.columns.get_loc("Low")] = 49.0
+    frame.iloc[peak, frame.columns.get_loc("High")] = 110.0
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    frame.iloc[launch, frame.columns.get_loc("Volume")] = 10_000_000.0
+    frame["Stock Splits"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]

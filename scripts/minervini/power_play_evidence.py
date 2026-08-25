@@ -12,6 +12,7 @@ weeks to double reports whatever it managed in eight and fails on that number.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
@@ -29,6 +30,9 @@ def compile_power_play_spec() -> dict[str, Any]:
     return {
         "advance_window_sessions": int(doctrine.threshold(_CLAIM, "advance_maximum_weeks")) * week,
         "flag_window_sessions": int(doctrine.threshold(_CLAIM, "flag_maximum_weeks")) * week,
+        # Carried rather than re-derived, so the module that reports durations in weeks converts
+        # them the same way the windows were compiled.
+        "sessions_per_trading_week": week,
     }
 
 
@@ -84,13 +88,48 @@ def _tightness_state(depth: float | None, limit: float) -> str:
     return "pass" if depth <= limit else "needs_chart"
 
 
+def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
+    """How each criterion reads on one set of measurements, without the payloads."""
+
+    return {
+        "advance_minimum_pct": doctrine.evaluate_gate(_CLAIM, "advance_minimum_pct", measurements["advance_pct_closes"])["state"],
+        "advance_maximum_weeks": doctrine.evaluate_gate(_CLAIM, "advance_maximum_weeks", measurements["advance_weeks"])["state"],
+        "flag_minimum_sessions": doctrine.evaluate_gate(_CLAIM, "flag_minimum_sessions", measurements["flag_sessions"])["state"],
+        "flag_maximum_weeks": doctrine.evaluate_gate(_CLAIM, "flag_maximum_weeks", measurements["flag_weeks"])["state"],
+        "flag_maximum_decline_gate_pct": doctrine.evaluate_gate(_CLAIM, "flag_maximum_decline_gate_pct", measurements["flag_depth_pct"])["state"],
+        "launch_volume_character": _volume_state(measurements["advance_peak_volume_ratio"]),
+        "flag_tightness_or_vcp": _tightness_state(measurements["flag_depth_pct"], tight_limit),
+    }
+
+
 def build_power_play_evidence(history: Any) -> dict[str, Any]:
-    """Measure a history and read the criteria against it, deciding nothing."""
+    """Measure a history and read the criteria against it, deciding nothing.
+
+    The structure is found rather than declared, so the same bars are read twice: once from the
+    highest top of the search span, and once from the highest top below it. When the two readings
+    answer the criteria the same way, which one the search happened to land on did not matter.
+    When they differ, the verdict rests on a choice the bars did not make, and the source names
+    no size below which a new high stops counting -- a hundredth of a percent above the last high
+    restarts the flag and turns twenty sessions into four. Neither is vouched for then.
+
+    The same rule the segmentation already runs on its own parameters, for the same reason.
+    """
 
     spec = compile_power_play_spec()
     measurements = measure_power_play(history, spec)
     tight_limit = float(doctrine.threshold(_CLAIM, "tight_action_maximum_pct"))
     actions = measurements["corporate_action_sessions"]
+    alternate = (
+        measure_power_play(history, spec, below=measurements["peak_high"], before=measurements["peak_date"])
+        if measurements["peak_high"] is not None
+        else measurements
+    )
+    # An earlier top the search span does not contain is not a competing reading of this
+    # structure; there is nothing to disagree with.
+    disputed = (
+        alternate["rejection"] is None
+        and _criteria(alternate, tight_limit) != _criteria(measurements, tight_limit)
+    )
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -126,6 +165,14 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
+        },
+        "peak_identity": "disputed" if disputed else "settled",
+        "alternate_peak": None if not disputed else {
+            "peak_date": alternate["peak_date"],
+            "peak_high": alternate["peak_high"],
+            "flag_sessions": alternate["flag_sessions"],
+            "flag_depth_pct": alternate["flag_depth_pct"],
+            "advance_pct_closes": alternate["advance_pct_closes"],
         },
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".

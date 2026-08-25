@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..clock import resolve_as_of
+from ..setup_structure import _CORPORATE_ACTION_COLUMN
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 
 
@@ -17,14 +18,19 @@ OHLCV_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 
 
 def _complete_rows(frame: pd.DataFrame) -> np.ndarray:
-    """Mark the rows whose every present OHLCV value is a finite number.
+    """Mark the rows whose every present value the measurements read is a finite number.
 
     Positional rather than label-indexed: a provider may repeat a session, and a
     label slice would then keep or drop every row sharing that timestamp.
+
+    The corporate-action column counts because the measurement boundary refuses a frame with a
+    non-finite value in any column it carries. Checked here only for OHLCV, a single blank split
+    cell reached that boundary and took the whole history down -- for the setup and the chart as
+    well, neither of which reads the column.
     """
 
     complete = np.ones(len(frame), dtype=bool)
-    for column in OHLCV_COLUMNS:
+    for column in (*OHLCV_COLUMNS, _CORPORATE_ACTION_COLUMN):
         if column in frame:
             values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
             complete &= np.isfinite(values)

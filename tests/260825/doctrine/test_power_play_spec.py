@@ -29,6 +29,20 @@ class TheWindowsAreTheSourcesOwnLimits(unittest.TestCase):
 
         self.assertEqual(spec["flag_window_sessions"], weeks * sessions)
 
+    def test_the_conversion_travels_with_the_windows_it_compiled_them_from(self):
+        """A module reporting durations in weeks has to divide by what the windows multiplied by.
+
+        Divided by a constant instead, the two agree only while the registered value stays five:
+        at four, a twenty-five session flag is six and a quarter weeks and would pass the six-week
+        limit as five.
+        """
+        spec = compile_power_play_spec()
+
+        self.assertEqual(
+            spec["sessions_per_trading_week"],
+            doctrine.parameter("convention.trading_week", "sessions_per_trading_week"),
+        )
+
     def test_the_module_under_test_agrees_with_the_literal_its_unit_tests_use(self):
         """tests/260825/unit/test_power_play.py names 30 and 40 so it can stay free of doctrine."""
 

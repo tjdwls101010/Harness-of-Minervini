@@ -17,13 +17,14 @@ from tests.series import (
     dormancy_low_before_the_launch_series,
     power_play_series,
     reverse_split_series,
+    wick_after_the_launch_series,
     wide_launch_bar_series,
 )
 
 
 # Six weeks of flag and eight of advance, in sessions. Checked against the registry by
 # tests/260825/doctrine/test_power_play_spec.py rather than trusted here.
-SPEC = {"flag_window_sessions": 30, "advance_window_sessions": 40}
+SPEC = {"flag_window_sessions": 30, "advance_window_sessions": 40, "sessions_per_trading_week": 5}
 
 
 class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
@@ -121,7 +122,7 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
     def test_a_history_without_the_event_column_has_not_said_there_was_no_split(self):
         """Absence of evidence. The column being missing is a gap, never a quiet "none"."""
 
-        measured = measure_power_play(power_play_series(), SPEC)
+        measured = measure_power_play(power_play_series(corporate_actions=False), SPEC)
 
         self.assertEqual(measured["corporate_action_evidence"], "missing")
         self.assertIsNone(measured["corporate_action_sessions"])
@@ -152,13 +153,13 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
 
         self.assertAlmostEqual(measured["advance_pct_closes"], (200.0 - 90.0) / 90.0 * 100, places=6)
 
-    def test_a_launch_with_nothing_before_it_has_no_closes_reading(self):
-        """Absent, not zero -- the price before the move is missing, so the reading is."""
+    def test_a_history_with_no_baseline_in_front_of_the_window_reports_none(self):
+        """Absent, not short. The dormancy the advance began out of is what the volume is against."""
 
         bars = wide_launch_bar_series()
-        measured = measure_power_play(bars.iloc[45:], SPEC)
+        measured = measure_power_play(bars.iloc[60:], SPEC)
 
-        self.assertIsNone(measured["advance_pct_closes"])
+        self.assertIsNone(measured["advance_peak_volume_ratio"])
 
     def test_the_launch_session_carries_the_volume_clause_not_the_whole_advance(self):
         """"commences on huge volume" is about the session it commenced on.
@@ -218,6 +219,19 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
         measured = measure_power_play(power_play_series(split_inside_the_flag=True), SPEC)
 
         self.assertTrue(measured["corporate_action_sessions"])
+
+    def test_a_wick_after_the_launch_does_not_move_where_the_advance_is_read_from(self):
+        """Fifty to a hundred and ten is the move; a bar that dipped to forty-nine on the way is not.
+
+        Anchored on the lowest low, the close reading starts three days into the advance and
+        reports forty-seven percent, and the ten-times-volume session that began it falls outside
+        the window the volume is looked for in. The lowest close of the same window is the price
+        before the move under either identification of its first bar.
+        """
+        measured = measure_power_play(wick_after_the_launch_series(), SPEC)
+
+        self.assertAlmostEqual(measured["advance_pct_closes"], (110.0 - 50.0) / 50.0 * 100, places=6)
+        self.assertAlmostEqual(measured["advance_peak_volume_ratio"], 10.0, places=6)
 
 
 if __name__ == "__main__":

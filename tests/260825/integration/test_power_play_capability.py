@@ -52,11 +52,17 @@ class TheEnvelopeKeepsTheThreeApart(unittest.TestCase):
         payload = run(power_play_series())
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
 
-        self.assertEqual(reasons["corporate_action_evidence"], "corporate_action_evidence_missing")
+        self.assertNotIn("corporate_action_evidence", reasons)
         self.assertEqual(
             reasons["fundamentals.power_play_exception.launch_volume_character"],
             "chart_reading_required",
         )
+
+    def test_a_history_that_cannot_say_whether_a_split_happened_reports_that(self):
+        payload = run(power_play_series(corporate_actions=False))
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+
+        self.assertEqual(reasons["corporate_action_evidence"], "corporate_action_evidence_missing")
 
     def test_a_split_inside_the_span_is_a_different_gap_from_a_missing_column(self):
         payload = run(reverse_split_series())
