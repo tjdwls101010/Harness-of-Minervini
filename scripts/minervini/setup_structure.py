@@ -72,7 +72,13 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # fingerprint bars no chart would render, which is the opposite of one digest across both.
     if bool(inverted.any()) or bool(outside.any()):
         return None, "history_contains_invalid_bar_ranges"
-    index = pd.DatetimeIndex(bars.index)
+    try:
+        index = pd.DatetimeIndex(bars.index)
+    except Exception:
+        # An index that is not dates is a data problem like any other, and the digest raising on
+        # it is an internal failure where the envelope should carry typed unavailability -- the
+        # same shape closed for infinities, still open on this axis.
+        return None, "history_index_is_not_dates"
     # Two rows under one label make a bar lookup return a Series, and reading a price off it
     # raises inside the detector -- an internal contract failure where the envelope should carry
     # typed unavailability.
@@ -80,8 +86,14 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_repeats_a_session"
     # The production provider returns the exchange's own tz-aware index while the fixtures
     # are naive, so a swing date parsed from a string matched one and missed the other.
+    #
+    # The wall clock is kept and the zone dropped, not converted. A session's date is the one the
+    # exchange traded it on, and converting to UTC pushes a late-afternoon bar onto the next day.
+    # The chart boundary already read it this way, so the two surfaces were normalising the same
+    # bars differently -- one accepting what the other called a repeated session, and even where
+    # both accepted, fingerprinting different dates.
     if index.tz is not None:
-        index = index.tz_convert(None) if index.tz is not None else index
+        index = index.tz_localize(None)
     normalized = index.normalize()
     # Two intraday stamps on one date are not duplicates until the time is dropped, and dropping
     # it is what the rest of the engine reads. Checking only before normalising let that pair

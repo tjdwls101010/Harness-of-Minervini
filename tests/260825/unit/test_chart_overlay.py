@@ -222,17 +222,35 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         def infinite_high(frame): frame.iloc[17, frame.columns.get_loc("High")] = float("inf")
         def repeated_session(frame): frame.index = [frame.index[0], *frame.index[1:-1], frame.index[0]]
         def missing_column(frame): frame.drop(columns=["Volume"], inplace=True)
+        def non_date_index(frame): frame.index = ["not-a-date", *frame.index[1:]]
+
+        def late_evening_zone(frame):
+            # Two exchange dates, one of which becomes the next UTC day if the zone is converted
+            # rather than dropped. Everything above is naive, which is how a whole timezone seam
+            # sat between the two surfaces with the matrix reporting agreement.
+            frame.index = pd.DatetimeIndex(
+                [pd.Timestamp("2026-01-01 23:30"), pd.Timestamp("2026-01-02 16:00"), *frame.index[2:]]
+            ).tz_localize("America/New_York")
+
+        def two_sessions_one_zone_day(frame):
+            frame.index = pd.DatetimeIndex(
+                [pd.Timestamp("2026-01-02 00:30"), pd.Timestamp("2026-01-02 23:30"), *frame.index[2:]]
+            ).tz_localize("America/New_York")
 
         mutations = [
             ("untouched", lambda frame: None), ("zero prices", zero_prices), ("negative close", negative_close),
             ("negative volume", negative_volume), ("high below low", high_below_low),
             ("open above high", open_above_high), ("nan close", nan_close), ("infinite high", infinite_high),
             ("repeated session", repeated_session), ("missing column", missing_column),
+            ("non-date index", non_date_index), ("late evening zone", late_evening_zone),
+            ("two sessions one zone day", two_sessions_one_zone_day),
         ]
         for label, mutate in mutations:
             with self.subTest(frame=label):
                 frame = base.copy()
                 mutate(frame)
+                # Both sides have to answer, rather than one of them raising something the
+                # envelope has no word for.
                 accepted = read_bars(frame)[1] is None
                 try:
                     with tempfile.TemporaryDirectory() as directory:
@@ -241,6 +259,24 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
                 except ValueError:
                     rendered = False
                 self.assertEqual(accepted, rendered)
+
+    def test_a_session_late_in_the_exchange_day_keeps_its_own_date(self) -> None:
+        """The date a session traded on, not the UTC day it spills into.
+
+        One surface dropped the zone and the other converted to UTC, so the same tz-aware bars
+        were a repeated session to one and two ordinary ones to the other -- and where both did
+        accept, they fingerprinted different dates.
+        """
+
+        frame, _ = base_series()
+        frame.index = pd.DatetimeIndex(
+            [pd.Timestamp("2026-01-01 23:30"), pd.Timestamp("2026-01-02 16:00"), *frame.index[2:]]
+        ).tz_localize("America/New_York")
+
+        bars, rejection = read_bars(frame)
+
+        self.assertIsNone(rejection)
+        self.assertEqual([str(bars.index[0].date()), str(bars.index[1].date())], ["2026-01-01", "2026-01-02"])
 
     def test_an_infinite_price_leaves_as_unavailable_rather_than_an_exception(self) -> None:
         """`read_bars` passed it and the digest raised on it, which is an internal failure where

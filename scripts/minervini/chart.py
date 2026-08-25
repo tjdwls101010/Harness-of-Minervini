@@ -108,29 +108,17 @@ def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
     if daily_ohlcv.empty:
         raise ValueError("daily_ohlcv contains no completed bars")
 
-    bars = daily_ohlcv.loc[:, _REQUIRED_COLUMNS].copy()
-    index = pd.to_datetime(bars.index, errors="coerce")
-    if index.isna().any() or index.has_duplicates:
-        raise ValueError("daily_ohlcv index must contain unique trading dates")
-    bars.index = index.tz_localize(None) if index.tz is not None else index
-    bars = bars.sort_index()
-    if bars.index[-1].date() > as_of:
-        raise ValueError("daily_ohlcv contains a bar after as_of")
-    for column in _REQUIRED_COLUMNS:
-        bars[column] = pd.to_numeric(bars[column], errors="coerce")
-    if bars.isna().any().any() or not np.isfinite(bars.to_numpy(dtype=float)).all():
-        raise ValueError("daily_ohlcv must contain finite completed OHLCV values")
-    if (bars["Volume"] < 0).any() or (bars["High"] < bars["Low"]).any():
-        raise ValueError("daily_ohlcv contains invalid OHLCV ranges")
-    if ((bars["Open"] < bars["Low"]) | (bars["Open"] > bars["High"]) | (bars["Close"] < bars["Low"]) | (bars["Close"] > bars["High"])).any():
-        raise ValueError("daily_ohlcv open and close must fall inside each high-low range")
-    # The measuring boundary's own definition of a usable bar, applied here too. Two definitions
-    # let a chart render successfully off bars the setup refuses -- all-zero prices, or two
-    # stamps on one date -- and the artifact then carried a null digest, which is the one thing
-    # a setup approval has to name. A picture nothing can be approved from is not a success.
-    _, rejection = read_bars(bars)
+    # The measuring boundary owns what a usable bar is and how its index is read, so the frame
+    # this renders is the frame that gets measured. Normalising here as well is how the two came
+    # to disagree about a tz-aware index: one kept the wall clock, the other converted to UTC,
+    # and the same session landed on two different dates.
+    bars, rejection = read_bars(daily_ohlcv)
     if rejection is not None:
         raise ValueError(f"daily_ohlcv is not usable price history: {rejection}")
+    if bars is None or bars.empty:
+        raise ValueError("daily_ohlcv contains no completed bars")
+    if bars.index[-1].date() > as_of:
+        raise ValueError("daily_ohlcv contains a bar after as_of")
     return bars
 
 
