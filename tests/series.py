@@ -41,6 +41,7 @@ def base_series(
     rallies: tuple[int, ...] | None = None,
     declines: tuple[int, ...] | None = None,
     volume_profile: str = "drying",
+    pause_dip_pct: float = 1.5,
     breakout: bool = True,
     start: str = "2026-01-02",
 ) -> tuple[pd.DataFrame, list[Anchor]]:
@@ -59,6 +60,11 @@ def base_series(
         closes += _leg(low, high, rally_sessions)
         anchors.append(Anchor(len(closes) - 1, "high", high))
     if breakout:
+        # A pivot is a high the stock backed away from before clearing it. Without that pause
+        # the last anchor is just a point on a monotonic rise, and no segmentation can find
+        # it -- which is what a breakout is measured against.
+        if pause_dip_pct:
+            closes += _leg(high, high * (1 - pause_dip_pct / 100), 3)
         closes.append(base_high * 1.03)
 
     steps = [abs(later - earlier) for earlier, later in zip(closes, closes[1:])]
