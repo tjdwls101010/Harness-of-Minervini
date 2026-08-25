@@ -72,3 +72,28 @@ class TheWordEarlyNamesNothing(unittest.TestCase):
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
 
         self.assertEqual(reasons["named_entry_tactic"], "no_tactic_named")
+
+
+class TheReservedNamesAreRefusedRatherThanIgnored(unittest.TestCase):
+    """Ignored quietly, a caller believes they opted in and reads a gap they cannot explain.
+
+    The request already refuses supplying a segmentation or naming its own completeness source,
+    for the same reason: these are contract terms with their own arguments, and a payload that
+    restates them is a caller who has misunderstood the seam rather than one making a choice.
+    """
+
+    def test_an_entry_that_restates_the_route_is_refused(self) -> None:
+        from scripts.minervini.contracts import RequestError
+
+        with self.assertRaises(RequestError) as raised:
+            run("oops_reversal", entry={"kind": "completed_pivot"})
+
+        self.assertIn("entry_kind", str(raised.exception))
+
+    def test_an_entry_that_opts_itself_in_is_refused(self) -> None:
+        from scripts.minervini.contracts import RequestError
+
+        with self.assertRaises(RequestError) as raised:
+            run("oops_reversal", entry={"opt_in": True})
+
+        self.assertIn("tactic_opt_in", str(raised.exception))

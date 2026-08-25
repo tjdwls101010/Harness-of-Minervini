@@ -254,3 +254,67 @@ class AShapeNobodyCanReadIsNotADeclaration(unittest.TestCase):
 
                 self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
                 self.assertNotEqual(result["setup_state"], "ready")
+
+
+class ConfirmationDebtIsSomethingSaidInWords(unittest.TestCase):
+    def test_a_list_of_numbers_is_not_a_disclosure(self) -> None:
+        """`str(0)` is "0", and "0" is not a confirmation anybody promised to pay.
+
+        The debt is the one part of an early entry that is prose by nature, so it cannot be
+        graded -- which is exactly why the shape has to hold. Coercing whatever arrives into a
+        string let a list of numbers stand in for the disclosure the route exists to require.
+        """
+        result = verdict(
+            "oops_reversal",
+            confirmation_debt=[0],
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"state": "pass", "condition": "gapped and reclaimed"},
+        )
+
+        self.assertIn("confirmation_debt", result["missing"])
+        self.assertNotEqual(result["setup_state"], "ready")
+
+
+class ThePayloadDoesNotGetToRewriteTheContract(unittest.TestCase):
+    """Opting in and naming the tactic are arguments, not fields the payload can restate.
+
+    Merged last, the entry dict overwrote both: a caller who had not opted in could opt themselves
+    in from inside the declaration, and a completed-pivot request could turn itself into an early
+    tactic. The reserved keys have their own arguments and the arguments win.
+    """
+
+    def _evidence(self, **entry):
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        return build_setup_evidence(
+            frame,
+            chain,
+            entry_kind="oops_reversal",
+            entry={**PROMISE, **entry},
+            tactic_opt_in=False,
+            **readings(frame, chain),
+        )
+
+    def test_the_declaration_cannot_opt_the_caller_in(self) -> None:
+        result = evaluate_setup(self._evidence(
+            opt_in=True,
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"state": "pass", "condition": "gapped and reclaimed"},
+        ))
+
+        self.assertIn("tl_early_opt_in", result["missing"])
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_the_declaration_cannot_rename_the_route(self) -> None:
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        result = evaluate_setup(build_setup_evidence(
+            frame,
+            chain,
+            entry_kind="completed_pivot",
+            entry={**PROMISE, "kind": "oops_reversal", "opt_in": True},
+            tactic_opt_in=False,
+            **readings(frame, chain),
+        ))
+
+        self.assertEqual(result["entry"]["kind"], "completed_pivot")

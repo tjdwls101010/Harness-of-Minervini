@@ -523,7 +523,11 @@ def build_setup_evidence(
         },
         "signals": signals,
         "contrast": contrast,
-        "entry": {"kind": entry_kind, "opt_in": tactic_opt_in is True, **(dict(entry) if isinstance(entry, Mapping) else {})},
+        # The declaration first, then the two names that have their own arguments. Merged the
+        # other way round the payload rewrote the contract it was declared under: an entry dict
+        # could opt its own caller in, and a completed-pivot request could turn itself into an
+        # early tactic from the inside.
+        "entry": {**(dict(entry) if isinstance(entry, Mapping) else {}), "kind": entry_kind, "opt_in": tactic_opt_in is True},
     }
 
 

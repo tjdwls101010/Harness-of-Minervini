@@ -860,6 +860,15 @@ def _refuse_unusable_setup_request(request: Mapping[str, Any]) -> None:
     entry = request.get("entry")
     if entry is not None and not isinstance(entry, Mapping):
         raise RequestError("entry must be an object", "entry")
+    # Which entry this is, and whether the caller opted into it, are contract terms with their own
+    # arguments. Restated inside the declaration they are a caller who has misunderstood the seam,
+    # and dropping them quietly leaves that caller reading a gap they believe they filled.
+    for reserved in ("kind", "opt_in"):
+        if isinstance(entry, Mapping) and reserved in entry:
+            raise RequestError(
+                f"entry.{reserved} cannot be supplied; use entry_kind and tactic_opt_in",
+                "entry",
+            )
     for reserved in ("completeness_source", "detected_chain", "segmentation"):
         if request.get(reserved) is not None:
             # Naming a supplier is not being one, and neither is handing in a segmentation and

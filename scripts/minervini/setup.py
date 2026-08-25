@@ -233,7 +233,10 @@ def _early_entry_debt(
     entry: Mapping[str, Any], price: float | None, tactic: str | None
 ) -> tuple[dict[str, Any], list[str]]:
     debt = entry.get("confirmation_debt")
-    items = [str(item) for item in debt if str(item).strip()] if isinstance(debt, list) else []
+    # Words, not whatever coerces into them. The debt is the one part of an early entry that is
+    # prose by nature and cannot be graded, so the shape is the only check there is -- coerced,
+    # a list of numbers stood in for the disclosure this route exists to require.
+    items = [item for item in debt if isinstance(item, str) and item.strip()] if isinstance(debt, list) else []
     later_pivot = _precise_level(entry.get("minervini_later_pivot"))
     invalidation = _precise_level(entry.get("invalidation"))
     # A level is only the level it is named after if it sits where that name requires. A
