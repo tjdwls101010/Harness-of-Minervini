@@ -85,3 +85,23 @@ class TheCandidateBoundIsThisHarnessSOwnConvention(unittest.TestCase):
             spec["candidate_top_maximum_distance_pct"],
             float(doctrine.parameter("convention.power_play_top_candidates", "candidate_top_maximum_distance_pct")),
         )
+
+
+class AConventionThatOnlyDefinesSomethingCannotFail(unittest.TestCase):
+    """A registered failure effect is a promise about what a reducer will do.
+
+    These two claims carry no threshold and state no filter -- they define how many sessions a
+    week is, and how far down the chain of tops a reading goes. Nothing in them can be failed, so
+    a declared effect of `needs_review` describes a reducer behaviour that does not exist and
+    cannot: the reading past the bound is not evidence anybody withheld, it is a top this harness
+    decided was a different structure.
+    """
+
+    def test_the_convention_claims_declare_no_failure_effect(self):
+        for claim_id in ("convention.trading_week", "convention.power_play_top_candidates"):
+            with self.subTest(claim_id=claim_id):
+                claim = doctrine.get_claim(claim_id)["claim"]
+
+                self.assertEqual(claim["thresholds"], {})
+                self.assertTrue(claim["parameters"])
+                self.assertEqual(claim["failure"]["effect"], "not_applicable")

@@ -10203,8 +10203,8 @@
         }
       },
       "failure": {
-        "effect": "needs_review",
-        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+        "effect": "not_applicable",
+        "meaning": "This registers a conversion, not a filter: a week of limits stated by a source is this many completed sessions. There is nothing here to fail, and the limits it converts carry their own failure effects."
       },
       "missing": {
         "effect": "incomplete",
@@ -10262,8 +10262,8 @@
         }
       },
       "failure": {
-        "effect": "needs_review",
-        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+        "effect": "not_applicable",
+        "meaning": "This registers where one reading of a structure stops and another begins, not a filter. A top past the distance is not evidence anybody withheld -- it is a top this harness treats as a different structure, and the reading reports it with its distance so the boundary the verdict was decided next to can be audited."
       },
       "missing": {
         "effect": "incomplete",
