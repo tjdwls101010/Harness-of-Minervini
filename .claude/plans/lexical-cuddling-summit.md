@@ -157,14 +157,27 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 - 실사용 검증: 완료 후 성진의 실제 질문("유망 섹터/티커", "XXX 매수 조건")으로 시범 세션을 돌려 판단 품질을 최종 확인.
 
 
-## 진행 상태 (2026-08-25 컴팩트 시점)
+## 진행 상태 (2026-08-25)
 
-- **Phase 0 — 완료·머지됨** (PR #3, `b3aca97`). 계획의 버그 4건으로 시작해 codex 적대 리뷰 7라운드(6→4→3→3→2→1건 발견 후 ACCEPT)에서 12건이 추가로 나왔고 전부 수정. 마지막 세 커밋은 증상이 아니라 뿌리를 제거했다 — 같은 판단을 두 곳에서 각자의 말로 내리던 사본 3쌍(`settled_breach`, `declares_exit_plan`, `_status_word`)을 리듀서 단독 소유로 통합.
-- **Phase 1 — 브랜치 `feat/doctrine-registry-expansion`에 커밋됨, 적대 리뷰 2라운드 진행 중.** 레지스트리 12 → 124 claims. 1라운드 REJECT(8건, P1 5건) 전부 수정 후 `e63a942`. 2라운드 codex run id: `20260825-000308-p1-doctrine-review-51ac` (`codex_bridge.py result --run <id>`로 회수).
-  - 현재: 366 tests OK, `validate()` valid/124, 검증기 190 verified + 6 declared, `validate_harness.py` PASS.
-  - PR 전 남은 것: 2라운드 판정 처리 → PR → 머지.
-  - CLAUDE.md 114줄(계획 예산 111줄 대비 +3). band 공시·role 규칙 때문이며 Phase 6의 중복 제거로 상쇄 예정.
-- **Phase 2~7 — 미착수.**
+- **Phase 0 — 머지 완료** (PR #3, `b3aca97`). 계획의 버그 4건으로 시작해 codex 적대 리뷰 7라운드(6→4→3→3→2→1건 후 ACCEPT)에서 12건이 추가로 나왔고 전부 수정. 마지막 세 커밋은 증상이 아니라 뿌리를 제거했다 — 같은 판단을 두 곳에서 각자의 말로 내리던 사본 3쌍(`settled_breach`, `declares_exit_plan`, `_status_word`)을 리듀서 단독 소유로 통합.
+- **Phase 1 — 머지 완료** (PR #4, `56654ec`). 레지스트리 12 → 124 claims, role gate 18 / band 25 / reference 77, 인용 190 verified + 6 declared. codex 적대 리뷰 5라운드(8→10→6→2→1건). main에서 366 tests OK.
+- **Phase 2~7 — 미착수.** 다음은 Phase 2(셋업/VCP 정량 엔진). 계획이 "큰 단계는 구현 전 codex 설계 리뷰"를 요구하므로 착수 전에 설계 리뷰를 먼저 받는다.
+
+### Phase 2가 Phase 1 덕에 줄어드는 부분
+
+VCP 측정치는 새 스키마를 설계할 게 아니라 이미 만든 gate/band/reference 위에 배선한다. 원전이 범위로 준 것(수축 2~6개, 플랫베이스 4~7주 10~15%, 치트 존 1/3~1/2, Power Play 플래그 3~6주·20~25%)은 밴드로, 필터 언어로 진술된 것만 게이트로. **밴드 배정은 반드시 인용문을 하나씩 읽고 한다** — Phase 1에서 이름·단위 휴리스틱으로 돌렸다가 45개 중 20개를 틀렸다(측정치가 앉는 범위가 아니라 역사적 평균·추적 대상 수·스캔 창이었던 것들).
+
+채굴 자료는 세션 스크래치패드의 `codex_mining.txt` AXIS 2에 30개 측정 인코딩이 있다(DCR=100*(C-L)/(H-L), volume_ratio_50, vcp_footprint, structural pivot, shakeout, squat, failure reset, launchpad, consolidation pivot, post-breakout retest). 실무자 돌파 볼륨은 두 독립 채굴이 일치했다 — Minervini ratio50>1(강 1.5), Ryan ratio50>=1.25(강 2), Zanger max(ratio20,ratio30)>=1.5, Ritchie 하드룰 없음. **넷을 병합하지 말 것.**
+
+### 검증 도구 사용법 (매 페이즈)
+
+```
+PYTHONPATH=scripts scripts/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'
+scripts/.venv/bin/python scripts/verify_doctrine_quotations.py      # 인용이 저자의 글자인지
+python3 ~/.claude/skills/harness-creator/scripts/validate_harness.py --path .
+```
+
+codex 리뷰는 `codex_bridge.py`로 띄우고 **반드시 Monitor를 함께 건다**(`log --run <id> --follow`, `status --follow`는 `--group`용이라 단일 run에 안 됨). 폴링 루프로 블록하면 진행이 보이지 않는다.
 
 ### 채굴 원자료 (스크래치패드, 세션 종료 시 소실 가능)
 
