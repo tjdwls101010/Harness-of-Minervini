@@ -61,6 +61,7 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_pct_closes": None,
         "advance_low_close": None,
         "corporate_action_evidence": None,
+        "distribution_evidence": None,
         "corporate_action_sessions": None,
         "distribution_sessions": None,
         "distribution_paid_in_the_flag": None,
@@ -236,6 +237,10 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # reads as a fifty percent correction nobody took and the history that cannot be measured
         # comes back as a confident failure on depth.
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
+        # The same rule the split column gets. A provider that usually supplies the events is
+        # not the same as this input having supplied them, and dropping the column turned a
+        # payout that had reordered the tops into a confident rejection.
+        "distribution_evidence": "present" if _DISTRIBUTION_COLUMN in bars else "missing",
         "corporate_action_sessions": _dated_events(bars, _CORPORATE_ACTION_COLUMN, earliest, len(bars) - 1),
         "distribution_sessions": _dated_events(bars, _DISTRIBUTION_COLUMN, earliest, len(bars) - 1),
         # Split by the span each criterion reads, because a payout only moves the measurement it
@@ -304,6 +309,7 @@ _REQUIRED = (
     f"{_CLAIM}.flag_tightness_or_vcp",
 )
 _CORPORATE_ACTIONS = "corporate_action_evidence"
+_DISTRIBUTIONS = "distribution_evidence"
 # What a corporate action costs a reading, which is all of it. A split rescales every printed
 # price and every share count, so a depth, an advance and a volume ratio measured across one are
 # arithmetic about the action rather than about the stock.
@@ -384,7 +390,13 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     candidates deterministically and assembles the evidence for the ones it cannot remove.
     """
     signals = {str(signal["id"]): signal for signal in evidence.get("signals") or []}
-    unmoved = evidence.get(_CORPORATE_ACTIONS) == "present" and not evidence.get("corporate_action_sessions")
+    unmoved = (
+        evidence.get(_CORPORATE_ACTIONS) == "present"
+        and not evidence.get("corporate_action_sessions")
+        # A history that cannot say whether a distribution happened cannot say the prices are the
+        # stock's own either -- a payout moves the peak, the anchor and the depth alike.
+        and evidence.get(_DISTRIBUTIONS) == "present"
+    )
     # A criterion resting on which of two tops the search landed on is a statement about the
     # search. Read per criterion rather than as one verdict-wide switch, because the two readings
     # can reach the same conclusion by different routes: throwing away everything they agreed on
@@ -432,6 +444,8 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # is a finding about the stock, so both are gaps rather than failures.
     if evidence.get(_CORPORATE_ACTIONS) != "present" or evidence.get("corporate_action_sessions"):
         missing.append(_CORPORATE_ACTIONS)
+    if evidence.get(_DISTRIBUTIONS) != "present":
+        missing.append(_DISTRIBUTIONS)
     if not settled:
         missing.append("peak_identity")
 
@@ -450,6 +464,8 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         cause = (
             "corporate_action_evidence_missing"
             if evidence.get(_CORPORATE_ACTIONS) != "present"
+            else "distribution_evidence_missing"
+            if evidence.get(_DISTRIBUTIONS) != "present"
             else "corporate_action_inside_the_measured_span"
         )
         _decline({str(signal["id"]) for signal in signals.values()} | set(_BANDS_BESIDE.values()), cause)
@@ -484,12 +500,14 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),
         "unreadable_readings": evidence.get("unreadable_readings"),
+        "readings_ran_out_of_history": evidence.get("readings_ran_out_of_history"),
         "readings_cut_at": evidence.get("readings_cut_at"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,
         "held_by_another_top": held_by_another_top,
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
+        "distribution_evidence": evidence.get(_DISTRIBUTIONS),
         "distribution_sessions": evidence.get("distribution_sessions"),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
         "signals": reported,

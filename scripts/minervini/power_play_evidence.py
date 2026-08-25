@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
-from .setup_structure import _DISTRIBUTION_COLUMN
+from .setup_structure import _DISTRIBUTION_COLUMN, read_bars
 from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
 
 
@@ -26,6 +26,8 @@ _TOPS = "convention.power_play_top_candidates"
 # A runaway guard, not a doctrine limit: the longest chain any cached history produced was
 # nineteen tops. Hitting it is reported, never silently truncated into an agreement.
 _MOST_TOPS_READ = 200
+# The one refusal that means the chain is finished rather than unreadable.
+_NO_MORE_TOPS = "history_has_no_earlier_top_to_read_from"
 
 
 def compile_power_play_spec() -> dict[str, Any]:
@@ -138,6 +140,25 @@ def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, 
     }
 
 
+# Every session this reading treats as a boundary of the structure. Comparing peak dates alone
+# asks whether the payout picked the top, and the top is not the only thing it picks: the anchor
+# is the last session at the window's lowest close, so a distribution can leave the peak exactly
+# where it was and still move where the advance starts, how long it took, and which forty sessions
+# the volume is measured against.
+_BOUNDARIES = (
+    "peak_date",
+    "advance_anchor_date",
+    "flag_low_date",
+    "baseline_first_session",
+    "baseline_last_session",
+    "measured_span_first_session",
+)
+
+
+def _boundaries(measurements: Mapping[str, Any]) -> tuple[Any, ...]:
+    return tuple(measurements[name] for name in _BOUNDARIES)
+
+
 def _on_one_scale(history: Any) -> Any:
     """The same bars with every print put on the scale that follows all of its distributions.
 
@@ -148,9 +169,14 @@ def _on_one_scale(history: Any) -> Any:
     actually made, and the flag then hangs from a bar the dividend chose; worse, the real top is
     later than it and a chain that walks backward never reaches it.
     """
-    if _DISTRIBUTION_COLUMN not in history:
+    # Through the same normaliser the measurement uses. Read straight off the caller's frame, a
+    # history handed over newest-first accumulated its distributions backwards and this check
+    # answered the opposite question -- same dates, same prices, opposite verdict. Row order is
+    # not evidence, and one module owns saying so.
+    bars, _ = read_bars(history)
+    if bars is None or _DISTRIBUTION_COLUMN not in bars:
         return None
-    adjusted = history.copy()
+    adjusted = bars.copy()
     # What each session still had coming to it. Subtracting it puts every print after the last
     # distribution and every print before it on the same footing.
     owed = adjusted[_DISTRIBUTION_COLUMN][::-1].cumsum()[::-1] - adjusted[_DISTRIBUTION_COLUMN]
@@ -188,6 +214,7 @@ def _unmoved(measurements: Mapping[str, Any]) -> bool:
     return (
         measurements["corporate_action_evidence"] == "present"
         and not measurements["corporate_action_sessions"]
+        and measurements["distribution_evidence"] == "present"
     )
 
 
@@ -232,10 +259,17 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # The count bound is a runaway guard. Reaching it is reported rather than passed over.
     bound = spec["candidate_top_maximum_distance_pct"]
     cut_at: dict[str, Any] | None = None
+    ran_out_of_history = False
     may_contest = 0
     while len(readings) < _MOST_TOPS_READ:
         reading = measurements if not readings else measure_power_play(history, spec, below=below, before=before)
         if reading["rejection"] is not None:
+            # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
+            # anything else is a top that exists with too little history behind it to measure --
+            # a gap, and treating it as the chain ending turns it into a silent vote for whatever
+            # the tops above it decided. That is the shape a recently listed stock arrives in.
+            if reading["rejection"] != _NO_MORE_TOPS:
+                ran_out_of_history = True
             break
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
@@ -270,7 +304,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     reordered = (
         on_one_scale is not None
         and measurements["peak_date"] is not None
-        and measure_power_play(on_one_scale, spec)["peak_date"] != measurements["peak_date"]
+        and _boundaries(measure_power_play(on_one_scale, spec)) != _boundaries(measurements)
     )
     if reordered:
         contested = set(primary_criteria)
@@ -316,7 +350,13 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # contesting is still a reading under which the structure stands. And a chain that read the
     # dividend's ordering read the wrong tops, so agreement among them is agreement about nothing.
     every_top_rejects = (
-        bool(readings) and not exhausted and not reordered and not surviving and not unreadable
+        bool(readings)
+        and not exhausted
+        and not reordered
+        and not surviving
+        and not unreadable
+        # A lower top the loaded history cannot reach behind is still a top nobody read.
+        and not ran_out_of_history
     )
     rejected_under_every_top_read = every_top_rejects and bool(contested)
 
@@ -361,6 +401,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "readings_cut_at": cut_at,
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
+        "readings_ran_out_of_history": ran_out_of_history,
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,
@@ -375,6 +416,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "corporate_action_evidence": measurements["corporate_action_evidence"],
         # Surfaced beside the split events rather than left in the payload: a payout that decided
         # a criterion is the reason that criterion stopped deciding, and the reader is owed it.
+        "distribution_evidence": measurements["distribution_evidence"],
         "distribution_sessions": measurements["distribution_sessions"],
         "corporate_action_sessions": actions,
         "spec": spec,

@@ -434,6 +434,7 @@ class TheReadingCountsAccountForEveryTopTaken(unittest.TestCase):
             {"flag_depth_pct": 40.0},
             {"split_inside_the_flag": True},
             {"flag_sessions": 30, "marginal_new_high_at": (-8, -4)},
+            {"dormancy_sessions": 1, "advance_sessions": 10, "advance_pct": 40.0},
         ):
             with self.subTest(**kwargs):
                 pack = evidence(**kwargs)
@@ -555,3 +556,86 @@ class RejectingAndQualifyingAskDifferentQuestions(unittest.TestCase):
 
         self.assertFalse(pack["every_top_rejects"])
         self.assertTrue(pack["surviving_readings"])
+
+
+class TheOrderingCheckGoesThroughTheSameNormaliser(unittest.TestCase):
+    """Row order is not evidence, and slice three made one module the owner of saying so.
+
+    The scale check read the caller's frame directly instead of the normalised bars, so a history
+    handed over newest-first had its distributions accumulated backwards and the check answered
+    the opposite question. Same dates, same prices, opposite verdict.
+    """
+
+    def test_the_same_bars_in_reverse_order_read_the_same(self):
+        forward = power_play_series(flag_sessions=25, flag_depth_pct=8.0, payout_that_reorders_the_tops=True)
+        backward = forward.iloc[::-1]
+
+        self.assertEqual(
+            build_power_play_evidence(backward)["peak_identity"],
+            build_power_play_evidence(forward)["peak_identity"],
+        )
+
+
+class RunningOutOfHistoryIsNotRunningOutOfTops(unittest.TestCase):
+    """A candidate the loaded history cannot reach behind is a gap, not a chain that ended.
+
+    The enumeration stops on any refusal, and one of them means the opposite of the others: there
+    *is* a lower top, but nothing before it to measure an advance from. Treated as "no more tops"
+    it becomes a silent vote for the rejection the tops above it reached -- which is exactly the
+    shape a recently listed stock arrives in.
+    """
+
+    def test_a_top_with_no_history_behind_it_withholds_the_rejection(self):
+        pack = build_power_play_evidence(
+            power_play_series(dormancy_sessions=1, advance_sessions=10, advance_pct=40.0, flag_sessions=20)
+        )
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertTrue(pack["readings_ran_out_of_history"])
+        self.assertFalse(pack["every_top_rejects"])
+        self.assertEqual(verdict["failed"], [])
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+
+
+class TheScaleCheckComparesTheWholeStructure(unittest.TestCase):
+    """Comparing peak dates asks whether the payout picked the top. That is not the only thing it picks.
+
+    The anchor is the last session at the window's lowest close, so a distribution can leave the
+    peak exactly where it was and still move where the advance starts, how long it took, and
+    which forty sessions the volume is measured against.
+    """
+
+    def _pack(self):
+        from tests.series import anchor_moving_payout_series
+
+        return build_power_play_evidence(anchor_moving_payout_series())
+
+    def test_a_payout_that_moves_only_the_anchor_still_unsettles_the_reading(self):
+        pack = self._pack()
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(pack["peak_identity"], "disputed")
+        self.assertEqual(verdict["failed"], [])
+
+
+class AHistoryWithoutTheDistributionColumnHasNotSaidThereWereNone(unittest.TestCase):
+    """The same rule the split column already gets, for the same reason.
+
+    Dropping the column from a frame whose payout had reordered the tops turned an open question
+    into a confident rejection. A provider that usually supplies the events is not the same as
+    this input having supplied them.
+    """
+
+    def test_the_absence_is_reported_as_its_own_gap(self):
+        from tests.series import anchor_moving_payout_series
+
+        bars = anchor_moving_payout_series().drop(columns=["Dividends"])
+
+        pack = build_power_play_evidence(bars)
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(pack["distribution_evidence"], "missing")
+        self.assertIn("distribution_evidence", verdict["missing"])
+        self.assertEqual(verdict["failed"], [])

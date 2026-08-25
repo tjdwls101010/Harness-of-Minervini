@@ -184,7 +184,11 @@ def completed_daily_bars(
                 "requested_start": start,
                 "requested_end_exclusive": end,
                 "adjusted": False,
-                "corporate_actions": True,
+                # What the frame carries, not what was asked for. `actions=True` is a request,
+                # and a feed that answers without the columns leaves a history that cannot say
+                # whether a split or a distribution happened.
+                "corporate_actions": _CORPORATE_ACTION_COLUMN in completed,
+                "distributions": _DISTRIBUTION_COLUMN in completed,
                 "requested_session": clock.date.isoformat(),
                 "last_completed_bar": last_completed_bar.isoformat(),
             },

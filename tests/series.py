@@ -590,6 +590,8 @@ def power_play_series(
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if "Dividends" not in frame:
+        frame["Dividends"] = [0.0] * len(closes)
     if later_high is not None:
         # One session late in the flag printing a caller-chosen high. Just inside the candidate
         # distance it is another reading of the same structure; a cent outside it, the structure
@@ -640,10 +642,7 @@ def power_play_series(
         frame.iloc[cut, frame.columns.get_loc("Stock Splits")] = 2.0
         columns = ["Open", "High", "Low", "Close"]
         frame.iloc[cut:, [frame.columns.get_loc(name) for name in columns]] /= 2
-    columns = ["Open", "High", "Low", "Close", "Volume", "Stock Splits"]
-    if "Dividends" in frame:
-        columns.append("Dividends")
-    return frame[columns]
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
 def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> pd.DataFrame:
@@ -670,8 +669,10 @@ def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> p
     # The event column the provider fills: zero on every ordinary session, the ratio on the day
     # it happened. A one-for-two reverse split is 0.5.
     frame["Stock Splits"] = [0.0] * len(closes)
+    if "Dividends" not in frame:
+        frame["Dividends"] = [0.0] * len(closes)
     frame.iloc[len(before), frame.columns.get_loc("Stock Splits")] = 1 / factor
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
 def wide_launch_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
@@ -755,7 +756,9 @@ def wick_after_the_launch_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     frame["Volume"] = [1_000_000.0] * len(closes)
     frame.iloc[launch, frame.columns.get_loc("Volume")] = 10_000_000.0
     frame["Stock Splits"] = [0.0] * len(closes)
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
+    if "Dividends" not in frame:
+        frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
 def stale_volume_regime_series(*, start: str = "2026-01-02") -> pd.DataFrame:
@@ -780,4 +783,32 @@ def stale_volume_regime_series(*, start: str = "2026-01-02") -> pd.DataFrame:
         [10_000_000.0] * 40 + [1_000_000.0] * 31 + [5_000_000.0] * 10 + [1_000_000.0] * 20
     )
     frame["Stock Splits"] = [0.0] * len(closes)
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
+    if "Dividends" not in frame:
+        frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def anchor_moving_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A distribution that leaves the peak where it is and takes the anchor somewhere else.
+
+    Fifty for sixty sessions, a run-up to sixty, then a ten-dollar payout and twenty sessions at
+    what prints as forty-five, then the peak at a hundred and a flag. On the tape the lowest close
+    of the eight weeks before the peak is the forty-five stretch; on one scale it is the fifty
+    stretch, seven weeks earlier. Same peak, different advance, different baseline.
+    """
+
+    index = pd.bdate_range(start=start, periods=121)
+    closes = [50.0] * 60 + [60.0] * 10 + [55.0] * 20 + [100.0] + [92.0] * 30
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    frame.iloc[90, frame.columns.get_loc("High")] = 100.0
+    frame["Volume"] = [400_000.0] * 90 + [2_400_000.0] + [800_000.0] * 30
+    frame["Stock Splits"] = [0.0] * len(closes)
+    if "Dividends" not in frame:
+        frame["Dividends"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    frame.iloc[70, frame.columns.get_loc("Dividends")] = 10.0
+    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+    frame.iloc[70:, paid] -= 10.0
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

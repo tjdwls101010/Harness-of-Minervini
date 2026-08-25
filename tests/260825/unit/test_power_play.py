@@ -365,7 +365,6 @@ class ACashDistributionMovesThePriceToo(unittest.TestCase):
 
     def test_the_distribution_column_reaches_the_measurement(self):
         bars = power_play_series()
-        bars["Dividends"] = 0.0
         bars.iloc[-3, bars.columns.get_loc("Dividends")] = 1.5
 
         measurements = measure_power_play(bars, SPEC)
@@ -373,11 +372,12 @@ class ACashDistributionMovesThePriceToo(unittest.TestCase):
         self.assertEqual(measurements["distribution_sessions"], [str(bars.index[-3].date())])
 
     def test_a_history_without_the_column_says_so_rather_than_no_distribution(self):
-        bars = power_play_series()
+        bars = power_play_series().drop(columns=["Dividends"])
 
         measurements = measure_power_play(bars, SPEC)
 
         self.assertIsNone(measurements["distribution_sessions"])
+        self.assertEqual(measurements["distribution_evidence"], "missing")
 
 
 class TheVolumeIsReadAcrossTheAdvanceAndNowhereElse(unittest.TestCase):
@@ -427,3 +427,42 @@ class TheChainWalksStrictlyDownward(unittest.TestCase):
         self.assertGreater(len(heights), 2)
         self.assertEqual(heights, sorted(heights, reverse=True))
         self.assertEqual(len(heights), len(set(heights)))
+
+
+class TheStructureHasBoundariesBesidesItsPeak(unittest.TestCase):
+    """A payout can leave the top where it is and move everything else about the structure.
+
+    The anchor is the last session at the window's lowest close, and a distribution takes every
+    later close down -- so a session that was not the low becomes it. Peak unchanged, advance
+    measured from a different day, over a different span, against a different baseline.
+    """
+
+    def _series(self):
+        index = pd.bdate_range("2026-01-02", periods=121)
+        close = [50.0] * 60 + [60.0] * 10 + [55.0] * 20 + [100.0] + [92.0] * 30
+        frame = pd.DataFrame({"Open": close, "Close": close}, index=index)
+        frame["High"] = frame["Close"] * 1.002
+        frame["Low"] = frame["Close"] * 0.998
+        frame.iloc[90, frame.columns.get_loc("High")] = 100.0
+        frame["Volume"] = [400_000.0] * 90 + [2_400_000.0] + [800_000.0] * 30
+        frame["Stock Splits"] = 0.0
+        frame["Dividends"] = 0.0
+        # Paid where the run-up paused. Every close after it drops by ten, so the fifty-five
+        # stretch prints forty-five and takes the lowest-close anchor away from the fifties.
+        frame.iloc[70, frame.columns.get_loc("Dividends")] = 10.0
+        columns = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+        frame.iloc[70:, columns] -= 10.0
+        return frame
+
+    def test_the_anchor_moves_even_though_the_peak_does_not(self):
+        bars = self._series()
+
+        raw = measure_power_play(bars, SPEC)
+        one_scale = bars.copy()
+        owed = one_scale["Dividends"][::-1].cumsum()[::-1] - one_scale["Dividends"]
+        for column in ("Open", "High", "Low", "Close"):
+            one_scale[column] = one_scale[column] - owed
+        adjusted = measure_power_play(one_scale, SPEC)
+
+        self.assertEqual(raw["peak_date"], adjusted["peak_date"])
+        self.assertNotEqual(raw["advance_anchor_date"], adjusted["advance_anchor_date"])

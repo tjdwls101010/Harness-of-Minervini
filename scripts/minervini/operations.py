@@ -581,6 +581,7 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             else "corporate_action_evidence_missing"
         ),
         "peak_identity": "peak_identity_disputed",
+        "distribution_evidence": "distribution_evidence_missing",
     }
     contested = {
         f"fundamentals.power_play_exception.{condition}"
@@ -593,16 +594,20 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
-        verdict["corporate_action_evidence"] != "present" or verdict["corporate_action_sessions"]
+        verdict["corporate_action_evidence"] != "present"
+        or verdict["corporate_action_sessions"]
+        or verdict["distribution_evidence"] != "present"
     )
 
     def _reason(item: str) -> str:
         if item in reasons:
             return reasons[item]
         if unreadable:
-            return "corporate_action_evidence_missing" if verdict[
-                "corporate_action_evidence"
-            ] != "present" else "corporate_action_inside_the_measured_span"
+            if verdict["corporate_action_evidence"] != "present":
+                return "corporate_action_evidence_missing"
+            if verdict["distribution_evidence"] != "present":
+                return "distribution_evidence_missing"
+            return "corporate_action_inside_the_measured_span"
         if item in set(verdict["held_by_another_top"]):
             return "structure_stands_under_another_top"
         if item in payout_sensitive:

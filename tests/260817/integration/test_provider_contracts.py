@@ -81,7 +81,9 @@ class ProviderContractTests(unittest.TestCase):
         # split events come with them: without the events a one-for-two reverse split is
         # indistinguishable from a hundred percent overnight advance.
         self.assertTrue(ticker.calls[0]["actions"])
-        self.assertIs(snapshot.meta.coverage["corporate_actions"], True)
+        # Requested here; whether they arrived is a separate fact this frame does not carry, and
+        # coverage reports the frame rather than the request.
+        self.assertIs(snapshot.meta.coverage["corporate_actions"], False)
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
         self.assertIsInstance(snapshot.meta, SnapshotMeta)
 
@@ -441,3 +443,30 @@ class ProviderContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverageReportsWhatTheFrameActuallyCarries(unittest.TestCase):
+    """Asking for the events and receiving them are different facts.
+
+    `actions=True` is a request. A feed that answers without the columns leaves a frame that
+    cannot say whether a split or a distribution happened, and a coverage flag hardcoded to true
+    tells every consumer the opposite.
+    """
+
+    def test_a_frame_without_the_event_columns_does_not_claim_them(self) -> None:
+        index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
+        frame = pd.DataFrame(
+            {
+                "Open": [10.0, 11.0, 12.0],
+                "High": [10.5, 11.5, 12.5],
+                "Low": [9.5, 10.5, 11.5],
+                "Close": [10.0, 11.0, 12.0],
+                "Volume": [100.0, 100.0, 100.0],
+            },
+            index=index,
+        )
+
+        snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
+
+        self.assertIs(snapshot.meta.coverage["corporate_actions"], False)
+        self.assertIs(snapshot.meta.coverage["distributions"], False)
