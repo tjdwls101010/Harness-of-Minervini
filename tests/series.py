@@ -496,6 +496,7 @@ def power_play_series(
     split_at: int | None = None,
     distribution_in_the_flag: float | None = None,
     distribution_after_the_flag_low: float | None = None,
+    payout_that_reorders_the_tops: bool = False,
     volume_spike_before_the_launch: float | None = None,
     corporate_actions: bool = True,
     marginal_new_high_at: int | Sequence[int] | None = None,
@@ -588,17 +589,33 @@ def power_play_series(
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if payout_that_reorders_the_tops:
+        # An earlier session two percent under the top, and a payout of three percent taken out of
+        # every print from the top onward. On the tape the earlier session now prints the higher
+        # high, so which bar the flag hangs from was decided by the dividend rather than by the
+        # stock -- and the real top, being later, is never reached by a chain that walks backward.
+        frame["Dividends"] = [0.0] * len(closes)
+        payout = peak * 0.03
+        frame.iloc[apex - 6, frame.columns.get_loc("High")] = peak * 0.98
+        frame.iloc[apex, frame.columns.get_loc("Dividends")] = payout
+        columns = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+        frame.iloc[apex:, columns] -= payout
     if distribution_after_the_flag_low is not None:
         # Paid once the flag had already bottomed. It takes the later prints down without having
         # taken the low down, so the decline the criterion reads is the stock's own.
         frame["Dividends"] = [0.0] * len(closes)
         frame.iloc[trough + 2, frame.columns.get_loc("Dividends")] = distribution_after_the_flag_low
+        paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+        frame.iloc[trough + 2:, paid] -= distribution_after_the_flag_low
     if distribution_in_the_flag is not None:
-        # A cash distribution paid partway through the flag. It comes out of the printed price on
-        # its ex-date, so the decline the flag measures is partly the payout -- and unlike a split
-        # the amount is known, which is what lets the reading say whether it changed the answer.
+        # A cash distribution paid partway through the flag, and taken out of every print from its
+        # ex-date onward the way the tape takes it. The decline the flag measures is then partly
+        # the payout -- and unlike a split the amount is known, which is what lets the reading say
+        # whether it changed the answer.
         frame["Dividends"] = [0.0] * len(closes)
         frame.iloc[trough, frame.columns.get_loc("Dividends")] = distribution_in_the_flag
+        paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+        frame.iloc[trough:, paid] -= distribution_in_the_flag
     if split_at is not None:
         # A two-for-one forward split at a caller-chosen session, printed the way a raw feed
         # prints one: everything *before* it carries the pre-split price and share count, so the

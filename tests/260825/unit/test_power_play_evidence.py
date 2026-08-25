@@ -280,12 +280,13 @@ class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
 
     Blocking on any distribution would leave every dividend payer permanently unreadable, and an
     ordinary quarterly payment is a fraction of a percent against a twenty-five percent limit.
-    What matters is whether the answer turns on it: a forty percent flag that is twenty-three
-    without the payout has been decided by the payout, and an ordinary one has not.
+    What matters is whether the answer turns on it: a flag printing thirty-six percent that is
+    twenty-four once the payout is added back has been decided by the payout, and an ordinary
+    one has not.
     """
 
     def test_a_payout_that_carries_the_verdict_stops_the_criterion_deciding(self):
-        pack = evidence(flag_depth_pct=40.0, distribution_in_the_flag=3.5)
+        pack = evidence(advance_pct=160.0, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
 
         verdict = evaluate_power_play(pack)
 
@@ -295,7 +296,7 @@ class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
         )
 
     def test_an_ordinary_payout_leaves_the_criterion_deciding(self):
-        pack = evidence(flag_depth_pct=40.0, distribution_in_the_flag=0.05)
+        pack = evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=0.05)
 
         verdict = evaluate_power_play(pack)
 
@@ -338,7 +339,7 @@ class NoReadingRejectsOnWhatThePayoutDecided(unittest.TestCase):
         saw. Neutralised only for the top reading, an earlier candidate could reject on a depth
         its own payout manufactured and cast that vote into "every reading rejects".
         """
-        pack = evidence(flag_sessions=30, flag_depth_pct=30.0, distribution_in_the_flag=2.5)
+        pack = evidence(advance_pct=160.0, flag_sessions=30, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
         sensitive = {
             f"fundamentals.power_play_exception.{condition}"
             for condition in pack["payout_sensitive_criteria"]
@@ -354,7 +355,7 @@ class APayoutWithholdsItsOwnSignalAndNothingElse(unittest.TestCase):
         # An advance far enough above the limit that no candidate top crosses it, so the only
         # thing in question here is the payout.
         return evaluate_power_play(
-            evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=4.5)
+            evidence(advance_pct=160.0, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
         )
 
     def test_the_machine_channel_stops_saying_what_the_reducer_stopped_saying(self):
@@ -456,3 +457,29 @@ class TheReadingCountsAccountForEveryTopTaken(unittest.TestCase):
         self.assertTrue(pack["readings_cut_at"])
         self.assertIn("rejected_under_every_top_read", pack)
         self.assertNotIn("rejected_under_every_reading", pack)
+
+
+class APayoutCanChooseTheTopItself(unittest.TestCase):
+    """Adding the cash back to two scalars is not enough when the cash picked the peak.
+
+    A distribution takes every print after its ex-date down, so a session before it can outprint
+    the top the stock actually made. The flag then hangs from a bar the dividend chose -- and the
+    real top, being later than it, is never reached by a chain that only walks backward. Nothing
+    downstream can recover from that, so the ordering itself has to be checked.
+    """
+
+    def test_a_reordering_payout_leaves_the_top_unsettled(self):
+        pack = evidence(flag_sessions=25, flag_depth_pct=8.0, payout_that_reorders_the_tops=True)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(pack["peak_identity"], "disputed")
+        self.assertEqual(verdict["failed"], [])
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+
+    def test_a_payout_too_small_to_reorder_anything_leaves_the_top_settled(self):
+        """An advance far enough above its limit that the candidate tops agree on their own."""
+
+        pack = evidence(advance_pct=160.0, flag_depth_pct=40.0, distribution_in_the_flag=0.05)
+
+        self.assertEqual(pack["peak_identity"], "settled")

@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
+from .setup_structure import _DISTRIBUTION_COLUMN
 from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
 
 
@@ -137,6 +138,27 @@ def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, 
     }
 
 
+def _on_one_scale(history: Any) -> Any:
+    """The same bars with every print put on the scale that follows all of its distributions.
+
+    Only ever used to ask whether the tops keep their order. The measurement itself stays on the
+    prints the tape made -- this harness names corporate events rather than rewriting prices --
+    but *which* bar is the highest is a comparison across sessions, and across an ex-date that
+    comparison is between two scales. A session before a payout can outprint the top the stock
+    actually made, and the flag then hangs from a bar the dividend chose; worse, the real top is
+    later than it and a chain that walks backward never reaches it.
+    """
+    if _DISTRIBUTION_COLUMN not in history:
+        return None
+    adjusted = history.copy()
+    # What each session still had coming to it. Subtracting it puts every print after the last
+    # distribution and every print before it on the same footing.
+    owed = adjusted[_DISTRIBUTION_COLUMN][::-1].cumsum()[::-1] - adjusted[_DISTRIBUTION_COLUMN]
+    for column in ("Open", "High", "Low", "Close"):
+        adjusted[column] = adjusted[column] - owed
+    return adjusted
+
+
 def _read_criteria(measurements: Mapping[str, Any], tight_limit: float) -> tuple[dict[str, str], set[str]]:
     """One reading's criteria, with whatever a cash payout decided taken back out of them.
 
@@ -235,6 +257,17 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         for condition in primary_criteria
         if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria)
     }
+    # And the ordering itself. If the tops keep their places once every print is on one scale, the
+    # search read the stock; if they do not, it read the dividend, and no amount of adding cash
+    # back to a depth afterwards recovers a top that was never the top.
+    on_one_scale = _on_one_scale(history)
+    reordered = (
+        on_one_scale is not None
+        and measurements["peak_date"] is not None
+        and measure_power_play(on_one_scale, spec)["peak_date"] != measurements["peak_date"]
+    )
+    if reordered:
+        contested = set(primary_criteria)
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
     # nothing -- and folding it into the survivors reports the structure as intact under every
@@ -273,7 +306,14 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # own name -- two ticks a hundredth of a percent apart hide a structure behind them -- and a
     # count-truncated chain has the same problem for a different reason.
     rejected_under_every_top_read = (
-        bool(contested) and not exhausted and bool(readings) and not surviving and not unreadable
+        bool(contested)
+        and not exhausted
+        # A chain that read the dividend's ordering read the wrong tops, so agreement among them
+        # is agreement about nothing.
+        and not reordered
+        and bool(readings)
+        and not surviving
+        and not unreadable
     )
 
     signals = [
