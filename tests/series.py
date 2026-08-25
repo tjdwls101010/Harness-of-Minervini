@@ -458,3 +458,21 @@ def neighbour_only_ambiguity_series() -> tuple[pd.DataFrame, str]:
         at = position
         break
     return frame, frame.index[at].date().isoformat()
+
+
+def distribution_only_in_the_tail_series() -> tuple[pd.DataFrame, list[str], list[str]]:
+    """A base whose volume is healthy, and a suffix of its own chain where it is not.
+
+    Declared as the whole base the up/down ratio passes; declared as the last five anchors it
+    fails, because that span is where the down-day volume was piled. The suffix is structurally
+    valid -- every anchor is still the extreme of its span -- so nothing but the comparison with
+    the detector's own chain separates it from an honest declaration, and the verdict read off it
+    is a finding about some other span.
+    """
+
+    frame, anchors = base_series()
+    whole = [frame.index[anchor.position].date().isoformat() for anchor in anchors]
+    suffix = whole[2:]
+    heavier = (frame["Close"] < frame["Close"].shift(1)) & (frame.index >= pd.Timestamp(suffix[0]))
+    frame.loc[heavier, "Volume"] = frame.loc[heavier, "Volume"] * 3
+    return frame, whole, suffix

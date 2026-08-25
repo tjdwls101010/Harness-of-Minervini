@@ -649,13 +649,30 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)
+    # Two different questions, and they were being answered by one flag. Whether the verdict is
+    # corroborated turns on the chain everything was measured off: a declared chain the detector
+    # did not produce measures some other span, and one such chain reported an up/down volume
+    # ratio of 0.08 where the base's own was 3.65, published as AVOID. Whether the caller can act
+    # turns on something else entirely -- they can declare the detector's chain, and they cannot
+    # make an unstable segmentation stable.
+    corroborated = evidence["chain_corroborated"]
     unvouched = evidence["segmentation"].get("state") != "resolved"
-    if unvouched:
+    if not corroborated:
         # Every measurement was read off the declared chain, so a segmentation nothing vouched
         # for disqualifies what was measured from it -- a hard gate's failure included. Leaving
         # the reducer's AVOID in the payload while the envelope said unavailable published a
         # finding about the stock that rested on a data-integrity gap.
-        result = {**result, "setup_state": "incomplete", "uncorroborated_verdict": result["setup_state"]}
+        # The reason travels with the state. Completeness failing lands in `unsatisfied` rather
+        # than `missing`, so overriding the verdict without moving it left an incomplete answer
+        # with nothing in it naming what was incomplete.
+        missing_ids = [item for item in result["missing"] if item != _CHAIN_COMPLETENESS]
+        result = {
+            **result,
+            "setup_state": "incomplete",
+            "uncorroborated_verdict": result["setup_state"],
+            "missing": [*missing_ids, _CHAIN_COMPLETENESS],
+            "unsatisfied": [item for item in result["unsatisfied"] if item != _CHAIN_COMPLETENESS],
+        }
     # A reading nobody declared and a reading nothing will corroborate are different absences.
     # The first is fixed by declaring one; the second is fixed by nothing the caller can type,
     # and reporting both as "evidence required" sends a reader looking for an argument.
@@ -737,6 +754,8 @@ def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:
     segmentation = evidence["segmentation"]
     if segmentation.get("state") != "resolved":
         return "segmentation_unstable"
+    if not evidence["chain_corroborated"]:
+        return "declared_chain_is_not_the_detected_one"
     signal = next((item for item in evidence["signals"] if item.get("id") == _CHAIN_COMPLETENESS), {})
     measured = signal.get("measured") or {}
     if "approved_bars" in measured:

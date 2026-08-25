@@ -468,9 +468,18 @@ def build_setup_evidence(
         doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", measurements["closing_range_pct"]),
     ]
 
+    completeness = next(item for item in signals if item.get("id") == _CHAIN_COMPLETENESS)
     return {
         "structure": structure,
         "segmentation": detected,
+        # Whether the chain everything else was measured off is the base. A declared chain the
+        # detector did not produce measures some other span, so what comes back from it is a
+        # finding about that span rather than about the stock.
+        "chain_corroborated": str(structure.get("state")) != "resolved"
+        or (
+            "differs" not in (completeness.get("measured") or {})
+            and detected.get("state") == "resolved"
+        ),
         "measurements": measurements,
         # Named separately from the measurements so a reader can see at a glance how much of
         # this verdict came from a person. Everything else is measured and cannot be declared

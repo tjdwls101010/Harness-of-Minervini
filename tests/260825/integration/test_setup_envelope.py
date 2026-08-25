@@ -18,7 +18,7 @@ from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 from scripts.minervini.setup_structure import bars_fingerprint
-from tests.series import anchor_dates, base_series
+from tests.series import anchor_dates, base_series, distribution_only_in_the_tail_series
 
 
 def snapshot(**kwargs) -> tuple[ProviderSnapshot, list[str]]:
@@ -114,6 +114,40 @@ class RefusedBeforeAnythingIsFetchedTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.field, "swing")
         self.assertEqual(calls, [])
+
+
+class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
+    def test_a_gate_failing_on_a_chain_the_detector_did_not_produce_is_not_avoid(self) -> None:
+        """The measurement was of another span, so what it found is not about this stock.
+
+        The uncorroborated rule was applied only where the segmentation itself was unstable, so
+        a declared chain the detector had rejected still published its hard-gate failure: an
+        up/down volume ratio read off the last five anchors, where the base's own passed.
+        """
+
+        frame, whole, suffix = distribution_only_in_the_tail_series()
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        prices = ProviderSnapshot(frame, meta)
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        def run_with(chain):
+            return execute("ticker.setup", {
+                "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+                "right_side_development": "constructive", "chain_completeness": "complete",
+                "approved_bars": bars_fingerprint(frame), "entry_proximity": "at_pivot",
+                "no_cache": True,
+            }, runtime=runtime)
+
+        honest, misdeclared = run_with(whole), run_with(suffix)
+
+        self.assertEqual(honest["data"]["setup_state"], "ready")
+        self.assertEqual(misdeclared["data"]["setup_state"], "incomplete")
+        self.assertEqual(misdeclared["data"]["uncorroborated_verdict"], "avoid")
+        reasons = {item["id"]: item["reason"] for item in misdeclared["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "declared_chain_is_not_the_detected_one")
+        # The caller can act on this one -- declare the chain ticker.swings proposed.
+        self.assertEqual(misdeclared["status"], "needs_input")
 
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
