@@ -18,7 +18,7 @@ from scripts.minervini.setup_structure import resolve_structure
 from tests.series import anchor_dates, base_series
 
 
-SPEC = {"volume_baseline_sessions": 50, "tightness_window_sessions": 10}
+SPEC = {"volume_baseline_sessions": 50}
 
 
 def measured(**kwargs) -> dict:
@@ -83,7 +83,7 @@ class InsufficientHistoryTests(unittest.TestCase):
         frame, anchors = base_series()
         structure = resolve_structure(frame, anchor_dates(frame, anchors))
 
-        numbers = measure(frame, structure, {"volume_baseline_sessions": 500, "tightness_window_sessions": 10})
+        numbers = measure(frame, structure, {"volume_baseline_sessions": 500})
 
         self.assertIsNone(numbers["final_contraction_volume_ratio"])
 

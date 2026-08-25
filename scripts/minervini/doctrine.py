@@ -145,14 +145,16 @@ def threshold(claim_id: str, name: str) -> Any:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
     role = specification["role"]
-    # A raw number is one comparison away from a verdict, so the two kinds of number that
-    # must never carry one do not come out of here at all. A marker leaves through
-    # `evaluate_marker`, where the distance travels with it; another practitioner's filter
-    # leaves through `evaluate_gate`, where it is stamped as contrast.
+    # A raw number is one comparison away from a verdict, so the kinds of number whose
+    # meaning is positional do not come out of here at all: a band leaves through
+    # `evaluate_band` and a marker through `evaluate_marker`, each carrying where the
+    # measurement sat. Binding is checked only for gates, because only a gate could decide
+    # anything; a reference is never compared with a measurement, so reading one raw is how
+    # a window length reaches the code that computes the series it names.
     if role in {"marker", "band"}:
         evaluator = "evaluate_marker" if role == "marker" else "evaluate_band"
         raise ValueError(f"{claim_id}.{name} is a {role}; read it through {evaluator} so where the measurement sits travels with it")
-    if not _binds(claim):
+    if role == "gate" and not _binds(claim):
         raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
     return specification["value"]
 

@@ -76,7 +76,14 @@ def base_series(
 
     span = len(closes)
     if volume_profile == "drying":
-        volumes = [2_000_000 * (1 - 0.7 * position / span) for position in range(span)]
+        # Volume dries through the base and arrives on up days rather than down days,
+        # which is what accumulation looks like on the tape.
+        volumes = [
+            2_000_000
+            * (1 - 0.7 * position / span)
+            * (1.8 if position and closes[position] > closes[position - 1] else 0.5)
+            for position in range(span)
+        ]
     elif volume_profile == "rising":
         volumes = [700_000 * (1 + 1.5 * position / span) for position in range(span)]
     elif volume_profile == "distribution":

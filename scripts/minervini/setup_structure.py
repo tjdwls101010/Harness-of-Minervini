@@ -107,7 +107,7 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
             problems.append(
                 f"{_iso(stamp)} is declared a swing {kind} but is not the {kind} of the span its neighbours bound"
             )
-        resolved.append({"date": _iso(stamp), "kind": kind, "price": round(price, 4)})
+        resolved.append({"date": _iso(stamp), "kind": kind, "price": price})
 
     contractions: list[dict[str, Any]] = []
     for position in range(0, len(resolved) - 1, 2):
@@ -121,7 +121,7 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
                 "high": high["price"],
                 "low_date": low["date"],
                 "low": low["price"],
-                "depth_pct": round((high["price"] - low["price"]) / high["price"] * 100, 6),
+                "depth_pct": (high["price"] - low["price"]) / high["price"] * 100,
                 # The recovery ends where the next swing high stands, which is what makes
                 # "volume on the final contraction" a window rather than a phrase.
                 "recovery_end": resolved[position + 2]["date"],
@@ -143,7 +143,7 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
             "end": _iso(end),
             "high": base_high,
             "low": base_low,
-            "depth_pct": round((base_high - base_low) / base_high * 100, 6),
+            "depth_pct": (base_high - base_low) / base_high * 100,
             "duration_sessions": int(len(bars.loc[start:end])),
             # The last declared high is the pivot: the source's trigger is price trading
             # above the high of the final pause, not above a rolling window's maximum.

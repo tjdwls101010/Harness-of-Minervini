@@ -1,197 +1,167 @@
-"""Reduce completed daily bars and chart review into setup-evaluator evidence."""
+"""Assemble setup evidence: compile the spec, resolve the structure, measure, evaluate.
+
+Four steps with four owners. The registry owns every limit and every window; the structure
+resolver owns whether the caller's chart reading survives contact with the bars; the
+measurement module owns arithmetic and knows no doctrine; and this module is the only place
+they meet. Nothing here decides a setup state -- that is the reducer's job, and it reads
+what this returns.
+
+Binding and contrast evidence are separated before either reaches the reducer. A gate
+belonging to a practitioner this harness reads for comparison reports `contrast_pass` or
+`contrast_fail`, words no reducer's state vocabulary contains; handing one to a reducer
+anyway would not make it ignored, it would make it read as missing evidence and turn
+somebody else's disagreement into this harness's incompleteness.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from copy import deepcopy
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pandas as pd
 
-
-_REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
-_PIVOT_LOOKBACK = 20
-_POSITIVE_STATES = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete"}
-
-
-def _copy_mapping(value: Any) -> dict[str, Any]:
-    return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
+from . import doctrine
+from .setup_measurements import measure
+from .setup_structure import resolve_structure
 
 
-def _state(value: Any, default: str) -> str:
-    if isinstance(value, Mapping):
-        value = value.get("state", value.get("status"))
-    if value is None:
-        return default
-    return str(value).strip().lower().replace("-", "_") or default
+# Each numberless observation names the claim whose sentence states it. The source supplies
+# the requirement and no magnitude, so the predicate reads a direction and the required
+# text comes from the claim rather than from a string written here.
+_VOLUME_ASYMMETRY = "setup.demand_supply_volume_asymmetry"
+_PIVOT_VOLUME = "setup.pivot_volume_contraction"
+_CONTRACTIONS_CONTRACT = "setup.contractions_must_contract"
+_PIVOT_TRIGGER = "setup.structural_pivot_and_trigger"
+_TIME_COMPRESSION = "setup.time_compression_hazard"
+
+_CONTRACTION_COUNT = "setup.vcp_contraction_count"
+_HALVING = "setup.successive_contraction_halving"
+_DRYUP = "setup.final_contraction_volume_dryup"
+_VOLUME_STATE = "setup.volume_state_convention"
+_CLOSING_RANGE = "setup.closing_range_formula"
+
+_RYAN_BREAKOUT = ("practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal", "breakout_volume_increase_min")
+_ZANGER_BREAKOUT = ("practitioners.breakout_volume.zanger_50pct_over_20day_avg", "breakout_volume_increase_over_20d_avg_min")
+_MINERVINI_BREAKOUT = ("practitioners.breakout_volume.minervini_eclipse_50d_avg_or_50pct", "breakout_volume_increase_over_50d_avg_min")
 
 
-def _chart_claim(value: Any, default: str = "needs_chart") -> dict[str, Any]:
-    claim = _copy_mapping(value)
-    claim["state"] = _state(claim, default)
-    return claim
+def compile_measurement_spec() -> dict[str, Any]:
+    """Read the windows the measurements need from the claims that name them.
 
-
-def _unavailable_evidence(reason: str) -> dict[str, Any]:
+    These select which series to compute, not what to conclude, which is why they are
+    registered as references and why compiling them here keeps the measurement module free
+    of the registry entirely.
+    """
+    swing = int(doctrine.threshold(_VOLUME_STATE, "swing_baseline_sessions"))
+    position = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
     return {
-        "price_geometry": {"state": "unavailable", "reason": reason},
-        "supply_evidence": {"state": "unavailable", "reason": reason},
-        "entry": {"kind": None, "state": "unavailable", "reason": reason},
-        "vcp_label": None,
+        "volume_baseline_sessions": int(doctrine.threshold(_DRYUP, "volume_baseline_sessions")),
+        "breakout_volume_baseline_sessions": (swing, position),
     }
 
 
-def _completed_bars(history: Any) -> pd.DataFrame | None:
-    if not isinstance(history, pd.DataFrame) or any(column not in history for column in _REQUIRED_COLUMNS):
-        return None
-    bars = history.loc[:, _REQUIRED_COLUMNS].copy()
-    for column in _REQUIRED_COLUMNS:
-        bars[column] = pd.to_numeric(bars[column], errors="coerce")
-    if bars.isna().any().any() or (bars.loc[:, _REQUIRED_COLUMNS] <= 0).any().any():
-        return None
-    if not bars.index.is_monotonic_increasing:
-        bars = bars.sort_index()
-    return bars
+def _summary(claim_id: str) -> str:
+    return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
 
 
-def _volume_observation(bars: pd.DataFrame) -> dict[str, Any]:
-    if len(bars) < 11:
-        return {"state": "needs_chart", "reason": "insufficient completed volume history"}
-    recent = float(bars["Volume"].iloc[-5:].mean())
-    preceding = float(bars["Volume"].iloc[-11:-5].mean())
+def _observation(claim_id: str, state: str, measured: Any) -> dict[str, Any]:
+    """One claim the source states without a number, evaluated on direction alone."""
+
     return {
-        "state": "needs_chart",
-        "recent_5_session_average": round(recent, 4),
-        "preceding_6_session_average": round(preceding, 4),
-        "recent_to_preceding_ratio": round(recent / preceding, 4) if preceding > 0 else None,
-        "reason": "volume observations do not establish supply absorption without chart review",
+        "id": claim_id,
+        "doctrine_id": claim_id,
+        "role": "observation",
+        "binds": True,
+        "state": state,
+        "measured": measured,
+        "required": _summary(claim_id),
     }
 
 
-def _candidate_pivot(bars: pd.DataFrame) -> dict[str, Any] | None:
-    if len(bars) < _PIVOT_LOOKBACK + 1:
-        return None
-    prior = bars.iloc[-(_PIVOT_LOOKBACK + 1) : -1]
-    return {
-        "price": round(float(prior["High"].max()), 4),
-        "lookback_sessions": _PIVOT_LOOKBACK,
-        "basis": "highest high among the preceding completed sessions",
-    }
+def _direction(measured: float | None, satisfied: bool) -> str:
+    if measured is None:
+        return "unavailable"
+    return "pass" if satisfied else "fail"
 
 
-def _add_debt(entry: dict[str, Any], item: str) -> None:
-    debt = entry.get("confirmation_debt")
-    items = [str(value) for value in debt if str(value).strip()] if isinstance(debt, list) else []
-    if item not in items:
-        items.append(item)
-    entry["confirmation_debt"] = items
-
-
-def _entry_evidence(
-    source: Any,
-    *,
-    candidate_pivot: dict[str, Any] | None,
-    close: float | None,
-    geometry: Mapping[str, Any],
-    supply: Mapping[str, Any],
-    tactic_opt_in: bool,
-) -> dict[str, Any]:
-    if candidate_pivot is None or close is None:
-        return {"kind": None, "state": "unavailable", "reason": "insufficient completed history for a candidate pivot"}
-
-    chart_entry = _copy_mapping(source)
-    kind = str(chart_entry.get("kind", "")).strip().lower().replace("-", "_")
-    trigger = {
-        "price": candidate_pivot["price"],
-        "condition": "completed close above the candidate pivot",
-    }
-    invalidation = _copy_mapping(chart_entry.get("invalidation"))
-    if not invalidation:
-        invalidation = {"state": "needs_chart", "reason": "base low requires visual structure"}
-
-    if kind not in {"completed_pivot", "pivot_breakout", "breakout", "vcp_cheat", "cheat", "3c_cheat", "tl_early", "early"}:
-        return {
-            "kind": "candidate_pivot",
-            "state": "wait",
-            "candidate_pivot": candidate_pivot,
-            "trigger": trigger,
-            "invalidation": invalidation,
-            "confirmation_debt": ["chart-confirmed entry pattern"],
-        }
-
-    canonical_kind = {
-        "pivot_breakout": "completed_pivot",
-        "breakout": "completed_pivot",
-        "cheat": "vcp_cheat",
-        "3c_cheat": "vcp_cheat",
-        "early": "tl_early",
-    }.get(kind, kind)
-    entry = {**chart_entry, "kind": canonical_kind, "candidate_pivot": candidate_pivot, "trigger": trigger, "invalidation": invalidation}
-    chart_confirmed = _state(chart_entry, "unavailable") in _POSITIVE_STATES
-
-    if canonical_kind == "tl_early":
-        entry["opt_in"] = tactic_opt_in
-        entry["state"] = "pass" if chart_confirmed else "wait"
-        if not chart_confirmed:
-            _add_debt(entry, "chart-confirmed TL early entry")
-        return entry
-
-    conditions = [
-        (chart_confirmed, "chart-confirmed entry pattern"),
-        (_state(geometry, "needs_chart") == "pass", "chart-confirmed price geometry"),
-    ]
-    if canonical_kind == "completed_pivot":
-        conditions.append((close > candidate_pivot["price"], "completed_close_above_candidate_pivot"))
-    else:
-        conditions.append((_state(supply, "needs_chart") == "pass", "chart-confirmed supply absorption"))
-
-    for satisfied, debt in conditions:
-        if not satisfied:
-            _add_debt(entry, debt)
-    entry["state"] = "pass" if all(satisfied for satisfied, _ in conditions) else "wait"
-    entry["price"] = round(close, 4)
-    return entry
+def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> str:
+    cleared = measurements.get("pivot_cleared")
+    if cleared is None or expansion is None:
+        return "unavailable"
+    if not cleared:
+        return "not_triggered"
+    # Clearing the pivot without expanding volume is not the trigger the source describes;
+    # it is the trigger's other half missing, which is a failure rather than a wait.
+    return "pass" if expansion > 1 else "fail"
 
 
 def build_setup_evidence(
-    history: pd.DataFrame,
+    history: Any,
+    swings: Sequence[Any] | None = None,
     *,
-    chart_judgments: Mapping[str, Any] | None = None,
+    entry_kind: str = "completed_pivot",
     tactic_opt_in: bool = False,
+    entry: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build only the Mapping consumed by :func:`setup.evaluate_setup`.
+    """Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside it."""
 
-    Daily OHLCV supplies bounded observations and a candidate pivot. Visual
-    pattern geometry, supply absorption, and named entry tactics remain caller
-    judgments, so neither a VCP label nor a single computed price level can
-    declare a setup complete.
-    """
-    bars = _completed_bars(history)
-    if bars is None:
-        return _unavailable_evidence("completed daily OHLCV is missing or invalid")
+    spec = compile_measurement_spec()
+    structure = resolve_structure(history, list(swings or []))
+    bars = history if isinstance(history, pd.DataFrame) else None
+    measurements = measure(bars, structure, spec) if bars is not None else measure(pd.DataFrame(), structure, spec)
 
-    judgments = _copy_mapping(chart_judgments)
-    geometry = _chart_claim(judgments.get("price_geometry"))
-    supply = _chart_claim(judgments.get("supply_evidence"))
-    if "supply_evidence" not in judgments:
-        supply.update(_volume_observation(bars))
+    ratios = measurements.get("breakout_volume_ratios") or {}
+    position_sessions = spec["breakout_volume_baseline_sessions"][1]
+    swing_sessions = spec["breakout_volume_baseline_sessions"][0]
+    expansion = ratios.get(position_sessions)
 
-    candidate = _candidate_pivot(bars)
-    close = float(bars["Close"].iloc[-1]) if candidate is not None else None
-    entry = _entry_evidence(
-        judgments.get("entry"),
-        candidate_pivot=candidate,
-        close=close,
-        geometry=geometry,
-        supply=supply,
-        tactic_opt_in=tactic_opt_in is True,
-    )
+    signals = [
+        _observation(
+            _VOLUME_ASYMMETRY,
+            _direction(measurements["up_down_volume_ratio"], (measurements["up_down_volume_ratio"] or 0) > 1),
+            measurements["up_down_volume_ratio"],
+        ),
+        _observation(
+            _PIVOT_VOLUME,
+            _direction(measurements["final_contraction_volume_ratio"], (measurements["final_contraction_volume_ratio"] or 0) < 1),
+            measurements["final_contraction_volume_ratio"],
+        ),
+        _observation(
+            _CONTRACTIONS_CONTRACT,
+            "unavailable" if measurements["contractions_contract"] is None else ("pass" if measurements["contractions_contract"] else "fail"),
+            measurements["contraction_depths_pct"],
+        ),
+        _observation(_PIVOT_TRIGGER, _trigger_state(measurements, expansion), measurements.get("pivot_extension_pct")),
+        _observation(
+            _TIME_COMPRESSION,
+            "unavailable" if measurements["right_to_left_session_ratio"] is None else "reported",
+            measurements["right_to_left_session_ratio"],
+        ),
+        doctrine.evaluate_band(_CONTRACTION_COUNT, "contraction_count", measurements["contraction_count"] or None),
+        doctrine.evaluate_marker(_HALVING, "successive_depth_ratio", measurements["successive_depth_ratios"][-1] if measurements["successive_depth_ratios"] else None),
+        doctrine.evaluate_marker(_DRYUP, "final_contraction_volume_ratio", measurements["final_contraction_volume_ratio"]),
+        doctrine.evaluate_marker(*_MINERVINI_BREAKOUT, _percent_increase(expansion)),
+    ]
+
+    contrast = [
+        doctrine.evaluate_gate(*_RYAN_BREAKOUT, _percent_increase(expansion)),
+        doctrine.evaluate_gate(*_ZANGER_BREAKOUT, _percent_increase(ratios.get(swing_sessions))),
+        doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", measurements["closing_range_pct"]),
+    ]
+
     return {
-        "price_geometry": geometry,
-        "supply_evidence": supply,
-        "entry": entry,
-        "vcp_label": judgments.get("vcp_label"),
+        "structure": structure,
+        "measurements": measurements,
+        "signals": signals,
+        "contrast": contrast,
+        "entry": {"kind": entry_kind, "opt_in": tactic_opt_in is True, **(dict(entry) if isinstance(entry, Mapping) else {})},
     }
 
 
-__all__ = ["build_setup_evidence"]
+def _percent_increase(ratio: float | None) -> float | None:
+    """Practitioner standards are stated as a percentage above an average, not as a ratio."""
+
+    return None if ratio is None else (ratio - 1) * 100
+
+
+__all__ = ["build_setup_evidence", "compile_measurement_spec"]

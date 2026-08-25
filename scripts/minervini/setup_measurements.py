@@ -87,7 +87,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     baseline = _baseline(bars["Volume"], baseline_sessions, base["end"])
 
     up_volume, down_volume = _up_down_volume(base_window)
-    tightness_window = base_window.iloc[-int(spec.get("tightness_window_sessions") or 0) :]
+    # Tightness is read where the source reads it -- the final contraction on the right
+    # side, just before the purchase -- so no session count has to be invented for it.
+    tightness_window = final_window
 
     # The source's hazard is a right side that develops too fast for supply to be worked
     # through -- "V-shaped price action or the absence of proper right-side development".

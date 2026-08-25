@@ -54,6 +54,11 @@ class RawValueSeamTests(unittest.TestCase):
     def test_a_binding_gate_value_is_still_readable(self) -> None:
         self.assertEqual(doctrine.threshold("risk.initial_stop_and_reward", "initial_stop_ceiling_pct"), 10)
 
+    def test_a_reference_on_a_non_binding_claim_is_readable_because_nothing_compares_it(self) -> None:
+        """A window length selects which series to compute; it cannot decide anything."""
+
+        self.assertEqual(doctrine.threshold("setup.volume_state_convention", "swing_baseline_sessions"), 20)
+
 
 class ContrastGateCannotRejectTests(unittest.TestCase):
     def test_a_non_binding_claim_declaring_rejection_is_invalid(self) -> None:
