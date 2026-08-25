@@ -101,6 +101,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "pause_low_held_to_breakout": None,
             "breakout_held": None,
             "currently_above_pivot": None,
+            "base_failed_after_pivot": None,
+            "sessions_below_pivot_after_breakout": None,
+            "pivot_extension_cents": None,
             "pivot_extension_at_breakout_pct": None,
             "failed_pivot_attempts": None,
             "daily_range_median_pct": None,
@@ -254,6 +257,12 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # price stands now is a different fact from whether it ever slipped, and the trigger
         # reads this one while the attempts are counted beside it.
         "currently_above_pivot": bool(float(last["Close"]) > pivot),
+        # Two failure kinds, counted apart: a close under the base's own low is the one the
+        # source says needs a whole new base, and no later rally makes the declared structure
+        # the one being bought.
+        "base_failed_after_pivot": bool((since_breakout["Close"] < float(base["low"])).any()) if breakout_label is not None else None,
+        "sessions_below_pivot_after_breakout": int((since_breakout["Close"] <= pivot).sum()) if breakout_label is not None else None,
+        "pivot_extension_cents": (float(last["Close"]) - pivot) * 100,
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,
         "pivot_extension_pct": (float(last["Close"]) - pivot) / pivot * 100,

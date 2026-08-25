@@ -102,17 +102,15 @@ class CompletenessCannotBeSelfCertifiedTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class ProximityRefusesAnExtendedEntryTests(unittest.TestCase):
-    def test_at_pivot_is_refused_once_price_has_run_past_where_it_broke_out(self) -> None:
-        """"As close to the pivot as possible" has a closest available point, and it is the breakout."""
+class ProximityIsTheReadersCallTests(unittest.TestCase):
+    def test_at_pivot_is_refused_on_a_pivot_price_has_not_cleared(self) -> None:
+        """The one refusal the bars support: there is no entry above a pivot nobody reached."""
 
-        frame, anchors = base_series()
-        extended = tail(frame, 40, close=150.0, volume=400_000.0)
+        frame, anchors = base_series(breakout=False)
 
-        result = evaluate_setup(build_setup_evidence(extended, anchor_dates(frame, anchors), right_side_development="constructive", entry_proximity="at_pivot"))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", entry_proximity="at_pivot"))
 
         self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
-        self.assertNotEqual(result["setup_state"], "ready")
 
     def test_at_pivot_holds_on_the_breakout_itself(self) -> None:
         frame, anchors = base_series()
@@ -218,23 +216,31 @@ class AdversarialDirectionTests(unittest.TestCase):
         self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("setup.declared_chain_completeness", result["missing"])
 
-    def test_a_fifty_percent_extended_entry_declared_at_the_pivot_cannot_reach_ready(self) -> None:
+    def test_a_fifty_percent_extended_entry_carries_its_distance_where_a_reader_cannot_miss_it(self) -> None:
+        """No mechanical rule survived here, so the harness prints the distance instead.
+
+        Comparing the entry with the breakout's own extension called a twenty-percent gap
+        that ticked down "at the pivot" and refused a one-cent advance the day after a
+        three-percent breakout. The source names the limit and withholds the number.
+        """
+
         frame, anchors = base_series()
         extended = tail(frame, 40, close=150.0, volume=400_000.0)
 
-        result = evaluate_setup(
-            build_setup_evidence(
-                extended,
-                anchor_dates(frame, anchors),
-                chain_completeness="complete",
-                completeness_source="independent_segmentation",
-                right_side_development="constructive",
-                entry_proximity="at_pivot",
-            )
+        evidence = build_setup_evidence(
+            extended,
+            anchor_dates(frame, anchors),
+            chain_completeness="complete",
+            completeness_source="independent_segmentation",
+            right_side_development="constructive",
+            entry_proximity="at_pivot",
         )
 
-        self.assertGreater(result["measurements"]["pivot_extension_pct"], 50.0)
-        self.assertNotEqual(result["setup_state"], "ready")
+        chase = signal(evaluate_setup(evidence), "setup.chase_limit_above_pivot")
+        self.assertGreater(chase["measured"]["pivot_extension_pct"], 50.0)
+        self.assertEqual(chase["measured"]["sessions_since_breakout"], 40)
+        buffer_signal = next(item for item in evidence["signals"] if "minervini_5_to_20_cents" in item["id"])
+        self.assertEqual(buffer_signal["state"], "beyond_source_range")
 
     def test_a_base_that_more_than_halved_cannot_be_talked_into_ready_either(self) -> None:
         frame, anchors = base_series()

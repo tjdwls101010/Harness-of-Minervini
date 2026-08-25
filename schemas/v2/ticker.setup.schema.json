@@ -44,15 +44,7 @@
           "partial",
           "needs_chart"
         ],
-        "description": "Whether the declared chain is the base's whole structure. A caller may say partial, which admits a gap. A caller may not say complete: the reading exists to check the chain, and the chain's own author cannot perform that check, so complete counts only when completeness_source names an independent segmentation. Until one exists the standard route stops at wait.",
-        "required": false,
-        "type": "enum"
-      },
-      "completeness_source": {
-        "choices": [
-          "independent_segmentation"
-        ],
-        "description": "Who supplied the completeness reading. Only an independent segmentation can vouch for a chain the caller declared.",
+        "description": "Whether the declared chain is the base's whole structure. A caller may say partial, which admits a gap and costs them nothing. Saying complete has no effect: the reading exists to check the caller's chain, and neither its author nor a word they type can perform that check. It counts only when an independent segmentation supplies it, and until one exists the standard route stops at wait.",
         "required": false,
         "type": "enum"
       },
@@ -77,7 +69,7 @@
           "chased",
           "needs_judgment"
         ],
-        "description": "Chart reading of how close the entry sits to the pivot. The source says to buy as close to the pivot as possible without chasing more than a few percentage points and supplies no number, so the call is the reader's; the distance now, the distance at the breakout, and the breakout's age are reported beside it.",
+        "description": "How close the entry sits to the pivot. The source says to buy as close to the pivot as possible without chasing more than a few percentage points and supplies no number, so the call is the reader's outright: the only reading the bars refuse is at_pivot on a pivot price has not cleared. The distance now, the distance at the breakout, the breakout's age, and Minervini's own stated five-to-twenty-cent buffer are reported for the reader to make the call with.",
         "required": false,
         "type": "enum"
       },
@@ -147,7 +139,7 @@
     "limitations": [
       "Swing segmentation is the caller's chart reading; what the bars can check is that each declared date exists, that the chain alternates and ends on a high, and that each bar really is the extreme of its span.",
       "Ready requires every item of a route's declared evidence, so a base nobody described is incomplete rather than unobjectionable.",
-      "Three of those items are readings rather than measurements, because completed bars cannot settle a V-shaped right side, whether a chain describes the base's whole structure, or how far above the pivot stops being close to it. Two of them the bars can still refuse: a right side with no pause at all is not constructive, and an entry further from the pivot than the breakout was is not at the pivot. The third cannot be self-certified at all, so the standard route stops at wait until an independent segmentation exists to vouch for the chain.",
+      "Three of those items are readings rather than measurements, because completed bars cannot settle a V-shaped right side, whether a chain describes the base's whole structure, or how far above the pivot stops being close to it. One of them the bars can refuse: a right side with no pause at all is not constructive. The entry-proximity call is the reader's outright, because every mechanical rule tried for it either invented the number the source withheld or cut in the wrong place, so the distances are printed instead and Minervini's own stated buffer above the pivot is reported beside them. The third cannot be self-certified at all and is not a request input, so the standard route stops at wait until an independent segmentation exists to vouch for the chain.",
       "All three readings are listed back in declared_readings so the share of the verdict that came from a person is visible, and everything else in it is measured and cannot be declared away.",
       "Price quieting down on the right side is reported rather than decided: the source says 'noticeably' and gives no number, and a strict comparison of two medians passed a pause two ten-thousandths of a percentage point tighter than its base. The volume half of that same sentence is a gate, because a contraction either happened or it did not.",
       "Contrast evidence from other practitioners is reported beside the verdict and never enters it.",

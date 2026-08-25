@@ -85,6 +85,12 @@
 
 31. **"noticeably"에 엄격한 부등호를 대입하면 안 된다.** 가격이 조용해졌는가를 `pause 중앙값 < base 중앙값`으로 판정했더니 0.0024%p 차이가 양성 증거가 됐다. 출처가 정도부사를 쓰고 숫자를 안 줬으면 판정이 아니라 보고다. 같은 문장의 볼륨 절은 게이트로 남는다 — 수축은 일어났거나 안 일어났거나이기 때문이다.
 
+32. **공급자의 이름을 호출자가 타이핑하는 것은 provenance가 아니다.** 자기 보증 구멍을 막으려고 "독립 분할이 보증해야 한다"고 해놓고, 그 독립성을 주장하는 문자열을 CLI 플래그로 공개했다. `--completeness-source independent_segmentation`은 아무나 칠 수 있다. 공개 표면에서 제거했고 요청에 들어오면 거부한다. seam은 하네스가 실제로 만든 분할을 위해 남아 있고, **따라서 표준 경로는 지금 어떤 요청으로도 READY에 도달하지 못한다.** 슬라이스 ③이 그 자리를 채운다.
+
+33. **추격 한계에 시도한 모든 기계적 규칙이 엉뚱한 곳을 잘랐다.** "돌파 시점보다 멀어졌으면 거부"는 +20% 갭 돌파 후 1% 되밀린 것을 at_pivot으로 인정하고, +3.62% 돌파 다음 날 +0.01%를 거부했다. 절대 거리를 안 보기 때문이다. 원전이 한계를 말하고 숫자를 안 줬으면 판단은 독자의 것이다 — 유일하게 남긴 거부는 "피벗을 못 넘었는데 at_pivot"이고, 대신 현재 연장률·돌파 시점 연장률·경과 세션 수에 **Minervini 자신이 말한 5~20센트 버퍼를 밴드로** 함께 싣는다.
+
+34. **원전은 실패를 두 종류로 나눈다.** "a base failure, which requires building a whole new base before it can be purchased again, and a pivot failure, which can reset and recover within a small number of days." 하나의 카운터로 뭉개고 있었다. 베이스 저점 아래 종가는 첫 번째 종류이고 나중의 어떤 랠리도 선언된 구조를 되살리지 못한다(trigger fail). 두 번째는 회복 가능하고, "a small number of days"에 숫자가 없으므로 피벗 아래에서 보낸 세션 수를 보고한다.
+
 ## 실행 단계
 
 각 단계 공통 게이트: `tdd` 스킬 선행(공개 시임 합의 → RED → GREEN, 테스트는 `./tests` 아래 레포 관례대로 — 기존 `tests/260817`은 보존하고 이번 재작성 스위트는 새 날짜 디렉터리 `tests/2608xx/`에 작성) → codex(sol, xhigh) diff 리뷰 → `validate_harness.py` 0 에러 → `harness-spec.md` Change history 동기 갱신 → 브랜치/PR(한국어 커밋 규칙, 스쿼시 머지). 큰 단계는 구현 전 codex 설계 리뷰 추가.

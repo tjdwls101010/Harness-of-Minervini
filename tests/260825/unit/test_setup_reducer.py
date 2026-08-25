@@ -73,8 +73,13 @@ class KnownFailureTests(unittest.TestCase):
 
 
 class TimingTests(unittest.TestCase):
-    def test_a_base_that_has_not_cleared_its_pivot_waits(self) -> None:
-        self.assertEqual(state_of(breakout=False), "wait")
+    def test_a_base_that_has_not_cleared_its_pivot_has_not_triggered(self) -> None:
+        """An entry declared at a pivot nobody reached is refused alongside the timing itself."""
+
+        result = evaluate_setup(evidence_for(breakout=False))
+
+        self.assertEqual(signal(result, "setup.structural_pivot_and_trigger")["state"], "not_triggered")
+        self.assertNotEqual(result["setup_state"], "ready")
 
 
 class MissingEvidenceTests(unittest.TestCase):

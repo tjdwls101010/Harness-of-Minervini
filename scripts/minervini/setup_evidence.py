@@ -50,6 +50,7 @@ _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 _RYAN_BREAKOUT = ("practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal", "breakout_volume_increase_min")
 _ZANGER_BREAKOUT = ("practitioners.breakout_volume.zanger_50pct_over_20day_avg", "breakout_volume_increase_over_20d_avg_min")
 _MINERVINI_BREAKOUT = ("practitioners.breakout_volume.minervini_eclipse_50d_avg_or_50pct", "breakout_volume_increase_over_50d_avg_min")
+_MINERVINI_BUFFER = ("practitioners.chase.minervini_5_to_20_cents_no_magic_number", "chase_buffer_above_pivot")
 
 
 def compile_measurement_spec() -> dict[str, Any]:
@@ -172,17 +173,13 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> st
     if reading == "chased":
         return "fail"
     if reading == "at_pivot":
-        # "As close to the pivot as possible" has a closest available point, and it is the
-        # breakout. How much further than that stops being close the source declines to say,
-        # but price standing further from the pivot than it did when it left the base is not
-        # a reading the bars leave open.
-        if not measurements.get("pivot_cleared"):
-            return "fail"
-        now = measurements.get("pivot_extension_pct")
-        at_breakout = measurements.get("pivot_extension_at_breakout_pct")
-        if now is None or at_breakout is None:
-            return "unavailable"
-        return "pass" if now <= at_breakout else "fail"
+        # The one thing the bars can refuse: there is no entry above a pivot price has not
+        # cleared. Every mechanical rule tried for the rest of it cut in the wrong place --
+        # comparing the entry with the breakout's own extension called a twenty-percent gap
+        # that ticked down "at the pivot" and refused a one-cent advance the day after a
+        # three-percent breakout. The source names the limit and withholds the number, so the
+        # call is the reader's and the distances are printed for them to make it with.
+        return "pass" if measurements.get("pivot_cleared") else "fail"
     return "needs_chart"
 
 
@@ -196,6 +193,24 @@ def _quieting_state(measurements: Mapping[str, Any]) -> str:
     change are reported, and the reading is the analyst's.
     """
     return "unavailable" if measurements.get("daily_range_median_pct") is None else "reported"
+
+
+def _failure_state(measurements: Mapping[str, Any]) -> str:
+    """The source separates two failures and only one of them is recoverable.
+
+    "A base failure, which requires building a whole new base before it can be purchased
+    again, and a pivot failure, which can reset and recover within a small number of days."
+    A close under the base's own low is the first kind, and no later rally makes the declared
+    structure the one being bought. How small "a small number of days" is has no number, so
+    the count of sessions spent below the pivot is reported rather than cut.
+    """
+    failed = measurements.get("base_failed_after_pivot")
+    if failed is None:
+        return "unavailable"
+    # The condition is that the base has not failed. The attempt count and the time spent
+    # below the pivot ride in the measurement, where a reader can weigh "a small number of
+    # days" without a number being invented for them.
+    return "fail" if failed else "pass"
 
 
 def _spike_state(measurements: Mapping[str, Any]) -> str:
@@ -302,8 +317,12 @@ def build_setup_evidence(
         ),
         _observation(
             _FAILURE_RESET,
-            "unavailable" if measurements.get("failed_pivot_attempts") is None else "reported",
-            measurements.get("failed_pivot_attempts"),
+            _failure_state(measurements),
+            {
+                "base_failed_after_pivot": measurements.get("base_failed_after_pivot"),
+                "failed_pivot_attempts": measurements.get("failed_pivot_attempts"),
+                "sessions_below_pivot_after_breakout": measurements.get("sessions_below_pivot_after_breakout"),
+            },
         ),
         _observation(
             _CHASE_LIMIT,
@@ -318,6 +337,10 @@ def build_setup_evidence(
         doctrine.evaluate_marker(_HALVING, "successive_depth_ratio", measurements["successive_depth_ratios"][-1] if measurements["successive_depth_ratios"] else None),
         doctrine.evaluate_marker(_DRYUP, "final_contraction_volume_ratio", measurements["final_contraction_volume_ratio"]),
         doctrine.evaluate_marker(*_MINERVINI_BREAKOUT, _percent_increase(expansion)),
+        # The source's own stated practice, in the units it stated them in: he waits for the
+        # stock to trade five, ten, or even twenty cents above the pivot, and says in the same
+        # breath that there is no magic number. A band, so it reports where the entry sat.
+        doctrine.evaluate_band(*_MINERVINI_BUFFER, measurements.get("pivot_extension_cents")),
     ]
 
     contrast = [
