@@ -151,11 +151,13 @@ def _readable(record: Mapping[str, Any], claim_id: str) -> None:
         raise ValueError(f"{claim_id} is recorded {exclusion} and is audit material; no capability may read its numbers")
 
 
-def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    """One threshold plus the quotation it cites, refusing a role it was not registered as.
+def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """One threshold, the claim it belongs to, and the quotation it cites.
 
     Reading a band as a gate is how a range the source hedged becomes a cliff it never
-    drew, so the mismatch raises here rather than producing a plausible verdict.
+    drew, so the mismatch raises here rather than producing a plausible verdict. The claim
+    travels back with the threshold because whose standard this is decides what the
+    evaluation is allowed to say, and looking it up twice invites the two answers to drift.
     """
     record = get_claim(claim_id)
     _readable(record["claim"], claim_id)
@@ -164,7 +166,7 @@ def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[s
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     if specification["role"] != expected_role:
         raise ValueError(f"{claim_id}.{name} is registered as a {specification['role']}, not a {expected_role}")
-    return specification, record["provenance"]["quotations"][specification["quote_index"]]
+    return specification, record["claim"], record["provenance"]["quotations"][specification["quote_index"]]
 
 
 def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -174,11 +176,10 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
     and a stop that is "basically ten percent" is the negotiation the risk spine exists
     to forbid.
     """
-    record = get_claim(claim_id)
-    specification, _ = _specification(claim_id, name, "gate")
+    specification, claim, _ = _specification(claim_id, name, "gate")
     limit = specification["value"]
     comparator = specification["comparator"]
-    binds = _binds(record["claim"])
+    binds = _binds(claim)
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
@@ -188,7 +189,7 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
         "unit": specification["unit"],
         "required": f"{comparator} {limit}",
     }
-    attribution = record["claim"].get("attributed_to")
+    attribution = claim.get("attributed_to")
     if attribution is not None:
         signal["attributed_to"] = attribution
     if measured is None:
@@ -219,7 +220,7 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     the analyst. Its state word is deliberately outside the pass/fail/wait vocabulary the
     reducers branch on.
     """
-    specification, quotation = _specification(claim_id, name, "marker")
+    specification, _, quotation = _specification(claim_id, name, "marker")
     value = specification["value"]
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
@@ -246,7 +247,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     both sit inside 25-35, and a bare pass/fail throws that difference away. The
     quotation travels with the signal so the response can cite what it is reading.
     """
-    specification, quotation = _specification(claim_id, name, "band")
+    specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
