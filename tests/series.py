@@ -838,3 +838,40 @@ def lower_top_reshuffling_payout_series(*, start: str = "2026-01-02") -> pd.Data
     paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
     frame.iloc[60:, paid] -= 2.0
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def payout_that_only_moves_a_gate_series(
+    *, payout: float = 0.30, start: str = "2026-01-02"
+) -> pd.DataFrame:
+    """Same structure on either scale, and the advance lands on opposite sides of the limit.
+
+    Every boundary matches: same peak, same anchor, same flag low, same baseline, same tops in
+    the same order. What differs is the number the gate is read against, because the payout came
+    out of the prints between the anchor and the peak -- ninety-nine percent on the tape, a
+    hundred and a half once every print is on one scale.
+
+    Built so that nothing else can account for the withholding. The advance tops out twelve
+    percent below the peak and reaches it in one session, so no candidate top other than the
+    flag's own bars comes within the registered contesting distance, and those agree on every
+    criterion. Read on the default fixture instead, the payout and the candidate tops fire
+    together and the test cannot tell which one withheld the gate.
+    """
+
+    dormant, ramp_top, peak, flag = 50.0, 88.0, 99.9, 94.0
+    closes = (
+        [dormant] * 60
+        + [dormant + (ramp_top - dormant) * (step + 1) / 25 for step in range(25)]
+        + [peak]
+        + [flag] * 30
+    )
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 26 + [800_000.0] * 30
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    frame.iloc[70, frame.columns.get_loc("Dividends")] = payout
+    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+    frame.iloc[70:, paid] -= payout
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

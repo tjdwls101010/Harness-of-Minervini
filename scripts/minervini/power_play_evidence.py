@@ -102,30 +102,6 @@ def _tightness_state(depth: float | None, limit: float) -> str:
     return "pass" if depth <= limit else "needs_chart"
 
 
-def _without_the_payout(measurements: Mapping[str, Any]) -> dict[str, Any]:
-    """The same measurements with the cash the company paid added back to the price it left.
-
-    Not a correction of the tape -- the printed prices stay printed. It is the second reading the
-    criteria are checked against, so that a payout decides a verdict only when the verdict was
-    going to turn on it. Blocking on any distribution instead would leave every dividend payer
-    unreadable for months at a time over a fraction of a percent.
-    """
-    adjusted = dict(measurements)
-    paid_in_the_flag = measurements["distribution_paid_in_the_flag"]
-    if paid_in_the_flag and measurements["flag_depth_pct"] is not None:
-        peak_high = measurements["peak_high"]
-        adjusted["flag_depth_pct"] = (
-            (peak_high - measurements["flag_low"] - paid_in_the_flag) / peak_high * 100
-        )
-    paid_in_the_advance = measurements["distribution_paid_in_the_advance"]
-    if paid_in_the_advance and measurements["advance_pct_closes"] is not None:
-        low_close = measurements["advance_low_close"]
-        adjusted["advance_pct_closes"] = (
-            (measurements["peak_close"] + paid_in_the_advance) / low_close - 1
-        ) * 100
-    return adjusted
-
-
 def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
     """How each criterion reads on one set of measurements, without the payloads."""
 
@@ -160,8 +136,12 @@ def _boundaries(measurements: Mapping[str, Any]) -> tuple[Any, ...]:
 
 
 def _signature(walk: Mapping[str, Any]) -> tuple[Any, ...]:
-    """Everything about one walk of the tops that a distribution could have chosen."""
+    """Everything about one walk of the tops that a distribution could have chosen.
 
+    Structure only. Whether the two scales agree about the *answers* is asked separately, per
+    criterion, because a payout that moves one gate has not made the whole reading unusable -- and
+    a payout that moves the structure has.
+    """
     return (
         tuple(_boundaries(reading) for reading in walk["readings"]),
         walk["may_contest"],
@@ -195,24 +175,29 @@ def _on_one_scale(history: Any) -> Any:
     return adjusted
 
 
-def _read_criteria(measurements: Mapping[str, Any], tight_limit: float) -> tuple[dict[str, str], set[str]]:
-    """One reading's criteria, with whatever a cash payout decided taken back out of them.
+def _decided_by_the_payout(
+    walk: Mapping[str, Any], adjusted: Mapping[str, Any], tight_limit: float
+) -> list[set[str]]:
+    """Which criteria answer differently once every print is on one scale.
 
-    Computed per reading rather than once for the top one, because the tops sit at different
-    sessions and a longer flag holds payouts a shorter one never saw. Left to the top reading
-    alone, an earlier candidate could reject on a depth its own payout manufactured and cast that
-    into "every reading rejects".
+    Paired reading by reading, because the tops sit at different sessions and a longer flag holds
+    payouts a shorter one never saw -- left to the top reading alone, an earlier candidate could
+    reject on a depth its own payout manufactured and cast that into "every top rejects". The
+    pairing is sound only where the structures matched, which is what the boundary signature has
+    already established by the time this runs.
+
+    One coordinate system, not two. An earlier version added the cash back to the flag's low and
+    to the peak's close while this series takes it off the prints before the ex-date, and the two
+    disagreed about the very percentages they were correcting.
     """
-    criteria = _criteria(measurements, tight_limit)
-    without = _criteria(_without_the_payout(measurements), tight_limit)
-    decided_by_the_payout = {condition for condition, state in criteria.items() if without[condition] != state}
-    return (
+    return [
         {
-            condition: "unavailable" if condition in decided_by_the_payout else state
-            for condition, state in criteria.items()
-        },
-        decided_by_the_payout,
-    )
+            condition
+            for condition, state in _criteria(reading, tight_limit).items()
+            if _criteria(other, tight_limit)[condition] != state
+        }
+        for reading, other in zip(walk["readings"], adjusted["readings"])
+    ]
 
 
 def _unmoved(measurements: Mapping[str, Any]) -> bool:
@@ -245,7 +230,7 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
     #
     # The count bound is a runaway guard. Reaching it is reported rather than passed over.
     bound = spec["candidate_top_maximum_distance_pct"]
-    cut_at: dict[str, Any] | None = None
+    first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
     may_contest = 0
     while len(readings) < _MOST_TOPS_READ:
@@ -260,15 +245,15 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
             break
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
-            if cut_at is None:
-                cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
+            if first_non_contesting is None:
+                first_non_contesting = {"peak_date": reading["peak_date"], "distance_pct": distance}
         else:
             may_contest = len(readings) + 1
         readings.append(reading)
         below, before = reading["peak_high"], reading["peak_date"]
     return {
         "readings": readings,
-        "cut_at": cut_at,
+        "first_non_contesting": first_non_contesting,
         "ran_out_of_history": ran_out_of_history,
         "may_contest": may_contest,
     }
@@ -299,39 +284,57 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     actions = measurements["corporate_action_sessions"]
 
     walk = _walk_the_tops(history, spec, measurements)
-    readings, cut_at = walk["readings"], walk["cut_at"]
+    readings, first_non_contesting = walk["readings"], walk["first_non_contesting"]
     ran_out_of_history, may_contest = walk["ran_out_of_history"], walk["may_contest"]
     exhausted = len(readings) >= _MOST_TOPS_READ
 
-    # Which criteria a cash payout inside the span decided. Everything else it touched, it did
-    # not decide, and an ordinary quarterly payment touches nearly nothing against these limits.
-    every_criteria, every_payout_sensitive = map(
-        list, zip(*(_read_criteria(reading, tight_limit) for reading in readings))
-    ) if readings else ([], [])
-    primary_criteria = every_criteria[0] if readings else _read_criteria(measurements, tight_limit)[0]
-    # Every reading's, not the highest top's alone. The tops sit at different sessions, so a
-    # criterion a payout decided for one of them would otherwise reach the envelope as a question
-    # about which top the search landed on -- and send the reader to the chart for something the
-    # dividend calendar already answered.
-    payout_sensitive = set().union(*every_payout_sensitive) if readings else _read_criteria(measurements, tight_limit)[1]
-    contested = {
-        condition
-        for condition in primary_criteria
-        if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria[:may_contest])
-    }
-    # And the ordering itself. If the tops keep their places once every print is on one scale, the
-    # search read the stock; if they do not, it read the dividend, and no amount of adding cash
-    # back to a depth afterwards recovers a top that was never the top.
+    # The ordering first. If the tops keep their places once every print is on one scale, the
+    # search read the stock; if they do not, it read the dividend, and nothing measured against
+    # those boundaries recovers a top that was never the top.
+    #
     # The whole chain, not just the reading at the top of it. Which tops the chain holds is
     # decided by comparing highs, and a payout moves highs -- the highest top can keep its date
     # and every one of its boundaries while the tops beneath it change places, and those are the
     # readings that decide whether a criterion is contested and whether the rejection stands.
     on_one_scale = _on_one_scale(history)
+    adjusted: dict[str, Any] | None = None
     reordered = False
     if on_one_scale is not None and measurements["peak_date"] is not None:
-        first = measure_power_play(on_one_scale, spec)
-        adjusted = _walk_the_tops(on_one_scale, spec, first)
+        adjusted = _walk_the_tops(on_one_scale, spec, measure_power_play(on_one_scale, spec))
         reordered = _signature(walk) != _signature(adjusted)
+
+    # Then which criteria the payout decided, paired reading by reading against that same scale.
+    # Structure surviving does not make the answers survive with it: the payout comes out of the
+    # prints between the anchor and the peak, so ninety-eight and a half percent on the tape is a
+    # hundred and a half on one scale, every boundary matches, and which side of the limit that
+    # lands on is the whole verdict.
+    # Per reading, not pooled across the chain. The tops sit at different sessions, so a payout a
+    # longer flag held is one a shorter one never saw -- and pooling withholds the top reading's
+    # own confident failure over a limit some lower candidate happened to sit on.
+    every_payout_sensitive: list[set[str]] = [set() for _ in readings]
+    if adjusted is not None and not reordered:
+        every_payout_sensitive = _decided_by_the_payout(walk, adjusted, tight_limit)
+    payout_sensitive = every_payout_sensitive[0] if readings else set()
+
+    every_criteria = [
+        {
+            condition: "unavailable" if condition in decided else state
+            for condition, state in _criteria(reading, tight_limit).items()
+        }
+        for reading, decided in zip(readings, every_payout_sensitive)
+    ]
+    primary_criteria = every_criteria[0] if readings else _criteria(measurements, tight_limit)
+    # A reading whose answer the payout decided abstains rather than dissents. It has not disputed
+    # the top reading's answer; it has declined to give one, and counting that as disagreement
+    # sends the reader to the chart to settle a top when the dividend calendar is what moved.
+    contested = {
+        condition
+        for condition in primary_criteria
+        if any(
+            criteria[condition] not in ("unavailable", primary_criteria[condition])
+            for criteria in every_criteria[:may_contest]
+        )
+    }
     if reordered:
         contested = set(primary_criteria)
     # Three states, because a reading nobody could read is not a reading that came through. A
@@ -366,11 +369,6 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
 
     # A rejection every top agrees on is a rejection whichever of them the search landed on.
     #
-    # "Every top read", not "every reading": the chain stops at the registered distance, so tops
-    # beyond it were never taken and cannot have agreed to anything. `readings_cut_at` names the
-    # first of them. Left at the two nearest tops this claimed all of them and was wrong in its
-    # own name -- two ticks a hundredth of a percent apart hide a structure behind them -- and a
-    # count-truncated chain has the same problem for a different reason.
     # Every top in the span, read and rejecting. Nothing weaker will do: a top nobody could read
     # has not consented to a rejection by being silent, and a top the distance excluded from
     # contesting is still a reading under which the structure stands. And a chain that read the
@@ -424,7 +422,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "peak_identity": "disputed" if contested else "settled",
         "readings": len(readings),
         "readings_exhausted": exhausted,
-        "readings_cut_at": cut_at,
+        "first_non_contesting_reading": first_non_contesting,
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
         "readings_ran_out_of_history": ran_out_of_history,

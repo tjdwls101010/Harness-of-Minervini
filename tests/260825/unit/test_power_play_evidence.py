@@ -13,7 +13,7 @@ import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
 from scripts.minervini.power_play_evidence import build_power_play_evidence
-from tests.series import power_play_series
+from tests.series import payout_that_only_moves_a_gate_series, power_play_series
 
 
 def evidence(**kwargs):
@@ -280,20 +280,24 @@ class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
 
     Blocking on any distribution would leave every dividend payer permanently unreadable, and an
     ordinary quarterly payment is a fraction of a percent against a twenty-five percent limit.
-    What matters is whether the answer turns on it. The room for that is narrow and real: a
-    payout big enough to move the twenty-five percent depth gate also reshuffles the tops, and
-    then nothing decides anyway -- but a payout of a fraction of a percent still decides which
-    side of the ten percent tightness line a flag sits on.
+    What matters is whether the answer turns on it. The room for that is narrow and real: a payout
+    big enough to move the depth gate also reshuffles the tops, and then nothing decides anyway --
+    but three tenths of a percent paid mid-advance still decides which side of the hundred percent
+    line the advance sits on, because the cash came out of the prints between the anchor and the
+    peak and the ratio is read across them.
+
+    The pair below differs in one number: the size of the payout, on one structure, at one
+    session.
     """
 
     def test_a_payout_that_carries_the_verdict_stops_the_criterion_deciding(self):
-        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
+        pack = build_power_play_evidence(payout_that_only_moves_a_gate_series())
 
         self.assertEqual(pack["peak_identity"], "settled")
-        self.assertEqual(pack["payout_sensitive_criteria"], ["flag_tightness_or_vcp"])
+        self.assertEqual(pack["payout_sensitive_criteria"], ["advance_minimum_pct"])
 
     def test_an_ordinary_payout_leaves_the_criterion_deciding(self):
-        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.02)
+        pack = build_power_play_evidence(payout_that_only_moves_a_gate_series(payout=0.02))
 
         self.assertEqual(pack["peak_identity"], "settled")
         self.assertEqual(pack["payout_sensitive_criteria"], [])
@@ -324,42 +328,48 @@ class EveryTopTheSearchCouldHaveLandedOnIsRead(unittest.TestCase):
         self.assertGreaterEqual(pack["readings"], 3)
 
 
-class NoReadingRejectsOnWhatThePayoutDecided(unittest.TestCase):
-    def test_a_payout_decided_criterion_carries_no_reading_s_rejection(self):
-        """Read per reading, not once for the top one.
+class NoVerdictRestsOnWhatThePayoutDecided(unittest.TestCase):
+    def test_lower_tops_rejecting_on_it_does_not_make_it_a_failure(self):
+        """Read per reading, not once for the top one, and not pooled across the chain either.
 
         The tops sit at different sessions, so a longer flag holds payouts a shorter one never
-        saw. Neutralised only for the top reading, an earlier candidate could reject on a depth
-        its own payout manufactured and cast that vote into "every reading rejects".
+        saw. Every one of the flag's own bars rejects this structure's advance on its own terms,
+        and none of those is the reading whose answer the payout decided -- so the chain is loud
+        with rejections while the criterion the verdict would rest on has no answer at all.
         """
-        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
-        sensitive = {
-            f"fundamentals.power_play_exception.{condition}"
-            for condition in pack["payout_sensitive_criteria"]
-        }
+        pack = build_power_play_evidence(payout_that_only_moves_a_gate_series())
+        criterion = "fundamentals.power_play_exception.advance_minimum_pct"
 
-        self.assertTrue(sensitive)
-        for rejection in pack["reading_rejections"]:
-            self.assertEqual(sensitive.intersection(rejection["failed"]), set())
+        verdict = evaluate_power_play(pack)
+
+        self.assertTrue(any(criterion in item["failed"] for item in pack["reading_rejections"]))
+        self.assertNotIn(criterion, verdict["failed"])
+        self.assertIn(criterion, verdict["missing"])
 
 
 class APayoutWithholdsItsOwnSignalAndNothingElse(unittest.TestCase):
     def _verdict(self):
-        # An advance far enough above the limit that no candidate top crosses it, so the only
-        # thing in question here is the payout.
-        return evaluate_power_play(
-            evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
-        )
+        # A structure no candidate top disputes, so the only thing in question here is the payout.
+        return evaluate_power_play(build_power_play_evidence(payout_that_only_moves_a_gate_series()))
 
     def test_the_machine_channel_stops_saying_what_the_reducer_stopped_saying(self):
         verdict = self._verdict()
-        tightness = next(
+        advance = next(
             signal for signal in verdict["signals"]
-            if signal["id"] == "fundamentals.power_play_exception.flag_tightness_or_vcp"
+            if signal["id"] == "fundamentals.power_play_exception.advance_minimum_pct"
         )
 
-        self.assertEqual(tightness["state"], "unavailable")
-        self.assertEqual(tightness["withheld"], "distribution_inside_the_measured_span")
+        self.assertEqual(advance["state"], "unavailable")
+        self.assertEqual(advance["withheld"], "distribution_inside_the_measured_span")
+
+    def test_it_withholds_only_the_criterion_the_payout_decided(self):
+        verdict = self._verdict()
+        withheld = {
+            signal["id"] for signal in verdict["signals"]
+            if signal.get("withheld") == "distribution_inside_the_measured_span"
+        }
+
+        self.assertEqual(withheld, {"fundamentals.power_play_exception.advance_minimum_pct"})
 
     def test_a_payout_is_not_a_question_about_which_top_the_search_landed_on(self):
         verdict = self._verdict()
@@ -442,13 +452,13 @@ class TheReadingCountsAccountForEveryTopTaken(unittest.TestCase):
     def test_a_chain_the_bound_cut_does_not_claim_every_top(self):
         """The name has to survive the convention that shortened the chain.
 
-        `readings_cut_at` names a top the bound removed, so a verdict resting on agreement among
+        `first_non_contesting_reading` names the first top the bound stops from contesting, so a verdict resting on agreement among
         the tops that were read cannot be called agreement among all of them. It is agreement
         among the tops taken, and the field that says so points at the count and the cut.
         """
         pack = evidence(flag_depth_pct=40.0)
 
-        self.assertTrue(pack["readings_cut_at"])
+        self.assertTrue(pack["first_non_contesting_reading"])
         self.assertIn("rejected_under_every_top_read", pack)
         self.assertNotIn("rejected_under_every_reading", pack)
 
@@ -504,7 +514,7 @@ class ATopTheBoundExcludedStillPreventsARejection(unittest.TestCase):
 
         verdict = evaluate_power_play(just_outside)
 
-        self.assertTrue(just_outside["readings_cut_at"])
+        self.assertTrue(just_outside["first_non_contesting_reading"])
         self.assertEqual(verdict["power_play_state"], "incomplete")
         self.assertEqual(verdict["failed"], [])
 
@@ -539,7 +549,7 @@ class RejectingAndQualifyingAskDifferentQuestions(unittest.TestCase):
             power_play_series(dormant_price=10.0, flag_sessions=20, flag_depth_pct=8.0, later_high=21.0 / 0.9 + 0.01)
         )
 
-        self.assertTrue(pack["readings_cut_at"])
+        self.assertTrue(pack["first_non_contesting_reading"])
         self.assertEqual(pack["contested_criteria"], [])
 
     def test_but_it_does_withdraw_the_rejection(self):
@@ -589,6 +599,27 @@ class RunningOutOfHistoryIsNotRunningOutOfTops(unittest.TestCase):
         self.assertFalse(pack["every_top_rejects"])
         self.assertEqual(verdict["failed"], [])
         self.assertEqual(verdict["power_play_state"], "incomplete")
+
+    def test_the_gap_is_the_history_rather_than_a_top_that_stands(self):
+        """No top is standing here, so saying one is sends the reader to settle nothing.
+
+        The two look alike from the reducer -- a rejection that did not carry -- and close on
+        opposite things. A contested top is settled by reading the chart or by the tops agreeing;
+        a history that ends before the next candidate is settled by loading more of it, and by
+        nothing a reader can do with the bars in hand.
+        """
+        pack = build_power_play_evidence(
+            power_play_series(dormancy_sessions=1, advance_sessions=10, advance_pct=40.0, flag_sessions=20)
+        )
+        advance = "fundamentals.power_play_exception.advance_minimum_pct"
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(pack["surviving_readings"], [])
+        self.assertEqual(verdict["held_by_another_top"], [])
+        self.assertEqual(verdict["held_by_short_history"], [advance])
+        signal = next(item for item in verdict["signals"] if item["id"] == advance)
+        self.assertEqual(signal["withheld"], "history_ends_before_lower_top")
 
 
 class TheScaleCheckComparesTheWholeStructure(unittest.TestCase):
@@ -649,3 +680,22 @@ class TheChainItselfIsPartOfTheSignature(unittest.TestCase):
 
         self.assertEqual(pack["peak_identity"], "disputed")
         self.assertEqual(evaluate_power_play(pack)["failed"], [])
+
+
+class TheSignatureHasToCoverTheAnswersToo(unittest.TestCase):
+    """Same structure is not the same verdict.
+
+    Every boundary can match on both scales -- same peak, same anchor, same flag low, same
+    baseline -- while the number a gate is read against does not, because the payout came out of
+    the prices between the anchor and the peak. Ninety-eight and a half percent on the tape is a
+    hundred and a half once every print is on one scale, and which side of the limit that lands on
+    is the whole verdict.
+    """
+
+    def test_a_gate_that_lands_on_opposite_sides_is_not_settled(self):
+        pack = build_power_play_evidence(payout_that_only_moves_a_gate_series())
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["failed"], [])
+        self.assertEqual(verdict["power_play_state"], "incomplete")

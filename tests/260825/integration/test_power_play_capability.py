@@ -165,3 +165,22 @@ class AFailureHeldBackByAnotherTopSaysSo(unittest.TestCase):
 
         self.assertEqual(advance["state"], "unavailable")
         self.assertEqual(advance["withheld"], "structure_stands_under_another_top")
+
+    def test_a_history_that_ends_first_is_named_as_itself(self):
+        """The other way a rejection fails to carry, and it closes on something else entirely.
+
+        A reader told a top is standing goes to the chart to settle which one; there is no top
+        here, only bars the loaded history does not reach. Naming the two the same way sends a
+        recently listed stock -- the shape this arrives in most often -- to settle nothing.
+        """
+        payload = run(
+            power_play_series(
+                dormancy_sessions=1, advance_sessions=10, advance_pct=40.0, flag_sessions=20
+            )
+        )
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+
+        self.assertEqual(
+            reasons["fundamentals.power_play_exception.advance_minimum_pct"],
+            "history_ends_before_lower_top",
+        )
