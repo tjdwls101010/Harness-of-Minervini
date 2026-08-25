@@ -46,16 +46,13 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
 
 
 class EnvelopeTests(unittest.TestCase):
-    def test_a_fully_read_setup_stops_at_the_completeness_nobody_can_vouch_for(self) -> None:
-        """No request reaches READY on the standard route until a segmentation exists to check
-        the caller's chain, which is the seam the swing detector fills."""
-
+    def test_a_fully_read_setup_corroborated_by_the_harnesss_own_segmentation_is_ready(self) -> None:
         payload = run()
 
-        self.assertEqual(payload["status"], "needs_input")
-        self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["setup_state"], "ready")
         self.assertEqual(payload["data"]["measurements"]["contraction_count"], 3)
+        self.assertEqual(payload["data"]["segmentation"]["state"], "resolved")
 
     def test_no_signal_in_the_envelope_carries_a_state_or_a_flag_the_verdict_must_ignore(self) -> None:
         """Not that every signal was required -- most report -- but that none of them is contrast."""

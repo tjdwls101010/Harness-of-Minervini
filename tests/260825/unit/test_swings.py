@@ -1,70 +1,119 @@
-"""A deterministic segmentation, so the caller's chart reading has something to be checked against.
+"""A deterministic segmentation, so the caller's chart reading has something to check against.
 
-The engine cannot tell an honest chain from a flattering one by measuring it -- every anchor
-in a chain that skipped a contraction is still its own span's extreme. What it can do is
-produce its own segmentation and compare. This is that segmentation, and it is the harness's
-own convention rather than anything the source specifies: the source calls swing reading
-chart work and never names a retracement.
+The engine cannot tell an honest swing chain from a flattering one by measuring it -- every
+anchor in a chain that skipped a contraction still sits at its own span's extreme. What it can
+do is produce its own segmentation and compare.
+
+Every rule here is the harness's, not the source's: the source calls swing reading chart work
+and never names a retracement. So the rules are written down rather than left to whatever the
+loop happened to do -- when a bar both extends a move and reverses it, which of two equal
+extremes wins, and what happens when a neighbouring parameter value would have seen something
+different.
 """
 
 from __future__ import annotations
 
 import unittest
 
-from scripts.minervini.swings import segment
+import pandas as pd
+
+from scripts.minervini.swings import base_chain, canonical_chain, segment
 from tests.series import anchor_dates, base_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
     def test_the_turning_points_of_a_twenty_five_ten_five_base_are_found(self) -> None:
         frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
-        expected = anchor_dates(frame, anchors)
 
         found = segment(frame, retracement_pct=1.0)
 
-        self.assertEqual([item["date"] for item in found["anchors"]], expected)
-
-    def test_the_chain_alternates_high_and_low_starting_and_ending_on_a_high(self) -> None:
-        frame, _ = base_series()
-
-        kinds = [item["kind"] for item in segment(frame, retracement_pct=1.0)["anchors"]]
-
-        self.assertEqual(kinds, ["high", "low"] * (len(kinds) // 2) + ["high"])
+        self.assertEqual([item["date"] for item in base_chain(found["anchors"])], anchor_dates(frame, anchors))
 
     def test_the_breakout_underway_is_kept_out_of_the_base(self) -> None:
-        """A move still in progress is unconfirmed, and the breakout is exactly that move.
+        """A move still in progress is unconfirmed, and a breakout is exactly that move.
 
-        Confirming an extreme means watching price fall away from it, which a breakout has not
-        done. Folding it into the chain would put the pivot on the breakout bar -- the level
-        the entry is measured against would become the entry's own session.
+        Confirming an extreme means watching price fall away from it. Folding the live leg into
+        the chain would put the pivot on the breakout bar, making the level the entry is
+        measured against the entry's own session.
         """
 
         frame, anchors = base_series()
 
         found = segment(frame, retracement_pct=1.0)
 
-        self.assertEqual(found["anchors"][-1]["date"], anchor_dates(frame, anchors)[-1])
-        self.assertEqual(found["provisional"]["date"], frame.index[-1].date().isoformat())
+        self.assertEqual(base_chain(found["anchors"])[-1]["date"], anchor_dates(frame, anchors)[-1])
+        self.assertEqual(found["live_leg"]["date"], frame.index[-1].date().isoformat())
 
 
-class ThresholdSensitivityTests(unittest.TestCase):
-    def test_a_threshold_above_the_smallest_contraction_stops_seeing_it(self) -> None:
-        """The reason a single threshold cannot be trusted, made visible rather than hidden."""
+class DeterministicRulesTests(unittest.TestCase):
+    def test_an_extreme_is_never_confirmed_by_its_own_bar(self) -> None:
+        """A daily bar does not say whether its high came before its low.
 
-        frame, _ = base_series(depths=(25.0, 10.0, 5.0))
+        A session that both prints a new high and falls far enough to reverse could have done
+        either first, so confirming inside it would be a guess about intraday order dressed as
+        a measurement.
+        """
 
-        coarse = segment(frame, retracement_pct=7.0)["anchors"]
-        fine = segment(frame, retracement_pct=1.0)["anchors"]
+        index = pd.bdate_range(end="2026-08-21", periods=4)
+        frame = pd.DataFrame(
+            {"Open": [10.0, 10.0, 10.0, 9.0], "High": [10.0, 20.0, 12.0, 9.5],
+             "Low": [9.9, 9.0, 9.5, 8.5], "Close": [10.0, 9.5, 10.0, 9.0], "Volume": [1e6] * 4},
+            index=index,
+        )
 
-        self.assertLess(len(coarse), len(fine))
+        found = segment(frame, retracement_pct=10.0)
 
-    def test_noise_below_the_threshold_is_not_counted_as_a_contraction(self) -> None:
-        frame, _ = base_series(depths=(25.0, 10.0, 5.0))
-        # A one-session wobble a fifth of the smallest declared contraction.
-        position = len(frame) // 2
-        frame.iloc[position, frame.columns.get_loc("Low")] *= 0.99
+        self.assertIn(index[1].date().isoformat(), found["ambiguous_sessions"])
 
-        self.assertEqual(len(segment(frame, retracement_pct=1.0)["anchors"]), 7)
+    def test_the_first_of_two_equal_extremes_is_the_one_named(self) -> None:
+        index = pd.bdate_range(end="2026-08-21", periods=6)
+        frame = pd.DataFrame(
+            {"Open": [10.0] * 6, "High": [10.0, 12.0, 12.0, 11.0, 10.0, 9.0],
+             "Low": [9.5, 11.0, 11.0, 10.5, 9.5, 8.5], "Close": [10.0, 12.0, 12.0, 11.0, 10.0, 9.0],
+             "Volume": [1e6] * 6},
+            index=index,
+        )
+
+        found = segment(frame, retracement_pct=10.0)
+
+        self.assertEqual(found["anchors"][0]["date"], index[1].date().isoformat())
+
+
+class CanonicalChainTests(unittest.TestCase):
+    """What `ticker.setup` compares a declared chain against, chosen by the harness alone.
+
+    If the caller could pick the parameter, the start date, or which tail of the chain counted,
+    the segmentation gaming this exists to stop would come straight back in through the choice.
+    """
+
+    def test_the_canonical_chain_is_the_base_the_last_confirmed_high_tops(self) -> None:
+        frame, anchors = base_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual([item["date"] for item in chain["anchors"]], anchor_dates(frame, anchors))
+        self.assertEqual(chain["state"], "resolved")
+
+    def test_a_segmentation_neighbouring_values_disagree_with_vouches_for_nothing(self) -> None:
+        """Knowing the chain moves with the parameter and passing one of them anyway is the
+        same failure as issuing READY over a gap the engine knows about."""
+
+        frame, _ = base_series(depths=(25.0, 10.0, 1.2))
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unstable")
+        self.assertEqual(chain["anchors"], [])
+        self.assertTrue(chain["sensitivity"])
+
+    def test_the_parameters_it_used_travel_with_the_answer(self) -> None:
+        frame, _ = base_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertIn("retracement_pct", chain["parameters"])
+        self.assertIn("sensitivity_offsets_pct", chain["parameters"])
+        self.assertEqual(chain["sessions"], len(frame))
 
 
 class UnusableHistoryTests(unittest.TestCase):

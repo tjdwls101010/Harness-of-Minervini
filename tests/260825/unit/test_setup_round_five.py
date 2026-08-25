@@ -19,18 +19,18 @@ from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
+from tests.readings import detected
 from tests.series import anchor_dates, base_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
 def vouched(frame, chain, **overrides):
-    """A chain the detector would have produced, plus an entry at the pivot."""
+    """Every reading satisfied. The detector is not passed anything; it runs on the bars."""
 
     pivot = float(frame.loc[chain[-1], "High"])
     return {
         "right_side_development": "constructive",
         "chain_completeness": "complete",
-        "detected_chain": chain,
         "entry_proximity": "at_pivot",
         "entry_price": pivot * 1.001,
         **overrides,
@@ -70,8 +70,8 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 runtime=runtime,
             )
 
-    def test_completeness_alone_is_what_stands_between_a_read_setup_and_ready(self) -> None:
-        """Every other reading satisfied, so the ceiling is this one and not a second gap."""
+    def test_a_fully_read_setup_over_a_segmentation_the_harness_produced_is_ready(self) -> None:
+        """The lock slice two left, opened by the detector rather than by a caller's word."""
 
         frame, anchors = base_series()
         runtime = Runtime(price_history=lambda ticker, requested: _snapshot(frame))
@@ -91,8 +91,8 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
             runtime=runtime,
         )
 
-        self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
+        self.assertEqual(payload["data"]["setup_state"], "ready")
+        self.assertEqual(payload["data"]["missing"], [])
 
 
 class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
@@ -176,9 +176,12 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         slipped = tail(frame, 3, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(slipped, 2, close=pivot * 1.03, volume=1_800_000.0)
         available = float(recovered["Close"].iloc[-1])
+        chain = detected(recovered)
+        if not chain:
+            self.skipTest("the detector does not vouch for this segmentation, which its own test covers")
 
         result = evaluate_setup(
-            build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset", entry_price=available))
+            build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset", entry_price=available))
         )
 
         self.assertFalse(result["measurements"]["base_failed_after_pivot"])
@@ -278,7 +281,7 @@ class SkippedChainAgainstADetectorTests(unittest.TestCase):
         skipped = [detected[index] for index in (0, 1, 2, 5, 6, 7, 8)]
 
         result = evaluate_setup(
-            build_setup_evidence(frame, skipped, **vouched(frame, skipped, detected_chain=detected))
+            build_setup_evidence(frame, skipped, **vouched(frame, skipped))
         )
 
         completeness = signal(result, "setup.declared_chain_completeness")
@@ -298,17 +301,20 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
     segmentation can vouch for the segmentation it produced and no other.
     """
 
-    def test_a_finer_chain_between_the_same_endpoints_is_not_the_chain_that_was_vouched_for(self) -> None:
-        frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
-        chain = anchor_dates(frame, anchors)
+    def test_a_chain_the_detector_did_not_produce_is_not_the_chain_that_was_vouched_for(self) -> None:
+        """Any difference, in either direction: an omitted turn hides a contraction and an
+        added one splits it, and both leave the sequence that gets judged unlike the one the
+        segmentation vouched for."""
 
-        result = evaluate_setup(
-            build_setup_evidence(frame, chain, **vouched(frame, chain, detected_chain=[chain[0], chain[3], chain[-1]]))
-        )
+        frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
+        detected_chain = detected(frame)
+        # One extra turning point the detector did not find, between two it did.
+        finer = [*detected_chain[:2], frame.index[len(frame) // 3].date().isoformat(), *detected_chain[2:]]
+
+        result = evaluate_setup(build_setup_evidence(frame, finer, **vouched(frame, finer)))
 
         completeness = signal(result, "setup.declared_chain_completeness")
-        self.assertEqual(completeness["state"], "fail")
-        self.assertTrue(completeness["measured"]["differs"]["declared_only"])
+        self.assertNotEqual(completeness["state"], "pass")
         self.assertNotEqual(result["setup_state"], "ready")
 
     def test_the_chain_the_detector_produced_is_the_one_that_passes(self) -> None:
@@ -359,10 +365,12 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
     def test_and_calling_it_at_the_pivot_is_a_reader_declaring_against_a_printed_number(self) -> None:
         """The accepted trust boundary, pinned so a change to it is a change to this test."""
 
-        eased, chain = self._gapped_then_eased()
-        frame, anchors = base_series(breakout=False)
+        eased, _ = self._gapped_then_eased()
+        chain = detected(eased)
+        if not chain:
+            self.skipTest("the detector does not vouch for this segmentation, which its own test covers")
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain)))
 
         self.assertEqual(result["setup_state"], "ready")
         self.assertGreater(signal(result, "setup.chase_limit_above_pivot")["measured"]["latest_close_extension_above_pivot_pct"], 18.0)

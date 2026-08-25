@@ -557,7 +557,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     entry = request.get("entry")
     if entry is not None and not isinstance(entry, Mapping):
         raise RequestError("entry must be an object", "entry")
-    for reserved in ("completeness_source", "detected_chain"):
+    for reserved in ("completeness_source", "detected_chain", "segmentation"):
         if request.get(reserved) is not None:
             # Naming a supplier is not being one, and neither is handing in a segmentation and
             # calling it independent. The seam exists for one this harness produced.

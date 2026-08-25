@@ -232,6 +232,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "setup_state": setup_state,
         "entry": entry,
         "structure": structure,
+        "segmentation": payload.get("segmentation") if isinstance(payload.get("segmentation"), Mapping) else {},
         "measurements": measurements,
         "declared_readings": dict(declared),
         "signals": signals,

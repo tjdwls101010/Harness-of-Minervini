@@ -23,6 +23,7 @@ import pandas as pd
 from . import doctrine
 from .setup_measurements import measure
 from .setup_structure import completed_bars, resolve_structure
+from .swings import canonical_chain
 
 
 # Each numberless observation names the claim whose sentence states it. The source supplies
@@ -149,34 +150,43 @@ def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
     return "pass" if total > 1 else "fail"
 
 
-def _completeness_state(structure: Mapping[str, Any], reading: str | None, detected: Sequence[Any] | None) -> tuple[str, dict[str, Any]]:
-    """Whether an independent segmentation found anything the declared chain left out.
+def _completeness_state(structure: Mapping[str, Any], reading: str | None, detected: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+    """Whether the harness's own segmentation produced the chain the caller declared.
 
     A caller may say their segmentation is partial -- admitting a gap costs them nothing and
-    tells the truth. They may not say it is complete: the reading exists to check the chain,
-    and a check the checked party performs is the flag this rewrite removed with a longer
+    tells the truth. They may not say it is complete: the reading exists to check the chain, and
+    a check the checked party performs is the flag this rewrite removed with a longer
     description on it.
 
-    An earlier version accepted the *name* of an independent supplier, which a caller can
-    type. So the seam takes the other segmentation itself and does the comparison here: a
-    declared chain is complete when it contains every turning point the detector found. A
-    finer caller chain is fine; a missing one is the skip this exists to catch.
+    Two earlier versions failed here in the same way, by trusting something the caller could
+    write. The first accepted the *name* of an independent supplier. The second accepted the
+    other segmentation as an argument. Neither is provenance, so the detector now runs here,
+    over the same bars, at parameters the caller cannot reach.
+
+    Equality, because everything downstream measures the declared chain. Allowing a finer chain
+    between the same endpoints looked like harmless refinement and was not: an unfavourable
+    contraction re-cut into four smaller ones disappears from the sequence without a single
+    anchor being skipped or an endpoint moved.
     """
     if str(structure.get("state")) != "resolved":
         return "unavailable", {"structure": structure.get("state")}
     declared = [str(anchor["date"]) for anchor in structure.get("anchors") or []]
     if reading == "partial":
         return "fail", {"declared_anchors": len(declared)}
-    if not detected:
-        return "needs_chart", {"declared_anchors": len(declared), "detected_anchors": None}
-    found = [_iso_day(date) for date in detected]
-    basis: dict[str, Any] = {"declared_anchors": len(declared), "detected_anchors": len(found)}
-    # Equality, because everything downstream measures the *declared* chain. Allowing a finer
-    # caller chain between the same endpoints looked like harmless refinement and was not: an
-    # unfavourable twenty-eight percent contraction re-cut into four smaller ones disappears
-    # from the sequence without a single anchor being skipped or an endpoint moved. What can
-    # vouch for a segmentation is another segmentation, and it can only vouch for the one it
-    # produced.
+
+    basis: dict[str, Any] = {
+        "declared_anchors": len(declared),
+        "segmentation": detected.get("state"),
+        "parameters": detected.get("parameters"),
+    }
+    if detected.get("state") != "resolved":
+        # A chain that moves when the parameter moves a half point is not something to check
+        # anything against, and reporting the instability while passing one of the readings is
+        # the failure this harness spent a slice learning to name.
+        basis["sensitivity"] = detected.get("sensitivity")
+        return "needs_chart", basis
+    found = [str(anchor["date"]) for anchor in detected.get("anchors") or []]
+    basis["detected_anchors"] = len(found)
     if declared != found:
         basis["differs"] = {
             "declared_only": [date for date in declared if date not in found],
@@ -302,7 +312,6 @@ def build_setup_evidence(
     entry: Mapping[str, Any] | None = None,
     right_side_development: str | None = None,
     chain_completeness: str | None = None,
-    detected_chain: Sequence[Any] | None = None,
     entry_proximity: str | None = None,
     entry_price: float | None = None,
     pivot_reset: str | None = None,
@@ -314,6 +323,9 @@ def build_setup_evidence(
     # out of order validate against one reading and be measured against another.
     bars = completed_bars(history)
     structure = resolve_structure(bars if bars is not None else history, list(swings or []))
+    # Run here rather than accepting one: a segmentation handed in is a segmentation the caller
+    # chose, and the whole point of comparing against one is that they did not.
+    detected = canonical_chain(bars if bars is not None else history)
     measurements = measure(bars if bars is not None else pd.DataFrame(), structure, spec)
 
     pivot = measurements.get("pivot")
@@ -356,7 +368,7 @@ def build_setup_evidence(
                 "contraction_depths_pct": measurements["contraction_depths_pct"],
             },
         ),
-        _observation(_CHAIN_COMPLETENESS, *_completeness_state(structure, chain_completeness, detected_chain)),
+        _observation(_CHAIN_COMPLETENESS, *_completeness_state(structure, chain_completeness, detected)),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(
@@ -428,6 +440,7 @@ def build_setup_evidence(
 
     return {
         "structure": structure,
+        "segmentation": detected,
         "measurements": measurements,
         # Named separately from the measurements so a reader can see at a glance how much of
         # this verdict came from a person. Everything else is measured and cannot be declared

@@ -10085,6 +10085,75 @@
       "provenance": {
         "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement separates it from an honest one. An independent segmentation would, and building one is a later slice; until then the gap is declared rather than stepped over."
       }
+    },
+    {
+      "id": "setup.swing_segmentation_convention",
+      "title": "The harness's own swing segmentation, and the parameters that decide it",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "retracement_pct": {
+          "value": 1.0,
+          "unit": "percent",
+          "affects_verdict": true,
+          "note": "A move is treated as turned once price gives back this much of it. The source names no such number; this one is small enough to see the final contraction of the progression the book works through -- twenty-five percent, then ten, then five -- without counting daily noise as a contraction."
+        },
+        "sensitivity_offsets_pct": {
+          "value": [
+            -0.5,
+            0.5
+          ],
+          "unit": "percent",
+          "affects_verdict": true,
+          "note": "Neighbouring values the segmentation is re-run at. A chain that changes when the parameter moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading anyway."
+        }
+      },
+      "rule": {
+        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain, refuses to vouch for one that neighbouring parameter values disagree with, and never lets the caller choose the parameter, the starting anchor, or the pivot."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there is nothing to segment."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup",
+        "ticker.swings"
+      ],
+      "tests": [
+        "tests/260825/unit/test_swings.py",
+        "tests/260825/doctrine/test_parameters.py"
+      ],
+      "provenance": {
+        "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition."
+      }
     }
   ]
 }
