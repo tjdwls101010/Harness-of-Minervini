@@ -33,6 +33,27 @@ class TheEventsArePartOfTheInput(unittest.TestCase):
 
         self.assertNotEqual(power_play_fingerprint(plain), power_play_fingerprint(split))
 
+    def test_and_so_does_the_session_it_happened_on(self) -> None:
+        """Where an event sits is what decides whether it touches the reading at all.
+
+        A split inside the measured span leaves nothing deciding; the same split six months
+        earlier leaves the reading intact. Digest the kind and the size but not the date, and one
+        key covers both -- so an answer read from a chart with the split in the flag applies to
+        bars where it never was.
+        """
+        early, late = power_play_series(), power_play_series()
+        early.iloc[-40, early.columns.get_loc("Stock Splits")] = 2.0
+        late.iloc[-8, late.columns.get_loc("Stock Splits")] = 2.0
+
+        self.assertNotEqual(power_play_fingerprint(early), power_play_fingerprint(late))
+
+    def test_the_session_a_payout_lands_on_moves_it_too(self) -> None:
+        early, late = power_play_series(), power_play_series()
+        early.iloc[-40, early.columns.get_loc("Dividends")] = 0.42
+        late.iloc[-8, late.columns.get_loc("Dividends")] = 0.42
+
+        self.assertNotEqual(power_play_fingerprint(early), power_play_fingerprint(late))
+
     def test_a_payout_changes_it_too(self) -> None:
         plain = power_play_series()
         paying = power_play_series()

@@ -62,6 +62,22 @@ class TheChartDebtItUsedToManufacture(unittest.TestCase):
         self.assertEqual(self.payload["data"]["chart_questions"], [])
         self.assertEqual(self.payload["next_capabilities"], [])
 
+    def test_the_machine_channel_never_reads_more_certain_than_the_verdict(self) -> None:
+        """A signal reading `pass` or `fail` beside a gap that says the criterion is held is a
+        second, contradicting answer -- and the one a consumer reads without the envelope. What it
+        may still read is the measurement's own abstention: `needs_chart` decides nothing.
+        """
+        held = {item["id"]: item["reason"] for item in self.payload["missing"]}
+        signals = {signal["id"]: signal for signal in self.payload["signals"]}
+
+        for claim_id, reason in held.items():
+            if claim_id not in signals:
+                continue
+            with self.subTest(claim_id=claim_id):
+                self.assertNotIn(signals[claim_id]["state"], ("pass", "fail"))
+                if signals[claim_id]["state"] == "unavailable":
+                    self.assertEqual(signals[claim_id]["withheld"], reason)
+
 
 if __name__ == "__main__":
     unittest.main()

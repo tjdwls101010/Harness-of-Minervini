@@ -4,7 +4,7 @@ Every other candidate is found by descending from the one above it, and the turn
 answers the question that raises: is this descending high a top, or a bar inside the flag? The
 span's highest bar is not found that way -- the measurement picks it as the highest session of the
 longest structure the criteria describe -- so it is read whatever the segmentation says. Refusing
-to read it costs three of the twenty-four rejections this repository can currently reach, with
+to read it costs two of the twenty-three rejections this repository can currently reach, with
 nothing read in their place.
 
 What was false was calling that top settled. A flag tighter than one day's ordinary range confirms

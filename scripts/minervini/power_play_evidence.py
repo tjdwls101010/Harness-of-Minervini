@@ -490,7 +490,7 @@ def _walk_the_tops(
     # Whether the segmentation confirms the top the whole structure hangs from. The span's highest
     # bar is read whatever the answer -- it is found by the measurement rather than by descending,
     # so the question the filter below asks ("is this descending high a top, or a bar inside the
-    # flag?") does not arise for it, and refusing to read it costs three of the twenty-four
+    # flag?") does not arise for it, and refusing to read it costs two of the twenty-three
     # rejections this repository can currently reach and leaves nothing read in their place.
     # Reading it and calling its top *settled* is the part that was false: a flag tighter than one
     # day's ordinary range confirms no turning point at all, and answering a chart there qualified

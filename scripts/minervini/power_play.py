@@ -535,6 +535,17 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         {f"{_CLAIM}.{condition}" for condition in payout_elsewhere},
         "distribution_under_another_top",
     )
+    # The two silences that consent to nothing decline the machine channel too. Left out, the
+    # verdict said `incomplete` and the signal beside it still read `pass` or `fail` -- a consumer
+    # reading signals alone would take arithmetic about a split for a finding about the stock.
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in action_elsewhere},
+        "corporate_action_under_another_top",
+    )
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in rejected_elsewhere},
+        "structure_rejected_under_another_top",
+    )
     _decline(set(held_by_short_history), "history_ends_before_lower_top")
     _decline(set(held_by_another_top), "structure_stands_under_another_top")
     reported = [
