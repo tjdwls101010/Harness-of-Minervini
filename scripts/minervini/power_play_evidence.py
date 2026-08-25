@@ -524,11 +524,14 @@ def _walk_the_tops(
                     "distance_pct": None if distance is None else round(distance, 4),
                 }
             break
-        # Walked past rather than read. The bar is still where the next search starts from -- the
-        # tops below it are found by descending -- but it is not a reading of the structure, so it
-        # neither contests a criterion nor has to consent to a rejection.
+        # Walked past rather than read. The price ceiling moves -- the tops below it are found by
+        # descending -- and the date the next search must precede does not, because this bar is
+        # not a reading of the structure and a non-reading must not decide which readings exist. A
+        # confirmed top lower than it and later than it is behind it forever otherwise, and two
+        # reviewers reproduced `qualified` over exactly that: a six-week violation the chain never
+        # reached because a taller bar nothing confirms stood in front of it.
         if readings and turning_points is not None and str(reading["peak_date"]) not in turning_points:
-            below, before = reading["peak_high"], reading["peak_date"]
+            below = reading["peak_high"]
             continue
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
@@ -537,6 +540,10 @@ def _walk_the_tops(
         else:
             may_contest = len(readings) + 1
         readings.append(reading)
+        # A reading does move both. A confirmed top lower than this one and later than it sits
+        # inside this reading's own flag: it is part of the structure hanging from this top rather
+        # than a competing anchor for it. Measured, reading those too leaves the same twenty-three
+        # rejections and takes settled tops from sixteen to nine -- all dispute, no decision.
         below, before = reading["peak_high"], reading["peak_date"]
     return {
         "readings": readings,

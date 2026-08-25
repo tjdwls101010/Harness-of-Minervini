@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
 
@@ -1107,4 +1108,28 @@ def a_payout_that_confirms_the_peak_series(*, flag_depth_pct: float = 10.1, star
     frame.iloc[ex_date, frame.columns.get_loc("Dividends")] = 1.1
     columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
     frame.iloc[ex_date:, columns] -= 1.1
+    return frame
+
+
+def a_top_behind_a_taller_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A confirmed top the descent reaches only if a bar it walked past leaves the window alone.
+
+    The frame opens on a long slide from a high nothing confirms, so the search meets that taller
+    bar before it meets the confirmed top in April. That bar is walked past -- it is not a reading
+    of the structure -- and if walking past it also moves the *date* the next search must precede,
+    the April top is behind it forever, though it is lower and the union confirms it.
+
+    Read from that top the flag runs thirty-one sessions, past the six-week limit.
+    """
+
+    frame = a_top_only_a_neighbour_confirms_series(start=start)
+    slide = np.r_[np.linspace(110.0, 104.2, 36), np.linspace(104.1, 50.1, 23), [50.0]]
+    for position, close in enumerate(slide):
+        for column, value in (
+            ("Open", close),
+            ("Close", close),
+            ("High", close * 1.001),
+            ("Low", close * 0.999),
+        ):
+            frame.iloc[position, frame.columns.get_loc(column)] = value
     return frame

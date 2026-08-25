@@ -66,15 +66,32 @@ class AnAnswerClosesTheCriterionItWasAskedAbout(unittest.TestCase):
         self.assertEqual(states["fundamentals.power_play_exception.flag_tightness_or_vcp"], "pass")
 
     def test_a_pass_a_person_supplied_never_looks_like_one_the_numbers_reached(self) -> None:
-        """The one thing an auditor of a qualified verdict has to be able to see."""
+        """The one thing an auditor of a qualified verdict has to be able to see.
+
+        Both criteria, not one. A qualified verdict rests on two answers a person gave, and an
+        auditor reading only the volume signal's provenance would take the tightness pass for a
+        measurement.
+        """
         history = power_play_series()
         answered = build_power_play_evidence(history, **self._both(history))
+        signals = {signal["id"]: signal for signal in answered["signals"]}
 
-        volume = next(
-            signal for signal in answered["signals"]
-            if signal["id"].endswith("launch_volume_character")
-        )
-        self.assertTrue(volume["read_from_chart"])
+        for condition in ("launch_volume_character", "flag_tightness_or_vcp"):
+            with self.subTest(condition=condition):
+                signal = signals[f"fundamentals.power_play_exception.{condition}"]
+                self.assertEqual(signal["state"], "pass")
+                self.assertTrue(signal["read_from_chart"])
+
+    def test_and_a_pass_the_numbers_reached_is_not_marked_as_a_reading(self) -> None:
+        """The control. Marked on everything, the flag would say nothing."""
+        signals = {
+            signal["id"]: signal
+            for signal in build_power_play_evidence(power_play_series())["signals"]
+        }
+        measured = signals["fundamentals.power_play_exception.advance_minimum_pct"]
+
+        self.assertEqual(measured["state"], "pass")
+        self.assertFalse(measured.get("read_from_chart"))
 
     def test_answering_both_is_what_makes_qualified_reachable(self) -> None:
         history = power_play_series()
