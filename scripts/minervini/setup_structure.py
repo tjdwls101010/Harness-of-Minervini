@@ -61,7 +61,13 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # carried typed unavailability.
     if history.columns.has_duplicates:
         return None, "history_repeats_a_column"
+    if history.empty:
+        return None, "history_has_no_completed_bars"
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
+    # Booleans survive `to_numeric` as booleans, and comparing one with a price raises further
+    # down. Whole numbers are prices too, so only the boolean case is refused.
+    if any(pd.api.types.is_bool_dtype(bars[column]) for column in _REQUIRED_COLUMNS):
+        return None, "history_contains_non_numeric_values"
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
     if bars.isna().any().any() or not bool(np.isfinite(bars.to_numpy(dtype=float)).all()):
@@ -78,12 +84,19 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # fingerprint bars no chart would render, which is the opposite of one digest across both.
     if bool(inverted.any()) or bool(outside.any()):
         return None, "history_contains_invalid_bar_ranges"
+    # A positional index converts silently -- integers become nanoseconds since 1970 -- so a
+    # frame that never carried dates would be measured against dates it never had.
+    if pd.api.types.is_integer_dtype(bars.index) or pd.api.types.is_float_dtype(bars.index):
+        return None, "history_index_is_not_dates"
     try:
         index = pd.DatetimeIndex(bars.index)
     except Exception:
         # An index that is not dates is a data problem like any other, and the digest raising on
         # it is an internal failure where the envelope should carry typed unavailability -- the
         # same shape closed for infinities, still open on this axis.
+        return None, "history_index_is_not_dates"
+    if index.isna().any():
+        # A missing stamp is not a date either, and it compares against nothing without raising.
         return None, "history_index_is_not_dates"
     # Two rows under one label make a bar lookup return a Series, and reading a price off it
     # raises inside the detector -- an internal contract failure where the envelope should carry

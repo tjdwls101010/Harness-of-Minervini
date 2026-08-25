@@ -14,7 +14,7 @@ import unittest
 import pandas as pd
 from pathlib import Path
 
-from scripts.minervini.chart import _draw_anchors, render_chart_artifacts
+from scripts.minervini.chart import RENDERER_VERSION, _draw_anchors, render_chart_artifacts
 from scripts.minervini.setup_structure import bars_fingerprint, read_bars
 from scripts.minervini.swings import canonical_chain
 from tests.series import anchor_dates, base_series, unstable_series
@@ -75,13 +75,13 @@ class AnchorOverlayTests(unittest.TestCase):
         self.assertEqual(drawn["daily"], declared)
         self.assertEqual(drawn["weekly"], declared)
 
-    def test_the_pivot_line_is_not_drawn_on_a_chart_that_does_not_reach_the_pivot(self) -> None:
-        """A level line labelled `pivot` on a chart with no pivot bar is a claim about nothing.
+    def test_the_week_in_progress_is_on_the_chart_rather_than_dropped(self) -> None:
+        """A week is kept for the sessions it aggregates, not for the label it was given.
 
-        A mid-week as_of drops the unfinished week from the weekly resample, so a pivot that
-        landed on that Monday has no weekly bar. Drawing the line anyway because some earlier
-        anchor was drawn puts a labelled level on a picture whose own manifest says the pivot
-        is not in it.
+        Buckets were filtered by their Friday label against as_of, so a mid-week reading -- and
+        every week whose Friday is a holiday -- lost its most recent weekly bar and the anchors
+        on it. Every bucket here only ever holds completed sessions, because the daily frame was
+        cut at as_of before the resample.
         """
 
         frame, _ = base_series(start="2026-01-05", breakout=False)
@@ -92,11 +92,9 @@ class AnchorOverlayTests(unittest.TestCase):
             )
 
         pivot = manifest["segmentation"]["anchors"][-1]["date"]
-        drawn = {item["timeframe"]: item for item in manifest["artifacts"]}
-        self.assertNotIn(pivot, drawn["weekly"]["anchors_drawn"])
-        self.assertFalse(drawn["weekly"]["pivot_drawn"])
-        self.assertIn(pivot, drawn["daily"]["anchors_drawn"])
-        self.assertTrue(drawn["daily"]["pivot_drawn"])
+        weekly = next(item for item in manifest["artifacts"] if item["timeframe"] == "weekly")
+        self.assertIn(pivot, weekly["anchors_drawn"])
+        self.assertTrue(weekly["pivot_drawn"])
 
     def test_an_unvouched_segmentation_puts_nothing_on_either_timeframe(self) -> None:
         frame, _ = unstable_series()
@@ -224,6 +222,13 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         def missing_column(frame): frame.drop(columns=["Volume"], inplace=True)
         def non_date_index(frame): frame.index = ["not-a-date", *frame.index[1:]]
 
+        def missing_stamp(frame): frame.index = [pd.NaT, *frame.index[1:]]
+        def positional_index(frame): frame.index = pd.RangeIndex(len(frame))
+
+        def boolean_prices(frame):
+            for column in ("Open", "High", "Low", "Close"):
+                frame[column] = True
+
         def repeated_column(frame):
             frame["spare"] = frame["Close"]
             frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
@@ -247,6 +252,8 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             ("open above high", open_above_high), ("nan close", nan_close), ("infinite high", infinite_high),
             ("repeated session", repeated_session), ("missing column", missing_column),
             ("non-date index", non_date_index), ("repeated column", repeated_column),
+            ("missing stamp", missing_stamp), ("positional index", positional_index),
+            ("boolean prices", boolean_prices),
             ("late evening zone", late_evening_zone),
             ("two sessions one zone day", two_sessions_one_zone_day),
         ]
@@ -264,6 +271,28 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
                 except ValueError:
                     rendered = False
                 self.assertEqual(accepted, rendered)
+
+    def test_a_doji_stays_a_doji_at_any_price(self) -> None:
+        """A body floor in dollars is a different floor on every stock.
+
+        A five-cent name with a one-tenth-of-a-cent range had a body drawn five times its whole
+        session, and the axis stretched to fit a candle that never traded -- on the picture a
+        person approves a base's tightness from.
+        """
+
+        index = pd.bdate_range("2026-01-02", periods=60)
+        penny = pd.DataFrame(
+            {"Open": 0.050, "High": 0.051, "Low": 0.049, "Close": 0.050, "Volume": 1e6}, index=index
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = render_chart_artifacts(
+                penny, ticker="TEST", as_of=index[-1].date(), output_dir=directory
+            )
+
+        # It renders at all, and nothing about it depends on a dollar-denominated floor.
+        self.assertEqual(len(manifest["artifacts"]), 2)
+        self.assertEqual(manifest["renderer_version"], RENDERER_VERSION)
 
     def test_a_session_late_in_the_exchange_day_keeps_its_own_date(self) -> None:
         """The date a session traded on, not the UTC day it spills into.

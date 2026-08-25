@@ -126,7 +126,11 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     weekly = daily.resample("W-FRI").agg(
         {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
     ).dropna()
-    weekly = weekly.loc[weekly.index.date <= as_of]
+    # No filter on the label: every bucket here aggregates completed sessions only, because
+    # the daily frame was already cut at as_of. Dropping buckets whose Friday label falls
+    # after it deleted the most recent week whenever that Friday was a holiday -- Good Friday
+    # takes the last completed week and its anchors off the chart, and on a short history it
+    # raised instead.
     if weekly.empty:
         raise ValueError("daily_ohlcv contains no completed weekly bars as_of")
     return weekly
@@ -148,7 +152,12 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         for position, (_, row), color in zip(dates, bars.iterrows(), colors, strict=True):
             price_axis.vlines(position, row["Low"], row["High"], color=color, linewidth=0.8)
             body_low = min(row["Open"], row["Close"])
-            body_height = max(abs(row["Close"] - row["Open"]), 0.01)
+            # A floor in dollars is a floor at a different size on every stock. On a five-cent
+            # name it drew a body a fifth taller than the session's whole range, and the axis
+            # stretched to fit a candle that never traded -- on the picture a person approves a
+            # base's tightness from. The floor is a fraction of the bar's own range instead, so
+            # a doji stays a doji at any price.
+            body_height = max(abs(row["Close"] - row["Open"]), (row["High"] - row["Low"]) * 0.03)
             price_axis.add_patch(Rectangle((position - width / 2, body_low), width, body_height, facecolor=color, edgecolor=color, linewidth=0.6))
         close = bars["Close"]
         if timeframe == "daily":
