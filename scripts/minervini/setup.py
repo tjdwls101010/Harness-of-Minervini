@@ -28,6 +28,8 @@ _MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"
 # Reported evidence carries no verdict by design: a band says where a measurement sat, a
 # marker says how far it is from a value the source declined to bound.
 _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of_source_range"}
+# Distinguishes "no state key" from "a state key holding nothing", which None cannot.
+_UNSTATED = object()
 
 # What each route must positively have before it can be called ready. Every entry names a
 # claim, so the reason a setup is not ready is always a sentence from the source.
@@ -101,15 +103,22 @@ def _tactic_declarations(
             owed.append(condition)
             continue
         declared[condition] = answer
-        stated = answer.get("state", answer.get("status")) if isinstance(answer, Mapping) else (
-            answer if isinstance(answer, (bool, str)) else None
-        )
-        if stated is None:
-            # A declaration with no state word is the caller saying what they read, and it stands.
+        if isinstance(answer, Mapping):
+            # Absent and null are different answers. A mapping that never mentions a state is the
+            # caller describing what they read, and it stands; one that carries the key with
+            # nothing in it is an answer nobody filled in, and defaulting that to satisfaction is
+            # the same mistake as defaulting an unreadable word to it.
+            stated = answer.get("state", answer.get("status", _UNSTATED))
+            if stated is _UNSTATED:
+                continue
+        elif isinstance(answer, (bool, str)):
+            stated = answer
+        else:
+            # A number, a list, anything else -- there is no reading in it to take at face value.
+            owed.append(condition)
             continue
-        # One that carries a state word goes by that word, and by nothing else. Reading an
-        # ungradeable word as the good outcome is what let "state: not observed" arrive as a pass:
-        # the default was satisfaction, so a denial nobody could parse became one.
+        # A stated verdict goes by that word and by nothing else. Reading an ungradeable one as
+        # the good outcome is what let "state: not observed" arrive as a pass.
         state = _state(stated, default="")
         if state in _FAIL or state in _WAIT:
             denied.append(condition)

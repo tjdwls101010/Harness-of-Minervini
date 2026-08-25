@@ -220,3 +220,37 @@ class AWordTheReducerCannotReadIsNotAPass(unittest.TestCase):
 
         self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
+
+
+class AShapeNobodyCanReadIsNotADeclaration(unittest.TestCase):
+    """The programmatic channel is a trust boundary for content, not for form.
+
+    A caller who declares what they read is taken at their word -- that is what a declared reading
+    is. What they cannot do is hand in something with no reading in it and have the absence
+    default to the good outcome. A state key present and null is an answer nobody filled in, and a
+    number or a list is not an answer at all.
+    """
+
+    def test_a_null_state_leaves_the_condition_owed(self) -> None:
+        for key in ("state", "status"):
+            with self.subTest(key=key):
+                result = verdict(
+                    "oops_reversal",
+                    prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+                    gap_below_prior_low={key: None, "condition": "the stock did not gap below it"},
+                )
+
+                self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
+                self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_a_shape_that_carries_no_reading_leaves_it_owed(self) -> None:
+        for answer in (0, 1, 3.5, ["no gap"], ("no gap",)):
+            with self.subTest(answer=answer):
+                result = verdict(
+                    "oops_reversal",
+                    prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+                    gap_below_prior_low=answer,
+                )
+
+                self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
+                self.assertNotEqual(result["setup_state"], "ready")
