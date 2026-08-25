@@ -356,6 +356,21 @@ class VolumeIsWhatSeparatesTwoStructuresTests(unittest.TestCase):
         self.assertEqual(chain, current)
         self.assertFalse(set(left_behind) & set(chain))
 
+    def test_the_same_price_path_without_the_volume_is_not_a_departure(self) -> None:
+        """Price alone reads the two identically, which is why the boundary is not on price.
+
+        Drifting above a prior high on quiet volume is the stock still inside its correction.
+        A fixture that only ever expands would show the boundary firing and never show that
+        volume is what fires it.
+        """
+
+        quiet, left_behind, current = borrowed_contraction_series(breakout_volume=False)
+        loud, _, _ = borrowed_contraction_series()
+
+        self.assertTrue(quiet["Close"].equals(loud["Close"]))
+        self.assertEqual(detected(loud), current)
+        self.assertEqual(detected(quiet), [*left_behind, *current])
+
     def test_the_structure_left_behind_does_not_lend_its_contractions(self) -> None:
         """One contraction is no sequence, and the older structure's is not the fix for that."""
 

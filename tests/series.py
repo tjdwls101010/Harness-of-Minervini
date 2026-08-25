@@ -272,7 +272,7 @@ def hidden_turn_series(*, turn_pct: float = 0.2) -> tuple[pd.DataFrame, list[str
     return frame, chain, finer
 
 
-def borrowed_contraction_series() -> tuple[pd.DataFrame, list[str], list[str]]:
+def borrowed_contraction_series(*, breakout_volume: bool = True) -> tuple[pd.DataFrame, list[str], list[str]]:
     """A current structure with one contraction, sitting above a structure price left.
 
     One contraction is no sequence, so `contractions_contract` comes back unavailable and the
@@ -306,6 +306,17 @@ def borrowed_contraction_series() -> tuple[pd.DataFrame, list[str], list[str]]:
         2_000_000 * (1 - 0.7 * position / span) * (1.8 if position and closes[position] > closes[position - 1] else 0.5)
         for position in range(span)
     ]
+    if not breakout_volume:
+        # The same price path with nothing on the tape. Whether the stock left the eighty level
+        # is the whole question, and price alone answers it identically either way -- so a
+        # fixture that only ever expands proves the boundary fires, never that volume is what
+        # fires it.
+        level = left[-1].price
+        for position, label in enumerate(frame.index):
+            if float(frame.at[label, "Close"]) <= level or position < 50:
+                continue
+            prior = frame["Volume"].iloc[position - 50 : position]
+            frame.at[label, "Volume"] = float(prior.mean()) * 0.5
     return (
         frame[["Open", "High", "Low", "Close", "Volume"]],
         [index[anchor.position].date().isoformat() for anchor in left],
