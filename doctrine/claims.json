@@ -125,7 +125,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "deterministic"
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.standard_trend_template",
@@ -326,7 +327,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "The full-criteria block quote is an OCR transcription of an image table rather than flowing prose; it reads as a faithful copy of the book's own numbered list and is internally consistent with prose elsewhere in the chapter (e.g. '99 percent... traded above 200-day')."
+      "note": "The full-criteria block quote is an OCR transcription of an image table rather than flowing prose; it reads as a faithful copy of the book's own numbered list and is internally consistent with prose elsewhere in the chapter (e.g. '99 percent... traded above 200-day').",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.recent_ipo_primary_base",
@@ -481,7 +483,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "Re-mining found no book sentence stating 'at least two months of trading history' or any specific session/day count for minimum trading history — that figure was the harness's own invention in the prior registry version and has been dropped as a standalone condition; the 40-session threshold that replaces it is explicitly marked exact:false for the same reason. | Second confirmed case of mined_existing.json's unsupported_parts being wrong rather than the harness inventing something; treated its other unsupported_parts as leads, re-checked against quote text, found no further errors."
+      "note": "Re-mining found no book sentence stating 'at least two months of trading history' or any specific session/day count for minimum trading history — that figure was the harness's own invention in the prior registry version and has been dropped as a standalone condition; the 40-session threshold that replaces it is explicitly marked exact:false for the same reason. | Second confirmed case of mined_existing.json's unsupported_parts being wrong rather than the harness inventing something; treated its other unsupported_parts as leads, re-checked against quote text, found no further errors.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "setup.vcp_supply_contraction",
@@ -563,7 +566,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "chart_assisted"
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.power_play_exception",
@@ -661,22 +665,6 @@
           "comparator": "<=",
           "exact": false,
           "quote_index": 2
-        },
-        "flag_maximum_weeks": {
-          "role": "gate",
-          "comparator": "<=",
-          "value": 6,
-          "unit": "weeks",
-          "exact": false,
-          "quote_index": 2
-        },
-        "flag_decline_ceiling_pct": {
-          "role": "gate",
-          "comparator": "<=",
-          "value": 25,
-          "unit": "percent",
-          "exact": false,
-          "quote_index": 2
         }
       },
       "failure": {
@@ -736,7 +724,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "chart_assisted"
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini"
     },
     {
       "id": "risk.initial_stop_and_reward",
@@ -859,7 +848,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "deterministic"
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
     },
     {
       "id": "risk.hard_stop_and_no_average_down",
@@ -931,7 +921,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "deterministic"
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
     },
     {
       "id": "risk.profit_protection_at_3r",
@@ -1007,7 +998,8 @@
         "tests/260817/doctrine/test_registry.py",
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "deterministic"
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
     },
     {
       "id": "tactic.early_entry_confirmation_debt",
@@ -1208,7 +1200,8 @@
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "judgment_only"
+      "computability": "judgment_only",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.avoid_buying_stage4",
@@ -1265,7 +1258,8 @@
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "judgment_only"
+      "computability": "judgment_only",
+      "attributed_to": "Minervini"
     },
     {
       "id": "setup.no_bottom_fishing_buy_near_highs",
@@ -1335,7 +1329,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "This is a constitutional stance, not a numeric gate — it motivates the 52-week-high proximity criterion above but is broader (also concerns not predicting a bottom)."
+      "note": "This is a constitutional stance, not a numeric gate — it motivates the 52-week-high proximity criterion above but is broader (also concerns not predicting a bottom).",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.four_stages_taxonomy",
@@ -1396,7 +1391,8 @@
       "unquantified": [
         "exact date or bar the transition between stages occurs"
       ],
-      "note": "Quote reconstructed by joining the book's numbered list items 127-136; wording of each item unchanged."
+      "note": "Quote reconstructed by joining the book's numbered list items 127-136; wording of each item unchanged.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.stage1_characteristics",
@@ -1474,7 +1470,8 @@
       "computability": "chart_assisted",
       "unquantified": [
         "exact duration of stage 1 — book only says 'months or even years'"
-      ]
+      ],
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.stage1_to_stage2_transition_checklist",
@@ -1535,7 +1532,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Quote reconstructed by joining numbered list items 248-277; wording unchanged. This list overlaps heavily with Trend Template criteria 1-3 but is framed as a transition confirmation checklist rather than the formal 8-criterion gate."
+      "note": "Quote reconstructed by joining numbered list items 248-277; wording unchanged. This list overlaps heavily with Trend Template criteria 1-3 but is framed as a transition confirmation checklist rather than the formal 8-criterion gate.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.transition_min_pct_off_52wk_low_heuristic",
@@ -1555,14 +1553,6 @@
         "summary": "A stage 2 advance should show at least a 25-30 percent prior rally off the 52-week low before being called underway"
       },
       "thresholds": {
-        "stage2_confirmation_rally_minimum_pct": {
-          "role": "gate",
-          "comparator": ">=",
-          "value": 25,
-          "unit": "percent",
-          "exact": false,
-          "quote_index": 0
-        },
         "stage2_confirmation_rally_band_pct": {
           "role": "band",
           "range": [
@@ -1612,7 +1602,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Distinct from the formal Trend Template criterion 6 (>=30% above 52-week low, exact, a hard gate). This is a softer narrative heuristic ('25 to 30 percent') used earlier in the same chapter to describe when a stage-2 call is credible — do not silently merge the two into one number."
+      "note": "Distinct from the formal Trend Template criterion 6 (>=30% above 52-week low, exact, a hard gate). This is a softer narrative heuristic ('25 to 30 percent') used earlier in the same chapter to describe when a stage-2 call is credible — do not silently merge the two into one number.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.stage2_characteristics",
@@ -1673,7 +1664,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "Quote reconstructed by joining the Stage 2 Characteristics bullet list; wording unchanged."
+      "note": "Quote reconstructed by joining the Stage 2 Characteristics bullet list; wording unchanged.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.stage3_characteristics",
@@ -1748,7 +1740,8 @@
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
-      "computability": "chart_assisted"
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.stage4_characteristics",
@@ -1808,7 +1801,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "Quote reconstructed by joining the Stage 4 Characteristics bullet list; wording unchanged."
+      "note": "Quote reconstructed by joining the Stage 4 Characteristics bullet list; wording unchanged.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "stage.historical_pct_above_ma_before_advance",
@@ -1877,7 +1871,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "This is a historical/statistical claim about the book's own backtest population, not itself a per-ticker gate — it is the empirical justification underlying the moving-average criteria above, not an additional threshold to enforce."
+      "note": "This is a historical/statistical claim about the book's own backtest population, not itself a per-ticker gate — it is the empirical justification underlying the moving-average criteria above, not an additional threshold to enforce.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "basecount.role_and_disclaimer",
@@ -1938,7 +1933,8 @@
       "unquantified": [
         "a formulaic way to declare a top from base count alone — explicitly refused"
       ],
-      "note": "Base counting was credited to Bill O'Neil and David Ryan per the surrounding text (not quoted here verbatim as a separate claim)."
+      "note": "Base counting was credited to Bill O'Neil and David Ryan per the surrounding text (not quoted here verbatim as a separate claim).",
+      "attributed_to": "Minervini"
     },
     {
       "id": "basecount.typical_top_after_3_to_5_bases",
@@ -2015,7 +2011,8 @@
       "unquantified": [
         "whether a stock 'gets that far' — some stocks top earlier via a climax/blow-off run instead"
       ],
-      "note": "Explicitly hedged with 'generally' — the same passage notes some stocks instead go parabolic into a climax run/blow-off top without following the base-count pattern at all, so base ordinal implies increasing caution, not a hard cutoff."
+      "note": "Explicitly hedged with 'generally' — the same passage notes some stocks instead go parabolic into a climax run/blow-off top without following the base-count pattern at all, so base ordinal implies increasing caution, not a hard cutoff.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "basecount.typical_base_duration_5_to_26_weeks",
@@ -2098,7 +2095,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "'5 to 26 weeks' is stated as 'most commonly' (exact:true on the numbers themselves, but it is a typical range, not a hard bound). The wider 'four or five weeks up to a year or more' sentence immediately before it describes the broader universe of pullbacks/basing waves within stage 2, not specifically 'base patterns' — kept as separate softer thresholds ('a year or more' rendered as ~52 weeks low-confidence, exact:false) so a reducer doesn't collapse two different framings into one number. See also setup.consolidation_footprint_3_to_60_weeks for a third, still different range given elsewhere in the book for general consolidation footprints."
+      "note": "'5 to 26 weeks' is stated as 'most commonly' (exact:true on the numbers themselves, but it is a typical range, not a hard bound). The wider 'four or five weeks up to a year or more' sentence immediately before it describes the broader universe of pullbacks/basing waves within stage 2, not specifically 'base patterns' — kept as separate softer thresholds ('a year or more' rendered as ~52 weeks low-confidence, exact:false) so a reducer doesn't collapse two different framings into one number. See also setup.consolidation_footprint_3_to_60_weeks for a third, still different range given elsewhere in the book for general consolidation footprints.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "setup.consolidation_footprint_3_to_60_weeks",
@@ -2167,7 +2165,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "This 3-60 week range (Chapter 10, general VCP/consolidation discussion) does NOT match the '5 to 26 weeks' figure given for stage-2 base patterns in Chapter 5 (basecount.typical_base_duration_5_to_26_weeks). Both are verbatim and both are hedged ('as many as', 'most commonly'); they appear to describe overlapping but not identical things (general consolidation footprint vs. stage-2 base patterns specifically) — a reducer author should decide which applies to which check rather than assuming one supersedes the other."
+      "note": "This 3-60 week range (Chapter 10, general VCP/consolidation discussion) does NOT match the '5 to 26 weeks' figure given for stage-2 base patterns in Chapter 5 (basecount.typical_base_duration_5_to_26_weeks). Both are verbatim and both are hedged ('as many as', 'most commonly'); they appear to describe overlapping but not identical things (general consolidation footprint vs. stage-2 base patterns specifically) — a reducer author should decide which applies to which check rather than assuming one supersedes the other.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.float_marketcap_small_cap_preference",
@@ -2235,7 +2234,8 @@
         "a specific market-cap ceiling or floor",
         "a specific float or shares-outstanding count that qualifies as 'small'"
       ],
-      "note": "The book is deliberately relative/comparative here ('all things being equal', 'relatively small') and never gives a dollar or share-count cutoff. Do not fabricate one."
+      "note": "The book is deliberately relative/comparative here ('all things being equal', 'relatively small') and never gives a dollar or share-count cutoff. Do not fabricate one.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.ipo_youthfulness_10yr_window",
@@ -2300,7 +2300,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "Hedged twice ('Generally', 'for example') — treat as descriptive context, not a hard age cutoff. The same passage notes some superperformers were long-established private companies before their IPO."
+      "note": "Hedged twice ('Generally', 'for example') — treat as descriptive context, not a hard age cutoff. The same passage notes some superperformers were long-established private companies before their IPO.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.primary_base_definition",
@@ -2360,7 +2361,8 @@
       "unquantified": [
         "how many weeks/months after IPO a base must occur to still count as 'primary'"
       ],
-      "note": "Relevant to the recent-IPO / insufficient-moving-average-history exception route: this is the book's own name for the base a young stock uses when 150/200-day history is not yet meaningful."
+      "note": "Relevant to the recent-IPO / insufficient-moving-average-history exception route: this is the book's own name for the base a young stock uses when 150/200-day history is not yet meaningful.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "setup.overhead_supply_mechanism",
@@ -2426,7 +2428,8 @@
       "unquantified": [
         "a numeric volume-contraction percentage that counts as 'significant'"
       ],
-      "note": "This is the mechanism behind why a stock nearer its 52-week high (no overhead supply) is preferred over one nearer its 52-week low (overhead supply to work through)."
+      "note": "This is the mechanism behind why a stock nearer its 52-week high (no overhead supply) is preferred over one nearer its 52-week low (overhead supply to work through).",
+      "attributed_to": "Minervini"
     },
     {
       "id": "eligibility.float_liquidity_volatility_relationship",
@@ -2750,7 +2753,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "This is the single most load-bearing number in the leadership chapter — a reducer should treat it as the primary window for flagging 'early leader' candidates after a confirmed market low."
+      "note": "This is the single most load-bearing number in the leadership chapter — a reducer should treat it as the primary window for flagging 'early leader' candidates after a confirmed market low.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.lockout_period_pullback_depth",
@@ -2823,7 +2827,8 @@
       "unquantified": [
         "exact duration of the 'first few months' lockout window"
       ],
-      "note": "Hedged with 'probably' in the source — mark exact:false. Pullbacks deeper than this during the presumed lockout phase are itself a piece of evidence the 'new bull market' read may be wrong."
+      "note": "Hedged with 'probably' in the source — mark exact:false. Pullbacks deeper than this during the presumed lockout phase are itself a piece of evidence the 'new bull market' read may be wrong.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.bottoming_signal_checklist",
@@ -2899,7 +2904,8 @@
         "what volume differential between up days and down days counts as distribution",
         "what fraction of leaders holding ground counts as 'the majority'"
       ],
-      "note": "This is a 4-item checklist in the source (item 2 is the leader advance/pullback cadence, captured separately as market.leader_advance_rest_cycle). Item 4 is explicitly a revert-to-cash trigger if volume shows distribution — treat as a soft override on bottoming-market confidence, not a hard gate."
+      "note": "This is a 4-item checklist in the source (item 2 is the leader advance/pullback cadence, captured separately as market.leader_advance_rest_cycle). Item 4 is explicitly a revert-to-cash trigger if volume shows distribution — treat as a soft override on bottoming-market confidence, not a hard gate.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.leader_advance_rest_cycle",
@@ -2979,7 +2985,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Second item of the four-part bottoming checklist in market.bottoming_signal_checklist; broken out because it carries its own numeric thresholds."
+      "note": "Second item of the four-part bottoming checklist in market.bottoming_signal_checklist; broken out because it carries its own numeric thresholds.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.correction_depth_healthy_leader",
@@ -3018,11 +3025,12 @@
           "quote_index": 0
         },
         "correction_failure_threshold": {
-          "role": "marker",
+          "role": "gate",
           "value": 50,
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": "<="
         }
       },
       "failure": {
@@ -3063,7 +3071,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Two distinct thresholds share the value 50: one is the ceiling for a survivable severe-bear-market correction ('as much as 50 percent'), the other is the point past which the source calls the correction 'generally too much' ('more than 50 percent'). Keep both — they frame the same number from opposite sides."
+      "note": "Two distinct thresholds share the value 50: one is the ceiling for a survivable severe-bear-market correction ('as much as 50 percent'), the other is the point past which the source calls the correction 'generally too much' ('more than 50 percent'). Keep both — they frame the same number from opposite sides.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.striking_distance_52w_high",
@@ -3133,7 +3142,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Companion rule to concentrating on the new-52-week-high list itself during early-bull-market stages."
+      "note": "Companion rule to concentrating on the new-52-week-high list itself during early-bull-market stages.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.avoid_52w_low_list",
@@ -3192,7 +3202,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Stated as an unconditional 'stay away' — pairs directly with concentrating on the new-high list as the opposite-polarity screen."
+      "note": "Stated as an unconditional 'stay away' — pairs directly with concentrating on the new-high list as the opposite-polarity screen.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.leader_divergence_at_bottom",
@@ -3260,7 +3271,8 @@
       "unquantified": [
         "exact number of days/weeks of divergence required before treating a stock as a confirmed leader — the 22-day Amgen lag is a single historical illustration, not a stated rule"
       ],
-      "note": "The Amgen case is illustrative narrative, not a restated threshold — do not turn '22 days' into a rule; it corroborates the separately-sourced 4-to-8-week leader window (market.new_bull_leaders_first_weeks)."
+      "note": "The Amgen case is illustrative narrative, not a restated threshold — do not turn '22 days' into a rule; it corroborates the separately-sourced 4-to-8-week leader window (market.new_bull_leaders_first_weeks).",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.late_cycle_warning_signs",
@@ -3327,7 +3339,8 @@
       "unquantified": [
         "how many weeks of churning or how many topping leaders confirms the signal"
       ],
-      "note": "Directly supports 'don't confuse index strength for market health' — an index making new highs on rotation into laggards while true leaders buckle is framed as a bearish tell, not a bullish one."
+      "note": "Directly supports 'don't confuse index strength for market health' — an index making new highs on rotation into laggards while true leaders buckle is framed as a bearish tell, not a bullish one.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.superperformers_give_back_gains",
@@ -3417,7 +3430,8 @@
       "unquantified": [
         "what fraction of superperformers this applies to beyond 'one-third give back all or more' (left as prose, not converted to a percent to avoid rounding a stated fraction)"
       ],
-      "note": "Source literally spells it 'superpeformers' (likely an OCR artifact in the original PDF) — kept verbatim per instructions not to alter wording. Frames why 'defend at least breakeven at 3R' matters at the market-cycle level, not just per-trade."
+      "note": "Source literally spells it 'superpeformers' (likely an OCR artifact in the original PDF) — kept verbatim per instructions not to alter wording. Frames why 'defend at least breakeven at 3R' matters at the market-cycle level, not just per-trade.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.superperformers_emerge_from_corrections",
@@ -3482,7 +3496,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "Stated as a floor ('more than 90 percent'). Supports doing preparatory watch-list work during declines rather than waiting for confirmed strength."
+      "note": "Stated as a floor ('more than 90 percent'). Supports doing preparatory watch-list work during declines rather than waiting for confirmed strength.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.rs_as_leading_indicator",
@@ -3549,7 +3564,8 @@
       "unquantified": [
         "exact lead time between relative-strength improvement and the subsequent price breakout"
       ],
-      "note": "Book asserts RS leads price but never quantifies by how much — leave the lead-time unquantified rather than inferring one from the 4-to-8-week leader window."
+      "note": "Book asserts RS leads price but never quantifies by how much — leave the lead-time unquantified rather than inferring one from the 4-to-8-week leader window.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.industry_groups_leading_bull_count",
@@ -3620,7 +3636,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "The source's actual wording is compound ('3 or 4' at the low end, 'as many as 8 to 10' at the high end) — [3,10] is a simplification for the schema; a reducer author should preserve the compound phrasing rather than treat 3-10 as one clean uniform range."
+      "note": "The source's actual wording is compound ('3 or 4' at the low end, 'as many as 8 to 10' at the high end) — [3,10] is a simplification for the schema; a reducer author should preserve the compound phrasing rather than treat 3-10 as one clean uniform range.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.top_sectors_portfolio_concentration",
@@ -3689,7 +3706,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "This is activity-focus language (which sectors to hunt in), not a position-sizing instruction — keep it framed that way if it reaches prose output, per the harness's ban on prescribing portfolio percentages."
+      "note": "This is activity-focus language (which sectors to hunt in), not a position-sizing instruction — keep it framed that way if it reaches prose output, per the harness's ban on prescribing portfolio percentages.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.group_new_highs_signal",
@@ -3750,7 +3768,8 @@
       "unquantified": [
         "what count or rate of new-high names constitutes 'a growing number' / 'healthy number'"
       ],
-      "note": "The underlying data (per-stock new-high flags aggregated by group) is fully computable even though the source leaves the threshold qualitative — a reducer could expose the raw count without inventing a cutoff."
+      "note": "The underlying data (per-stock new-high flags aggregated by group) is fully computable even though the source leaves the threshold qualitative — a reducer could expose the raw count without inventing a cutoff.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.top_names_per_group_focus",
@@ -3827,7 +3846,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "Also underlies the 'when the leader sneezes, the group can get a cold' warning — the top 2-3 names are both the buy focus and the group's early-warning sensor."
+      "note": "Also underlies the 'when the leader sneezes, the group can get a cold' warning — the top 2-3 names are both the buy focus and the group's early-warning sensor.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.pct_superperformers_in_group_advance",
@@ -3892,7 +3912,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "This is a historical base-rate, not a per-ticker computable check — pair with market.single_stock_can_lead_without_group so a reducer doesn't over-read the ~40% minority as disqualifying."
+      "note": "This is a historical base-rate, not a per-ticker computable check — pair with market.single_stock_can_lead_without_group so a reducer doesn't over-read the ~40% minority as disqualifying.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.single_stock_can_lead_without_group",
@@ -3913,16 +3934,15 @@
       },
       "thresholds": {
         "other_group_names_showing_rs_early": {
-          "role": "band",
+          "role": "reference",
           "unit": "count",
           "exact": false,
           "quote_index": 0,
           "note": "an observation of how many peers usually show strength, not a measurement",
-          "range": [
+          "value": [
             1,
             2
-          ],
-          "direction": "higher_is_better"
+          ]
         }
       },
       "failure": {
@@ -3975,7 +3995,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "This directly answers the 'can a single stock lead without group confirmation' question the harness needs: yes, explicitly and by design — missing group confirmation is context, not an automatic rejection. This should anchor that clause in the harness constitution."
+      "note": "This directly answers the 'can a single stock lead without group confirmation' question the harness needs: yes, explicitly and by design — missing group confirmation is context, not an automatic rejection. This should anchor that clause in the harness constitution.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "market.index_vs_individual_stock_evidence",
@@ -4036,7 +4057,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "This is the book's explicit stance on acting on individual-stock evidence over index-level opinion. Note this does not override the harness's separate rule against authorizing longs below a falling 200-day average — this claim is about not waiting for the index to confirm before acting on an individual leader's own evidence, not about ignoring a stock's own trend-template failure."
+      "note": "This is the book's explicit stance on acting on individual-stock evidence over index-level opinion. Note this does not override the harness's separate rule against authorizing longs below a falling 200-day average — this claim is about not waiting for the index to confirm before acting on an individual leader's own evidence, not about ignoring a stock's own trend-template failure.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "tactic.market_cycle_swing_system",
@@ -4600,7 +4622,8 @@
       "unquantified": [
         "what counts as a 'meaningful' or 'good' gain when the book separately demands the most recent quarter plus the prior two or three quarters all show gains, beyond restating this same 20-25% floor"
       ],
-      "note": "This is a floor, not the target — the book immediately escalates it in the superperformance and bull-market variants below. Treat as a soft default, not an AND-gate: fundamentals here converge with other evidence rather than reject on their own."
+      "note": "This is a floor, not the target — the book immediately escalates it in the superperformance and bull-market variants below. Treat as a soft default, not an AND-gate: fundamentals here converge with other evidence rather than reject on their own.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.superperformance_quarterly_earnings_growth",
@@ -4668,7 +4691,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "'Or more' is explicitly open-ended — this is a step up from the 20-25% minimum default, not a ceiling."
+      "note": "'Or more' is explicitly open-ended — this is a step up from the 20-25% minimum default, not a ceiling.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.bull_market_quarterly_earnings_growth",
@@ -4748,7 +4772,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Conditioned explicitly on market regime — the book ties the threshold itself to bull-market conditions, not just candidate quality."
+      "note": "Conditioned explicitly on market regime — the book ties the threshold itself to bull-market conditions, not just candidate quality.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.best_performers_recent_quarter_frequency",
@@ -4818,7 +4843,8 @@
       "unquantified": [
         "what numeric increase counts as 'meaningful' in this specific claim"
       ],
-      "note": "This is a historical base-rate statistic the book cites (with Love and Reinganum studies), not itself a pass/fail rule — it justifies why current-quarter earnings get weight, and implies roughly 1-in-4 superperformers can lack it."
+      "note": "This is a historical base-rate statistic the book cites (with Love and Reinganum studies), not itself a pass/fail rule — it justifies why current-quarter earnings get weight, and implies roughly 1-in-4 superperformers can lack it.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.earnings_acceleration_before_big_moves",
@@ -4885,7 +4911,8 @@
       "unquantified": [
         "what specific acceleration magnitude qualifies as 'some form'"
       ],
-      "note": "'More than 90 percent' is a floor, not an exact figure — treat as directional evidentiary support, not a gate."
+      "note": "'More than 90 percent' is a floor, not an exact figure — treat as directional evidentiary support, not a gate.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.code_33_triple_acceleration",
@@ -4907,11 +4934,12 @@
       },
       "thresholds": {
         "code_33_quarters_required": {
-          "role": "marker",
+          "role": "gate",
           "value": 3,
           "unit": "quarters",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -4960,7 +4988,8 @@
       "unquantified": [
         "no minimum magnitude of acceleration is specified for earnings, sales, or margins — only that all three accelerate simultaneously for three quarters (the worked example shows EPS -34%→+83%, revenue -22%→+38%, margins 4.5%→6.6%, but this is illustrative, not a stated rule)"
       ],
-      "note": "Named pattern used elsewhere in the book (Monster Beverage annual example) applied loosely to annual data too, but the canonical definition given is quarterly and requires exactly three quarters of simultaneous triple acceleration."
+      "note": "Named pattern used elsewhere in the book (Monster Beverage annual example) applied loosely to annual data too, but the canonical definition given is quarterly and requires exactly three quarters of simultaneous triple acceleration.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.analyst_estimate_revision_threshold",
@@ -4981,7 +5010,7 @@
       },
       "thresholds": {
         "estimate_revision_significance_threshold_percent": {
-          "role": "marker",
+          "role": "reference",
           "value": 5,
           "unit": "percent",
           "exact": false,
@@ -5025,7 +5054,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "'5 percent or more' applies symmetrically to upward and downward revisions of current-quarter and current-fiscal-year estimates."
+      "note": "'5 percent or more' applies symmetrically to upward and downward revisions of current-quarter and current-fiscal-year estimates.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.estimate_trend_lookback_window",
@@ -5098,7 +5128,8 @@
       "unquantified": [
         "not disqualifying: the book explicitly says it 'won't necessarily disqualify a stock as a buy candidate if it lacks upward earnings revisions' — only large downward revisions are flagged as a definite red flag"
       ],
-      "note": "Value's unit is calendar days, not quarters — the 30-day window is a comparison baseline, not a growth threshold."
+      "note": "Value's unit is calendar days, not quarters — the 30-day window is a comparison baseline, not a growth threshold.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.earnings_deceleration_red_flag",
@@ -5178,7 +5209,8 @@
       "unquantified": [
         "no fixed percentage-point drop is stated as the deceleration trigger — the book only gives this one contrastive example to illustrate that the same absolute growth rate (20-30%) can be either an improvement or a red flag depending on the prior rate"
       ],
-      "note": "Same 20-30% number is reused elsewhere as a bare minimum floor (fundamentals.minimum_quarterly_earnings_growth) — here the book explicitly frames it as inadequate when it represents deceleration from a much higher base. A reducer must compare against the company's own trailing rate, not just an absolute floor."
+      "note": "Same 20-30% number is reused elsewhere as a bare minimum floor (fundamentals.minimum_quarterly_earnings_growth) — here the book explicitly frames it as inadequate when it represents deceleration from a much higher base. A reducer must compare against the company's own trailing rate, not just an absolute floor.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.earnings_acceleration_vs_historical_growth_rate",
@@ -5254,7 +5286,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "These specific numbers (12%, then 40%, then 100%) are a single illustrative example, not a general-purpose threshold — do not generalize them into a rule that any 12%-grower accelerating to 40% qualifies."
+      "note": "These specific numbers (12%, then 40%, then 100%) are a single illustrative example, not a general-purpose threshold — do not generalize them into a rule that any 12%-grower accelerating to 40% qualifies.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.annual_earnings_requirement",
@@ -5314,7 +5347,8 @@
       "unquantified": [
         "exact number of consecutive strong quarters required beyond 'more than one or two'; no annual EPS growth percentage is attached to this specific claim (see the market-leader 20%+ / 35-45% figures for the closest numeric analog)"
       ],
-      "note": "Reducer implication: a single blow-out quarter should not by itself satisfy a fundamentals convergence check without corroborating annual trend."
+      "note": "Reducer implication: a single blow-out quarter should not by itself satisfy a fundamentals convergence check without corroborating annual trend.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.earnings_history_lookback_window",
@@ -5383,7 +5417,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Unit is years, not quarters. Companion tactic: 'life is not perfect' — one off-quarter within this window is tolerated if the overall trend still improves."
+      "note": "Unit is years, not quarters. Companion tactic: 'life is not perfect' — one off-quarter within this window is tolerated if the overall trend still improves.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.two_quarter_rolling_average_smoothing",
@@ -5451,7 +5486,8 @@
       "unquantified": [
         "the lookback depth is given only as a discrete choice of 4, 6, or 8 quarters, not a continuous range or single preferred value"
       ],
-      "note": "Purely a smoothing/visualization tactic to reduce single-quarter noise, not itself a pass/fail criterion."
+      "note": "Purely a smoothing/visualization tactic to reduce single-quarter noise, not itself a pass/fail criterion.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.turnaround_qualifying_criteria",
@@ -5473,11 +5509,12 @@
       },
       "thresholds": {
         "turnaround_min_strong_quarters": {
-          "role": "marker",
+          "role": "gate",
           "value": 2,
           "unit": "quarters",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -5521,7 +5558,8 @@
       "unquantified": [
         "'strong' is not itself numerically defined here — see the separate 100%-growth threshold claims for the quantified version"
       ],
-      "note": "Companion checklist questions (qualitative, not quantified): are margins recovering toward peak; is the improvement cost-cutting only or does it include revenue growth; what is cash burn rate and debt load; is the turnaround running better/worse/as expected (worse-than-expected is 'usually a reason to consider selling')."
+      "note": "Companion checklist questions (qualitative, not quantified): are margins recovering toward peak; is the improvement cost-cutting only or does it include revenue growth; what is cash burn rate and debt load; is the turnaround running better/worse/as expected (worse-than-expected is 'usually a reason to consider selling').",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.turnaround_growth_rate_threshold",
@@ -5541,11 +5579,12 @@
       },
       "thresholds": {
         "turnaround_recent_growth_percent": {
-          "role": "marker",
+          "role": "gate",
           "value": 100,
           "unit": "percent",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         },
         "turnaround_growth_window_quarters_ch6": {
           "role": "reference",
@@ -5613,7 +5652,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "The two chapters disagree on the exact quarter window (2-3 vs. 1-2) while agreeing on the 100%-or-more figure — a reducer author should treat the window as approximate ('most recent quarter or two') rather than reconciling it into a single false-precise number."
+      "note": "The two chapters disagree on the exact quarter window (2-3 vs. 1-2) while agreeing on the 100%-or-more figure — a reducer author should treat the window as approximate ('most recent quarter or two') rather than reconciling it into a single false-precise number.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.cyclical_inverse_pe_and_signals",
@@ -5681,7 +5721,8 @@
       "unquantified": [
         "no numeric P/E level defines 'high' or 'low' for a cyclical — this is a directional/contrarian reading, not a threshold; the buy-side implication is explicitly attributed as Peter Lynch's warning against buying a cyclical after several years of record earnings when the P/E has hit a low point"
       ],
-      "note": "This is the explicit exception to 'buy expensive leaders, avoid cheap laggards' — for cyclicals specifically, low P/E after a long earnings run is a warning sign, not value confirmation."
+      "note": "This is the explicit exception to 'buy expensive leaders, avoid cheap laggards' — for cyclicals specifically, low P/E after a long earnings run is a warning sign, not value confirmation.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.market_leader_earnings_growth_pace",
@@ -5769,7 +5810,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "'A good balance sheet, expanding margins, high return on equity, and reasonable debt' are also named as signs of good management for this category, but no ROE number or peer-relative threshold is stated anywhere in the book — that concept must stay in refuses_to_quantify."
+      "note": "'A good balance sheet, expanding margins, high return on equity, and reasonable debt' are also named as signs of good management for this category, but no ROE number or peer-relative threshold is stated anywhere in the book — that concept must stay in refuses_to_quantify.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.institutional_favorite_growth_pace",
@@ -5829,7 +5871,8 @@
       "unquantified": [
         "'low to middle teens' is given only as a qualitative descriptor, never as an explicit numeric percentage range"
       ],
-      "note": "Explicit expectation-setting: 'you're not likely to get a superperformance move' from this category (examples given: Coca-Cola, Johnson & Johnson, General Electric)."
+      "note": "Explicit expectation-setting: 'you're not likely to get a superperformance move' from this category (examples given: Coca-Cola, Johnson & Johnson, General Electric).",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.top_competitor_reading",
@@ -5903,7 +5946,8 @@
       "unquantified": [
         "a top competitor is explicitly allowed to be fundamentally inferior to the true leader — 'may not be the superior company in an industry group or even have superior products' — so no absolute fundamentals bar applies, only relative ranking"
       ],
-      "note": "A top competitor can still 'produce high rates of earnings growth and enjoy large-scale price advances, albeit inferior to that of the leader' — the read is comparative, not absolute."
+      "note": "A top competitor can still 'produce high rates of earnings growth and enjoy large-scale price advances, albeit inferior to that of the leader' — the read is comparative, not absolute.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.laggard_fundamentals_reading",
@@ -5964,7 +6008,8 @@
       "unquantified": [
         "no numeric definition of how much inferior growth qualifies a stock as a laggard"
       ],
-      "note": "'In most cases' explicitly hedges — the book allows that a laggard's underperformance is not always fundamentals-driven, but usually is."
+      "note": "'In most cases' explicitly hedges — the book allows that a laggard's underperformance is not always fundamentals-driven, but usually is.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.anti_low_pe_bargain_trap",
@@ -6022,7 +6067,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "Worked example: Wild Oats (low P/E, weak earnings growth) underperformed Whole Foods (higher P/E, strong earnings growth) despite Wild Oats being 'popularly perceived' as the cheaper play."
+      "note": "Worked example: Wild Oats (low P/E, weak earnings growth) underperformed Whole Foods (higher P/E, strong earnings growth) despite Wild Oats being 'popularly perceived' as the cheaper play.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.pe_useless_alone",
@@ -6078,7 +6124,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
-      "note": "Reasoning given: standard P/E reflects historical results, not the future; a forward P/E depends on estimates that are frequently wrong. Companion claim: 'Buying a cheap stock is like a trap hand in poker... The cheaper it gets, the more attractive it becomes based on the it's cheap rationale. This is the type of thinking that gets investors in big trouble.'"
+      "note": "Reasoning given: standard P/E reflects historical results, not the future; a forward P/E depends on estimates that are frequently wrong. Companion claim: 'Buying a cheap stock is like a trap hand in poker... The cheaper it gets, the more attractive it becomes based on the it's cheap rationale. This is the type of thinking that gets investors in big trouble.'",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.growth_stock_pe_premium",
@@ -6099,16 +6146,15 @@
       },
       "thresholds": {
         "growth_stock_pe_premium_vs_market_multiple": {
-          "role": "band",
+          "role": "reference",
           "unit": "multiple",
           "exact": false,
           "quote_index": 0,
           "note": "an open-ended 'can trade at' observation, not a bounded range",
-          "range": [
+          "value": [
             3,
             4
-          ],
-          "direction": "inside_is_better"
+          ]
         }
       },
       "failure": {
@@ -6148,7 +6194,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Book adds that in times when growth stocks are in favor, the premium can be even higher; even out of favor, a significant premium to the market can persist."
+      "note": "Book adds that in times when growth stocks are in favor, the premium can be even higher; even out of favor, a significant premium to the market can persist.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.big_winners_pe_before_advance",
@@ -6215,7 +6262,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Explicitly framed as descriptive ('many... traded at more than'), not prescriptive — not a minimum P/E requirement for buying."
+      "note": "Explicitly framed as descriptive ('many... traded at more than'), not prescriptive — not a minimum P/E requirement for buying.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.pe_expansion_late_stage_and_historical_average",
@@ -6312,7 +6360,8 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
-      "note": "Book gives an explicit sell-discipline application: buy at P/E of 20 at breakout, multiply by 2-3 to estimate a target zone of 40-60; 'pay extra attention once the P/E nears 2 and especially around 2.5 to 3 or greater. It could top soon afterward.' This is presented as a probabilistic late-stage warning, not a hard sell trigger — the book pairs it with watching for deceleration/price weakness before acting."
+      "note": "Book gives an explicit sell-discipline application: buy at P/E of 20 at breakout, multiply by 2-3 to estimate a target zone of 40-60; 'pay extra attention once the P/E nears 2 and especially around 2.5 to 3 or greater. It could top soon afterward.' This is presented as a probabilistic late-stage warning, not a hard sell trigger — the book pairs it with watching for deceleration/price weakness before acting.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.margin_analysis",
@@ -6389,7 +6438,8 @@
       "unquantified": [
         "no absolute or industry-relative margin percentage threshold is stated — only that net margin should be compared against the industry average and should show consistent improvement"
       ],
-      "note": "Book distinguishes margin-improvement quality: 'the best kind of margin improvement comes from pricing power because of strong demand,' versus a decline that 'could be temporary... or far more worrisome... because prices are dropping as a result of declining customer interest' — the direction of margin change must be read against the cause, not just the number."
+      "note": "Book distinguishes margin-improvement quality: 'the best kind of margin improvement comes from pricing power because of strong demand,' versus a decline that 'could be temporary... or far more worrisome... because prices are dropping as a result of declining customer interest' — the direction of margin change must be read against the cause, not just the number.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.inventory_receivables_vs_sales",
@@ -6414,11 +6464,12 @@
       },
       "thresholds": {
         "receivables_and_inventory_vs_sales_double_trouble_ratio": {
-          "role": "marker",
+          "role": "gate",
           "value": 2,
           "unit": "ratio",
           "exact": false,
-          "quote_index": 1
+          "quote_index": 1,
+          "comparator": "<"
         }
       },
       "failure": {
@@ -6467,7 +6518,8 @@
       "unquantified": [
         "the standalone 'inventory grows much faster than sales' warning (quote 0) gives no numeric multiple — only the combined receivables+inventory 'double trouble' case (quote 1) states a ratio ('twice or more')"
       ],
-      "note": "Finer-grained rule inside inventory: finished goods rising much faster than raw materials/work-in-progress specifically signals unsold product piling up, especially dangerous if the goods are highly depreciable (worked example: Dell's build-to-order model vs. Compaq/HP/Gateway's stocked-shelf model). Not all inventory buildup is bad — explained buildup (e.g., stocking new store openings) is exempted."
+      "note": "Finer-grained rule inside inventory: finished goods rising much faster than raw materials/work-in-progress specifically signals unsold product piling up, especially dangerous if the goods are highly depreciable (worked example: Dell's build-to-order model vs. Compaq/HP/Gateway's stocked-shelf model). Not all inventory buildup is bad — explained buildup (e.g., stocking new store openings) is exempted.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.one_time_income_exclusion",
@@ -6528,7 +6580,8 @@
       "unquantified": [
         "no general rule for what dollar or percentage size of a gain/charge counts as material enough to flag — only a worked numeric example ($0.84/share out of $3.01 reported)"
       ],
-      "note": "General principle stated: 'I'm looking for earnings that come from core operations, not from a one-time gain or an extraordinary event.' Reversing the same trick with a one-time charge understates true earnings quality in the opposite direction — see the companion 'repeated one-time charge' claim."
+      "note": "General principle stated: 'I'm looking for earnings that come from core operations, not from a one-time gain or an extraordinary event.' Reversing the same trick with a one-time charge understates true earnings quality in the opposite direction — see the companion 'repeated one-time charge' claim.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.repeated_one_time_charge_red_flag",
@@ -6587,7 +6640,8 @@
       "unquantified": [
         "no fixed count of recurrences defines 'over and over'"
       ],
-      "note": "Related smoke-and-mirrors patterns named without numeric thresholds: guiding estimates down before an earnings beat (so the 'surprise' is against a lowered bar), write-down banking/timing, and revenue/expense shifting between quarters — all judgment_only, refuses_to_quantify by design."
+      "note": "Related smoke-and-mirrors patterns named without numeric thresholds: guiding estimates down before an earnings beat (so the 'surprise' is against a lowered bar), write-down banking/timing, and revenue/expense shifting between quarters — all judgment_only, refuses_to_quantify by design.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.cost_cutting_unsustainable",
@@ -6654,7 +6708,8 @@
       "unquantified": [
         "no numeric window given for how long cost-cutting-driven earnings growth can persist before it must be discounted"
       ],
-      "note": "Diagnostic question the book poses: is earnings growth coming from revenue growth, or only from cost cutting/productivity enhancements — the latter should reduce confidence in the sustainability of the trend even if the reported EPS growth number looks strong."
+      "note": "Diagnostic question the book poses: is earnings growth coming from revenue growth, or only from cost cutting/productivity enhancements — the latter should reduce confidence in the sustainability of the trend even if the reported EPS growth number looks strong.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "fundamentals.tax_disclosure_red_flag",
@@ -6715,7 +6770,8 @@
       "unquantified": [
         "'a big difference' and 'not paying much in taxes' are not given numeric thresholds"
       ],
-      "note": "Named as a form of 'differential disclosure' — the book generalizes this beyond taxes: any material inconsistency between what a company states in different documents (shareholder reports vs. SEC filings) is itself a signal worth investigating."
+      "note": "Named as a form of 'differential disclosure' — the book generalizes this beyond taxes: any material inconsistency between what a company states in different documents (shareholder reports vs. SEC filings) is itself a signal worth investigating.",
+      "attributed_to": "Minervini"
     },
     {
       "id": "practitioners.uptrend.minervini_never_below_declining_200sma",
@@ -6797,16 +6853,17 @@
       },
       "thresholds": {
         "rs_rating_min": {
-          "role": "marker",
+          "role": "gate",
           "value": 80,
           "unit": "percentile",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">"
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "incomplete",
@@ -7473,11 +7530,12 @@
           "direction": "higher_is_better"
         },
         "base_length_min": {
-          "role": "marker",
+          "role": "gate",
           "value": 4,
           "unit": "weeks",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -7762,16 +7820,17 @@
           "direction": "lower_is_better"
         },
         "min_days_volume_follow_through": {
-          "role": "marker",
+          "role": "gate",
           "value": 3,
           "unit": "sessions",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
-        "effect": "not_applicable",
-        "meaning": "This is descriptive or statistical context, not an executable pass/fail rule; no failure effect applies."
+        "effect": "needs_review",
+        "meaning": "This filter belongs to a practitioner or practice layer this harness reads for contrast, so a measurement that fails it is reported as contrast evidence for review and never rejects a candidate on its own."
       },
       "missing": {
         "effect": "not_applicable",

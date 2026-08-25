@@ -24,8 +24,13 @@ def registry() -> dict:
 
 
 class BindingAuthorityTests(unittest.TestCase):
-    def test_every_threshold_a_reducer_reads_sits_on_a_binding_claim(self) -> None:
-        """The one rule that keeps a contrast standard out of a harness verdict."""
+    def test_every_threshold_the_reducer_manifest_declares_sits_on_a_binding_claim(self) -> None:
+        """The manifest is what the reducers say they read; `threshold()` closes the rest.
+
+        This walks the declaration, not the call sites, so it cannot catch a reducer that
+        reaches past the manifest. That path is closed at the seam instead: `threshold()`
+        refuses a non-binding value and `evaluate_gate` stamps one as contrast.
+        """
 
         claims = {record["id"]: record for record in registry()["claims"]}
         for claim_id, name, _role in doctrine.REQUIRED_THRESHOLDS:
@@ -61,17 +66,23 @@ class BindingAuthorityTests(unittest.TestCase):
 
 class OneRangeIsOneThresholdTests(unittest.TestCase):
     def test_a_range_the_source_gave_once_is_registered_once(self) -> None:
-        """Splitting "3 to as many as 60 weeks" in two loses that it was ever a range."""
+        """Splitting "3 to as many as 60 weeks" in two loses that it was ever a range.
 
-        for claim_id, name in [
-            ("setup.consolidation_footprint_3_to_60_weeks", "consolidation_footprint_duration_weeks"),
-            ("basecount.typical_base_duration_5_to_26_weeks", "typical_base_duration_weeks"),
-            ("basecount.typical_top_after_3_to_5_bases", "typical_base_count_before_top"),
+        Asserting only that the merged band exists would pass with both halves still
+        registered beside it, which is the state this replaced.
+        """
+
+        for claim_id, merged, replaced in [
+            ("setup.consolidation_footprint_3_to_60_weeks", "consolidation_footprint_duration_weeks", ("consolidation_footprint_duration_low", "consolidation_footprint_duration_high")),
+            ("basecount.typical_base_duration_5_to_26_weeks", "typical_base_duration_weeks", ("typical_base_duration_low", "typical_base_duration_high")),
+            ("basecount.typical_top_after_3_to_5_bases", "typical_base_count_before_top", ("typical_base_count_before_top_low", "typical_base_count_before_top_high")),
         ]:
-            with self.subTest(threshold=name):
-                specification = doctrine.get_claim(claim_id)["claim"]["thresholds"][name]
-                self.assertEqual(specification["role"], "band")
-                self.assertEqual(len(specification["range"]), 2)
+            with self.subTest(threshold=merged):
+                thresholds = doctrine.get_claim(claim_id)["claim"]["thresholds"]
+                self.assertEqual(thresholds[merged]["role"], "band")
+                self.assertEqual(len(thresholds[merged]["range"]), 2)
+                for name in replaced:
+                    self.assertNotIn(name, thresholds)
 
 
 if __name__ == "__main__":

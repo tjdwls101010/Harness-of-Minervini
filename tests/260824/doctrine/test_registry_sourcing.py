@@ -137,11 +137,13 @@ class AttributionTests(unittest.TestCase):
         # that reconciled them into one number would have destroyed the disagreement.
         self.assertGreaterEqual(len({record["attributed_to"] for record in volume_claims}), 3)
 
-    def test_no_attributed_claim_is_a_hard_gate(self) -> None:
+    def test_no_claim_attributed_to_another_practitioner_is_a_hard_gate(self) -> None:
+        """Every canonical claim names its voice now, so the question is which voice."""
+
         promoted = [
             record["id"]
             for record in registry()["claims"]
-            if record.get("attributed_to") and record["kind"] == "hard_gate"
+            if record.get("attributed_to") not in (None, "Minervini") and record["kind"] == "hard_gate"
         ]
         self.assertEqual(promoted, [])
 

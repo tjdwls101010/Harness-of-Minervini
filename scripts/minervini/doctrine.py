@@ -140,7 +140,16 @@ def threshold(claim_id: str, name: str) -> Any:
     if name not in thresholds:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
-    return specification["range"] if specification["role"] == "band" else specification["value"]
+    role = specification["role"]
+    # A raw number is one comparison away from a verdict, so the two kinds of number that
+    # must never carry one do not come out of here at all. A marker leaves through
+    # `evaluate_marker`, where the distance travels with it; another practitioner's filter
+    # leaves through `evaluate_gate`, where it is stamped as contrast.
+    if role == "marker":
+        raise ValueError(f"{claim_id}.{name} is a marker; read it through evaluate_marker so its distance travels with it")
+    if not _binds(claim):
+        raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
+    return specification["range"] if role == "band" else specification["value"]
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
@@ -206,9 +215,20 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
 
 
 def _binds(record: Mapping[str, Any]) -> bool:
-    """Whether this claim's filter is the one the harness itself applies."""
+    """Whether this claim's filter is the one the harness itself applies.
 
-    return record.get("layer") == "canonical" and record.get("attributed_to") in (None, "Minervini")
+    Attribution is required on the canonical layer precisely so this reads a statement
+    rather than a silence: an earlier version treated a missing name as the house voice,
+    and deleting one line from Ryan's claim made his standard bind.
+    """
+
+    return record.get("layer") == "canonical" and record.get("attributed_to") == "Minervini"
+
+
+def _is_contrast(record: Mapping[str, Any]) -> bool:
+    """Whether this claim is somebody else's standard, read here for comparison."""
+
+    return record.get("layer") == "practice" or record.get("attributed_to") not in (None, "Minervini")
 
 
 def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -318,6 +338,10 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             errors.append(f"{label} executable record requires a test reference")
         if record["layer"] not in _VALID_LAYERS:
             errors.append(f"{label}.layer is invalid")
+        if record["layer"] == "canonical" and not isinstance(record.get("attributed_to"), str):
+            # Only the canonical layer can bind, so this is where a missing name would be
+            # read as the house voice rather than as an incomplete record.
+            errors.append(f"{label} is canonical and must name its attributed_to")
         if record["computability"] not in _VALID_COMPUTABILITY:
             errors.append(f"{label}.computability is invalid")
         out_of_scope = record.get("out_of_scope")
@@ -365,6 +389,12 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             # A gate is an executable pass/fail rule by definition, so a claim holding one
             # and also saying failure does not apply describes itself two ways at once.
             errors.append(f"{label} holds a gate and cannot declare a failure effect of not_applicable")
+        if record["failure"].get("effect") == "reject" and _is_contrast(record):
+            # A contrast filter reports; the rejection words belong to the standard this
+            # harness actually follows. A harness-layer rule is exempt because it is not
+            # another practitioner's standard -- it is this harness's own contract, and
+            # refusing a malformed early entry is exactly what it is for.
+            errors.append(f"{label} is contrast material and cannot declare a failure effect of reject")
         for name, specification in thresholds.items():
             if not isinstance(specification, Mapping):
                 errors.append(f"{label}.thresholds.{name} must be an object")
@@ -415,6 +445,7 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                     # than the registry pretending they are population statistics.
                     errors.append(f"{label}.thresholds.{name} cannot be a gate on the harness layer")
 
+    _assert_manifest_roles(REQUIRED_THRESHOLDS)
     registered = {record.get("id"): record for record in registry.get("claims", [])}
     for claim_id, name, role in REQUIRED_THRESHOLDS:
         record = registered.get(claim_id)
@@ -437,10 +468,21 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
 
 
+def _assert_manifest_roles(manifest: tuple[tuple[str, str, str], ...]) -> None:
+    """Refuse a reducer manifest that names a role no reducer may decide with.
+
+    A marker is a signed distance from a value the source declined to bound. Listing one
+    here would hand a reducer that distance under a name that reads like a limit.
+    """
+    named = [f"{claim_id}.{name}" for claim_id, name, role in manifest if role == "marker"]
+    if named:
+        raise ValueError(f"a reducer may not read a marker: {', '.join(named)}")
+
+
 def _is_number(value: Any) -> bool:
     # Python's JSON reader accepts NaN and Infinity, and every comparison against NaN is
     # false, so an ordinary stop would silently fail a ceiling the registry calls valid.
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-__all__ = ["evaluate_band", "evaluate_gate", "get_claim", "list", "threshold", "validate"]
+__all__ = ["evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "threshold", "validate"]
