@@ -226,3 +226,42 @@ class ARejectedStructureAsksNothing(unittest.TestCase):
 
         self.assertEqual(verdict["power_play_state"], "not_qualified")
         self.assertEqual(evidence["chart_questions"], [])
+
+
+class AnAnswerNeverRescuesARejectedReading(unittest.TestCase):
+    """The property that keeps a rejection from being talked out of.
+
+    It holds structurally rather than by a rule: a reading rejects only on a criterion a number
+    settled, and no key is issued for a reading in that state -- so there is nothing for an
+    `observed` to be spent on. Pinned because the two halves live in different loops, and a later
+    edit that issued keys before checking the rejection would open exactly this door.
+    """
+
+    def test_no_reading_the_bars_rejected_is_ever_offered_a_key(self) -> None:
+        for history in (
+            power_play_series(flag_depth_pct=40.0),
+            power_play_series(advance_pct=20.0),
+            power_play_series(flag_sessions=45),
+            two_tops_that_both_await_the_chart_series(),
+        ):
+            evidence = build_power_play_evidence(history)
+            asked = {question["peak_date"] for question in evidence["chart_questions"]}
+            rejected = {rejection["peak_date"] for rejection in evidence["reading_rejections"]}
+            with self.subTest(readings=evidence["readings"], asked=len(asked)):
+                self.assertEqual(asked & rejected, set())
+                # And the ones asked are the ones still standing, so a key always belongs to a
+                # reading whose answer could still decide something.
+                self.assertLessEqual(asked, set(evidence["surviving_readings"]))
+
+    def test_answering_observed_cannot_move_a_reading_out_of_the_rejections(self) -> None:
+        history = power_play_series(flag_depth_pct=40.0)
+        before = build_power_play_evidence(history)
+        keys = {question["key"]: "observed" for question in before["chart_questions"]}
+        after = build_power_play_evidence(history, chart_readings=keys)
+
+        self.assertEqual(before["chart_questions"], [])
+        self.assertEqual(
+            [rejection["peak_date"] for rejection in after["reading_rejections"]],
+            [rejection["peak_date"] for rejection in before["reading_rejections"]],
+        )
+        self.assertEqual(evaluate_power_play(after)["power_play_state"], "not_qualified")
