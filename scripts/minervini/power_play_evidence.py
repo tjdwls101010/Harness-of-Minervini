@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
-from .power_play import measure_power_play
+from .power_play import measure_power_play, reading_rejects
 
 
 _CLAIM = "fundamentals.power_play_exception"
@@ -102,6 +102,19 @@ def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, 
     }
 
 
+def _rejects(measurements: Mapping[str, Any], tight_limit: float) -> bool:
+    """Whether this reading rejects on the strength of its own span.
+
+    Each reading carries its own corporate-action span, because the two structures cover
+    different sessions and a split inside one of them says nothing about the other.
+    """
+    unmoved = (
+        measurements["corporate_action_evidence"] == "present"
+        and not measurements["corporate_action_sessions"]
+    )
+    return reading_rejects(_criteria(measurements, tight_limit), corporate_action_unmoved=unmoved)
+
+
 def build_power_play_evidence(history: Any) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
@@ -126,9 +139,15 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     )
     # An earlier top the search span does not contain is not a competing reading of this
     # structure; there is nothing to disagree with.
-    disputed = (
-        alternate["rejection"] is None
-        and _criteria(alternate, tight_limit) != _criteria(measurements, tight_limit)
+    primary_criteria = _criteria(measurements, tight_limit)
+    contested = (
+        {
+            condition
+            for condition, state in primary_criteria.items()
+            if _criteria(alternate, tight_limit)[condition] != state
+        }
+        if alternate["rejection"] is None
+        else set()
     )
 
     signals = [
@@ -166,8 +185,13 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
         },
-        "peak_identity": "disputed" if disputed else "settled",
-        "alternate_peak": None if not disputed else {
+        "peak_identity": "disputed" if contested else "settled",
+        # Which criteria the choice of top actually moved. The reducer reads this rather than the
+        # summary word, because agreeing on the verdict is not agreeing on every criterion: two
+        # readings can both reject and still disagree about which limit did it, and reporting the
+        # primary reading's version of that as a confident failure is a finding about the search.
+        "contested_criteria": sorted(contested),
+        "alternate_peak": None if not contested else {
             "peak_date": alternate["peak_date"],
             "peak_high": alternate["peak_high"],
             "flag_sessions": alternate["flag_sessions"],

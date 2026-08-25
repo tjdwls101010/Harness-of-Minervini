@@ -105,6 +105,35 @@ class AFlagStillFormingHasNotFailed(unittest.TestCase):
         self.assertEqual(verdict["power_play_state"], "incomplete")
         self.assertEqual(verdict["failed"], [])
 
+    def test_the_readings_disagree_about_the_flag_and_not_about_the_advance(self):
+        """A forty percent advance is not a Power Play from either top.
+
+        The readings do disagree, so the identity stays disputed and says so. What they disagree
+        about is the flag; the advance itself reads the same from both tops, and a criterion the
+        bars answered twice the same way is not waiting on which top the search landed on.
+        """
+        pack = evidence(advance_pct=40.0, marginal_new_high_at=100)
+
+        self.assertEqual(pack["peak_identity"], "disputed")
+        self.assertNotIn("advance_minimum_pct", pack["contested_criteria"])
+        self.assertIn("advance_maximum_weeks", pack["contested_criteria"])
+
+    def test_the_criterion_both_readings_failed_is_the_one_reported(self):
+        pack = evidence(advance_pct=40.0, marginal_new_high_at=100)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["power_play_state"], "not_qualified")
+        self.assertEqual(verdict["failed"], ["fundamentals.power_play_exception.advance_minimum_pct"])
+
+    def test_a_criterion_only_one_reading_failed_is_not_reported(self):
+        """The advance's length differs between the readings; only the advance itself agrees."""
+        pack = evidence(advance_pct=40.0, marginal_new_high_at=100)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertNotIn("fundamentals.power_play_exception.advance_maximum_weeks", verdict["failed"])
+
 
 class ACorporateActionInvalidatesWhatItMoved(unittest.TestCase):
     """A split moves every printed price and moves nobody's money.

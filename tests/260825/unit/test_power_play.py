@@ -236,3 +236,22 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheActionSpanCoversEverySessionAMeasurementReads(unittest.TestCase):
+    """The span checked for corporate actions has to start where the earliest reading starts.
+
+    The volume baseline sits forty sessions ahead of the advance window, so it begins earlier
+    than the launch bar by however far into the window the launch fell. A split in that gap
+    leaves the baseline's median straddling two share counts while nothing reports an action,
+    and a ratio built on it is arithmetic about the split.
+    """
+
+    def test_a_split_the_baseline_reads_but_the_launch_precedes_is_reported(self):
+        # Index 10 sits inside the baseline the peak-anchored reading takes its median from, and
+        # ahead of the launch bar's own forty-session lookback.
+        bars = power_play_series(split_at=10)
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertTrue(measurements["corporate_action_sessions"])

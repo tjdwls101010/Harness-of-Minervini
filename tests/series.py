@@ -491,6 +491,7 @@ def power_play_series(
     tie_the_peak_at: int | None = None,
     ancient_equal_high: bool = False,
     split_inside_the_flag: bool = False,
+    split_at: int | None = None,
     corporate_actions: bool = True,
     marginal_new_high_at: int | None = None,
     start: str = "2026-01-02",
@@ -566,6 +567,17 @@ def power_play_series(
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if split_at is not None:
+        # A two-for-one forward split at a caller-chosen session, printed the way a raw feed
+        # prints one: everything *before* it carries the pre-split price and share count, so the
+        # sessions after it are untouched and the structure downstream still reads. The caller
+        # picks the index because where the split falls relative to a measurement's span is the
+        # whole question -- a volume baseline that begins earlier than the span checked for
+        # actions takes its median from two different share counts and says nothing about it.
+        frame.iloc[split_at, frame.columns.get_loc("Stock Splits")] = 2.0
+        earlier = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+        frame.iloc[:split_at, earlier] *= 2
+        frame.iloc[:split_at, frame.columns.get_loc("Volume")] /= 2
     if split_inside_the_flag:
         # A two-for-one forward split partway through the flag: every printed price halves, so
         # the flag reads as a fifty percent correction that never happened.

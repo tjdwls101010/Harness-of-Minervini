@@ -144,6 +144,9 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     # plainly expanded, removed as a known failure by an outlier behind it.
     start = peak - advance_window
     baseline = bars.iloc[start - advance_window:start] if start >= advance_window else bars.iloc[0:0]
+    # The first session anything here reads. Derived from the baseline rather than restated, so
+    # moving the baseline moves the span checked for corporate actions with it.
+    earliest = max(0, start - advance_window if len(baseline) else start)
 
     baseline_volume = float(baseline["Volume"].median()) if len(baseline) else None
     measurable = baseline_volume is not None and baseline_volume > 0
@@ -172,15 +175,18 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # is how a reverse split that moved nobody's money reads as a hundred percent advance.
         #
         # The span is every session any measurement here reads: from the volume baseline through
-        # the last bar. Both ends were wrong once. Starting at the launch leaves a split before
-        # the advance with the baseline in pre-split share counts and the advance in post-split
-        # ones -- forty quiet sessions at 100K against a launch at 1M is an eight-fold expansion
-        # that never happened. Ending at the peak misses the flag, which is measured too: a
+        # the last bar. Both ends were wrong once, and the near end twice. Starting at the launch
+        # leaves a split before the advance with the baseline in pre-split share counts and the
+        # advance in post-split ones -- forty quiet sessions at 100K against a launch at 1M is an
+        # eight-fold expansion that never happened. Starting forty sessions before the launch is
+        # the same bug one step quieter: the baseline is anchored to the peak, the launch is
+        # wherever the lowest low fell inside the window, and the gap between them is baseline the
+        # span never covered. Ending at the peak misses the flag, which is measured too: a
         # two-for-one split partway through it halves every printed price after it, so the flag
         # reads as a fifty percent correction nobody took and the history that cannot be measured
         # comes back as a confident failure on depth.
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
-        "corporate_action_sessions": _corporate_actions(bars, max(0, launch - advance_window), len(bars) - 1),
+        "corporate_action_sessions": _corporate_actions(bars, earliest, len(bars) - 1),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / week,
         # Three readings of the volume clause, because "commences on huge volume" asks about a
@@ -255,6 +261,26 @@ _MOVED_BY_A_CORPORATE_ACTION = (
 )
 
 
+def reading_rejects(criteria: Mapping[str, str], *, corporate_action_unmoved: bool) -> bool:
+    """Whether one reading of the structure rejects on its own, under the reducer's trust rule.
+
+    Two readings of the same bars can disagree about every intermediate state and still both
+    reject. A rejection is the one outcome a later chart reading never overturns, so when both
+    reach it the choice between the tops decided nothing -- withholding the verdict then discards
+    a finding the bars made twice, and reports a forty percent advance as an open question.
+
+    The trust rule has to be the reducer's own, or the two would drift into calling a structure
+    settled on a failure the reducer will not use. Hence one predicate, read from both sides.
+    """
+    for claim_id in _REQUIRED:
+        condition = claim_id[len(_CLAIM) + 1:]
+        if criteria.get(condition) != "fail" or claim_id == _STILL_FORMING:
+            continue
+        if corporate_action_unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION:
+            return True
+    return False
+
+
 def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     """Classify a measured Power Play without deciding what may be done about it.
 
@@ -266,14 +292,20 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     """
     signals = {str(signal["id"]): signal for signal in evidence.get("signals") or []}
     unmoved = evidence.get(_CORPORATE_ACTIONS) == "present" and not evidence.get("corporate_action_sessions")
-    # A verdict resting on which of two tops the search landed on is a verdict about the search.
-    settled = evidence.get("peak_identity") != "disputed"
+    # A criterion resting on which of two tops the search landed on is a statement about the
+    # search. Read per criterion rather than as one verdict-wide switch, because the two readings
+    # can reach the same conclusion by different routes: throwing away everything they agreed on
+    # reports a forty percent advance as an open question, and trusting everything reports a limit
+    # the rival reading says was never exceeded.
+    contested = set(evidence.get("contested_criteria") or ())
+    settled = not contested
     failed: list[str] = []
     missing: list[str] = []
     for claim_id in _REQUIRED:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
-        trusted = settled and (unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION)
+        agreed = claim_id[len(_CLAIM) + 1:] not in contested
+        trusted = agreed and (unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION)
         if state == "pass" and trusted:
             continue
         if state == "fail" and claim_id != _STILL_FORMING and trusted:
@@ -303,6 +335,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "structure": evidence.get("structure") or {},
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
+        "contested_criteria": sorted(contested),
         "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
@@ -310,4 +343,4 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["evaluate_power_play", "measure_power_play"]
+__all__ = ["evaluate_power_play", "measure_power_play", "reading_rejects"]
