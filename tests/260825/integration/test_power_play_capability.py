@@ -128,3 +128,40 @@ class TheEnvelopeCitesWhatDecidedIt(unittest.TestCase):
 
         self.assertIn("convention.power_play_top_candidates", payload["doctrine_ids"])
         self.assertIn("convention.trading_week", payload["doctrine_ids"])
+
+
+class AFailureHeldBackByAnotherTopSaysSo(unittest.TestCase):
+    """Withholding a measured failure is not the same as waiting for a chart.
+
+    A top the distance excluded from contesting still reads these bars as a structure that
+    stands, so the failure the highest top measured cannot carry the verdict. That gap closes
+    when the tops are settled, never when someone reads the chart -- and reported as
+    `chart_reading_required` it would be closed by whatever approval seam eventually answers the
+    volume, which is the shape the still-forming flag already had to be kept out of.
+    """
+
+    def _payload(self):
+        return run(
+            power_play_series(
+                dormant_price=10.0, flag_sessions=20, flag_depth_pct=8.0, later_high=21.0 / 0.9 + 0.01
+            )
+        )
+
+    def test_the_gap_names_the_top_that_held_it_back(self):
+        payload = self._payload()
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+
+        self.assertEqual(
+            reasons["fundamentals.power_play_exception.advance_minimum_pct"],
+            "structure_stands_under_another_top",
+        )
+
+    def test_the_machine_channel_withholds_it_too(self):
+        payload = self._payload()
+        advance = next(
+            signal for signal in payload["signals"]
+            if signal["id"] == "fundamentals.power_play_exception.advance_minimum_pct"
+        )
+
+        self.assertEqual(advance["state"], "unavailable")
+        self.assertEqual(advance["withheld"], "structure_stands_under_another_top")

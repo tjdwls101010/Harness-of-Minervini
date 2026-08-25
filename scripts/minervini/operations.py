@@ -603,6 +603,8 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             return "corporate_action_evidence_missing" if verdict[
                 "corporate_action_evidence"
             ] != "present" else "corporate_action_inside_the_measured_span"
+        if item in set(verdict["held_by_another_top"]):
+            return "structure_stands_under_another_top"
         if item in payout_sensitive:
             return "distribution_inside_the_measured_span"
         if item in contested:

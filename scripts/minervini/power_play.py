@@ -404,6 +404,12 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     settled = not contested
     failed: list[str] = []
     missing: list[str] = []
+    # Criteria the highest top measured as failed, held back only because a top the distance
+    # excluded from contesting still reads these bars as a structure that stands. That gap closes
+    # when the tops are settled and never when somebody reads the chart, so it cannot arrive under
+    # the chart's name -- the still-forming flag had to be kept out of that bucket for the same
+    # reason, and this one is the same shape.
+    held_by_another_top: list[str] = []
     for claim_id in _REQUIRED:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
@@ -412,8 +418,12 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
-        if state == "fail" and claim_id != _STILL_FORMING and trusted and every_top_rejects:
-            failed.append(claim_id)
+        if state == "fail" and claim_id != _STILL_FORMING and trusted:
+            if every_top_rejects:
+                failed.append(claim_id)
+            else:
+                held_by_another_top.append(claim_id)
+                missing.append(claim_id)
         else:
             missing.append(claim_id)
 
@@ -445,6 +455,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         _decline({str(signal["id"]) for signal in signals.values()} | set(_BANDS_BESIDE.values()), cause)
     _decline({f"{_CLAIM}.{condition}" for condition in payout_sensitive}, "distribution_inside_the_measured_span")
     _decline({f"{_CLAIM}.{condition}" for condition in contested}, "peak_identity_disputed")
+    _decline(set(held_by_another_top), "structure_stands_under_another_top")
     reported = [
         _withhold(signal, withheld[str(signal["id"])]) if str(signal["id"]) in withheld else dict(signal)
         for signal in evidence.get("signals") or []
@@ -477,6 +488,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,
+        "held_by_another_top": held_by_another_top,
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "distribution_sessions": evidence.get("distribution_sessions"),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
