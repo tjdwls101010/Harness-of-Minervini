@@ -20,7 +20,7 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 - If a known Stage 2 or Trend Template gate fails, return AVOID for a prospective entry and stop. Explain the exact failed evidence and do not let fundamentals, cheapness, reputation, or narrative reopen the route.
 - If qualification is incomplete, distinguish missing evidence from failure. Resolve only the named gap when possible; use a chart for `needs_chart`, and never infer a pass.
 - If eligible, examine weekly structure before daily timing. Require separate price geometry, contracting supply, a completed pivot or VCP-anchored cheat, and precise invalidation.
-- A named VCP without supply evidence is incomplete. `[TL-EARLY]` is available only after explicit opt-in and must retain confirmation debt, a later Minervini pivot, and exact invalidation.
+- A named VCP without supply evidence is incomplete. `[TL-EARLY]` is available only after explicit opt-in, must name one of the five defined tactics, and must retain that tactic's trigger and invalidation alongside confirmation debt and a later Minervini pivot.
 - Evaluate SEC filed-as-of fundamentals, accounting integrity, dilution, growth quality, and leadership category. The Power Play exception may waive only unavailable verified fundamentals when every other proof remains intact.
 - Compare the ticker with current same-industry peers. Treat historical peer analysis as unavailable when current mutable taxonomy would be the only identity source.
 - Recheck the market evidence needed by this setup. QQQ context alone cannot supply market alignment, and absent user trade traction remains a real gap.

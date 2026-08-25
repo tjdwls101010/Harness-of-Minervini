@@ -36,7 +36,7 @@ Do not read `.tmp/Minervini.db`, `.tmp/TraderLion.db`, or `.claude/harness-spec.
 
 - Default entries require a completed pivot breakout or VCP-anchored cheat after eligibility.
 - A VCP name alone is descriptive. Supply absorption, contracting price/volume, and a usable trigger must be separately evidenced.
-- `[TL-EARLY]` is advanced and opt-in. It must disclose confirmation debt, the later Minervini pivot, exact invalidation, and elevated false-positive risk.
+- `[TL-EARLY]` is advanced and opt-in. It must name one of the five tactics the practice layer defines, and disclose that tactic's own trigger and invalidation alongside confirmation debt, the later Minervini pivot, and elevated false-positive risk. "Early" is a time, not a tactic.
 - Buy confirmation rather than bottoms. New highs indicate strength and reduced overhead supply; they do not make a stock automatically expensive.
 - Do not bottom-fish a fallen leader on reputation or low P/E. Price often deteriorates before the public explanation.
 - Read leaders bottom-up and compare same-industry peers. Early leadership can begin with one exceptional stock, so missing group confirmation is context, not an automatic rejection.
