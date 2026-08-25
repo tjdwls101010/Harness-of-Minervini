@@ -131,6 +131,7 @@ class SignalMapTests(unittest.TestCase):
 
         result = evaluate_setup(duplicated)
 
+        self.assertIn("setup.demand_supply_volume_asymmetry", result["missing"])
         self.assertNotEqual(result["setup_state"], "ready")
 
 

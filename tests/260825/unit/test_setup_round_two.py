@@ -196,6 +196,9 @@ class RightSideJudgementTests(unittest.TestCase):
             build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
         )
 
+        compression = next(item for item in result["signals"] if item["id"] == "setup.time_compression_hazard")
+        self.assertEqual(compression["state"], "fail")
+        self.assertEqual(result["measurements"]["right_side_contraction_count"], 0)
         self.assertNotEqual(result["setup_state"], "ready")
 
 
