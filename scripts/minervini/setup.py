@@ -311,13 +311,14 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     entry["kind"] = kind
     entry_missing: list[str] = []
     entry_unsatisfied: list[str] = []
+    entry_required: tuple[str, ...] = ()
     tactic = kind if kind in _TACTICS else None
     if tactic is not None or kind == "tl_early":
         price = measurements.get("last_close")
         entry, entry_missing = _early_entry_debt(
             entry, float(price) if isinstance(price, (int, float)) else None, tactic
         )
-    required = _ROUTES.get(kind)
+    required: tuple[str, ...] | None = _ROUTES.get(kind)
     if required is None:
         required = _BASE_EVIDENCE if kind in _UNMEASURED_ROUTES or tactic is not None or kind == "tl_early" else ()
         if kind in _UNMEASURED_ROUTES:
@@ -331,6 +332,12 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
             entry_missing = [*entry_missing, *owed]
             entry_unsatisfied = denied
             declared = {**declared, **declared_here}
+            # Listed as part of what the route requires, not only as what it is still owed.
+            # Carried as gaps alone they vanished the moment they were paid, so the one field
+            # that answers "what was this route held to" answered for the base by itself. Kept
+            # out of the signal loop below, which reads claims the bars measured -- these were
+            # settled by the caller's declaration and answering them twice would owe them twice.
+            entry_required = _tactic_conditions(tactic)
         elif kind != "tl_early":
             entry_missing = [*entry_missing, "entry_trigger"]
 
@@ -374,7 +381,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "measurements": measurements,
         "declared_readings": dict(declared),
         "signals": signals,
-        "required_evidence": list(required),
+        "required_evidence": [*required, *entry_required],
         # The claims this verdict was reached under, so the tactic the caller declared travels
         # with the answer instead of only its conditions' names.
         "doctrine_ids": sorted(

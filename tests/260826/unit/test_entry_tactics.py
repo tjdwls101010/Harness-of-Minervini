@@ -347,3 +347,28 @@ class APriceHasToBeAPrice(unittest.TestCase):
                 )
 
                 self.assertIn("minervini_later_pivot", result["missing"])
+
+
+class TheRouteListsWhatItRequires(unittest.TestCase):
+    def test_a_tactic_s_conditions_are_part_of_its_declared_evidence(self) -> None:
+        """READY is a set of satisfied conditions, and the set has to be readable.
+
+        Carried only as gaps, a tactic's conditions appeared in `missing` while it was owed and
+        vanished once it was paid -- so a reader could never see what the route had actually been
+        held to. The declared list is the one place that answers "what does this route require",
+        and it was answering for the base alone.
+        """
+        result = verdict("oops_reversal")
+
+        self.assertIn("tactic.oops_reversal.prior_day_low", result["required_evidence"])
+        self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["required_evidence"])
+
+    def test_they_stay_listed_once_they_are_paid(self) -> None:
+        result = verdict(
+            "oops_reversal",
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"state": "pass", "condition": "gapped and reclaimed"},
+        )
+
+        self.assertIn("tactic.oops_reversal.prior_day_low", result["required_evidence"])
+        self.assertEqual(result["setup_state"], "ready")
