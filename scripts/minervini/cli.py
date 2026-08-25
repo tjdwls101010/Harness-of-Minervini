@@ -30,7 +30,9 @@ class JsonArgumentParser(argparse.ArgumentParser):
         raise RequestError(message=message, field="arguments")
 
 
-_COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies"})
+# Every value that decided something already travels in a signal, so the raw measurement
+# table and the anchor list are detail rather than meaning.
+_COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies", "measurements", "anchors", "contractions"})
 
 
 def _compact_data(value: Any) -> Any:

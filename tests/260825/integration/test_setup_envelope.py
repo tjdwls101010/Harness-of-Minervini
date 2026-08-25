@@ -12,6 +12,7 @@ from datetime import date, datetime, timezone
 import unittest
 
 from scripts.minervini.contracts import RequestError
+from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 from tests.series import anchor_dates, base_series
@@ -146,6 +147,34 @@ class DeclaredReadingsAreVisibleTests(unittest.TestCase):
         self.assertEqual(payload["data"]["declared_readings"], {})
         missing = {item["id"] for item in payload["missing"]}
         self.assertTrue({"setup.time_compression_hazard", "setup.declared_chain_completeness", "setup.chase_limit_above_pivot"}.issubset(missing))
+
+
+
+
+class CompactFormatTests(unittest.TestCase):
+    def test_compact_drops_the_measurement_detail_and_keeps_every_decision_surface(self) -> None:
+        """Compact changes detail, never meaning: the signals carry the values that decided."""
+
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+        request = {
+            "ticker": "TEST",
+            "as_of": prices.meta.as_of.isoformat(),
+            "swing": chain,
+            "right_side_development": "constructive",
+            "chain_completeness": "complete",
+            "entry_proximity": "at_pivot",
+            "no_cache": True,
+        }
+
+        full = execute("ticker.setup", request, runtime=runtime)
+        compact = format_payload(execute("ticker.setup", request, runtime=runtime), "compact")
+
+        self.assertEqual(compact["data"]["setup_state"], full["data"]["setup_state"])
+        self.assertEqual(compact["signals"], full["signals"])
+        self.assertEqual(compact["missing"], full["missing"])
+        self.assertNotIn("measurements", compact["data"])
+        self.assertIn("problems", compact["data"]["structure"])
 
 
 if __name__ == "__main__":
