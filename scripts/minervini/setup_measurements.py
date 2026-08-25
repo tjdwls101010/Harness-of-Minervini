@@ -47,13 +47,18 @@ def _up_down_volume(bars: pd.DataFrame) -> dict[str, float | None]:
     prints a large bar satisfies the first clause and not the second.
     """
     change = bars["Close"].diff()
+    returns = bars["Close"].pct_change() * 100
     up_days = bars.loc[change > 0, "Volume"]
     down_days = bars.loc[change < 0, "Volume"]
+    up_returns = returns.loc[change > 0]
+    down_returns = returns.loc[change < 0]
     return {
         "up_day_volume": float(up_days.sum()),
         "down_day_volume": float(down_days.sum()),
         "largest_up_day_volume": float(up_days.max()) if len(up_days) else None,
         "largest_down_day_volume": float(down_days.max()) if len(down_days) else None,
+        "largest_up_day_return_pct": float(up_returns.max()) if len(up_returns) else None,
+        "largest_down_day_return_pct": float(-down_returns.min()) if len(down_returns) else None,
     }
 
 
@@ -69,19 +74,25 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "contraction_count": 0,
             "contractions_contract": None,
             "base_depth_pct": None,
+            "peak_to_low_correction_pct": None,
+            "peak_to_low_correction_low": None,
+            "peak_high": None,
             "base_duration_weeks": None,
             "final_contraction_volume_ratio": None,
             "up_day_volume": None,
             "down_day_volume": None,
             "largest_up_day_volume": None,
             "largest_down_day_volume": None,
+            "largest_up_day_return_pct": None,
+            "largest_down_day_return_pct": None,
             "up_down_volume_ratio": None,
             "largest_up_to_down_volume_ratio": None,
             "pivot_area_volume_ratio_to_base": None,
             "breakout_date": None,
             "sessions_since_breakout": None,
             "sessions_after_pivot": None,
-            "pause_held_to_breakout": None,
+            "pause_low_held_to_breakout": None,
+            "breakout_held": None,
             "pivot_extension_at_breakout_pct": None,
             "failed_pivot_attempts": None,
             "daily_range_median_pct": None,
@@ -133,14 +144,12 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     # paired with today's volume and called a current breakout.
     after_pivot = bars.loc[bars.index > pd.Timestamp(base["pivot_date"])]
     above = after_pivot["Close"] > pivot
-    # The live breakout is the start of the run price is in now, not the first close above
-    # the pivot ever. Reading the first one dates the breakout at a poke that failed months
-    # ago; `setup.failure_reset_types` carries the passage saying a pivot failure "can reset
-    # and recover", so the earlier attempts are counted beside the current run rather than
-    # standing in for it.
-    below = after_pivot.loc[~above]
-    current_run = after_pivot.loc[after_pivot.index > below.index[-1]] if len(below) else after_pivot
-    breakout_label = current_run.index[0] if len(current_run) else None
+    # The breakout is the first close above the pivot after it. An earlier version took the
+    # start of whatever run price was in at the end, which let a failed pivot be renamed a
+    # breakout by any later rally: `setup.failure_reset_types` says a pivot failure can reset
+    # and recover, and a reset is a new structure somebody has to declare, not a rename.
+    cleared = after_pivot.loc[above]
+    breakout_label = cleared.index[0] if len(cleared) else None
     failed_attempts = int(((~above).astype(int).diff() == 1).sum()) if len(after_pivot) else 0
     breakout = bars.loc[breakout_label] if breakout_label is not None else None
     # The baseline is the volume the breakout expanded against, so it is taken from the bars
@@ -155,6 +164,15 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     # structure check cannot see, and it is reported rather than decided.
     prior = bars.loc[: pd.Timestamp(base["start"])].iloc[:-1]
     prior_high = float(prior["High"].max()) if len(prior) else None
+    # "The correction for a healthy stock from peak to low": the peak is the stock's, not the
+    # caller's. Handing the gate the declared base's depth let a chain declared after a sixty
+    # percent collapse read as a ten percent base.
+    # ...and the low is the low of that correction: the lowest the stock went after the peak,
+    # not the lowest of the contractions the caller chose to declare.
+    through_base = bars.loc[: pd.Timestamp(base["end"])]
+    peak = float(through_base["High"].max())
+    peak_label = through_base["High"].idxmax()
+    correction_low = float(through_base.loc[peak_label:, "Low"].min())
     breakout_baselines = tuple(spec["breakout_volume_baseline_sessions"])
     span = (float(breakout["High"]) - float(breakout["Low"])) if breakout is not None else None
 
@@ -168,6 +186,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # otherwise the shortest possible declaration clears what a longer one has to earn.
         "contractions_contract": None if len(depths) < 2 else all(later < earlier for earlier, later in zip(depths, depths[1:])),
         "base_depth_pct": float(base["depth_pct"]),
+        "peak_to_low_correction_pct": (peak - correction_low) / peak * 100 if peak > 0 else None,
+        "peak_to_low_correction_low": correction_low,
+        "peak_high": peak,
         "base_duration_weeks": round(int(base["duration_sessions"]) / _SESSIONS_PER_WEEK, 4),
         "final_contraction_volume_baseline_sessions": baseline_sessions,
         "final_contraction_volume_ratio": _ratio(float(final_window["Volume"].mean()) if len(final_window) else None, baseline),
@@ -198,9 +219,12 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         "breakout_date": breakout_label.date().isoformat() if breakout_label is not None else None,
         "sessions_since_breakout": int(len(since_breakout)) if breakout_label is not None else None,
         "sessions_after_pivot": int(len(after_pivot)),
-        # A pause that broke its base's own low on the way to the breakout took the structure
-        # the pivot was measured from with it, whatever price did afterwards.
-        "pause_held_to_breakout": bool((before_breakout["Close"] > float(base["low"])).all()) if breakout_label is not None else None,
+        # Between the pivot and the breakout price is still in the pause the pivot topped. A
+        # close under that pause's low means the low the caller declared was not the last one,
+        # so the declaration is stale rather than the shakeout the source wants to see -- a
+        # shakeout undercuts a prior low inside the base, before the pause completed.
+        "pause_low_held_to_breakout": bool((before_breakout["Close"] > float(final["low"])).all()) if breakout_label is not None else None,
+        "breakout_held": bool((since_breakout["Close"] > pivot).all()) if breakout_label is not None else None,
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,
         "pivot_extension_pct": (float(last["Close"]) - pivot) / pivot * 100,

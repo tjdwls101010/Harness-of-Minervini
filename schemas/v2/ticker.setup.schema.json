@@ -89,6 +89,16 @@
         "required": false,
         "type": "boolean"
       },
+      "right_side_development": {
+        "choices": [
+          "constructive",
+          "compressed",
+          "needs_chart"
+        ],
+        "description": "Chart reading of the base's right side. The source names two forms of time compression and only one of them is measurable: a right side with no pause at all is an absence the bars show, while V-shaped action is a shape the source never puts a ratio on. Without this the setup stays incomplete rather than assuming the shape is fine, and a reading of constructive is refused when the bars show no pause.",
+        "required": false,
+        "type": "enum"
+      },
       "swing": {
         "description": "Repeatable swing date, alternating high and low and ending on the high that is the pivot; every date is checked against the completed bars and a bar that is not the extreme of the span its neighbours bound is refused by name. Omitting it is not an error: the setup comes back incomplete with the base structure named as the evidence it lacks, which is the point at which to render the chart and read the swings off it.",
         "required": false,
@@ -113,7 +123,7 @@
       "The breakout is dated at the start of the run price is currently in, not at the first close above the pivot ever, and earlier attempts at the pivot are counted beside it.",
       "A chain declared from a late high is not a misread swing and is not refused; what it leaves above the entry is measured instead and reported as overhead supply.",
       "A cheat entry is not measurable yet: it is entered inside the base rather than at its pivot, so it returns incomplete naming the cheat geometry it needs rather than borrowing the pivot breakout's evidence.",
-      "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken."
+      "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken. Its named tactics are not measured yet, so it returns incomplete naming the trigger it needs."
     ],
     "output": "READY, WAIT, AVOID, or INCOMPLETE setup state, the measurements behind it, the evidence the route required, and contrast evidence reported separately.",
     "prerequisites": [],

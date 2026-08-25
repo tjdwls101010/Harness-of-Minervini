@@ -143,6 +143,7 @@ def build_parser() -> JsonArgumentParser:
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
     setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
+    setup.add_argument("--right-side-development", choices=("constructive", "compressed", "needs_chart"), help=_input_help("ticker.setup", "right_side_development"))
     setup.add_argument("--invalidation-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
     setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
     setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))

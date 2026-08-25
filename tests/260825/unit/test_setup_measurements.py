@@ -88,8 +88,6 @@ class InsufficientHistoryTests(unittest.TestCase):
         self.assertIsNone(numbers["final_contraction_volume_ratio"])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class RightSideDevelopmentTests(unittest.TestCase):
@@ -183,3 +181,7 @@ class OverheadSupplyTests(unittest.TestCase):
         structure = resolve_structure(trimmed, anchor_dates(frame, anchors))
 
         self.assertIsNone(measure(trimmed, structure, SPEC)["overhead_supply_above_pivot_pct"])
+
+
+if __name__ == "__main__":
+    unittest.main()

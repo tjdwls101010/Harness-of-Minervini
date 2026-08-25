@@ -122,31 +122,46 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
     # already taken out the base's own low on its way there.
     if not expansion > 1:
         return "fail"
-    if not measurements.get("pause_held_to_breakout"):
+    if not measurements.get("pause_low_held_to_breakout") or not measurements.get("breakout_held"):
         return "fail"
     return "pass"
 
 
 def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
-    """Both clauses of the source's sentence, neither of which carries a number."""
+    """Both clauses of the source's sentence, neither of which carries a number.
 
+    The second clause is about price: "a few of the price spikes to the upside should be
+    large, dwarfing the contractions". An earlier version compared the largest up-day volume
+    with the largest down-day volume, which answers a sentence the source did not write and
+    passes a base that drifts up on heavy volume and drops in violent single sessions.
+    """
     total = measurements.get("up_down_volume_ratio")
-    spike = measurements.get("largest_up_to_down_volume_ratio")
-    if total is None or spike is None:
+    up_spike = measurements.get("largest_up_day_return_pct")
+    down_spike = measurements.get("largest_down_day_return_pct")
+    if total is None or up_spike is None or down_spike is None:
         return "unavailable"
-    return "pass" if total > 1 and spike > 1 else "fail"
+    return "pass" if total > 1 and up_spike > down_spike else "fail"
 
 
-def _right_side_state(measurements: Mapping[str, Any]) -> str:
-    """"The absence of proper right-side development" is the form that needs no ratio.
+def _right_side_state(measurements: Mapping[str, Any], judgment: str | None) -> str:
+    """One named form of time compression is measurable; the other is genuinely visual.
 
-    The other form the source names is V-shaped price action, and it supplies no ratio for
-    that one, so the left-to-right duration ratio travels with this rather than deciding it.
+    "V-shaped price action or the absence of proper right-side development." The absence is
+    an absence and needs no ratio. The V is a shape the source never puts a ratio on, so a
+    right side that did develop pauses is unresolved until someone reads the chart -- and a
+    reading of "constructive" is refused when the bars show no pause at all, because that is
+    the form the measurement can see.
     """
     developed = measurements.get("right_side_contraction_count")
     if developed is None:
         return "unavailable"
-    return "pass" if developed >= 1 else "fail"
+    if developed < 1:
+        return "fail"
+    if judgment == "compressed":
+        return "fail"
+    if judgment == "constructive":
+        return "pass"
+    return "needs_chart"
 
 
 def build_setup_evidence(
@@ -156,6 +171,7 @@ def build_setup_evidence(
     entry_kind: str = "completed_pivot",
     tactic_opt_in: bool = False,
     entry: Mapping[str, Any] | None = None,
+    right_side_development: str | None = None,
 ) -> dict[str, Any]:
     """Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside it."""
 
@@ -186,11 +202,11 @@ def build_setup_evidence(
             measurements["contraction_depths_pct"],
         ),
         _observation(_PIVOT_TRIGGER, _trigger_state(measurements, expansion), measurements.get("pivot_extension_pct")),
-        _observation(_TIME_COMPRESSION, _right_side_state(measurements), measurements["right_to_left_session_ratio"]),
+        _observation(_TIME_COMPRESSION, _right_side_state(measurements, right_side_development), measurements["right_to_left_session_ratio"]),
         # How deep the base ran was measured and then never looked at, so a stock that had
         # more than halved could measure as a clean VCP inside its own ruin.
-        doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", measurements["base_depth_pct"]),
-        doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", measurements["base_depth_pct"]),
+        doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", measurements["peak_to_low_correction_pct"]),
+        doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", measurements["peak_to_low_correction_pct"]),
         doctrine.evaluate_band(_FOOTPRINT, "consolidation_footprint_duration_weeks", measurements["base_duration_weeks"]),
         _observation(
             _OVERHEAD_SUPPLY,

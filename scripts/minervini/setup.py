@@ -43,15 +43,14 @@ _BASE_EVIDENCE = (
 )
 _ROUTES = {
     "completed_pivot": (*_BASE_EVIDENCE, "setup.structural_pivot_and_trigger"),
-    # An early entry is taken before the pivot, so the trigger is the confirmation it owes
-    # rather than evidence it already has. The supply gates still apply: they are about the
-    # base, not about when the trade is taken.
-    "tl_early": _BASE_EVIDENCE,
 }
-# A cheat is entered inside the base rather than at its pivot, so it needs the pause's
-# location and recovery fraction measured. Until that exists, borrowing the pivot route's
-# evidence would call a cheat ready on evidence about a different entry.
-_UNMEASURED_ROUTES = {"vcp_cheat": "cheat_geometry"}
+# Two routes still need their own trigger measured. A cheat is entered inside the base rather
+# than at its pivot, so it needs the pause's location and recovery fraction. An early entry
+# is taken on a named tactic -- an upside reversal, an oops, a key-level reclaim -- and
+# dropping the pivot from its list without measuring one of those left "taken before the
+# pivot" indistinguishable from "taken for no stated reason". Borrowing the pivot route's
+# evidence would call either one ready on evidence about a different entry.
+_UNMEASURED_ROUTES = {"vcp_cheat": "cheat_geometry", "tl_early": "early_trigger"}
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -99,19 +98,29 @@ def _canonical_kind(value: Any) -> str:
     }.get(kind, kind)
 
 
-def _rejects(identifier: str) -> bool:
-    """Whether a known failure here rejects rather than counting against readiness.
+def _owning_claim(identifier: str) -> str | None:
+    """The registered claim a condition belongs to.
 
-    A required condition is named either by its claim or by one threshold inside it, so the
-    claim is resolved by walking back from the longest prefix the registry knows.
+    A condition is named either by its claim or by one threshold inside it, so the claim is
+    the longest prefix of the name the registry knows.
     """
     parts = identifier.split(".")
     while parts:
+        candidate = ".".join(parts)
         try:
-            return doctrine.get_claim(".".join(parts))["claim"]["kind"] == "hard_gate"
+            doctrine.get_claim(candidate)
         except KeyError:
             parts.pop()
-    return False
+        else:
+            return candidate
+    return None
+
+
+def _rejects(identifier: str) -> bool:
+    """Whether a known failure here rejects rather than counting against readiness."""
+
+    claim_id = _owning_claim(identifier)
+    return claim_id is not None and doctrine.get_claim(claim_id)["claim"]["kind"] == "hard_gate"
 
 
 def _early_entry_debt(entry: Mapping[str, Any], price: float | None) -> tuple[dict[str, Any], list[str]]:
@@ -158,9 +167,12 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     by_id: dict[str, Any] = {}
     contested: set[str] = set()
     for item in signals:
-        if item.get("binds") is False:
-            continue
         identifier = str(item.get("id"))
+        # Binding has to be claimed and owned. A signal with no flag at all, or one whose
+        # doctrine_id names a different claim from the one its id answers, is not this
+        # harness's evidence however confident its state word sounds.
+        if item.get("binds") is not True or item.get("doctrine_id") != _owning_claim(identifier):
+            continue
         if identifier in by_id:
             contested.add(identifier)
         by_id[identifier] = item

@@ -35,6 +35,7 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
         "ticker": "TEST",
         "as_of": as_of or prices.meta.as_of.isoformat(),
         "swing": chain if swings is None else swings,
+        "right_side_development": "constructive",
         "no_cache": True,
     }
     return execute("ticker.setup", request, runtime=runtime)

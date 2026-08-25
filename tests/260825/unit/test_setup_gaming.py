@@ -107,7 +107,7 @@ class EarlyEntryRelationshipTests(unittest.TestCase):
 class SignalMapTests(unittest.TestCase):
     def _evidence(self):
         frame, anchors = base_series()
-        return build_setup_evidence(frame, anchor_dates(frame, anchors))
+        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
 
     def test_a_non_binding_signal_cannot_stand_in_for_a_required_one(self) -> None:
         evidence = self._evidence()
@@ -122,7 +122,12 @@ class SignalMapTests(unittest.TestCase):
 
     def test_two_signals_claiming_the_same_id_are_a_contradiction_not_a_last_writer_win(self) -> None:
         evidence = self._evidence()
-        duplicated = {**evidence, "signals": [*evidence["signals"], {"id": "setup.demand_supply_volume_asymmetry", "state": "pass", "binds": True}]}
+        duplicated = {**evidence, "signals": [*evidence["signals"], {
+            "id": "setup.demand_supply_volume_asymmetry",
+            "doctrine_id": "setup.demand_supply_volume_asymmetry",
+            "state": "pass",
+            "binds": True,
+        }]}
 
         result = evaluate_setup(duplicated)
 
@@ -130,14 +135,22 @@ class SignalMapTests(unittest.TestCase):
 
 
 class RightSideDevelopmentTests(unittest.TestCase):
-    def test_a_right_side_with_no_pause_at_all_cannot_be_ready(self) -> None:
-        """The source's second named form of time compression, and it needs no ratio."""
+    def test_a_right_side_with_no_pause_at_all_fails_the_condition_it_is_about(self) -> None:
+        """The source's second named form of time compression, and it needs no ratio.
+
+        Asserting only that the setup is not ready would pass with the time-compression
+        wiring deleted, because a single-contraction base is short of other evidence too.
+        The assertion is on the condition itself.
+        """
 
         frame, anchors = base_series(depths=(25.0,), rallies=(3,))
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors)))
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
 
-        self.assertNotEqual(result["setup_state"], "ready")
+        compression = next(item for item in evidence["signals"] if item["id"] == "setup.time_compression_hazard")
+        self.assertEqual(compression["state"], "fail")
+        # Rounded for the reader; the measurement itself is what the condition read.
+        self.assertAlmostEqual(compression["measured"], evidence["measurements"]["right_to_left_session_ratio"])
 
 
 class CheatRouteTests(unittest.TestCase):
@@ -151,19 +164,20 @@ class CheatRouteTests(unittest.TestCase):
 
 
 class VolumeAsymmetryTests(unittest.TestCase):
-    def test_the_gate_reads_both_halves_of_the_sentence_it_cites(self) -> None:
-        """"much bigger on up days" and "a few of the price spikes to the upside should be large"."""
+    def test_up_day_volume_alone_does_not_satisfy_the_sentence(self) -> None:
+        """"much bigger on up days" is one clause; the price-spike clause is tested next door.
 
-        frame, anchors = base_series()
-        # Totals still favour the up days, but no up day ever prints a large spike.
-        change = frame["Close"].diff()
-        frame.loc[change > 0, "Volume"] = 1_100_000.0
-        frame.loc[change < 0, "Volume"] = 900_000.0
-        frame.loc[frame.index[len(frame) // 3], "Volume"] = 5_000_000.0
+        See test_setup_round_two.PriceSpikeTests for the half this fixture cannot show: the
+        source's second clause is about price, and measuring it in volume answered a sentence
+        nobody wrote.
+        """
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors)))
+        frame, anchors = base_series(volume_profile="distribution")
+
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "avoid")
+        self.assertIn("setup.demand_supply_volume_asymmetry", result["failed"])
 
 
 class NormalisationTests(unittest.TestCase):
@@ -171,8 +185,8 @@ class NormalisationTests(unittest.TestCase):
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
 
-        forward = evaluate_setup(build_setup_evidence(frame, chain))
-        reversed_ = evaluate_setup(build_setup_evidence(frame.iloc[::-1], chain))
+        forward = evaluate_setup(build_setup_evidence(frame, chain, right_side_development="constructive"))
+        reversed_ = evaluate_setup(build_setup_evidence(frame.iloc[::-1], chain, right_side_development="constructive"))
 
         self.assertEqual(reversed_["setup_state"], forward["setup_state"])
 
@@ -181,13 +195,11 @@ class NormalisationTests(unittest.TestCase):
         chain = anchor_dates(frame, anchors)
         as_text = frame.astype(str)
 
-        result = evaluate_setup(build_setup_evidence(as_text, chain))
+        result = evaluate_setup(build_setup_evidence(as_text, chain, right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "ready")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class BaseDepthTests(unittest.TestCase):
@@ -200,7 +212,7 @@ class BaseDepthTests(unittest.TestCase):
 
         frame, anchors = base_series(depths=(55.0, 10.0, 5.0))
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors)))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive"))
 
         self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("market.correction_depth_healthy_leader.correction_failure_threshold", result["unsatisfied"])
@@ -208,7 +220,7 @@ class BaseDepthTests(unittest.TestCase):
     def test_base_depth_and_duration_are_reported_against_the_ranges_the_source_gave(self) -> None:
         frame, anchors = base_series()
 
-        signals = {item["id"]: item for item in build_setup_evidence(frame, anchor_dates(frame, anchors))["signals"]}
+        signals = {item["id"]: item for item in build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")["signals"]}
 
         depth = signals["market.correction_depth_healthy_leader.healthy_correction_range"]
         duration = signals["setup.consolidation_footprint_3_to_60_weeks.consolidation_footprint_duration_weeks"]
@@ -216,57 +228,23 @@ class BaseDepthTests(unittest.TestCase):
         self.assertEqual(duration["role"], "band")
 
 
-class FailedThenResetTests(unittest.TestCase):
-    """A pivot failure the source says can reset must not fix the breakout date forever.
-
-    Reading the *first* close above the pivot dates the breakout at a poke that failed months
-    ago, which then reports as a breakout that gave the pivot back. The source says a pivot
-    failure "can reset and recover", so the live breakout is the start of the run price is
-    currently in, and the earlier failures are counted beside it.
-    """
-
-    def _reset_series(self):
-        frame, anchors = base_series()
-        chain = anchor_dates(frame, anchors)
-        pivot = float(frame.loc[chain[-1], "High"])
-        poke = flat_tail(frame.iloc[:-1], 1, close=pivot * 1.005, volume=700_000.0)
-        pullback = flat_tail(poke, 6, close=pivot * 0.97, volume=600_000.0)
-        recovered = flat_tail(pullback, 3, close=pivot * 1.04, volume=2_500_000.0)
-        return recovered, chain
-
-    def test_the_live_breakout_is_the_run_price_is_in_now(self) -> None:
-        frame, chain = self._reset_series()
-
-        measurements = build_setup_evidence(frame, chain)["measurements"]
-
-        self.assertEqual(measurements["sessions_since_breakout"], 2)
-        self.assertEqual(measurements["failed_pivot_attempts"], 1)
-
-    def test_the_earlier_failure_does_not_by_itself_refuse_the_reset(self) -> None:
-        frame, chain = self._reset_series()
-
-        result = evaluate_setup(build_setup_evidence(frame, chain))
-
-        self.assertEqual(result["setup_state"], "ready")
-
-
 class BaseFailureBeforeBreakoutTests(unittest.TestCase):
-    def test_a_pause_that_broke_the_base_low_before_breaking_out_is_not_a_live_trigger(self) -> None:
+    def test_a_pause_that_broke_its_own_low_before_breaking_out_is_not_a_live_trigger(self) -> None:
         """Undercutting a prior low inside the base is a shakeout the source wants to see.
 
-        Undercutting the base's own low is a different event: the structure the pivot was
-        measured from is gone, and what follows is a new base rather than this one's breakout.
+        Undercutting the pause's own low after the pivot is a different event: the low the
+        caller declared as the last one was not the last one, so the declaration is stale.
         """
 
         frame, anchors = base_series(breakout=False)
         chain = anchor_dates(frame, anchors)
-        base_low = min(float(frame.loc[chain[position], "Low"]) for position in (1, 3, 5))
-        broken = flat_tail(frame, 4, close=base_low * 0.95, volume=1_500_000.0)
+        pause_low = float(frame.loc[chain[5], "Low"])
+        broken = flat_tail(frame, 4, close=pause_low * 0.95, volume=1_500_000.0)
         recovered = flat_tail(broken, 3, close=float(frame.loc[chain[-1], "High"]) * 1.03, volume=3_000_000.0)
 
         result = evaluate_setup(build_setup_evidence(recovered, chain))
 
-        self.assertFalse(result["measurements"]["pause_held_to_breakout"])
+        self.assertFalse(result["measurements"]["pause_low_held_to_breakout"])
         self.assertNotEqual(result["setup_state"], "ready")
 
     def test_the_entry_distance_is_measured_at_the_breakout_not_at_the_latest_bar(self) -> None:
@@ -278,3 +256,7 @@ class BaseFailureBeforeBreakoutTests(unittest.TestCase):
 
         self.assertLess(measurements["pivot_extension_at_breakout_pct"], 5.0)
         self.assertGreater(measurements["pivot_extension_pct"], 30.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

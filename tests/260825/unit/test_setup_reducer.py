@@ -20,8 +20,14 @@ from tests.series import anchor_dates, base_series
 def evidence_for(**kwargs):
     chain = kwargs.pop("chain", None)
     entry_kind = kwargs.pop("entry_kind", "completed_pivot")
+    judgment = kwargs.pop("right_side_development", "constructive")
     frame, anchors = base_series(**kwargs)
-    return build_setup_evidence(frame, chain if chain is not None else anchor_dates(frame, anchors), entry_kind=entry_kind)
+    return build_setup_evidence(
+        frame,
+        chain if chain is not None else anchor_dates(frame, anchors),
+        entry_kind=entry_kind,
+        right_side_development=judgment,
+    )
 
 
 def state_of(**kwargs) -> str:
@@ -76,7 +82,7 @@ class MissingEvidenceTests(unittest.TestCase):
         dates = anchor_dates(frame, anchors)
         dates[1] = frame.index[anchors[1].position - 1].date().isoformat()
 
-        result = evaluate_setup(build_setup_evidence(frame, dates, entry_kind="completed_pivot"))
+        result = evaluate_setup(build_setup_evidence(frame, dates, entry_kind="completed_pivot", right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "incomplete")
         self.assertTrue(any(dates[1] in problem for problem in result["structure"]["problems"]))
@@ -102,7 +108,7 @@ class MissingEvidenceTests(unittest.TestCase):
             index=index,
         )
 
-        result = evaluate_setup(build_setup_evidence(frame, [], entry_kind="completed_pivot"))
+        result = evaluate_setup(build_setup_evidence(frame, [], entry_kind="completed_pivot", right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "incomplete")
 
@@ -137,8 +143,6 @@ class ContrastIsolationTests(unittest.TestCase):
         self.assertTrue({"Ryan", "Zanger"}.issubset(attributed), attributed)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 TL_EARLY_DECLARATION = {
@@ -164,13 +168,15 @@ class EarlyEntryTests(unittest.TestCase):
             anchor_dates(frame, anchors),
             entry_kind="tl_early",
             entry=declaration,
+            right_side_development="constructive",
             **overrides,
         )
 
-    def test_a_declared_early_entry_with_the_measured_base_behind_it_is_ready(self) -> None:
+    def test_a_declared_early_entry_keeps_its_debt_while_waiting_for_a_trigger_to_be_measured(self) -> None:
         result = evaluate_setup(self._evidence(tactic_opt_in=True))
 
-        self.assertEqual(result["setup_state"], "ready")
+        self.assertEqual(result["setup_state"], "incomplete")
+        self.assertIn("early_trigger", result["missing"])
         self.assertEqual(result["entry"]["tactic"], "[TL-EARLY]")
         self.assertEqual(result["entry"]["confirmation_debt"], ["completed Minervini pivot breakout"])
         self.assertEqual(result["entry"]["minervini_later_pivot"]["price"], 104.5)
@@ -196,6 +202,7 @@ class EarlyEntryTests(unittest.TestCase):
             entry_kind="tl_early",
             entry=TL_EARLY_DECLARATION,
             tactic_opt_in=True,
+            right_side_development="constructive",
         )
 
         self.assertEqual(evaluate_setup(evidence)["setup_state"], "avoid")
@@ -206,13 +213,13 @@ class UnusableHistoryTests(unittest.TestCase):
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
 
-        result = evaluate_setup(build_setup_evidence(frame.drop(columns=["Volume"]), chain))
+        result = evaluate_setup(build_setup_evidence(frame.drop(columns=["Volume"]), chain, right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "incomplete")
         self.assertIn("base_structure", result["missing"])
 
     def test_a_history_that_is_not_a_frame_at_all_is_incomplete_rather_than_an_error(self) -> None:
-        result = evaluate_setup(build_setup_evidence(None, ["2026-03-19", "2026-04-06", "2026-04-20"]))
+        result = evaluate_setup(build_setup_evidence(None, ["2026-03-19", "2026-04-06", "2026-04-20"], right_side_development="constructive"))
 
         self.assertEqual(result["setup_state"], "incomplete")
 
@@ -263,7 +270,7 @@ class GoldenDiscriminationTests(unittest.TestCase):
         result = evaluate_setup(self._counterexample())
         compression = signal(result, "setup.time_compression_hazard")
 
-        self.assertEqual(compression["state"], "pass")
+        self.assertEqual(compression["state"], "needs_chart")
         self.assertLess(compression["measured"], 0.5)
 
 
@@ -296,7 +303,7 @@ class ChainGamingTests(unittest.TestCase):
         frame, anchors = base_series()
         late = anchor_dates(frame, anchors)[2:]
 
-        result = evaluate_setup(build_setup_evidence(frame, late))
+        result = evaluate_setup(build_setup_evidence(frame, late, right_side_development="constructive"))
 
         supply = signal(result, "setup.overhead_supply_mechanism")
         self.assertEqual(supply["state"], "reported")
@@ -308,3 +315,7 @@ class ChainGamingTests(unittest.TestCase):
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertEqual(chase["state"], "reported")
         self.assertEqual(round(chase["measured"], 2), round(result["measurements"]["pivot_extension_pct"], 2))
+
+
+if __name__ == "__main__":
+    unittest.main()

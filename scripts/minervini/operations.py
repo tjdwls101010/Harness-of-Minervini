@@ -563,6 +563,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry_kind=request.get("entry_kind") or "completed_pivot",
         tactic_opt_in=request.get("tactic_opt_in") is True,
         entry=entry,
+        right_side_development=request.get("right_side_development"),
     )
     result = evaluate_setup(evidence)
     missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]
