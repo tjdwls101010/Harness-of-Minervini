@@ -303,3 +303,53 @@ class TheBaselineIsTheVolumeTheStockLeft(unittest.TestCase):
         measurements = measure_power_play(bars, SPEC)
 
         self.assertEqual(measurements["advance_peak_volume_ratio"], 5.0)
+
+
+class TheReadingNamesTheSessionItCountsFrom(unittest.TestCase):
+    """`advance_weeks` is a distance, and a distance from an unnamed point is not checkable.
+
+    The extremes date beside it is a different session -- that is the whole reason the anchor
+    exists -- so a reader given only `advance_low_date` cannot recompute the number the gate was
+    decided on, and cannot see that the baseline sits behind it.
+    """
+
+    def test_the_anchor_is_reported_with_the_duration_it_produced(self):
+        bars = wick_after_the_launch_series()
+
+        measurements = measure_power_play(bars, SPEC)
+        index = list(bars.index.strftime("%Y-%m-%d"))
+        anchor = index.index(measurements["advance_anchor_date"])
+        peak = index.index(measurements["peak_date"])
+
+        self.assertEqual(peak - anchor, measurements["advance_sessions"])
+        self.assertNotEqual(measurements["advance_anchor_date"], measurements["advance_low_date"])
+
+    def test_no_session_of_the_advance_sits_in_its_own_volume_baseline(self):
+        """The invariant the baseline's placement rests on, over every shape the fixture makes."""
+
+        for advance, flag, dormancy in ((25, 20, 60), (10, 30, 90), (38, 12, 110)):
+            with self.subTest(advance=advance, flag=flag):
+                bars = power_play_series(
+                    advance_sessions=advance, flag_sessions=flag, dormancy_sessions=dormancy
+                )
+                measurements = measure_power_play(bars, SPEC)
+                index = list(bars.index.strftime("%Y-%m-%d"))
+
+                self.assertLess(
+                    index.index(measurements["baseline_last_session"]),
+                    index.index(measurements["advance_anchor_date"]),
+                )
+
+    def test_the_action_span_never_begins_after_the_baseline_does(self):
+        for advance, flag, dormancy in ((25, 20, 60), (10, 30, 90), (38, 12, 110)):
+            with self.subTest(advance=advance, flag=flag):
+                bars = power_play_series(
+                    advance_sessions=advance, flag_sessions=flag, dormancy_sessions=dormancy
+                )
+                measurements = measure_power_play(bars, SPEC)
+                index = list(bars.index.strftime("%Y-%m-%d"))
+
+                self.assertLessEqual(
+                    index.index(measurements["measured_span_first_session"]),
+                    index.index(measurements["baseline_first_session"]),
+                )

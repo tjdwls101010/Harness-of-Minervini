@@ -49,6 +49,10 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_low_close": None,
         "corporate_action_evidence": None,
         "corporate_action_sessions": None,
+        "measured_span_first_session": None,
+        "baseline_first_session": None,
+        "baseline_last_session": None,
+        "advance_anchor_date": None,
         "advance_sessions": None,
         "advance_weeks": None,
         "launch_volume_ratio": None,
@@ -62,6 +66,14 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "flag_low_date": None,
         "rejection": reason,
     }
+
+
+def _label(bars: Any, position: int) -> str | None:
+    """One session's date, or nothing when the position falls outside the loaded history."""
+
+    if position < 0 or position >= len(bars):
+        return None
+    return str(bars.index[position].date())
 
 
 def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | None = None, before: str | None = None) -> dict[str, Any]:
@@ -198,6 +210,13 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # comes back as a confident failure on depth.
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
         "corporate_action_sessions": _corporate_actions(bars, earliest, len(bars) - 1),
+        # The three boundaries the numbers above are counted between. A duration reported without
+        # the session it is counted from cannot be checked, and the anchor is deliberately not the
+        # extremes date printed beside it.
+        "measured_span_first_session": _label(bars, earliest),
+        "baseline_first_session": _label(bars, launch - advance_window) if len(baseline) else None,
+        "baseline_last_session": _label(bars, launch - 1) if len(baseline) else None,
+        "advance_anchor_date": _label(bars, launch),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / week,
         # Three readings of the volume clause, because "commences on huge volume" asks about a
