@@ -321,13 +321,16 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         return signal
     span = high - low
     signal["band_position"] = round((measured - low) / span, 4) if span else 0.0
-    # Which edge is the limit depends on what the range describes. A base shallower than
-    # its depth range is better; a company growing slower than its growth range is not.
-    direction = specification["direction"]
-    signal["direction"] = direction
-    if direction != "higher_is_better" and measured > high:
+    # The state says where the number sat and nothing else. Which edge is the good one is
+    # what ``direction`` is for -- a base shallower than its depth range is outside it and
+    # better for being outside; a company growing slower than its growth range is outside it
+    # and worse. Folding that judgement into the state made the favourable side report
+    # ``within_source_range`` about a measurement that never entered the range, which is a
+    # sentence the response standard cannot be written from.
+    signal["direction"] = specification["direction"]
+    if measured > high:
         signal["state"] = "beyond_source_range"
-    elif direction != "lower_is_better" and measured < low:
+    elif measured < low:
         signal["state"] = "short_of_source_range"
     else:
         signal["state"] = "within_source_range"

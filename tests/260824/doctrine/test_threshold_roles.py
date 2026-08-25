@@ -61,11 +61,15 @@ class BandTests(unittest.TestCase):
         self.assertEqual(signal["state"], "beyond_source_range")
         self.assertGreater(signal["band_position"], 1)
 
-    def test_a_measurement_tighter_than_the_range_is_inside_it_not_outside(self) -> None:
-        # A shallower base than the source's range is better, never a defect.
+    def test_a_measurement_tighter_than_the_range_is_outside_it_on_the_good_side(self) -> None:
+        # A shallower base than the source's range is better, never a defect -- and it is also
+        # not inside the range. `direction` carries the first fact so the state can carry the
+        # second one honestly.
         signal = doctrine.evaluate_band(*BAND, 12.0)
 
-        self.assertEqual(signal["state"], "within_source_range")
+        self.assertEqual(signal["state"], "short_of_source_range")
+        self.assertEqual(signal["direction"], "lower_is_better")
+        self.assertLess(signal["band_position"], 0)
 
     def test_a_band_carries_the_quotation_the_response_must_cite(self) -> None:
         signal = doctrine.evaluate_band(*BAND, 30.0)
