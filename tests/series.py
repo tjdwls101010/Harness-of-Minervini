@@ -812,3 +812,29 @@ def anchor_moving_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
     frame.iloc[70:, paid] -= 10.0
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def lower_top_reshuffling_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A payout that leaves the highest top alone and reorders the ones under it.
+
+    The peak prints last and is untouched by the ex-date, so its date, its anchor and its flag are
+    the same on either scale. Two lower tops sit on opposite sides of the distribution and are
+    within a dollar of each other, so which of them the chain reaches second is the payout's
+    answer rather than the stock's.
+    """
+
+    index = pd.bdate_range(start=start, periods=121)
+    closes = [50.0] * 40 + [78.0] * 10 + [50.0] * 20 + [79.0] * 10 + [50.0] * 20 + [100.0] + [96.0] * 20
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    frame.iloc[100, frame.columns.get_loc("High")] = 100.0
+    frame["Volume"] = [400_000.0] * 100 + [2_400_000.0] + [800_000.0] * 20
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    # Between the two lower tops. On the tape the later one prints lower than the earlier; with
+    # every print on one scale it prints higher.
+    frame.iloc[60, frame.columns.get_loc("Dividends")] = 2.0
+    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+    frame.iloc[60:, paid] -= 2.0
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

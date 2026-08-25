@@ -159,6 +159,16 @@ def _boundaries(measurements: Mapping[str, Any]) -> tuple[Any, ...]:
     return tuple(measurements[name] for name in _BOUNDARIES)
 
 
+def _signature(walk: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Everything about one walk of the tops that a distribution could have chosen."""
+
+    return (
+        tuple(_boundaries(reading) for reading in walk["readings"]),
+        walk["may_contest"],
+        walk["ran_out_of_history"],
+    )
+
+
 def _on_one_scale(history: Any) -> Any:
     """The same bars with every print put on the scale that follows all of its distributions.
 
@@ -218,6 +228,52 @@ def _unmoved(measurements: Mapping[str, Any]) -> bool:
     )
 
 
+def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, Any]) -> dict[str, Any]:
+    readings: list[dict[str, Any]] = []
+    below, before = None, None
+    top = first["peak_high"]
+    # The chain is walked to the end of the span, and the registered distance decides only which
+    # of those tops may *contest* a criterion. Contesting is a claim about one structure, so a top
+    # far below the highest is a different structure and letting it dispute a limit would leave
+    # every criterion permanently open -- unbounded contesting walks an ordinary advance one bar
+    # at a time and nothing ever decides.
+    #
+    # Objecting is weaker and survives the distance. A structure the chain walked past is still a
+    # reading of these bars under which nothing decisive failed, and rejecting while holding its
+    # date in hand decides against evidence already in the envelope: one cent on a later high used
+    # to delete a hundred-and-eight percent advance in five weeks from consideration entirely.
+    #
+    # The count bound is a runaway guard. Reaching it is reported rather than passed over.
+    bound = spec["candidate_top_maximum_distance_pct"]
+    cut_at: dict[str, Any] | None = None
+    ran_out_of_history = False
+    may_contest = 0
+    while len(readings) < _MOST_TOPS_READ:
+        reading = first if not readings else measure_power_play(history, spec, below=below, before=before)
+        if reading["rejection"] is not None:
+            # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
+            # anything else is a top that exists with too little history behind it to measure --
+            # a gap, and treating it as the chain ending turns it into a silent vote for whatever
+            # the tops above it decided. That is the shape a recently listed stock arrives in.
+            if reading["rejection"] != _NO_MORE_TOPS:
+                ran_out_of_history = True
+            break
+        distance = None if top is None else (top - reading["peak_high"]) / top * 100
+        if distance is not None and distance > bound:
+            if cut_at is None:
+                cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
+        else:
+            may_contest = len(readings) + 1
+        readings.append(reading)
+        below, before = reading["peak_high"], reading["peak_date"]
+    return {
+        "readings": readings,
+        "cut_at": cut_at,
+        "ran_out_of_history": ran_out_of_history,
+        "may_contest": may_contest,
+    }
+
+
 def build_power_play_evidence(history: Any) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
@@ -242,43 +298,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     measurements = measure_power_play(history, spec)
     actions = measurements["corporate_action_sessions"]
 
-    readings: list[dict[str, Any]] = []
-    below, before = None, None
-    top = measurements["peak_high"]
-    # The chain is walked to the end of the span, and the registered distance decides only which
-    # of those tops may *contest* a criterion. Contesting is a claim about one structure, so a top
-    # far below the highest is a different structure and letting it dispute a limit would leave
-    # every criterion permanently open -- unbounded contesting walks an ordinary advance one bar
-    # at a time and nothing ever decides.
-    #
-    # Objecting is weaker and survives the distance. A structure the chain walked past is still a
-    # reading of these bars under which nothing decisive failed, and rejecting while holding its
-    # date in hand decides against evidence already in the envelope: one cent on a later high used
-    # to delete a hundred-and-eight percent advance in five weeks from consideration entirely.
-    #
-    # The count bound is a runaway guard. Reaching it is reported rather than passed over.
-    bound = spec["candidate_top_maximum_distance_pct"]
-    cut_at: dict[str, Any] | None = None
-    ran_out_of_history = False
-    may_contest = 0
-    while len(readings) < _MOST_TOPS_READ:
-        reading = measurements if not readings else measure_power_play(history, spec, below=below, before=before)
-        if reading["rejection"] is not None:
-            # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
-            # anything else is a top that exists with too little history behind it to measure --
-            # a gap, and treating it as the chain ending turns it into a silent vote for whatever
-            # the tops above it decided. That is the shape a recently listed stock arrives in.
-            if reading["rejection"] != _NO_MORE_TOPS:
-                ran_out_of_history = True
-            break
-        distance = None if top is None else (top - reading["peak_high"]) / top * 100
-        if distance is not None and distance > bound:
-            if cut_at is None:
-                cut_at = {"peak_date": reading["peak_date"], "distance_pct": distance}
-        else:
-            may_contest = len(readings) + 1
-        readings.append(reading)
-        below, before = reading["peak_high"], reading["peak_date"]
+    walk = _walk_the_tops(history, spec, measurements)
+    readings, cut_at = walk["readings"], walk["cut_at"]
+    ran_out_of_history, may_contest = walk["ran_out_of_history"], walk["may_contest"]
     exhausted = len(readings) >= _MOST_TOPS_READ
 
     # Which criteria a cash payout inside the span decided. Everything else it touched, it did
@@ -300,12 +322,16 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # And the ordering itself. If the tops keep their places once every print is on one scale, the
     # search read the stock; if they do not, it read the dividend, and no amount of adding cash
     # back to a depth afterwards recovers a top that was never the top.
+    # The whole chain, not just the reading at the top of it. Which tops the chain holds is
+    # decided by comparing highs, and a payout moves highs -- the highest top can keep its date
+    # and every one of its boundaries while the tops beneath it change places, and those are the
+    # readings that decide whether a criterion is contested and whether the rejection stands.
     on_one_scale = _on_one_scale(history)
-    reordered = (
-        on_one_scale is not None
-        and measurements["peak_date"] is not None
-        and _boundaries(measure_power_play(on_one_scale, spec)) != _boundaries(measurements)
-    )
+    reordered = False
+    if on_one_scale is not None and measurements["peak_date"] is not None:
+        first = measure_power_play(on_one_scale, spec)
+        adjusted = _walk_the_tops(on_one_scale, spec, first)
+        reordered = _signature(walk) != _signature(adjusted)
     if reordered:
         contested = set(primary_criteria)
     # Three states, because a reading nobody could read is not a reading that came through. A

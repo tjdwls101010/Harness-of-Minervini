@@ -280,30 +280,23 @@ class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
 
     Blocking on any distribution would leave every dividend payer permanently unreadable, and an
     ordinary quarterly payment is a fraction of a percent against a twenty-five percent limit.
-    What matters is whether the answer turns on it: a flag printing thirty-six percent that is
-    twenty-four once the payout is added back has been decided by the payout, and an ordinary
-    one has not.
+    What matters is whether the answer turns on it. The room for that is narrow and real: a
+    payout big enough to move the twenty-five percent depth gate also reshuffles the tops, and
+    then nothing decides anyway -- but a payout of a fraction of a percent still decides which
+    side of the ten percent tightness line a flag sits on.
     """
 
     def test_a_payout_that_carries_the_verdict_stops_the_criterion_deciding(self):
-        pack = evidence(advance_pct=160.0, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
+        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
 
-        verdict = evaluate_power_play(pack)
-
-        self.assertIn("flag_maximum_decline_gate_pct", pack["payout_sensitive_criteria"])
-        self.assertNotIn(
-            "fundamentals.power_play_exception.flag_maximum_decline_gate_pct", verdict["failed"]
-        )
+        self.assertEqual(pack["peak_identity"], "settled")
+        self.assertEqual(pack["payout_sensitive_criteria"], ["flag_tightness_or_vcp"])
 
     def test_an_ordinary_payout_leaves_the_criterion_deciding(self):
-        pack = evidence(flag_depth_pct=40.0, distribution_in_the_flag=0.05)
+        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.02)
 
-        verdict = evaluate_power_play(pack)
-
+        self.assertEqual(pack["peak_identity"], "settled")
         self.assertEqual(pack["payout_sensitive_criteria"], [])
-        self.assertIn(
-            "fundamentals.power_play_exception.flag_maximum_decline_gate_pct", verdict["failed"]
-        )
 
 
 class EveryTopTheSearchCouldHaveLandedOnIsRead(unittest.TestCase):
@@ -339,7 +332,7 @@ class NoReadingRejectsOnWhatThePayoutDecided(unittest.TestCase):
         saw. Neutralised only for the top reading, an earlier candidate could reject on a depth
         its own payout manufactured and cast that vote into "every reading rejects".
         """
-        pack = evidence(advance_pct=160.0, flag_sessions=30, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
+        pack = evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
         sensitive = {
             f"fundamentals.power_play_exception.{condition}"
             for condition in pack["payout_sensitive_criteria"]
@@ -355,18 +348,18 @@ class APayoutWithholdsItsOwnSignalAndNothingElse(unittest.TestCase):
         # An advance far enough above the limit that no candidate top crosses it, so the only
         # thing in question here is the payout.
         return evaluate_power_play(
-            evidence(advance_pct=160.0, flag_depth_pct=24.0, distribution_in_the_flag=3.2)
+            evidence(advance_pct=160.0, flag_depth_pct=20.0, distribution_in_the_flag=0.4)
         )
 
     def test_the_machine_channel_stops_saying_what_the_reducer_stopped_saying(self):
         verdict = self._verdict()
-        depth = next(
+        tightness = next(
             signal for signal in verdict["signals"]
-            if signal["id"] == "fundamentals.power_play_exception.flag_maximum_decline_gate_pct"
+            if signal["id"] == "fundamentals.power_play_exception.flag_tightness_or_vcp"
         )
 
-        self.assertEqual(depth["state"], "unavailable")
-        self.assertEqual(depth["withheld"], "distribution_inside_the_measured_span")
+        self.assertEqual(tightness["state"], "unavailable")
+        self.assertEqual(tightness["withheld"], "distribution_inside_the_measured_span")
 
     def test_a_payout_is_not_a_question_about_which_top_the_search_landed_on(self):
         verdict = self._verdict()
@@ -639,3 +632,20 @@ class AHistoryWithoutTheDistributionColumnHasNotSaidThereWereNone(unittest.TestC
         self.assertEqual(pack["distribution_evidence"], "missing")
         self.assertIn("distribution_evidence", verdict["missing"])
         self.assertEqual(verdict["failed"], [])
+
+
+class TheChainItselfIsPartOfTheSignature(unittest.TestCase):
+    """Which tops the chain holds is decided by comparing highs, and a payout moves highs.
+
+    The highest top can keep its date and its boundaries while the tops beneath it change places
+    -- and those are the readings that decide whether a criterion is contested and whether the
+    rejection stands. A signature that stops at the primary reading misses it.
+    """
+
+    def test_a_payout_that_only_reshuffles_the_lower_tops_unsettles_the_reading(self):
+        from tests.series import lower_top_reshuffling_payout_series
+
+        pack = build_power_play_evidence(lower_top_reshuffling_payout_series())
+
+        self.assertEqual(pack["peak_identity"], "disputed")
+        self.assertEqual(evaluate_power_play(pack)["failed"], [])
