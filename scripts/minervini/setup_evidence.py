@@ -173,6 +173,20 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> st
     return "needs_chart"
 
 
+def _quieting_state(measurements: Mapping[str, Any]) -> str:
+    """"If the stock's price and volume don't quiet down on the right side ... too risky."
+
+    The volume half of that sentence is the pivot-volume contraction. This is the price half,
+    and it needs no number either: the pause either printed tighter bars than the base it
+    ends or it did not.
+    """
+    pause = measurements.get("daily_range_median_pct")
+    base = measurements.get("base_daily_range_median_pct")
+    if pause is None or base is None:
+        return "unavailable"
+    return "pass" if pause < base else "fail"
+
+
 def _spike_state(measurements: Mapping[str, Any]) -> str:
     """The clause the source states with "should", about price rather than volume, in the plural.
 
@@ -265,8 +279,14 @@ def build_setup_evidence(
         doctrine.evaluate_band(_FOOTPRINT, "consolidation_footprint_duration_weeks", measurements["base_duration_weeks"]),
         _observation(
             _OVERHEAD_SUPPLY,
-            "unavailable" if measurements["overhead_supply_above_pivot_pct"] is None else "reported",
-            measurements["overhead_supply_above_pivot_pct"],
+            _quieting_state(measurements),
+            {
+                "pause_daily_range_median_pct": measurements["daily_range_median_pct"],
+                "base_daily_range_median_pct": measurements["base_daily_range_median_pct"],
+                "pause_close_change_median_pct": measurements["close_change_median_pct"],
+                "overhead_supply_above_pivot_pct": measurements["overhead_supply_above_pivot_pct"],
+                "overhead_supply_high": measurements["overhead_supply_high"],
+            },
         ),
         _observation(
             _FAILURE_RESET,

@@ -196,5 +196,34 @@ class SpikePluralityTests(unittest.TestCase):
         self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["required_evidence"])
 
 
+
+
+class QuietingDownTests(unittest.TestCase):
+    """The other half of a quotation already in the registry, computed and never looked at.
+
+    "If the stock's price and volume don't quiet down on the right side of the consolidation,
+    chances are that supply is still coming to market and the stock is too risky." The volume
+    half was wired; the price half was measured into two medians nothing read.
+    """
+
+    def test_a_final_pause_no_tighter_than_the_base_has_not_quieted_down(self) -> None:
+        frame, anchors = base_series(depths=(25.0, 10.0, 20.0))
+
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
+
+        supply = signal(result, "setup.overhead_supply_mechanism")
+        self.assertEqual(supply["state"], "fail")
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_a_tightening_base_reports_both_medians_and_the_supply_above_the_entry(self) -> None:
+        frame, anchors = base_series()
+
+        supply = signal(evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ)), "setup.overhead_supply_mechanism")
+
+        self.assertEqual(supply["state"], "pass")
+        self.assertLess(supply["measured"]["pause_daily_range_median_pct"], supply["measured"]["base_daily_range_median_pct"])
+        self.assertEqual(supply["measured"]["overhead_supply_above_pivot_pct"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

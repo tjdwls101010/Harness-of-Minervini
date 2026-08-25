@@ -44,6 +44,7 @@ _BASE_EVIDENCE = (
     # Without it a chain that skipped an unfavourable contraction is indistinguishable from
     # an honest one, and issuing READY over a gap the engine knows about is worse than the
     # gap.
+    "setup.overhead_supply_mechanism",
     "setup.declared_chain_completeness",
     "setup.chase_limit_above_pivot",
 )

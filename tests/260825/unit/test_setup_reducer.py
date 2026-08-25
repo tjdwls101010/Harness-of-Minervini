@@ -309,8 +309,8 @@ class ChainGamingTests(unittest.TestCase):
         result = evaluate_setup(build_setup_evidence(frame, late, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
 
         supply = signal(result, "setup.overhead_supply_mechanism")
-        self.assertEqual(supply["state"], "reported")
-        self.assertGreater(supply["measured"], 0)
+        self.assertGreater(supply["measured"]["overhead_supply_above_pivot_pct"], 0)
+        self.assertGreater(supply["measured"]["overhead_supply_high"], result["measurements"]["pivot"])
 
     def test_the_distance_the_entry_sits_above_the_pivot_travels_with_the_verdict(self) -> None:
         result = evaluate_setup(evidence_for())
