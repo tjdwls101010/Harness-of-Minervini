@@ -293,3 +293,35 @@ def borrowed_contraction_series() -> tuple[pd.DataFrame, list[str], list[str]]:
         [index[anchor.position].date().isoformat() for anchor in left],
         [index[anchor.position].date().isoformat() for anchor in current],
     )
+
+
+def from_legs(
+    legs: tuple[tuple[float, float, int], ...],
+    *,
+    last: tuple[float, float, float, float] | None = None,
+    wick: float = 0.03,
+    start: str = "2025-08-01",
+) -> pd.DataFrame:
+    """A frame from explicit price legs, for shapes no base builder produces.
+
+    Each leg is (from, to, sessions) of evenly spaced closes. `last` replaces the final bar's
+    OHLC, which is how a breakout that opens under the level it clears gets built.
+    """
+
+    closes: list[float] = []
+    for begin, end, sessions in legs:
+        step = (end - begin) / sessions
+        closes.extend(begin + step * (position + 1) for position in range(sessions))
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] + wick
+    frame["Low"] = frame["Close"] - wick
+    span = len(closes)
+    frame["Volume"] = [
+        2_000_000 * (1 - 0.7 * position / span) * (1.8 if position and closes[position] > closes[position - 1] else 0.5)
+        for position in range(span)
+    ]
+    if last is not None:
+        frame.loc[index[-1], ["Open", "High", "Low", "Close"]] = last
+        frame.loc[index[-1], "Volume"] = float(frame["Volume"].iloc[-51:-1].mean()) * 2.0
+    return frame[["Open", "High", "Low", "Close", "Volume"]]

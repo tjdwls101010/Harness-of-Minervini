@@ -336,30 +336,32 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class NoBorrowingFromTheLastStructureTests(unittest.TestCase):
-    """One contraction is no sequence, and the fix for that is not an older structure's."""
+class ADeepBaseIsStillOneBaseTests(unittest.TestCase):
+    """Contractions that contract the whole way describe one structure, however deep it is."""
 
-    def test_a_base_with_one_contraction_does_not_borrow_the_missing_one(self) -> None:
+    def test_a_forty_percent_base_whose_depths_contract_is_read_as_one(self) -> None:
         frame, left_behind, current = borrowed_contraction_series()
         chain = detected(frame)
 
         result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
 
-        self.assertEqual(chain, current)
-        self.assertEqual(len(result["measurements"]["contraction_depths_pct"]), 1)
-        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "unavailable")
-        self.assertNotEqual(result["setup_state"], "ready")
-
-    def test_reaching_back_would_have_supplied_it(self) -> None:
-        """What the boundary is worth, stated as the thing it prevents rather than asserted."""
-
-        frame, left_behind, current = borrowed_contraction_series()
-
-        spliced = evaluate_setup(build_setup_evidence(frame, [*left_behind, *current], **vouched(frame, current)))
-
-        depths = spliced["measurements"]["contraction_depths_pct"]
+        self.assertEqual(chain, [*left_behind, *current])
+        depths = result["measurements"]["contraction_depths_pct"]
         self.assertEqual([round(depth) for depth in depths], [40, 15, 7])
-        self.assertTrue(all(later < earlier for earlier, later in zip(depths, depths[1:])))
+        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "pass")
+
+    def test_its_depth_is_reported_against_the_source_range_it_sits_outside(self) -> None:
+        """Forty percent clears the fifty percent gate and sits past the healthy band. Both are
+        said, because the gate is what decides and the band is what a reader weighs."""
+
+        frame, _, _ = borrowed_contraction_series()
+        chain = detected(frame)
+
+        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
+
+        self.assertEqual(signal(result, "market.correction_depth_healthy_leader.correction_failure_threshold")["state"], "pass")
+        band = signal(result, "market.correction_depth_healthy_leader.healthy_correction_range")
+        self.assertEqual(band["state"], "beyond_source_range")
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):

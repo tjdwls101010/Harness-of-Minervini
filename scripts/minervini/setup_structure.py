@@ -49,6 +49,11 @@ def completed_bars(history: Any) -> pd.DataFrame | None:
     if bars.isna().any().any() or (bars <= 0).any().any():
         return None
     index = pd.DatetimeIndex(bars.index)
+    # Two rows under one label make a bar lookup return a Series, and reading a price off it
+    # raises inside the detector -- an internal contract failure where the envelope should carry
+    # typed unavailability.
+    if index.has_duplicates:
+        return None
     # The production provider returns the exchange's own tz-aware index while the fixtures
     # are naive, so a swing date parsed from a string matched one and missed the other.
     if index.tz is not None:

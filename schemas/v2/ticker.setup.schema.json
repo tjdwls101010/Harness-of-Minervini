@@ -34,7 +34,7 @@
     },
     "inputs": {
       "approved_bars": {
-        "description": "The bars_fingerprint the chain was approved from, as ticker.swings and ticker.chart both report it. Required whenever chain_completeness is declared, because a chart reading is a reading of one picture: comparing the anchor dates alone let a chain approved from another vintage of the series vouch for this one, with every date matching while the pivot, the depths and the base the reader looked at had all moved. A value that does not match the bars being judged does not fail the base -- the reading comes back incomplete naming approval_covers_different_bars, with the current fingerprint beside it to re-approve from. It gates a reading that would otherwise have counted: a chain declared partial already fails on its own terms and a chain the bars contradict is refused before any approval is looked at, so neither outcome changes with the vintage.",
+        "description": "The bars_fingerprint the chain was approved from, as ticker.swings and ticker.chart both report it. Required whenever chain_completeness is complete, which is the reading it gates -- a caller admitting a gap is telling the truth whichever vintage they read it from. It is needed because a chart reading is a reading of one picture: comparing the anchor dates alone let a chain approved from another vintage of the series vouch for this one, with every date matching while the pivot, the depths and the base the reader looked at had all moved. A value that does not match the bars being judged does not fail the base -- the reading comes back incomplete naming approval_covers_different_bars, with the current fingerprint beside it to re-approve from. It gates a reading that would otherwise have counted: a chain declared partial already fails on its own terms and a chain the bars contradict is refused before any approval is looked at, so neither outcome changes with the vintage.",
         "required": false,
         "type": "string"
       },
@@ -173,10 +173,10 @@
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
-      "needs_input": "Required evidence is absent, or the declared chain contradicts the bars.",
+      "needs_input": "Required evidence is absent, or the declared chain contradicts the bars, and a caller can supply what is missing.",
       "ok": "The setup reducer produced ready, wait, or avoid.",
       "partial": "Completed price history stops before the requested session, so the setup is not judged.",
-      "unavailable": "Completed price history is unavailable."
+      "unavailable": "Completed price history is unavailable, or the detector will not vouch for any segmentation of these bars -- the same gap ticker.swings reports, and no argument to this command changes it, so no next capability is offered."
     },
     "summary": "Measure a declared base against completed bars and decide the setup on evidence each route must positively have."
   }

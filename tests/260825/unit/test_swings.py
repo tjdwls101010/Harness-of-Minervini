@@ -18,7 +18,7 @@ import unittest
 import pandas as pd
 
 from scripts.minervini.swings import base_chain, canonical_chain, segment
-from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, two_bases_series
+from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, two_bases_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
@@ -186,11 +186,12 @@ class OneBaseAtATimeTests(unittest.TestCase):
 
         self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
 
-    def test_a_structure_price_left_is_not_reached_back_into(self) -> None:
-        """The contractions of a structure the stock departed are not this base's contractions.
+    def test_a_history_under_one_peak_is_described_whole_not_cut_to_the_flattering_half(self) -> None:
+        """Whether a base under an older peak is one structure or two is not in the bars.
 
-        Leaving is clearing a high and then holding above it, so the rim search stops there
-        rather than at the highest high in the whole history.
+        Every rule tried for cutting it deleted evidence a gate reads. Left whole, a history
+        that really is two structures shows a contraction that widens at the seam, and
+        `setup.contractions_must_contract` rejects it there by name.
         """
 
         frame, left_behind, current = bases_under_an_older_high_series()
@@ -199,51 +200,49 @@ class OneBaseAtATimeTests(unittest.TestCase):
         dates = [item["date"] for item in chain["anchors"]]
 
         self.assertEqual(chain["state"], "resolved")
-        self.assertTrue(set(current) <= set(dates))
-        self.assertFalse(set(left_behind) & set(dates))
+        # The pause between the older structure's pivot and the advance is a turning point too,
+        # so the chain is both structures plus the low that joins them.
+        self.assertEqual(dates[: len(left_behind)], left_behind)
+        self.assertEqual(dates[-len(current) :], current)
+        self.assertEqual(len(dates), len(left_behind) + len(current) + 1)
 
-    def test_a_level_cleared_only_on_the_pivot_bar_was_not_held(self) -> None:
-        """Nothing that held is not the same as nothing that failed.
+    def test_a_final_rally_above_an_earlier_one_is_a_contraction_not_a_departure(self) -> None:
+        """Inside a correction, clearing an earlier rally top is what contracting looks like.
 
-        With no session after the crossing there is no evidence either way, and reading the
-        empty run as holding turned a poke on the pivot bar itself into a departure -- which
-        left the rim search with one anchor and no base at all.
+        A rule that read it as leaving cut the base down to its last two anchors, and after a
+        breakout -- when price holds above every interior high at once -- cut it away entirely.
         """
 
-        prices = [80.0, 100.0, 80.0, 90.0, 85.0, 92.0, 88.0]
-        index = pd.bdate_range("2026-01-02", periods=len(prices))
-        frame = pd.DataFrame(
-            {"Open": prices, "High": prices, "Low": prices, "Close": prices, "Volume": [1e6] * len(prices)},
-            index=index,
+        frame = from_legs(
+            ((55, 100, 55), (100, 80, 20), (80, 90, 10), (90, 85, 10), (85, 89, 9),
+             (89, 92, 1), (92, 90.5, 3), (90.5, 95, 1)),
+            last=(92.1, 95.2, 91.9, 95.0),
         )
 
         chain = canonical_chain(frame)
 
-        self.assertEqual([round(item["price"], 1) for item in chain["anchors"]], [100.0, 80.0, 90.0, 85.0, 92.0])
+        self.assertEqual([round(item["price"]) for item in chain["anchors"]], [100, 80, 90, 85, 92])
 
-    def test_a_level_that_failed_once_can_still_be_left_later(self) -> None:
-        """Any close that was held, not the first one.
+    def test_a_seam_between_two_structures_shows_up_as_a_contraction_that_widens(self) -> None:
+        """What rejects a spliced history, since the segmentation deliberately does not."""
 
-        Reading only the first crossing meant a level price poked through and fell back from
-        could never afterwards be left, however decisively it was later cleared -- so the older
-        structure stayed spliced onto the current base forever after one failed attempt.
-        """
-
-        legs = [(60.0, 100.0, 30), (100.0, 70.0, 12), (70.0, 105.0, 14), (105.0, 95.0, 8),
-                (95.0, 104.0, 10), (104.0, 101.5, 6), (101.5, 103.8, 6), (103.8, 102.5, 3)]
-        closes: list[float] = []
-        for start_price, end_price, sessions in legs:
-            step = (end_price - start_price) / sessions
-            closes += [start_price + step * (position + 1) for position in range(sessions)]
-        index = pd.bdate_range("2026-01-02", periods=len(closes))
-        frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
-        frame["High"] = frame["Close"] + 0.05
-        frame["Low"] = frame["Close"] - 0.05
-        frame["Volume"] = 1e6
+        frame = from_legs(
+            ((55, 100, 55), (100, 90, 12), (90, 95, 10), (95, 80, 12), (80, 97, 10), (97, 93, 8),
+             (93, 96.8, 8), (96.8, 94, 6), (94, 96.6, 6), (96.6, 94.5, 3), (94.5, 99, 1)),
+            last=(96.7, 99.2, 96.5, 99.0),
+            wick=0.02,
+            start="2025-05-01",
+        )
 
         chain = canonical_chain(frame)
+        prices = [item["price"] for item in chain["anchors"]]
+        depths = [
+            100 * (prices[index] - prices[index + 1]) / prices[index]
+            for index in range(0, len(prices) - 1, 2)
+        ]
 
-        self.assertTrue(all(item["price"] > 94.0 for item in chain["anchors"]))
+        self.assertEqual(len(chain["anchors"]), 9)
+        self.assertTrue(any(later > earlier for earlier, later in zip(depths, depths[1:])), depths)
 
 
 class UnusableHistoryTests(unittest.TestCase):
@@ -251,6 +250,22 @@ class UnusableHistoryTests(unittest.TestCase):
         frame, _ = base_series()
 
         self.assertEqual(segment(frame.iloc[:0], retracement_pct=1.0)["anchors"], [])
+
+    def test_a_history_with_a_repeated_session_is_unusable_rather_than_fatal(self) -> None:
+        """A provider that returns the same date twice is a data problem, not a crash.
+
+        Two rows under one label make a bar lookup return a Series, and reading a price off it
+        raised inside the detector -- an internal contract failure where the envelope should
+        have carried typed unavailability.
+        """
+
+        frame, _ = base_series()
+        doubled = pd.concat([frame.iloc[:1], frame])
+
+        chain = canonical_chain(doubled)
+
+        self.assertEqual(chain["state"], "unavailable")
+        self.assertEqual(chain["anchors"], [])
 
     def test_a_retracement_that_is_not_a_positive_percentage_is_refused(self) -> None:
         frame, _ = base_series()

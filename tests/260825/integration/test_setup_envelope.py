@@ -63,9 +63,29 @@ class AGapTheEngineKnowsAboutOutranksTheCallersTests(unittest.TestCase):
 
         self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
         self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertEqual(payload["status"], "needs_input")
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
         self.assertEqual(reasons.get("setup.declared_chain_completeness"), "segmentation_unstable")
+        # Outranking the caller's admission is not the same as losing it: the signal that took
+        # precedence carries the reading it took precedence over.
+        completeness = next(item for item in payload["signals"] if item["id"] == "setup.declared_chain_completeness")
+        self.assertEqual(completeness["measured"]["reading"], "partial")
+
+
+class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
+    def test_a_segmentation_nothing_will_vouch_for_stops_the_route_rather_than_routing_on(self) -> None:
+        """The same gap, answered two different ways by two capabilities.
+
+        ticker.swings says unavailable and offers no next step, because the parameters are out
+        of the caller's reach and the chart draws no anchors for a chain the detector refuses.
+        The setup was sending them to that chart anyway, on a needs_input that named nothing
+        they could supply.
+        """
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["next_capabilities"], [])
 
 
 class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
@@ -82,6 +102,21 @@ class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
             }, runtime=runtime)
 
         self.assertEqual(raised.exception.field, "approved_bars")
+
+    def test_admitting_a_gap_costs_nothing_including_naming_the_bars(self) -> None:
+        """The fingerprint gates a reading that would otherwise have counted, and partial is not
+        one: it fails on its own terms whichever vintage it was read from."""
+
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        payload = execute("ticker.setup", {
+            "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+            "chain_completeness": "partial", "no_cache": True,
+        }, runtime=runtime)
+
+        self.assertEqual(payload["data"]["declared_readings"]["chain_completeness"], "partial")
+        self.assertNotEqual(payload["data"]["setup_state"], "ready")
 
     def test_an_approval_of_other_bars_does_not_carry_over_to_these(self) -> None:
         """Same dates, different prices, and the reading was of the other picture.

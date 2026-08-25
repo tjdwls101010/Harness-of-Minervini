@@ -191,6 +191,9 @@ def _completeness_state(
         # their reading -- and the envelope came back ok, wait, and pointing at ticker.risk, with
         # the gap the engine already knew about nowhere in it.
         basis["sensitivity"] = detected.get("sensitivity")
+        # The caller's own reading rides along, so a partial declaration is still visible in the
+        # signal that outranked it rather than only in declared_readings.
+        basis["reading"] = reading
         return "needs_chart", basis
     if reading == "partial":
         # Admitting a gap costs the caller nothing and tells the truth, and it fails on its own
