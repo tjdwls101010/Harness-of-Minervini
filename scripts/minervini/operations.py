@@ -679,6 +679,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         f"fundamentals.power_play_exception.{condition}"
         for condition in verdict["corporate_action_under_another_top"]
     }
+    rejected_elsewhere = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["rejected_under_another_top"]
+    }
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
@@ -736,6 +740,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # this capability would refuse.
         if item in action_elsewhere:
             return "corporate_action_under_another_top"
+        # A top the bars already threw out. It was issued no key either, so a reader sent to draw
+        # its chart would come back with an answer this capability refuses.
+        if item in rejected_elsewhere:
+            return "structure_rejected_under_another_top"
         # The one gap that closes by itself. Reported as a chart reading, it would be closed by
         # whatever approval seam answers the chart -- and a twelve-session minimum would have been
         # waived by a reading of the volume.

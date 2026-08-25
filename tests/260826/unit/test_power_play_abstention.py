@@ -131,16 +131,21 @@ class WhichSilenceIsHoldingTheCriterion(unittest.TestCase):
     """
 
     def _classify(self, primary, *contesting):
-        """Each contesting reading as (criteria, readable), readable unless the test says so."""
+        """Each contesting reading as criteria, or (criteria, readable, asked).
+
+        A bare dict is the ordinary case: the reading was readable and was asked about every
+        criterion it left to a chart.
+        """
         from scripts.minervini.power_play_evidence import _how_the_tops_disagree
 
-        return _how_the_tops_disagree(
-            primary,
-            [
-                (dict(other), True) if isinstance(other, dict) else (dict(other[0]), other[1])
-                for other in contesting
-            ],
-        )
+        def unpack(other):
+            if isinstance(other, dict):
+                return (dict(other), True, set(other))
+            criteria, readable = dict(other[0]), other[1]
+            asked = other[2] if len(other) > 2 else set(criteria)
+            return (criteria, readable, set(asked))
+
+        return _how_the_tops_disagree(primary, [unpack(other) for other in contesting])
 
     def test_a_different_answer_is_a_dissent(self) -> None:
         self.assertEqual(self._classify({"a": "pass"}, {"a": "fail"}), {"a": "dissent"})
@@ -185,6 +190,22 @@ class WhichSilenceIsHoldingTheCriterion(unittest.TestCase):
     def test_a_dissent_still_outranks_it(self) -> None:
         self.assertEqual(
             self._classify({"a": "pass"}, ({"a": "pass"}, False), {"a": "fail"}), {"a": "dissent"}
+        )
+
+    def test_a_top_the_bars_already_threw_out_was_never_asked_either(self) -> None:
+        """`needs_chart` says the numbers declined, not that anybody was asked.
+
+        A reading the bars rejected is issued no key, so reporting the criterion as a chart
+        nobody opened names a picture that would close nothing and sends the reader to a
+        capability whose answer this one would refuse.
+        """
+        self.assertEqual(
+            self._classify({"a": "pass"}, ({"a": "needs_chart"}, True, set())), {"a": "rejected"}
+        )
+
+    def test_and_a_top_that_was_asked_still_reports_the_chart(self) -> None:
+        self.assertEqual(
+            self._classify({"a": "pass"}, ({"a": "needs_chart"}, True, {"a"})), {"a": "chart"}
         )
 
     def test_a_criterion_no_top_may_contest_is_never_held(self) -> None:

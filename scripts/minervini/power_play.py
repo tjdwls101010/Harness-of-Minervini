@@ -431,6 +431,9 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # consents to nothing -- and unlike the chart gaps beside it, no key exists that would let a
     # reader close it.
     action_elsewhere = set(evidence.get("corporate_action_under_another_top") or ())
+    # And a top whose own reading the bars already rejected. No key was issued for it either, so
+    # what holds the criterion is a reading of these bars saying this is not a Power Play.
+    rejected_elsewhere = set(evidence.get("rejected_under_another_top") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
     # Only the tops speak to this. A payout withholds the criterion it decided and says so under
@@ -461,6 +464,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
             and condition not in awaiting_elsewhere
             and condition not in payout_elsewhere
             and condition not in action_elsewhere
+            and condition not in rejected_elsewhere
         )
         trusted = agreed and unmoved
         if state == "pass" and trusted:
@@ -577,6 +581,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
         "payout_decided_under_another_top": sorted(payout_elsewhere),
         "corporate_action_under_another_top": sorted(action_elsewhere),
+        "rejected_under_another_top": sorted(rejected_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),

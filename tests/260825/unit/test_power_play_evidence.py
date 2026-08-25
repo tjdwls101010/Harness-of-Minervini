@@ -696,6 +696,7 @@ class TheChainItselfIsPartOfTheSignature(unittest.TestCase):
             ],
             "may_contest": len(dates),
             "ran_out_of_history": False,
+            "peak_confirmed": True,
         }
 
     def test_the_same_primary_under_a_different_chain_is_a_different_reading(self):

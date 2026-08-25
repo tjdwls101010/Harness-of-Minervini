@@ -1088,3 +1088,23 @@ def two_orders_that_confirm_different_tops_series(*, start: str = "2026-05-19") 
     frame["Stock Splits"] = 0.0
     frame["Dividends"] = 0.0
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_payout_that_confirms_the_peak_series(*, flag_depth_pct: float = 10.1, start: str = "2026-01-02") -> pd.DataFrame:
+    """A structure whose peak is a confirmed turning point only because of the ex-date drop.
+
+    The cash comes out of the print on the ex-date, and that drop is a retracement the stock never
+    made. Read on the tape the segmentation confirms the top; read with every print on one scale
+    it confirms nothing, so the withheld qualification is withheld on arithmetic about the
+    dividend rather than on anything the stock did.
+    """
+
+    frame = power_play_series(flag_depth_pct=flag_depth_pct, start=start)
+    frame["High"] = frame["Close"] * 1.03
+    frame["Low"] = frame["Close"] * 0.97
+    peak = int(frame["High"].to_numpy().argmax())
+    ex_date = peak + 5
+    frame.iloc[ex_date, frame.columns.get_loc("Dividends")] = 1.1
+    columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
+    frame.iloc[ex_date:, columns] -= 1.1
+    return frame

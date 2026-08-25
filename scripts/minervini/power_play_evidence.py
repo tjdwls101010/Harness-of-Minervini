@@ -129,11 +129,11 @@ _ABSTAINS = ("unavailable", "needs_chart")
 # Among the silences, the chart is last because it is the only one a reader can act on -- reported
 # ahead of a silence nothing they supply can close, it sends them to draw a picture that will not
 # close the criterion when they bring it back.
-_DISAGREEMENTS = ("dissent", "payout", "action", "chart")
+_DISAGREEMENTS = ("dissent", "rejected", "payout", "action", "chart")
 
 
 def _how_the_tops_disagree(
-    primary: Mapping[str, str], contesting: Sequence[tuple[Mapping[str, str], bool]]
+    primary: Mapping[str, str], contesting: Sequence[tuple[Mapping[str, str], bool, set[str]]]
 ) -> dict[str, str]:
     """Per criterion, whether a top that may contest it failed to agree, and why.
 
@@ -151,17 +151,29 @@ def _how_the_tops_disagree(
         # an abstention with anything says nothing about the tops.
         if answer in _ABSTAINS:
             continue
-        causes = {
-            "payout" if state == "unavailable" else "chart" if state == "needs_chart" else "dissent"
-            for state, readable in ((criteria[condition], readable) for criteria, readable in contesting)
-            if readable and state != answer
-        }
-        # A reading nobody could read agrees with nothing, including by coincidence. Its criteria
-        # are arithmetic about a split rather than about the stock, so matching the primary's
-        # answer is not consent to it -- and no key was issued for it, so reporting it as a chart
-        # a reader has not opened asks for an answer the capability will not accept.
-        if any(not readable for _, readable in contesting):
-            causes.add("action")
+        causes = set()
+        for criteria, readable, asked in contesting:
+            # A reading nobody could read agrees with nothing, including by coincidence. Its
+            # criteria are arithmetic about a split rather than about the stock, so matching the
+            # primary's answer is not consent to it.
+            if not readable:
+                causes.add("action")
+                continue
+            state = criteria[condition]
+            if state == answer:
+                continue
+            if state == "unavailable":
+                causes.add("payout")
+            elif state != "needs_chart":
+                causes.add("dissent")
+            # `needs_chart` says the numbers declined, not that anybody was asked. A reading the
+            # bars already threw out is issued no key, so calling this a chart nobody has opened
+            # names a picture that would close nothing and points the reader at a capability whose
+            # answer this one would refuse.
+            elif condition in asked:
+                causes.add("chart")
+            else:
+                causes.add("rejected")
         for cause in _DISAGREEMENTS:
             if cause in causes:
                 disagreement[condition] = cause
@@ -213,6 +225,11 @@ def _signature(walk: Mapping[str, Any]) -> tuple[Any, ...]:
         tuple(_boundaries(reading) for reading in walk["readings"]),
         walk["may_contest"],
         walk["ran_out_of_history"],
+        # Whether the segmentation confirms the top this hangs from is part of the structure, not
+        # part of the answers. A payout can create the confirmation: the ex-date drop is a
+        # retracement the stock never made, so the raw prints confirm a turning point the one
+        # scale does not, and read off the raw prints alone the withheld qualification came back.
+        walk["peak_confirmed"],
     )
 
 
@@ -641,6 +658,11 @@ def build_power_play_evidence(
         given = {}
     chart_questions: list[dict[str, Any]] = []
     answered: list[dict[str, str]] = [{} for _ in readings]
+    # Which conditions each reading was actually asked about. A gap that names the chart has to
+    # correspond to a key somebody can answer, and the several reasons a reading is never asked --
+    # a split in its span, a rejection the bars already reached, a structure the payout reordered
+    # -- are all invisible in the criteria themselves, which go on reading `needs_chart`.
+    issued: list[set[str]] = [set() for _ in readings]
     for index, (criteria, reading) in enumerate(zip(every_criteria, readings)):
         if fingerprint is None or reordered or not _unmoved(reading):
             continue
@@ -653,6 +675,7 @@ def build_power_play_evidence(
             if criteria[condition] != "needs_chart":
                 continue
             key = _chart_key(fingerprint, condition, reading, asks[condition])
+            issued[index].add(condition)
             answer = given.get(key)
             chart_questions.append(
                 {
@@ -693,18 +716,22 @@ def build_power_play_evidence(
     disagreement = _how_the_tops_disagree(
         primary_criteria,
         [
-            (criteria, _unmoved(reading))
-            for criteria, reading in zip(every_criteria[1:may_contest], readings[1:may_contest])
+            (criteria, _unmoved(reading), asked)
+            for criteria, reading, asked in zip(
+                every_criteria[1:may_contest], readings[1:may_contest], issued[1:may_contest]
+            )
         ],
     )
     contested = {condition for condition, cause in disagreement.items() if cause == "dissent"}
     payout_elsewhere = {condition for condition, cause in disagreement.items() if cause == "payout"}
     action_elsewhere = {condition for condition, cause in disagreement.items() if cause == "action"}
+    rejected_elsewhere = {condition for condition, cause in disagreement.items() if cause == "rejected"}
     awaiting_elsewhere = {condition for condition, cause in disagreement.items() if cause == "chart"}
     if reordered:
         contested = set(primary_criteria)
         payout_elsewhere = set()
         action_elsewhere = set()
+        rejected_elsewhere = set()
         awaiting_elsewhere = set()
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
@@ -845,6 +872,9 @@ def build_power_play_evidence(
         # something a reader closes. No key was issued for that reading, so reporting it as a
         # chart nobody has opened asks for an answer this capability would refuse.
         "corporate_action_under_another_top": sorted(action_elsewhere),
+        # And a top whose own reading the bars already rejected. It was never asked either, and
+        # what holds the criterion is that a reading of these bars says this is not a Power Play.
+        "rejected_under_another_top": sorted(rejected_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".
