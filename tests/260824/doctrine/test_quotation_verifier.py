@@ -157,5 +157,28 @@ class ShortPieceTests(unittest.TestCase):
         self.assertEqual(len(declared), 1)
 
 
+class EmptyQuotationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.rows = verifier.load_rows()
+        if not self.rows:
+            self.skipTest("build-time corpus is absent")
+
+    def test_punctuation_long_enough_to_look_like_a_sentence_is_a_defect(self) -> None:
+        defects, _, _ = verifier.verify(one_claim("." * 40), self.rows)
+
+        self.assertEqual(len(defects), 1, "a citation with no words is not a citation")
+
+    def test_the_registry_validator_also_refuses_a_wordless_citation(self) -> None:
+        from scripts.minervini import doctrine
+
+        broken = json.loads(REGISTRY.read_text(encoding="utf-8"))
+        record = next(item for item in broken["claims"] if item["id"] == "eligibility.standard_trend_template")
+        record["provenance"]["quotations"][0]["text"] = "." * 40
+
+        result = doctrine.validate(broken)
+
+        self.assertFalse(result["valid"])
+
+
 if __name__ == "__main__":
     unittest.main()

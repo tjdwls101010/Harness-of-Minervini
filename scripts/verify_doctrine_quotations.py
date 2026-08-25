@@ -155,6 +155,11 @@ def verify(registry: dict, rows: dict[tuple[str, int], tuple[str, ...]]) -> tupl
                 defects.append(f"{label}: cites {key[0]} row {key[1]}, which does not exist")
                 continue
             readings = rows[key]
+            if len(collapse(quotation["text"])) < _MINIMUM_RUN:
+                # Everything below normalises punctuation away, so a citation made only of
+                # punctuation arrives empty and then matches every reading trivially.
+                defects.append(f"{label}: contains no source words to check")
+                continue
             # An explicit ellipsis is the author of the quotation telling you they cut
             # something; each side of it still has to be the source's own words.
             pieces = [collapse(piece) for piece in quotation["text"].split("...") if collapse(piece)]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import json
 import math
+import re
 from collections.abc import Iterable, Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -300,7 +301,10 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             if not isinstance(quotation.get("row"), int) or isinstance(quotation.get("row"), bool):
                 errors.append(f"{label}.provenance.quotations[{position}].row must be an integer chapter id")
             text = quotation.get("text")
-            if not isinstance(text, str) or len(text.strip()) < _MINIMUM_QUOTATION_LENGTH:
+            # Measured in letters and digits, not characters: forty periods clear a raw
+            # length check while quoting nothing at all.
+            words = re.sub(r"[^A-Za-z0-9]", "", text) if isinstance(text, str) else ""
+            if len(words) < _MINIMUM_QUOTATION_LENGTH:
                 errors.append(f"{label}.provenance.quotations[{position}].text must quote the source")
         thresholds = record["thresholds"]
         if not isinstance(thresholds, Mapping):
