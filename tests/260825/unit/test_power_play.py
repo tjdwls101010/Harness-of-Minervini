@@ -37,24 +37,20 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
         self.assertEqual(measured["flag_sessions"], 20)
         self.assertAlmostEqual(measured["flag_depth_pct"], 12.0, places=6)
 
-    def test_a_high_inside_the_advance_denies_the_flag_its_peak(self):
-        """A flag hanging under a high the same structure already made is not a Power Play flag.
+    def test_a_high_inside_the_advance_becomes_the_peak_the_flag_hangs_from(self):
+        """A flag is under the structure's high, not under whichever high the search stopped at.
 
-        Both windows are anchored at the last bar, which is what keeps the reading still when a
-        caller loads more history -- and is also what makes this invisible from the flag alone.
-        Two of eighteen real tickers reported a six-week flag that was only six weeks because
-        the window stopped there; the bar before it had traded higher.
+        Two of twenty-three real tickers reported a six-week flag that was six weeks only
+        because the search window ended there; a bar shortly before it had traded higher. The
+        earlier high is the top the sideways move is under, so the flag is measured from it and
+        comes out longer than the source allows.
         """
         bars = power_play_series(spike_above_peak_pct=8.0)
 
         measured = measure_power_play(bars, SPEC)
 
-        self.assertIs(measured["peak_is_the_structure_high"], False)
-
-    def test_an_undisturbed_advance_leaves_the_peak_the_structure_high(self):
-        measured = measure_power_play(power_play_series(), SPEC)
-
-        self.assertIs(measured["peak_is_the_structure_high"], True)
+        self.assertAlmostEqual(measured["peak_high"], 21.0 * 1.08, places=6)
+        self.assertGreater(measured["flag_weeks"], 6.0)
 
     def test_a_later_equal_high_does_not_restart_the_flag(self):
         """The flag runs from the first session that made this high, not the last.
@@ -69,6 +65,38 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
         measured = measure_power_play(bars, SPEC)
 
         self.assertEqual(measured["flag_sessions"], 40)
+
+    def test_a_flag_longer_than_the_source_allows_measures_longer(self):
+        """The six-week limit has to be able to reject, which means finding what it rejects.
+
+        Looking for the peak inside the longest flag the source allows makes every flag six
+        weeks or shorter by selection: the limit is then satisfied by the search rather than by
+        the stock. The peak is looked for across the longest structure the criteria describe --
+        an eight-week advance and a six-week flag -- so a flag that really ran ten weeks
+        measures ten and fails on its own length.
+        """
+        bars = power_play_series(flag_sessions=50)
+
+        measured = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measured["flag_sessions"], 50)
+        self.assertAlmostEqual(measured["flag_weeks"], 10.0, places=6)
+
+    def test_a_truncated_baseline_is_no_baseline(self):
+        """The volume the advance began against needs the full window, or it is not that volume.
+
+        Sliced to a shorter lookback, five real tickers reported the same peak, the same advance
+        and the same flag while the launch volume ratio moved -- the only thing that had changed
+        was how many sessions were left in front of the launch to average. A short average
+        wearing a full one's name is worse than an admitted gap.
+        """
+        bars = power_play_series(dormancy_sessions=60)
+
+        full = measure_power_play(bars, SPEC)
+        clipped = measure_power_play(bars.iloc[-70:], SPEC)
+
+        self.assertIsNotNone(full["advance_volume_ratio"])
+        self.assertIsNone(clipped["advance_volume_ratio"])
 
 
 if __name__ == "__main__":

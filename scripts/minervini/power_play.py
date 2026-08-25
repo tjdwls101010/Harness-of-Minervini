@@ -42,7 +42,6 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_sessions": None,
         "advance_weeks": None,
         "advance_volume_ratio": None,
-        "peak_is_the_structure_high": None,
         "flag_sessions": None,
         "flag_weeks": None,
         "flag_depth_pct": None,
@@ -62,18 +61,18 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     flag_window = int(spec["flag_window_sessions"])
     advance_window = int(spec["advance_window_sessions"])
 
-    # The peak the flag hangs from is the highest bar inside the longest flag the source
-    # allows -- and then the FIRST session that printed it, counting from the last time the
-    # stock traded above it. Reading it from the last equal high instead re-labels the flag
-    # that came before as part of the advance: a session that merely matched a high already
-    # made is not the explosive move the first criterion is about, and a forty-session flag
-    # read from it becomes a twelve-session one that clears the six-week limit.
+    # The peak the flag hangs from is the highest bar of the longest structure the criteria
+    # describe -- an advance of up to eight weeks and a flag of up to six -- and then the FIRST
+    # session that printed it, counting from the last time the stock traded above it.
     #
-    # It is also what stops the six-week limit from being a tautology. Bounded by the search
-    # window on both sides, every flag would measure at six weeks or less by construction;
-    # anchored at the first occurrence, a flag that really did run longer measures longer and
-    # fails on its own length.
-    window = bars.iloc[-(flag_window + 1):]
+    # Both halves of that are load-bearing, and each was wrong on its own once. Looking only
+    # inside the flag's own limit makes the limit satisfied by the search: every flag measures
+    # six weeks or less because nothing longer can be found, and a stock ten weeks past its
+    # high reports a fictional flag off some lower high inside the decline. Reading the peak
+    # from the LAST equal high instead re-labels the flag before it as advance, so a forty
+    # session flag becomes twelve and clears the limit that way. Together the limit rejects
+    # what it is supposed to reject: a flag that really ran ten weeks measures ten.
+    window = bars.iloc[-(advance_window + flag_window + 1):]
     peak_high = float(window["High"].max())
     exceeded = bars.index[bars["High"] > peak_high]
     since = bars.loc[exceeded[-1]:].iloc[1:] if len(exceeded) else bars
@@ -86,20 +85,17 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     if not len(before):
         return _empty("history_has_no_sessions_before_the_peak")
 
-    # Both windows are anchored at the last bar, so the flag alone cannot say whether the peak
-    # it hangs from is the top of anything: a search that starts six weeks back finds a six-week
-    # flag whether or not the bar before it traded higher. Two of eighteen real tickers reported
-    # exactly that. The structure's own span is what settles it -- the advance's window through
-    # the last bar -- and a peak that is not its highest point is not the peak the criteria are
-    # about, however tidy the flag under it looks.
-    structure_high = float(bars.iloc[max(0, peak - advance_window):]["High"].max())
-
     low_label = before["Low"].idxmin()
     advance_low = float(before.loc[low_label, "Low"])
     launch = int(bars.index.get_loc(low_label))
     # The volume the advance "commences on", against what the same stock traded before it. The
     # source gives the clause no magnitude, so this is the ratio and nothing decides on it.
-    baseline = bars.iloc[max(0, launch - advance_window):launch]
+    #
+    # The window is required in full rather than taken as far as it reaches. Sliced to a shorter
+    # lookback, five real tickers reported the same peak, advance and flag while this ratio
+    # moved, because the only thing that had changed was how many sessions were left in front of
+    # the launch to average -- a short average wearing a full one's name.
+    baseline = bars.iloc[launch - advance_window:launch] if launch >= advance_window else bars.iloc[0:0]
 
     return {
         "peak_date": peak_label.date().isoformat(),
@@ -114,7 +110,6 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
             if len(baseline) and float(baseline["Volume"].mean()) > 0
             else None
         ),
-        "peak_is_the_structure_high": peak_high >= structure_high,
         "flag_sessions": int(len(flag)),
         "flag_weeks": len(flag) / _SESSIONS_PER_WEEK,
         "flag_depth_pct": (peak_high - float(flag["Low"].min())) / peak_high * 100 if len(flag) else None,
