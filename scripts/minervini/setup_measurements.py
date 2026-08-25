@@ -278,7 +278,8 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # a small number of days" is about a spell.
         "longest_spell_below_pivot": _longest_spell(since_breakout["Close"] <= pivot) if breakout_label is not None else None,
         "pivot_extension_cents": (float(last["Close"]) - pivot) * 100,
-        # What a declared entry price has to be inside to be a price anyone can pay today.
+        # Where a declared entry price sits against the session. Reported, never decisive: a
+        # daily bar does not prove every price between its extremes traded.
         "latest_session_range": [float(last["Low"]), float(last["High"])],
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,

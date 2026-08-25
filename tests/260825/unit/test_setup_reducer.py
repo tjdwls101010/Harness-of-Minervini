@@ -324,7 +324,7 @@ class ChainGamingTests(unittest.TestCase):
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertIn(chase["state"], {"pass", "needs_chart"})
         self.assertEqual(
-            round(chase["measured"]["pivot_extension_pct"], 2),
+            round(chase["measured"]["latest_close_extension_above_pivot_pct"], 2),
             round(result["measurements"]["pivot_extension_pct"], 2),
         )
 

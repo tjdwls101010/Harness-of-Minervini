@@ -85,7 +85,7 @@ class DeclaredReadingsTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "wait")
         self.assertIn("setup.chase_limit_above_pivot", result["unsatisfied"])
         reported = signal(result, "setup.chase_limit_above_pivot")["measured"]
-        self.assertGreater(reported["pivot_extension_pct"], 50.0)
+        self.assertGreater(reported["latest_close_extension_above_pivot_pct"], 50.0)
         self.assertEqual(reported["sessions_since_breakout"], 40)
 
 

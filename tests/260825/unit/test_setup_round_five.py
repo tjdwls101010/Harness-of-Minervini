@@ -23,9 +23,6 @@ from tests.series import anchor_dates, base_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
-READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot", "entry_price": None}
-
-
 def vouched(frame, chain, **overrides):
     """A chain the detector would have produced, plus an entry at the pivot."""
 
@@ -99,43 +96,49 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
 
 
 class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
-    """Comparing the entry with the breakout's own extension cut in the wrong place.
+    """The price being judged is one the tape recorded, and how far is too far is the reader's.
 
-    It let a twenty-percent gap breakout that ticked down one percent read as "at the pivot",
-    and refused a one-cent advance the day after a three-percent breakout. The source names a
-    limit and withholds the number, so the call is the reader's; what travels with it is the
-    distance, and Minervini's own stated buffer beside it.
+    Two mechanical rules were tried here and both had to go. Comparing the entry with the
+    breakout's own extension called a twenty-percent gap that ticked down "at the pivot" and
+    refused a one-cent advance the day after a three-percent breakout. Treating a declared
+    price as available because it fell inside the latest bar's low-to-high range promoted
+    something a daily bar cannot show -- that every price between its extremes traded, and
+    that a session which closed fifty percent higher still offers its low.
     """
 
-    def test_an_entry_inside_todays_range_is_a_price_someone_can_pay(self) -> None:
+    def test_the_distance_judged_is_the_latest_completed_close(self) -> None:
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
-        after = tail(frame, 1, close=float(frame["Close"].iloc[-1]) * 1.0001, volume=800_000.0)
-        available = float(after["Close"].iloc[-1])
 
-        result = evaluate_setup(build_setup_evidence(after, chain, **vouched(frame, chain, entry_price=available)))
-
-        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "pass")
-
-    def test_an_entry_the_stock_is_not_trading_at_is_not_an_entry(self) -> None:
-        """The refusal the bars support is availability, not distance.
-
-        Using the five-to-twenty-cent band as a ceiling made a band decide a required
-        condition, which its own record forbids, and put the boundary somewhere absurd: a
-        dollar below the pivot read as inside the range, twenty-one cents above it as chased.
-        """
-
-        frame, anchors = base_series()
-        chain = anchor_dates(frame, anchors)
-        extended = tail(frame, 40, close=150.0, volume=400_000.0)
-        stale_price = float(frame.loc[chain[-1], "High"]) * 1.001
-
-        result = evaluate_setup(build_setup_evidence(extended, chain, **vouched(frame, chain, entry_price=stale_price)))
+        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
-        self.assertFalse(chase["measured"]["entry_available_in_latest_session"])
-        self.assertEqual(chase["state"], "fail")
-        self.assertNotEqual(result["setup_state"], "ready")
+        self.assertAlmostEqual(
+            chase["measured"]["latest_close_extension_above_pivot_pct"],
+            result["measurements"]["pivot_extension_pct"],
+            places=6,
+        )
+
+    def test_a_declared_price_is_carried_but_decides_nothing(self) -> None:
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        outside = float(frame["High"].max()) * 5
+
+        with_price = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain, entry_price=outside)))
+        without = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain, entry_price=None)))
+
+        chase = signal(with_price, "setup.chase_limit_above_pivot")
+        self.assertFalse(chase["measured"]["declared_entry_inside_latest_daily_range"])
+        self.assertEqual(chase["state"], signal(without, "setup.chase_limit_above_pivot")["state"])
+        self.assertEqual(with_price["setup_state"], without["setup_state"])
+
+    def test_at_pivot_is_refused_on_a_pivot_price_has_not_cleared(self) -> None:
+        frame, anchors = base_series(breakout=False)
+        chain = anchor_dates(frame, anchors)
+
+        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
+
+        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
 
     def test_the_distance_is_still_reported_against_the_buffer_the_source_named(self) -> None:
         frame, anchors = base_series()
@@ -146,14 +149,6 @@ class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
         buffer_signal = next(item for item in evidence["signals"] if "minervini_5_to_20_cents" in item["id"])
         self.assertEqual(buffer_signal["role"], "band")
         self.assertEqual(buffer_signal["state"], "within_source_range")
-
-    def test_without_an_entry_price_the_reading_has_nothing_to_be_about(self) -> None:
-        frame, anchors = base_series()
-        chain = anchor_dates(frame, anchors)
-
-        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain, entry_price=None)))
-
-        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "needs_chart")
 
 
 class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
@@ -326,46 +321,51 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class EntryBelongsToThisRouteTests(unittest.TestCase):
-    def test_an_entry_below_the_pivot_is_a_different_route_not_a_close_one(self) -> None:
-        """Buying under the pivot is a cheat or an early tactic; it is not this trigger."""
-
-        frame, anchors = base_series()
-        chain = anchor_dates(frame, anchors)
-        under = float(frame.loc[chain[-1], "High"]) * 0.9995
-
-        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain, entry_price=under)))
-
-        chase = signal(result, "setup.chase_limit_above_pivot")
-        self.assertFalse(chase["measured"]["entry_above_pivot"])
-        self.assertEqual(chase["state"], "fail")
-        self.assertNotEqual(result["setup_state"], "ready")
-
-
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):
-    """The price path a reviewer named twice and I twice failed to build.
+    """A breakout that gaps twenty percent above the pivot and eases back one percent.
 
-    A breakout that gaps twenty percent above the pivot and then eases back one percent is
-    still twenty percent from the pivot. Nothing here refuses that reading -- the source gives
-    no number -- but the number a reader would need is in the signal, and this fixes the price
-    path so a later change cannot quietly stop reporting it.
+    Nothing here refuses the reading -- the source gives no number and the contract says so
+    out loud -- but the distance is in the signal, and this pins the price path so a later
+    change cannot quietly stop reporting it. The residual is stated rather than hidden: a
+    reader who calls nineteen percent "at the pivot" is doing it in front of the number.
     """
 
-    def test_a_gap_breakout_that_eased_back_still_reports_its_whole_distance(self) -> None:
+    def _gapped_then_eased(self):
         frame, anchors = base_series(breakout=False)
         chain = anchor_dates(frame, anchors)
         pivot = float(frame.loc[chain[-1], "High"])
         gapped = tail(frame, 1, close=pivot * 1.20, volume=4_000_000.0)
-        eased = tail(gapped, 1, close=pivot * 1.19, volume=1_200_000.0)
-        available = float(eased["Close"].iloc[-1])
+        return tail(gapped, 1, close=pivot * 1.19, volume=1_200_000.0), chain
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain, entry_price=available)))
+    def test_the_whole_distance_from_the_pivot_is_in_the_signal(self) -> None:
+        eased, chain = self._gapped_then_eased()
+        frame, anchors = base_series(breakout=False)
+
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
-        self.assertGreater(chase["measured"]["entry_extension_above_pivot_pct"], 18.0)
+        self.assertGreater(chase["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
         self.assertEqual(chase["measured"]["sessions_since_breakout"], 1)
-        buffer_signal = next(item for item in result["signals"] if "minervini_5_to_20_cents" in item["id"])
-        self.assertEqual(buffer_signal["state"], "beyond_source_range")
+
+    def test_calling_that_distance_chased_is_what_stops_it(self) -> None:
+        eased, chain = self._gapped_then_eased()
+        frame, anchors = base_series(breakout=False)
+
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain, entry_proximity="chased")))
+
+        self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_and_calling_it_at_the_pivot_is_a_reader_declaring_against_a_printed_number(self) -> None:
+        """The accepted trust boundary, pinned so a change to it is a change to this test."""
+
+        eased, chain = self._gapped_then_eased()
+        frame, anchors = base_series(breakout=False)
+
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
+
+        self.assertEqual(result["setup_state"], "ready")
+        self.assertGreater(signal(result, "setup.chase_limit_above_pivot")["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
 
 
 if __name__ == "__main__":

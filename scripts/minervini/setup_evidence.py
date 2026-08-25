@@ -195,40 +195,26 @@ def _iso_day(value: Any) -> str:
         return str(value)
 
 
-def _proximity_state(measurements: Mapping[str, Any], reading: str | None, executable: bool | None, above_pivot: bool | None) -> str:
+def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> str:
     """The source states the limit and withholds the number, so the reader supplies the call.
 
-    What the measurement can still refuse is a reading of "at the pivot" on an entry the
-    stock left behind: if price has closed above the pivot for sessions since the breakout,
-    the entry under discussion is not the breakout's.
+    The price being judged is the latest completed close, because that is a price the tape
+    recorded. An earlier version accepted a declared entry price and treated its falling
+    inside the latest bar's low-to-high range as evidence the entry was available: a daily bar
+    does not prove every price between its extremes traded, and even where one did, a session
+    that closed fifty percent higher is not an entry anyone can take now. The declared price
+    is still carried, and read against the buffer the source named, but it decides nothing.
+
+    What the bars refuse is a pivot price has not cleared. How far above it stops being close
+    the source declines to say, so a reader who calls a large distance "at the pivot" is doing
+    so with that distance printed in this signal.
     """
-    if measurements.get("pivot_extension_pct") is None:
+    if measurements.get("pivot") is None:
         return "unavailable"
     if reading == "chased":
         return "fail"
     if reading == "at_pivot":
-        if not measurements.get("pivot_cleared"):
-            return "fail"
-        # "At the pivot" is a claim about the price being paid, so it needs one. And the
-        # source did quantify this once, in cents rather than percent: he waits for the stock
-        # to trade five, ten, or even twenty cents above the pivot. An entry beyond that is
-        # not at the pivot by the only measure the source ever put on the distance -- which is
-        # a check on the reading, not a limit deciding the setup.
-        if above_pivot is False:
-            # Below the pivot is a different entry route -- a cheat or an early tactic -- not
-            # this one taken close to its trigger.
-            return "fail"
-        if executable is None:
-            return "needs_chart"
-        # The band that reports this distance is registered as a band and its own record says
-        # it was never promoted to a gate; using its edge as a ceiling made it decide a
-        # required condition, and put the boundary in an absurd place besides -- an entry a
-        # dollar *below* the pivot read as inside the range while twenty-one cents above it
-        # read as chased. What completed bars can say is narrower than "available now", which
-        # they cannot say at all: they can say the tape shows that price in the most recent
-        # session. How stale that makes it is what `sessions_since_breakout` and the distance
-        # from the latest close are printed for.
-        return "pass" if executable else "fail"
+        return "pass" if measurements.get("pivot_cleared") else "fail"
     return "needs_chart"
 
 
@@ -334,19 +320,16 @@ def build_setup_evidence(
         else None
     )
     # The source quantified this distance exactly once, in cents: he waits for the stock to
-    # trade five, ten, or even twenty cents above the pivot. Read through the band so where
-    # the entry sat travels with it, and so a reading of "at the pivot" on an entry beyond the
-    # only measure the source ever put on the distance is refused by his number, not by one
-    # invented here.
+    # trade five, ten, or even twenty cents above the pivot. Read through the band so where a
+    # declared entry sat travels with the verdict. It reports only -- an earlier version used
+    # its edge as a ceiling, which made a band decide a required condition and put the
+    # boundary somewhere absurd besides.
     entry_buffer = doctrine.evaluate_band(*_MINERVINI_BUFFER, entry_buffer_cents)
-    entry_above_pivot = (
-        None if entry_price is None or not isinstance(pivot, (int, float)) else float(entry_price) > float(pivot)
-    )
     session = measurements.get("latest_session_range")
-    entry_executable = (
-        None
-        if entry_price is None or not session
-        else bool(session[0] <= float(entry_price) <= session[1])
+    # Report-only. A daily bar's extremes do not prove every price between them traded, so
+    # this says where a declared price sits against the session, not that it can be paid.
+    entry_inside_range = (
+        None if entry_price is None or not session else bool(session[0] <= float(entry_price) <= session[1])
     )
     entry_extension_pct = (
         (float(entry_price) - float(pivot)) / float(pivot) * 100
@@ -413,14 +396,13 @@ def build_setup_evidence(
         ),
         _observation(
             _CHASE_LIMIT,
-            _proximity_state(measurements, entry_proximity, entry_executable, entry_above_pivot),
+            _proximity_state(measurements, entry_proximity),
             {
-                "entry_price": entry_price,
-                "entry_above_pivot": entry_above_pivot,
-                "entry_available_in_latest_session": entry_executable,
-                "entry_buffer_above_pivot_cents": entry_buffer_cents,
-                "entry_extension_above_pivot_pct": entry_extension_pct,
-                "pivot_extension_pct": measurements.get("pivot_extension_pct"),
+                "declared_entry_price": entry_price,
+                "declared_entry_inside_latest_daily_range": entry_inside_range,
+                "declared_entry_buffer_above_pivot_cents": entry_buffer_cents,
+                "declared_entry_extension_above_pivot_pct": entry_extension_pct,
+                "latest_close_extension_above_pivot_pct": measurements.get("pivot_extension_pct"),
                 "pivot_extension_at_breakout_pct": measurements.get("pivot_extension_at_breakout_pct"),
                 "sessions_since_breakout": measurements.get("sessions_since_breakout"),
             },
