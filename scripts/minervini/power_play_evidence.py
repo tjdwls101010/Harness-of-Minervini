@@ -12,11 +12,18 @@ weeks to double reports whatever it managed in eight and fails on that number.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
-from .setup_structure import _DISTRIBUTION_COLUMN, read_bars
+from .setup_structure import (
+    _CORPORATE_ACTION_COLUMN,
+    _DISTRIBUTION_COLUMN,
+    bars_fingerprint,
+    read_bars,
+)
 from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
 from .swings import _typical_range_pct, segment
 
@@ -213,6 +220,46 @@ def _unmoved(measurements: Mapping[str, Any]) -> bool:
         and not measurements["corporate_action_sessions"]
         and measurements["distribution_evidence"] == "present"
     )
+
+
+def power_play_fingerprint(history: Any) -> str | None:
+    """One digest of the bars *and* the events this capability reads.
+
+    The shared bars fingerprint covers the five price columns, which is right for the surfaces
+    that share a chain: they measure price. This one also measures events -- a split inside the
+    span leaves it deciding nothing, a payout inside it withholds the criteria it decided -- so
+    two histories with identical prices and different events are different inputs here and must
+    not digest the same. An approval bound to a digest that cannot see the split would not be
+    bound to the evidence the verdict turned on.
+
+    Returns None where the event columns are absent, because a history that never said whether a
+    split occurred is not a history that said none did. Digesting the absence as zeroes is the
+    substitution the reducer already refuses to make when it decides.
+    """
+
+    bars, _ = read_bars(history)
+    if bars is None or bars.empty:
+        return None
+    if not {_CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN}.issubset(bars.columns):
+        return None
+    events = json.dumps(
+        {
+            "bars": bars_fingerprint(bars),
+            "events": [
+                {
+                    "date": stamp.date().isoformat(),
+                    _CORPORATE_ACTION_COLUMN: float(row[_CORPORATE_ACTION_COLUMN]),
+                    _DISTRIBUTION_COLUMN: float(row[_DISTRIBUTION_COLUMN]),
+                }
+                for stamp, row in bars.iterrows()
+                if float(row[_CORPORATE_ACTION_COLUMN]) or float(row[_DISTRIBUTION_COLUMN])
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+        allow_nan=False,
+    )
+    return hashlib.sha256(events.encode("utf-8")).hexdigest()
 
 
 def _turning_points(history: Any) -> frozenset[str] | None:
@@ -453,6 +500,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         ),
     ]
     return {
+        # The name of the input this verdict was reached on, prices and events together, so an
+        # approval can be bound to it and a later reader can tell a rule change from a data one.
+        "measured_bars": power_play_fingerprint(history),
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],

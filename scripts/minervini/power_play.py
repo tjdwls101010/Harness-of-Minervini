@@ -499,6 +499,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         state = "qualified"
     return {
         "power_play_state": state,
+        "measured_bars": evidence.get("measured_bars"),
         "required_evidence": list(_REQUIRED),
         "failed": failed,
         "missing": missing,
