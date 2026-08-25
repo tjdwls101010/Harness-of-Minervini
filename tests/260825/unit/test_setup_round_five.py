@@ -368,5 +368,27 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
         self.assertGreater(signal(result, "setup.chase_limit_above_pivot")["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
 
 
+
+
+class ProximityReadsWherePriceIsNowTests(unittest.TestCase):
+    def test_a_pivot_cleared_once_and_since_given_back_is_not_where_price_is_now(self) -> None:
+        """`pivot_cleared` records that a breakout happened, not that price is above the pivot.
+
+        Reading it for a signal whose whole subject is the latest close let that signal pass
+        while reporting a distance of minus one percent.
+        """
+
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        pivot = float(frame.loc[chain[-1], "High"])
+        back_under = tail(frame, 2, close=pivot * 0.99, volume=700_000.0)
+
+        result = evaluate_setup(build_setup_evidence(back_under, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+
+        chase = signal(result, "setup.chase_limit_above_pivot")
+        self.assertLess(chase["measured"]["latest_close_extension_above_pivot_pct"], 0)
+        self.assertEqual(chase["state"], "fail")
+
+
 if __name__ == "__main__":
     unittest.main()

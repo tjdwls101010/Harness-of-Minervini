@@ -214,7 +214,10 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> st
     if reading == "chased":
         return "fail"
     if reading == "at_pivot":
-        return "pass" if measurements.get("pivot_cleared") else "fail"
+        # `pivot_cleared` records that a breakout happened at some point. This signal is about
+        # where price is now, so it reads that instead: a stock that broke out and slipped
+        # back under the pivot has no entry above it today.
+        return "pass" if measurements.get("currently_above_pivot") else "fail"
     return "needs_chart"
 
 

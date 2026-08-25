@@ -9875,12 +9875,12 @@
       ],
       "required_inputs": [
         "pivot",
-        "entry_price",
+        "latest_completed_close",
         "chart_review"
       ],
       "thresholds": {},
       "rule": {
-        "summary": "The entry belongs as close to the pivot as possible, and the source declines to say how far 'a few percentage points' reaches."
+        "summary": "The entry belongs as close to the pivot as possible, and the source declines to say how far 'a few percentage points' reaches; the distance read is the latest completed close's, because completed bars cannot show that any other price is still on offer."
       },
       "computability": "chart_assisted",
       "failure": {
