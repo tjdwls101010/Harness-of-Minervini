@@ -126,11 +126,14 @@ _ABSTAINS = ("unavailable", "needs_chart")
 # What a contesting reading did instead of agreeing, strongest first. The order is the precedence:
 # a reading that gave a different answer has disputed the criterion whatever the others did, and
 # only where nobody disputed it does the question become which kind of silence is holding it.
-_DISAGREEMENTS = ("dissent", "payout", "chart")
+# Among the silences, the chart is last because it is the only one a reader can act on -- reported
+# ahead of a silence nothing they supply can close, it sends them to draw a picture that will not
+# close the criterion when they bring it back.
+_DISAGREEMENTS = ("dissent", "payout", "action", "chart")
 
 
 def _how_the_tops_disagree(
-    primary: Mapping[str, str], contesting: Sequence[Mapping[str, str]]
+    primary: Mapping[str, str], contesting: Sequence[tuple[Mapping[str, str], bool]]
 ) -> dict[str, str]:
     """Per criterion, whether a top that may contest it failed to agree, and why.
 
@@ -150,9 +153,15 @@ def _how_the_tops_disagree(
             continue
         causes = {
             "payout" if state == "unavailable" else "chart" if state == "needs_chart" else "dissent"
-            for state in (criteria[condition] for criteria in contesting)
-            if state != answer
+            for state, readable in ((criteria[condition], readable) for criteria, readable in contesting)
+            if readable and state != answer
         }
+        # A reading nobody could read agrees with nothing, including by coincidence. Its criteria
+        # are arithmetic about a split rather than about the stock, so matching the primary's
+        # answer is not consent to it -- and no key was issued for it, so reporting it as a chart
+        # a reader has not opened asks for an answer the capability will not accept.
+        if any(not readable for _, readable in contesting):
+            causes.add("action")
         for cause in _DISAGREEMENTS:
             if cause in causes:
                 disagreement[condition] = cause
@@ -392,21 +401,23 @@ def _turning_points(history: Any) -> frozenset[str] | None:
     entirely: inside a flag it includes the bar that printed a hundredth of a percent above the
     last one, and reading the structure from there is reading a bar rather than a top.
 
-    The retracement is derived the way ticker.swings derives it, from the same registered
-    convention, and at every value that convention registers -- the middle one and both
-    neighbours. Taking the middle reading alone was one reading of an unstable measurement, and
-    the instability cuts one way here: a top the middle retracement walks past never contests a
-    criterion, so its known failure is a finding the verdict is never told about. Measured, a
-    structure with a six-week violation under a neighbour-only top came back qualified.
+    Every reading of the same chart, on two axes. The retracement is derived the way ticker.swings
+    derives it, from the same registered convention, and taken at every value that convention
+    registers -- the middle one and both neighbours; and each of those is run under both readings
+    of a session that extends the leg and ends it at once, because a daily bar does not say which
+    came first and the segmenter has to pick one. Both instabilities cut the same way here: a top
+    some reading confirms and the chosen one walks past never contests a criterion, so its known
+    failure is a finding the verdict is never told about. Measured, a six-week violation under a
+    neighbour-only top came back qualified, and so did one under a top only the other intraday
+    order confirms.
 
     The union rather than the refusal beside it in ticker.swings. That capability corroborates a
     chain a caller declared, so an unstable segmentation leaves it with nothing to vouch for;
     here the tops are found rather than declared, and a stock whose segmentation is unstable still
-    has tops. Every high any registered reading confirms is a candidate, which is conservative on
-    the side that matters -- more tops may contest a qualification, and a rejection still needs
-    all of them to agree. Measured across the tickers this repository has provider history for it
-    costs nothing: the same twenty-three reject and the same fifteen read a settled top, on chains
-    that run one to five tops instead of one to four.
+    has tops. Every high any reading confirms is a candidate, which is conservative on the side
+    that matters -- more tops may contest a qualification, and a rejection still needs all of them
+    to agree. Measured across the tickers this repository has provider history for it costs
+    nothing: the same twenty-three reject and the same sixteen read a settled top.
     """
 
     bars, _ = read_bars(history)
@@ -415,11 +426,6 @@ def _turning_points(history: Any) -> frozenset[str] | None:
         return None
     multiple = float(doctrine.parameter(_SEGMENTATION, "retracement_range_multiple"))
     offsets = [0.0, *(float(value) for value in doctrine.parameter(_SEGMENTATION, "sensitivity_offsets"))]
-    # The same guard the segmentation beside this one applies before it runs anything. A history
-    # whose ordinary session spans a large fraction of its own close gives a scale the segmenter
-    # has no domain for, and the upper neighbour leaves that domain first. Nothing here is a
-    # turning point then, which puts every descending high back in the candidate set -- more tops
-    # may contest, which is the safe direction for a measurement nobody can take.
     # No fixture stands on the upper edge, and none can: `2.6 * typical` steps from
     # 99.99999999999999 to 100.00000000000001 across the whole float grid of OHLC shapes, so a
     # test of `< 100` against `<= 100` has no history to run on.
@@ -427,62 +433,10 @@ def _turning_points(history: Any) -> frozenset[str] | None:
         return None
     found: set[str] = set()
     for offset in offsets:
-        run = segment(bars, retracement_pct=(multiple + offset) * typical)
-        found |= {str(anchor["date"]) for anchor in run["anchors"] if anchor["kind"] == "high"}
-        found |= _tops_the_order_would_have_confirmed(bars, run)
+        for order in ("extension", "reversal"):
+            run = segment(bars, retracement_pct=(multiple + offset) * typical, ambiguous_order=order)
+            found |= {str(anchor["date"]) for anchor in run["anchors"] if anchor["kind"] == "high"}
     return frozenset(found)
-
-
-def _tops_the_order_would_have_confirmed(bars: Any, run: Mapping[str, Any]) -> set[str]:
-    """The highs the segmenter had to choose against, because a daily bar does not say what came
-    first.
-
-    A session that both made a new high and retraced far enough to end the swing is two readings
-    of one bar, and the segmenter records it as ambiguous rather than deciding. Whichever way it
-    resolved it, the other resolution anchors a different top: extension first leaves the swing
-    running and no top before that bar, reversal first ends the swing at the highest bar before
-    it.
-
-    Read off the anchors alone, that choice arrives here as a settled fact, and the top it decided
-    against never contests anything. Measured, one such bar removed a top whose own reading fails
-    the six-week limit and the structure came back qualified -- a known uncertainty about intraday
-    order resolved into a pass. So the top the other order would have confirmed is a candidate
-    too, which is the same thing the chain does everywhere else: read the structure from every top
-    the search could have landed on.
-
-    Both orders, because either can be the one the segmenter declined. It resolved one bar toward
-    reversal-first and the extension-first reading -- where the ambiguous bar is itself the top --
-    was the one that went missing; that shape reproduces on a down leg and reached `qualified`
-    over a top failing all three of advance, duration and depth. Neither order is the safe one to
-    assume, so both tops are candidates and the readings decide between them.
-
-    Ambiguity is ordinary -- twelve of the twenty-four tickers this repository has history for
-    carry one inside the measured span -- so this names the tops actually at risk rather than
-    abandoning the turning-point filter. Abandoning it puts every descending bar of a flag back in
-    the chain: measured, nineteen readings, four fewer settled tops and a rejection lost.
-    """
-
-    ambiguous = [str(session) for session in (run.get("ambiguous_sessions") or ())]
-    if not ambiguous:
-        return set()
-    anchors = sorted(str(anchor["date"]) for anchor in run["anchors"])
-    dates = [str(stamp.date()) for stamp in bars.index]
-    at_risk: set[str] = set()
-    for session in ambiguous:
-        if session not in dates:
-            continue
-        earlier = [anchor for anchor in anchors if anchor < session]
-        start = earlier[-1] if earlier else dates[0]
-        # Open at the start, and the strictness is only ever visible when the anchor there is a
-        # low: every high anchor is already a candidate, so including one again changes nothing.
-        window = bars.loc[
-            (bars.index > pd.Timestamp(start)) & (bars.index < pd.Timestamp(session))
-        ]
-        at_risk.add(session)
-        if not len(window):
-            continue
-        at_risk.add(str(window["High"].idxmax().date()))
-    return at_risk
 
 
 def _walk_the_tops(
@@ -595,7 +549,7 @@ def build_power_play_evidence(
     ago is a different one. Measured through the capability on 2026-08-24 across the twenty-four
     in-scope tickers this repository has history for, the chain runs one to five tops either way
     and twenty-three reject either way; what the distance changes is how often the top is settled,
-    fifteen against nine.
+    sixteen against ten.
     """
 
     spec = compile_power_play_spec()
@@ -732,13 +686,21 @@ def build_power_play_evidence(
     # Three buckets rather than one, because a criterion the highest top answered can be held open
     # by a top that disputed it, by a top whose answer the dividend decided, or by a top whose
     # chart nobody has read -- and a reader sent to settle the wrong one has not settled anything.
-    disagreement = _how_the_tops_disagree(primary_criteria, every_criteria[1:may_contest])
+    disagreement = _how_the_tops_disagree(
+        primary_criteria,
+        [
+            (criteria, _unmoved(reading))
+            for criteria, reading in zip(every_criteria[1:may_contest], readings[1:may_contest])
+        ],
+    )
     contested = {condition for condition, cause in disagreement.items() if cause == "dissent"}
     payout_elsewhere = {condition for condition, cause in disagreement.items() if cause == "payout"}
+    action_elsewhere = {condition for condition, cause in disagreement.items() if cause == "action"}
     awaiting_elsewhere = {condition for condition, cause in disagreement.items() if cause == "chart"}
     if reordered:
         contested = set(primary_criteria)
         payout_elsewhere = set()
+        action_elsewhere = set()
         awaiting_elsewhere = set()
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
@@ -875,6 +837,10 @@ def build_power_play_evidence(
         # Separate from the contested set because each closes on a different action.
         "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
         "payout_decided_under_another_top": sorted(payout_elsewhere),
+        # And a top whose own span holds a corporate action, which is neither a dispute nor
+        # something a reader closes. No key was issued for that reading, so reporting it as a
+        # chart nobody has opened asks for an answer this capability would refuse.
+        "corporate_action_under_another_top": sorted(action_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".

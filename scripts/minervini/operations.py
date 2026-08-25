@@ -675,6 +675,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         f"fundamentals.power_play_exception.{condition}"
         for condition in verdict["payout_decided_under_another_top"]
     }
+    action_elsewhere = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["corporate_action_under_another_top"]
+    }
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
@@ -727,6 +731,11 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             return "chart_unread_under_another_top"
         if item in payout_elsewhere:
             return "distribution_under_another_top"
+        # A top whose own span holds a corporate action. Reported as a chart nobody has opened, it
+        # named a picture no key exists for and pointed the reader at ticker.chart for an answer
+        # this capability would refuse.
+        if item in action_elsewhere:
+            return "corporate_action_under_another_top"
         # The one gap that closes by itself. Reported as a chart reading, it would be closed by
         # whatever approval seam answers the chart -- and a twelve-session minimum would have been
         # waived by a reading of the volume.

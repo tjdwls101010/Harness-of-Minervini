@@ -131,9 +131,16 @@ class WhichSilenceIsHoldingTheCriterion(unittest.TestCase):
     """
 
     def _classify(self, primary, *contesting):
+        """Each contesting reading as (criteria, readable), readable unless the test says so."""
         from scripts.minervini.power_play_evidence import _how_the_tops_disagree
 
-        return _how_the_tops_disagree(primary, [dict(other) for other in contesting])
+        return _how_the_tops_disagree(
+            primary,
+            [
+                (dict(other), True) if isinstance(other, dict) else (dict(other[0]), other[1])
+                for other in contesting
+            ],
+        )
 
     def test_a_different_answer_is_a_dissent(self) -> None:
         self.assertEqual(self._classify({"a": "pass"}, {"a": "fail"}), {"a": "dissent"})
@@ -158,6 +165,27 @@ class WhichSilenceIsHoldingTheCriterion(unittest.TestCase):
         """It already blocks under its own name, and comparing an abstention says nothing."""
         self.assertEqual(self._classify({"a": "needs_chart"}, {"a": "pass"}), {})
         self.assertEqual(self._classify({"a": "unavailable"}, {"a": "pass"}), {})
+
+    def test_a_top_nobody_could_read_consents_to_nothing(self) -> None:
+        """Not even where its criteria happen to match. Those numbers are arithmetic about a
+        split rather than about the stock, and no key was ever issued for that reading -- so
+        reporting it as a chart nobody opened asks for an answer this capability would refuse.
+        """
+        self.assertEqual(self._classify({"a": "pass"}, ({"a": "pass"}, False)), {"a": "action"})
+
+    def test_and_a_reader_is_not_sent_to_a_chart_that_would_not_close_it(self) -> None:
+        """One contesting top waiting on a chart, another the split left unreadable. Reported as
+        the chart, the reader draws it, answers it, and the criterion stays exactly where it was.
+        """
+        self.assertEqual(
+            self._classify({"a": "pass"}, {"a": "needs_chart"}, ({"a": "pass"}, False)),
+            {"a": "action"},
+        )
+
+    def test_a_dissent_still_outranks_it(self) -> None:
+        self.assertEqual(
+            self._classify({"a": "pass"}, ({"a": "pass"}, False), {"a": "fail"}), {"a": "dissent"}
+        )
 
     def test_a_criterion_no_top_may_contest_is_never_held(self) -> None:
         """The caller passes only the readings inside the contest distance, so an empty list is

@@ -1058,3 +1058,33 @@ def a_flag_tighter_than_one_days_range_series(*, start: str = "2026-01-02") -> p
     frame["High"] = frame["Close"] * 1.02
     frame["Low"] = frame["Close"] * 0.98
     return frame
+
+
+def two_orders_that_confirm_different_tops_series(*, start: str = "2026-05-19") -> pd.DataFrame:
+    """One session that both extends the leg and ends it, followed by enough bars for the two
+    readings to diverge.
+
+    Whichever way the segmenter resolves that bar, it goes on running under that resolution and
+    confirms turns the other one never reaches. Here each order confirms a high the other does
+    not, which is the whole reason the candidate set has to come from running the segmenter twice
+    rather than from patching the two bars either side of the ambiguity.
+    """
+
+    rows = [
+        (100.0, 99.0, 99.5),
+        (100.0, 99.5, 99.8),
+        (106.0, 95.0, 100.0),
+        (105.0, 100.0, 104.0),
+        (104.5, 104.0, 104.2),
+        (112.0, 104.0, 111.0),
+    ]
+    index = pd.bdate_range(start=start, periods=len(rows))
+    frame = pd.DataFrame(
+        {"High": [row[0] for row in rows], "Low": [row[1] for row in rows], "Close": [row[2] for row in rows]},
+        index=index,
+    )
+    frame["Open"] = frame["Close"]
+    frame["Volume"] = 1_000_000.0
+    frame["Stock Splits"] = 0.0
+    frame["Dividends"] = 0.0
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
