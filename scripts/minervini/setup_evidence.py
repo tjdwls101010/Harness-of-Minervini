@@ -127,7 +127,14 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
     # already taken out the base's own low on its way there.
     if not expansion > 1:
         return "fail"
-    if not measurements.get("pause_low_held_to_breakout") or not measurements.get("pivot_is_highest_to_breakout"):
+    # Read explicitly rather than through truthiness: `not None` is True, so an unmeasured
+    # breakout fact would read as a failed one. It cannot be None here -- `pivot_cleared` is
+    # exactly "a breakout session exists", and these are computed from that session -- but the
+    # safety of the line should not depend on an invariant two modules away.
+    for name in ("pause_low_held_to_breakout", "pivot_is_highest_to_breakout", "base_failed_after_pivot"):
+        if measurements.get(name) is None:
+            return "unavailable"
+    if not measurements["pause_low_held_to_breakout"] or not measurements["pivot_is_highest_to_breakout"]:
         return "fail"
     # `setup.failure_reset_types` says a pivot failure can reset and recover within a small
     # number of days, so a slip below the pivot is counted rather than held against the base
