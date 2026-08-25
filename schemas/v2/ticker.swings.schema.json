@@ -1,0 +1,80 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.swings.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "ticker.swings"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.swings response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline ticker swings AAPL",
+      "scripts/.venv/bin/python scripts/pipeline ticker swings AAPL --as-of 2026-06-19"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "This proposes and decides nothing: no setup state, no signals. Approval is a person reading the chart and declaring the chain back to ticker.setup, which re-runs the same detector rather than trusting what it is handed.",
+      "The retracement is the harness's own convention, not the source's, which describes swing reading as chart work and never names a percentage. It is registered as a parameter rather than a threshold and is not a caller input.",
+      "A segmentation that neighbouring parameter values disagree with is not proposed at all: the disagreement is returned instead, because a chain that moves when the parameter moves half a point is not one to check anything against.",
+      "A move still underway is never confirmed, so the leg the stock is in now is reported apart from the base. Folding it in would put the pivot on the breakout bar."
+    ],
+    "output": "The candidate base chain ending on its pivot, the leg price is in now, the sessions a bar could not settle, and the parameters the detector ran at.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "Neighbouring parameter values disagree, or the history segments into nothing.",
+      "ok": "A segmentation the detector will vouch for.",
+      "partial": "Completed price history stops before the requested session.",
+      "unavailable": "Completed price history is unavailable."
+    },
+    "summary": "Propose the harness's own swing segmentation for a ticker, so a person can look at it before a setup rests on it."
+  }
+}

@@ -35,6 +35,7 @@ EXPECTED_CAPABILITIES = {
     "market.snapshot",
     "market.candidates",
     "ticker.qualify",
+    "ticker.swings",
     "ticker.setup",
     "ticker.fundamentals",
     "ticker.peers",

@@ -141,6 +141,9 @@ def build_parser() -> JsonArgumentParser:
     qualify.add_argument("--primary-base-long-correction", choices=("confirmed", "not_confirmed", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_long_correction"))
     _common(qualify, "ticker.qualify")
 
+    swings = _capability_parser(ticker_sub, "swings", "ticker.swings")
+    swings.add_argument("ticker", help=_input_help("ticker.swings", "ticker"))
+    _common(swings, "ticker.swings")
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))

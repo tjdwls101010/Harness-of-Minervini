@@ -34,6 +34,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
+from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
 from .technical import build_eligibility_evidence
 
@@ -514,6 +515,56 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         sources=sources,
         doctrine_ids=result["doctrine_ids"],
         next_capabilities=next_capabilities,
+    )
+
+
+def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    try:
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.swings",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.swings",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "state": "unavailable", "anchors": []},
+            missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.swings",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "state": "unavailable", "anchors": []},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
+        )
+    chain = canonical_chain(prices.data)
+    status = "ok" if chain["state"] == "resolved" else "needs_input"
+    return envelope(
+        "ticker.swings",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        status=status,
+        data={"ticker": ticker, **chain},
+        missing=[] if status == "ok" else [{"id": "stable_segmentation", "reason": "evidence_required", "required": True}],
+        sources=[_source(prices.meta)],
+        doctrine_ids=["setup.swing_segmentation_convention"],
+        # A proposal is not an approval, and the chart is where a person turns one into the other.
+        next_capabilities=["ticker.chart"],
     )
 
 
@@ -1520,6 +1571,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _doctrine_show(request)
     if operation == "ticker.qualify":
         return _qualify(request, runtime)
+    if operation == "ticker.swings":
+        return _swings(request, runtime)
     if operation == "ticker.setup":
         return _setup(request, runtime)
     if operation == "ticker.fundamentals":

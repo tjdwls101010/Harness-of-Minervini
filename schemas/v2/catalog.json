@@ -1,23 +1,81 @@
 {
-  "schema_version": "2.0.0",
   "capabilities": {
-    "capabilities": {"schema_id": "https://harness.minervini.dev/schemas/v2/capabilities.schema.json", "schema_file": "capabilities.schema.json"},
-    "clock": {"schema_id": "https://harness.minervini.dev/schemas/v2/clock.schema.json", "schema_file": "clock.schema.json"},
-    "describe": {"schema_id": "https://harness.minervini.dev/schemas/v2/describe.schema.json", "schema_file": "describe.schema.json"},
-    "doctrine.show": {"schema_id": "https://harness.minervini.dev/schemas/v2/doctrine.show.schema.json", "schema_file": "doctrine.show.schema.json"},
-    "health": {"schema_id": "https://harness.minervini.dev/schemas/v2/health.schema.json", "schema_file": "health.schema.json"},
-    "market.candidates": {"schema_id": "https://harness.minervini.dev/schemas/v2/market.candidates.schema.json", "schema_file": "market.candidates.schema.json"},
-    "market.snapshot": {"schema_id": "https://harness.minervini.dev/schemas/v2/market.snapshot.schema.json", "schema_file": "market.snapshot.schema.json"},
-    "ticker.chart": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json", "schema_file": "ticker.chart.schema.json"},
-    "ticker.fundamentals": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.fundamentals.schema.json", "schema_file": "ticker.fundamentals.schema.json"},
-    "ticker.peers": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.peers.schema.json", "schema_file": "ticker.peers.schema.json"},
-    "ticker.qualify": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.qualify.schema.json", "schema_file": "ticker.qualify.schema.json"},
-    "ticker.risk": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.risk.schema.json", "schema_file": "ticker.risk.schema.json"},
-    "ticker.setup": {"schema_id": "https://harness.minervini.dev/schemas/v2/ticker.setup.schema.json", "schema_file": "ticker.setup.schema.json"},
-    "watchlist.annotate": {"schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.annotate.schema.json", "schema_file": "watchlist.annotate.schema.json"},
-    "watchlist.export": {"schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.export.schema.json", "schema_file": "watchlist.export.schema.json"},
-    "watchlist.history": {"schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.history.schema.json", "schema_file": "watchlist.history.schema.json"},
-    "watchlist.record": {"schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.record.schema.json", "schema_file": "watchlist.record.schema.json"},
-    "watchlist.show": {"schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.show.schema.json", "schema_file": "watchlist.show.schema.json"}
-  }
+    "capabilities": {
+      "schema_file": "capabilities.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/capabilities.schema.json"
+    },
+    "clock": {
+      "schema_file": "clock.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/clock.schema.json"
+    },
+    "describe": {
+      "schema_file": "describe.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/describe.schema.json"
+    },
+    "doctrine.show": {
+      "schema_file": "doctrine.show.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/doctrine.show.schema.json"
+    },
+    "health": {
+      "schema_file": "health.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/health.schema.json"
+    },
+    "market.candidates": {
+      "schema_file": "market.candidates.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/market.candidates.schema.json"
+    },
+    "market.snapshot": {
+      "schema_file": "market.snapshot.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/market.snapshot.schema.json"
+    },
+    "ticker.chart": {
+      "schema_file": "ticker.chart.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json"
+    },
+    "ticker.fundamentals": {
+      "schema_file": "ticker.fundamentals.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.fundamentals.schema.json"
+    },
+    "ticker.peers": {
+      "schema_file": "ticker.peers.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.peers.schema.json"
+    },
+    "ticker.qualify": {
+      "schema_file": "ticker.qualify.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.qualify.schema.json"
+    },
+    "ticker.risk": {
+      "schema_file": "ticker.risk.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.risk.schema.json"
+    },
+    "ticker.setup": {
+      "schema_file": "ticker.setup.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.setup.schema.json"
+    },
+    "ticker.swings": {
+      "schema_file": "ticker.swings.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.swings.schema.json"
+    },
+    "watchlist.annotate": {
+      "schema_file": "watchlist.annotate.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.annotate.schema.json"
+    },
+    "watchlist.export": {
+      "schema_file": "watchlist.export.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.export.schema.json"
+    },
+    "watchlist.history": {
+      "schema_file": "watchlist.history.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.history.schema.json"
+    },
+    "watchlist.record": {
+      "schema_file": "watchlist.record.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.record.schema.json"
+    },
+    "watchlist.show": {
+      "schema_file": "watchlist.show.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/watchlist.show.schema.json"
+    }
+  },
+  "schema_version": "2.0.0"
 }
