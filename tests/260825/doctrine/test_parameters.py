@@ -28,11 +28,11 @@ def registry() -> dict:
 
 class ParameterSeamTests(unittest.TestCase):
     def test_a_registered_parameter_is_readable(self) -> None:
-        self.assertGreater(doctrine.parameter("setup.swing_segmentation_convention", "retracement_pct"), 0)
+        self.assertGreater(doctrine.parameter("setup.swing_segmentation_convention", "retracement_range_multiple"), 0)
 
     def test_a_parameter_is_not_a_threshold_and_neither_seam_answers_for_the_other(self) -> None:
         with self.assertRaises(KeyError):
-            doctrine.threshold("setup.swing_segmentation_convention", "retracement_pct")
+            doctrine.threshold("setup.swing_segmentation_convention", "retracement_range_multiple")
         with self.assertRaises(KeyError):
             doctrine.parameter("risk.initial_stop_and_reward", "initial_stop_ceiling_pct")
 
@@ -49,7 +49,7 @@ class ParameterSeamTests(unittest.TestCase):
     def test_a_parameter_must_carry_a_number_or_a_list_of_them(self) -> None:
         broken = registry()
         record = next(item for item in broken["claims"] if item["id"] == "setup.swing_segmentation_convention")
-        record["parameters"]["retracement_pct"]["value"] = "one percent"
+        record["parameters"]["retracement_range_multiple"]["value"] = "two and a half ranges"
 
         self.assertFalse(doctrine.validate(broken)["valid"])
 

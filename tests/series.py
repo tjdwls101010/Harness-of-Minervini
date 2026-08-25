@@ -43,6 +43,7 @@ def base_series(
     volume_profile: str = "drying",
     pause_dip_pct: float = 1.5,
     breakout: bool = True,
+    daily_range_pct: float | None = None,
     start: str = "2026-01-02",
 ) -> tuple[pd.DataFrame, list[Anchor]]:
     closes = _leg(base_high * 0.55, base_high, run_up)
@@ -73,8 +74,22 @@ def base_series(
 
     index = pd.bdate_range(start=start, periods=len(closes))
     frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
-    frame["High"] = frame["Close"] + wick
-    frame["Low"] = frame["Close"] - wick
+    if daily_range_pct is None:
+        frame["High"] = frame["Close"] + wick
+        frame["Low"] = frame["Close"] - wick
+    else:
+        # Real bars are wide: a session's high and low routinely straddle its close by more than
+        # a leg step. Everything built with the default hairline wick hides whatever a rule gets
+        # wrong about a bar that both extends a move and retraces it -- which is how a detector
+        # that resolved nothing on real data passed six adversarial review rounds.
+        #
+        # It is opt-in rather than the default because these legs are long: the last contraction
+        # of a twenty-five/ten/five base moves less per session than a realistic bar is wide, so
+        # its declared anchor stops being the extreme of its own span and the structure resolver
+        # rejects the fixture. A realistic fixture needs shorter legs as well as wider bars.
+        half = daily_range_pct / 200
+        frame["High"] = frame["Close"] * (1 + half)
+        frame["Low"] = frame["Close"] * (1 - half)
     pinned = {anchor.position: anchor.kind for anchor in anchors}
     for position, kind in pinned.items():
         label = index[position]
@@ -225,7 +240,7 @@ def bases_under_an_older_high_series(*, start: str = "2026-01-02") -> tuple[pd.D
     )
 
 
-def hidden_turn_series(*, turn_pct: float = 0.4) -> tuple[pd.DataFrame, list[str], list[str]]:
+def hidden_turn_series(*, turn_pct: float = 0.2) -> tuple[pd.DataFrame, list[str], list[str]]:
     """A base with one turn too small for the detector but big enough to declare.
 
     This is the shape the equality rule exists for. A caller who keeps every detected date and
@@ -233,10 +248,10 @@ def hidden_turn_series(*, turn_pct: float = 0.4) -> tuple[pd.DataFrame, list[str
     the extreme of its own span and the structure resolver has nothing to object to -- and the
     unfavourable contraction is gone from the sequence that gets judged.
 
-    The turn is smaller than the lowest parameter the detector runs at, so it stays invisible at
-    all three and the segmentation is still one it will vouch for. At 0.8 percent the nearest
-    neighbour does see it, the detector refuses to vouch, and the test would be measuring the
-    instability rather than the comparison.
+    The turn is smaller than the retracement at the lowest neighbouring multiple, so it stays
+    invisible at all three and the segmentation is still one the detector will vouch for. Any
+    larger and the nearest neighbour sees it, the detector refuses to vouch, and the test would
+    be measuring the instability rather than the comparison.
     """
 
     frame, anchors = base_series()
@@ -324,4 +339,46 @@ def from_legs(
     if last is not None:
         frame.loc[index[-1], ["Open", "High", "Low", "Close"]] = last
         frame.loc[index[-1], "Volume"] = float(frame["Volume"].iloc[-51:-1].mean()) * 2.0
+    return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+
+def unstable_series(**kwargs) -> tuple[pd.DataFrame, list[Anchor]]:
+    """A base the detector refuses to vouch for, because neighbouring multiples cut it apart.
+
+    The retracement is scaled to the stock's own typical daily range, so instability is produced
+    by the width of the bars rather than by shrinking a contraction: at this width the
+    neighbouring multiples straddle one of the turns and disagree about the chain. No session is
+    ambiguous here, which keeps the two reasons a segmentation can fail apart.
+    """
+
+    return base_series(daily_range_pct=0.8, **kwargs)
+
+
+def turn_between_neighbours_series(*, daily_range_pct: float = 1.0) -> pd.DataFrame:
+    """A decline interrupted by one bounce sized to fall between two neighbouring multiples.
+
+    The retracement is derived from the bars, so a fixture with a hand-picked bounce is tuned to
+    whatever the multiple happens to be today. This computes the bounce from the registry
+    instead: large enough that the lower neighbour calls it a turn, small enough that the primary
+    multiple does not. What it demonstrates is a chain that exists only at one end of the
+    sensitivity sweep, which is the thing the detector refuses to vouch for.
+    """
+
+    from scripts.minervini import doctrine
+
+    convention = "setup.swing_segmentation_convention"
+    multiple = float(doctrine.parameter(convention, "retracement_range_multiple"))
+    lower = multiple + min(float(value) for value in doctrine.parameter(convention, "sensitivity_offsets"))
+    half = daily_range_pct / 200
+    # A bounce is measured from the running low, which sits a half-range under its close.
+    low = 90.0 * (1 - half)
+    fraction = (lower + multiple) / 2 * daily_range_pct / 100
+    bounce = low * (1 + fraction) / (1 + half)
+
+    closes = [80.0, 90.0, 100.0, 95.0, 90.0, bounce, 90.0, 80.0, 75.0, 85.0,
+              99.0, 95.0, 89.0, 94.0, 98.0, 95.0, 93.0, 96.0, 97.0, 95.0]
+    index = pd.bdate_range("2026-01-02", periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes, "Volume": [1e6] * len(closes)}, index=index)
+    frame["High"] = frame["Close"] * (1 + half)
+    frame["Low"] = frame["Close"] * (1 - half)
     return frame[["Open", "High", "Low", "Close", "Volume"]]

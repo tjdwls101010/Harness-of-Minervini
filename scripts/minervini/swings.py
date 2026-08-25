@@ -178,19 +178,32 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     same failure as issuing a verdict over a gap the engine already knows about: what changes
     is only whether the gap is visible.
     """
-    retracement = float(doctrine.parameter(_CONVENTION, "retracement_pct"))
-    offsets = [float(value) for value in doctrine.parameter(_CONVENTION, "sensitivity_offsets_pct")]
-    parameters = {"retracement_pct": retracement, "sensitivity_offsets_pct": offsets}
+    multiple = float(doctrine.parameter(_CONVENTION, "retracement_range_multiple"))
+    offsets = [float(value) for value in doctrine.parameter(_CONVENTION, "sensitivity_offsets")]
 
     bars = completed_bars(history)
     sessions = 0 if bars is None else int(len(bars))
     source = bars if bars is not None else history
+    typical = _typical_range_pct(bars)
+    parameters = {
+        "retracement_range_multiple": multiple,
+        "sensitivity_offsets": offsets,
+        "typical_daily_range_pct": None if typical is None else round(typical, 4),
+        "retracement_pct": None if typical is None else round(multiple * typical, 4),
+    }
+    if typical is None:
+        return {
+            "state": "unavailable", "anchors": [], "live_leg": None, "ambiguous_sessions": [],
+            "sensitivity": [], "ambiguous_sessions_in_base": [], "parameters": parameters,
+            "sessions": sessions, "bars_fingerprint": bars_fingerprint(source),
+        }
+    retracement = multiple * typical
     primary = segment(source, retracement_pct=retracement)
     anchors = base_chain(primary["anchors"])
 
     sensitivity: list[dict[str, Any]] = []
     for offset in offsets:
-        neighbour = retracement + offset
+        neighbour = (multiple + offset) * typical
         if neighbour <= 0:
             continue
         found = base_chain(segment(source, retracement_pct=neighbour)["anchors"])
@@ -221,6 +234,18 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         "sessions": sessions,
         "bars_fingerprint": bars_fingerprint(source),
     }
+
+
+def _typical_range_pct(bars: Any) -> float | None:
+    """How far this stock travels inside an ordinary session, as a percentage of its close.
+
+    The median rather than the mean, so one gap or one earnings session does not set the scale
+    the whole history is read at.
+    """
+    if bars is None or len(bars) == 0:
+        return None
+    spread = ((bars["High"] - bars["Low"]) / bars["Close"] * 100).median()
+    return float(spread) if spread > 0 else None
 
 
 def _iso(label: Any) -> str:

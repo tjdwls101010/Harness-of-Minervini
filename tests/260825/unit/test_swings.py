@@ -18,7 +18,7 @@ import unittest
 import pandas as pd
 
 from scripts.minervini.swings import base_chain, canonical_chain, segment
-from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, two_bases_series
+from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, turn_between_neighbours_series, two_bases_series, unstable_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
@@ -98,7 +98,7 @@ class CanonicalChainTests(unittest.TestCase):
         """Knowing the chain moves with the parameter and passing one of them anyway is the
         same failure as issuing READY over a gap the engine knows about."""
 
-        frame, _ = base_series(depths=(25.0, 10.0, 1.2))
+        frame, _ = unstable_series()
 
         chain = canonical_chain(frame)
 
@@ -133,19 +133,22 @@ class CanonicalChainTests(unittest.TestCase):
         through the case the refusal exists for.
         """
 
-        prices = [80, 90, 100, 95, 90, 90.675, 90, 80, 75, 85, 99, 95, 89, 94, 98, 95, 93, 96, 97, 95]
-        index = pd.bdate_range("2026-01-02", periods=len(prices))
-        frame = pd.DataFrame(
-            {"Open": prices, "High": prices, "Low": prices, "Close": prices, "Volume": [1e6] * len(prices)},
-            index=index,
-        )
-
-        finer = base_chain(segment(frame, retracement_pct=0.5)["anchors"])
-        primary = base_chain(segment(frame, retracement_pct=1.0)["anchors"])
-        self.assertGreater(len(finer), len(primary))
+        frame = turn_between_neighbours_series()
 
         chain = canonical_chain(frame)
 
+        # The scale is derived from the bars, so the neighbours are read back rather than named.
+        parameters = chain["parameters"]
+        primary = base_chain(segment(frame, retracement_pct=parameters["retracement_pct"])["anchors"])
+        finer = base_chain(
+            segment(
+                frame,
+                retracement_pct=(parameters["retracement_range_multiple"] + min(parameters["sensitivity_offsets"]))
+                * parameters["typical_daily_range_pct"],
+            )["anchors"]
+        )
+
+        self.assertGreater(len(finer), len(primary))
         self.assertEqual(chain["state"], "unstable")
         self.assertTrue(chain["sensitivity"])
 
@@ -154,8 +157,15 @@ class CanonicalChainTests(unittest.TestCase):
 
         chain = canonical_chain(frame)
 
-        self.assertIn("retracement_pct", chain["parameters"])
-        self.assertIn("sensitivity_offsets_pct", chain["parameters"])
+        self.assertIn("retracement_range_multiple", chain["parameters"])
+        self.assertIn("sensitivity_offsets", chain["parameters"])
+        # The multiple is the rule; the percentage it came out at is a fact about this stock.
+        self.assertGreater(chain["parameters"]["typical_daily_range_pct"], 0)
+        self.assertAlmostEqual(
+            chain["parameters"]["retracement_pct"],
+            chain["parameters"]["retracement_range_multiple"] * chain["parameters"]["typical_daily_range_pct"],
+            places=3,
+        )
         self.assertEqual(chain["sessions"], len(frame))
 
 

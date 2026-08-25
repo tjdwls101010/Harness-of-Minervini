@@ -10103,24 +10103,24 @@
       ],
       "thresholds": {},
       "parameters": {
-        "retracement_pct": {
-          "value": 1.0,
-          "unit": "percent",
+        "retracement_range_multiple": {
+          "value": 2.5,
+          "unit": "multiple_of_typical_daily_range",
           "affects_verdict": true,
-          "note": "A move is treated as turned once price gives back this much of it. The source names no such number; this one is small enough to see the final contraction of the progression the book works through -- twenty-five percent, then ten, then five -- without counting daily noise as a contraction."
+          "note": "A move is treated as turned once price gives back this many typical daily ranges of it, the typical range being the median of (high - low) / close over the completed history. The source names no number for either, and describes swing reading as chart work; this is the harness's own rule. It is a multiple rather than a percentage because whether a given give-back is noise is a fact about the stock: a fixed one percent read a quiet name's real contractions and a volatile name's intraday chop as the same event, and on real bars the second produced chains of a dozen contractions where the source's own range is two to six."
         },
-        "sensitivity_offsets_pct": {
+        "sensitivity_offsets": {
           "value": [
-            -0.5,
-            0.5
+            -0.25,
+            0.25
           ],
-          "unit": "percent",
+          "unit": "multiple_of_typical_daily_range",
           "affects_verdict": true,
-          "note": "Neighbouring values the segmentation is re-run at. A chain that changes when the parameter moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading anyway."
+          "note": "Neighbouring multiples the segmentation is re-run at. A chain that changes when the multiple moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading."
         }
       },
       "rule": {
-        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain, refuses to vouch for one that neighbouring parameter values disagree with, and never lets the caller choose the parameter, the starting anchor, or the pivot."
+        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain at a retracement scaled to the stock's own typical daily range, refuses to vouch for one that neighbouring multiples disagree with, and never lets the caller choose the multiple, the starting anchor, or the pivot."
       },
       "computability": "deterministic",
       "failure": {

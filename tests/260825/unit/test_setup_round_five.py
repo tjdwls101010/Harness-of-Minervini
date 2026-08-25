@@ -184,7 +184,10 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         slipped = tail(frame, 3, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(slipped, 2, close=pivot * 1.03, volume=1_800_000.0)
         available = float(recovered["Close"].iloc[-1])
-        chain = detected(recovered) or anchor_dates(frame, anchors)
+        # The base, not the detector's chain over the extended frame: appending five flat
+        # sessions at one price makes turns of its own at a scale finer than these bars, and the
+        # subject here is which kind of failure a slip below the pivot is.
+        chain = anchor_dates(frame, anchors)
 
         result = evaluate_setup(
             build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset", entry_price=available))

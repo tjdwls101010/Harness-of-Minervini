@@ -14,7 +14,7 @@ from pathlib import Path
 
 from scripts.minervini.chart import _draw_anchors, render_chart_artifacts
 from scripts.minervini.swings import canonical_chain
-from tests.series import anchor_dates, base_series
+from tests.series import anchor_dates, base_series, unstable_series
 
 
 class AnchorOverlayTests(unittest.TestCase):
@@ -96,7 +96,7 @@ class AnchorOverlayTests(unittest.TestCase):
         self.assertTrue(drawn["daily"]["pivot_drawn"])
 
     def test_an_unvouched_segmentation_puts_nothing_on_either_timeframe(self) -> None:
-        frame, _ = base_series(depths=(25.0, 10.0, 1.2))
+        frame, _ = unstable_series()
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = render_chart_artifacts(
@@ -109,7 +109,7 @@ class AnchorOverlayTests(unittest.TestCase):
     def test_a_segmentation_the_detector_will_not_vouch_for_draws_nothing(self) -> None:
         """Drawing an unstable chain would show a person a structure the engine refuses to use."""
 
-        frame, _ = base_series(depths=(25.0, 10.0, 1.2))
+        frame, _ = unstable_series()
 
         with tempfile.TemporaryDirectory() as directory:
             manifest = render_chart_artifacts(

@@ -66,7 +66,7 @@ class ProposesAChainTests(unittest.TestCase):
 
 class DeclinesToProposeTests(unittest.TestCase):
     def test_a_segmentation_neighbouring_parameters_disagree_with_proposes_nothing(self) -> None:
-        payload = run(depths=(25.0, 10.0, 1.2))
+        payload = run(daily_range_pct=0.8)
 
         self.assertEqual(payload["data"]["state"], "unstable")
         self.assertEqual(payload["data"]["anchors"], [])
@@ -80,21 +80,21 @@ class DeclinesToProposeTests(unittest.TestCase):
         for a flag that does not exist and was never going to.
         """
 
-        payload = run(depths=(25.0, 10.0, 1.2))
+        payload = run(daily_range_pct=0.8)
 
         self.assertEqual(payload["status"], "unavailable")
 
     def test_the_reason_names_which_of_the_two_causes_it_was(self) -> None:
         """Parameter disagreement and an unreadable session are different problems."""
 
-        payload = run(depths=(25.0, 10.0, 1.2))
+        payload = run(daily_range_pct=0.8)
 
         self.assertEqual([item["reason"] for item in payload["missing"]], ["neighbouring_parameters_disagree"])
 
     def test_it_does_not_point_at_a_chart_that_would_draw_no_anchors(self) -> None:
         """The chart is where a proposal becomes an approval, and there is no proposal."""
 
-        payload = run(depths=(25.0, 10.0, 1.2))
+        payload = run(daily_range_pct=0.8)
 
         self.assertEqual(payload["next_capabilities"], [])
 
@@ -122,7 +122,7 @@ class CompactKeepsTheAnswerTests(unittest.TestCase):
         """A key name is not a place. `sensitivity` is a list of chains that disagreed, and its
         own anchor lists are exactly the verbose basis compact exists to drop."""
 
-        payload = run(depths=(25.0, 10.0, 1.2))
+        payload = run(daily_range_pct=0.8)
 
         compact = format_payload(payload, "compact")
 
