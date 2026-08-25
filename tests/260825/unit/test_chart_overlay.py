@@ -15,7 +15,7 @@ import pandas as pd
 from pathlib import Path
 
 from scripts.minervini.chart import _draw_anchors, render_chart_artifacts
-from scripts.minervini.setup_structure import bars_fingerprint
+from scripts.minervini.setup_structure import bars_fingerprint, read_bars
 from scripts.minervini.swings import canonical_chain
 from tests.series import anchor_dates, base_series, unstable_series
 
@@ -203,6 +203,44 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
 
         self.assertIsNone(bars_fingerprint(frame))
         self.assertIn("history_repeats_a_session", self._refused(frame))
+
+    def test_the_two_surfaces_never_disagree_about_a_frame(self) -> None:
+        """The invariant, rather than one rule at a time.
+
+        What went wrong was not any single check but that there were two lists of them. Pinning
+        the rules one by one would let the lists drift apart again between the pinned ones.
+        """
+
+        base, _ = base_series()
+
+        def zero_prices(frame): frame.iloc[5, 0:4] = 0.0
+        def negative_close(frame): frame.iloc[9, frame.columns.get_loc("Close")] = -1.0
+        def negative_volume(frame): frame.iloc[9, frame.columns.get_loc("Volume")] = -5.0
+        def high_below_low(frame): frame.iloc[11, frame.columns.get_loc("High")] = float(frame["Low"].iloc[11]) - 1
+        def open_above_high(frame): frame.iloc[13, frame.columns.get_loc("Open")] = float(frame["High"].iloc[13]) + 1
+        def nan_close(frame): frame.iloc[15, frame.columns.get_loc("Close")] = float("nan")
+        def infinite_high(frame): frame.iloc[17, frame.columns.get_loc("High")] = float("inf")
+        def repeated_session(frame): frame.index = [frame.index[0], *frame.index[1:-1], frame.index[0]]
+        def missing_column(frame): frame.drop(columns=["Volume"], inplace=True)
+
+        mutations = [
+            ("untouched", lambda frame: None), ("zero prices", zero_prices), ("negative close", negative_close),
+            ("negative volume", negative_volume), ("high below low", high_below_low),
+            ("open above high", open_above_high), ("nan close", nan_close), ("infinite high", infinite_high),
+            ("repeated session", repeated_session), ("missing column", missing_column),
+        ]
+        for label, mutate in mutations:
+            with self.subTest(frame=label):
+                frame = base.copy()
+                mutate(frame)
+                accepted = read_bars(frame)[1] is None
+                try:
+                    with tempfile.TemporaryDirectory() as directory:
+                        render_chart_artifacts(frame, ticker="TEST", as_of=base.index[-1].date(), output_dir=directory)
+                    rendered = True
+                except ValueError:
+                    rendered = False
+                self.assertEqual(accepted, rendered)
 
     def test_an_infinite_price_leaves_as_unavailable_rather_than_an_exception(self) -> None:
         """`read_bars` passed it and the digest raised on it, which is an internal failure where
