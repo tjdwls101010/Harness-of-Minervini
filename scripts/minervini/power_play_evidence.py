@@ -16,7 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from . import doctrine
-from .power_play import measure_power_play, reading_rejects
+from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
 
 
 _CLAIM = "fundamentals.power_play_exception"
@@ -222,34 +222,42 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         for condition in primary_criteria
         if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria)
     }
+    # Three states, because a reading nobody could read is not a reading that came through. A
+    # span holding a corporate action was not measured on one coordinate system, so it rejects
+    # nothing -- and folding it into the survivors reports the structure as intact under every
+    # reading, then sends the reader to the chart to settle a top when what needs settling is the
+    # split.
+    surviving: list[str] = []
+    unreadable: list[str] = []
+    reading_rejections: list[dict[str, Any]] = []
+    for criteria, reading in zip(every_criteria, readings):
+        if not _unmoved(reading):
+            unreadable.append(reading["peak_date"])
+        elif reading_rejects(criteria, corporate_action_unmoved=True):
+            reading_rejections.append(
+                {
+                    "peak_date": reading["peak_date"],
+                    # `failed` carries only the criteria every reading agreed on, so a rejection
+                    # the readings reached by different routes would otherwise arrive as a verdict
+                    # with nothing behind it -- a state no signal explains. The one criterion left
+                    # out is the flag that has not finished: the reducer calls it unfinished, and
+                    # one envelope cannot call it a failure on the line below.
+                    "failed": [
+                        f"{_CLAIM}.{condition}"
+                        for condition, state in criteria.items()
+                        if state == "fail" and f"{_CLAIM}.{condition}" != FLAG_STILL_FORMING
+                    ],
+                }
+            )
+        else:
+            surviving.append(reading["peak_date"])
+
     # A rejection every top agrees on is a rejection whichever top the search landed on. Left at
     # the two nearest tops it was not "every reading" at all, and it said so in its own name.
     # A truncated chain has readings nobody took, so it cannot claim they agreed.
     rejected_under_every_reading = (
-        bool(contested)
-        and not exhausted
-        and all(reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
-                for criteria, reading in zip(every_criteria, readings))
+        bool(contested) and not exhausted and bool(readings) and not surviving and not unreadable
     )
-    surviving = [
-        reading["peak_date"]
-        for criteria, reading in zip(every_criteria, readings)
-        if not reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
-    ]
-    # What each reading rejected on. `failed` carries only the criteria every reading agreed on,
-    # so a rejection the readings reached by different routes would otherwise arrive as a verdict
-    # with nothing behind it -- a state no signal explains, which is the shape this harness treats
-    # as a defect everywhere else.
-    reading_rejections = [
-        {
-            "peak_date": reading["peak_date"],
-            "failed": [
-                f"{_CLAIM}.{condition}" for condition, state in criteria.items() if state == "fail"
-            ],
-        }
-        for criteria, reading in zip(every_criteria, readings)
-        if reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
-    ]
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -290,6 +298,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "readings": len(readings),
         "readings_exhausted": exhausted,
         "surviving_readings": surviving,
+        "unreadable_readings": unreadable,
         "reading_rejections": reading_rejections,
         "rejected_under_every_reading": rejected_under_every_reading,
         # Which criteria the choice of top actually moved. The reducer reads this rather than the

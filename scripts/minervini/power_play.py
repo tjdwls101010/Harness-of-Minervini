@@ -194,6 +194,9 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     # on -- and it stopped one bar short of the peak, which in a one-session advance dropped the
     # only session there was and read a six-times launch as no expansion at all.
     advance = bars.iloc[launch + 1:peak + 1]
+    # The session the flag bottomed on, which is the boundary a payout has to fall inside to have
+    # had anything to do with that low.
+    flag_low_label = flag["Low"].idxmin() if len(flag) else None
     baseline_volume = float(baseline["Volume"].median()) if len(baseline) else None
     measurable = baseline_volume is not None and baseline_volume > 0
 
@@ -237,7 +240,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         "distribution_sessions": _dated_events(bars, _DISTRIBUTION_COLUMN, earliest, len(bars) - 1),
         # Split by the span each criterion reads, because a payout only moves the measurement it
         # was paid inside of.
-        "distribution_paid_in_the_flag": _paid_between(bars, peak + 1, len(bars) - 1),
+        # Bounded at the extreme each one is read against, not at the end of the span. A payout
+        # made after the flag had already bottomed took the later prints down without having taken
+        # the low down, and adding it back to a low it never touched turns a twenty-six percent
+        # decline into twenty-four and withholds a known failure as an open question.
+        "distribution_paid_in_the_flag": _paid_between(bars, peak + 1, int(bars.index.get_loc(flag_low_label))) if flag_low_label is not None else _paid_between(bars, peak + 1, peak),
         "distribution_paid_in_the_advance": _paid_between(bars, launch + 1, peak),
         # The three boundaries the numbers above are counted between. A duration reported without
         # the session it is counted from cannot be checked, and the anchor is deliberately not the
@@ -275,7 +282,7 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         "flag_weeks": len(flag) / week,
         "flag_depth_pct": (peak_high - float(flag["Low"].min())) / peak_high * 100 if len(flag) else None,
         "flag_low": float(flag["Low"].min()) if len(flag) else None,
-        "flag_low_date": flag["Low"].idxmin().date().isoformat() if len(flag) else None,
+        "flag_low_date": flag_low_label.date().isoformat() if flag_low_label is not None else None,
         "rejection": None,
     }
 
@@ -461,6 +468,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "payout_sensitive_criteria": sorted(payout_sensitive),
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),
+        "unreadable_readings": evidence.get("unreadable_readings"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_reading": rejected_under_every_reading,
         "alternate_peak": evidence.get("alternate_peak"),

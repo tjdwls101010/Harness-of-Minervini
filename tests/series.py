@@ -495,6 +495,7 @@ def power_play_series(
     split_inside_the_flag: bool = False,
     split_at: int | None = None,
     distribution_in_the_flag: float | None = None,
+    distribution_after_the_flag_low: float | None = None,
     volume_spike_before_the_launch: float | None = None,
     corporate_actions: bool = True,
     marginal_new_high_at: int | Sequence[int] | None = None,
@@ -587,6 +588,11 @@ def power_play_series(
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if distribution_after_the_flag_low is not None:
+        # Paid once the flag had already bottomed. It takes the later prints down without having
+        # taken the low down, so the decline the criterion reads is the stock's own.
+        frame["Dividends"] = [0.0] * len(closes)
+        frame.iloc[trough + 2, frame.columns.get_loc("Dividends")] = distribution_after_the_flag_low
     if distribution_in_the_flag is not None:
         # A cash distribution paid partway through the flag. It comes out of the printed price on
         # its ex-date, so the decline the flag measures is partly the payout -- and unlike a split

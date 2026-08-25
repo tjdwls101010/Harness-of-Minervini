@@ -372,3 +372,53 @@ class APayoutWithholdsItsOwnSignalAndNothingElse(unittest.TestCase):
 
         self.assertEqual(verdict["peak_identity"], "settled")
         self.assertNotIn("peak_identity", verdict["missing"])
+
+
+class OnlyThePayoutsThatCameOutOfTheLowCountAgainstIt(unittest.TestCase):
+    """A distribution paid after the flag's low did not make that low.
+
+    Summing the whole flag's payouts onto the extreme it already chose loses the order the
+    sessions happened in: a twenty-six percent decline that bottomed before the ex-date reads as
+    twenty-four, and a known failure is withheld as an open question.
+    """
+
+    def test_a_payout_after_the_low_does_not_shallow_it(self):
+        pack = evidence(flag_depth_pct=26.0, distribution_after_the_flag_low=0.42)
+
+        # Asserted on the measurement rather than on the verdict: a twenty-six percent flag sits
+        # close enough to the limit that the candidate tops contest it on their own, which would
+        # hide whether the payout was counted.
+        self.assertEqual(pack["measurements"]["distribution_paid_in_the_flag"], 0.0)
+        self.assertEqual(pack["payout_sensitive_criteria"], [])
+
+    def test_a_payout_before_the_low_still_counts_against_it(self):
+        pack = evidence(flag_depth_pct=26.0, distribution_in_the_flag=0.42)
+
+        self.assertEqual(pack["measurements"]["distribution_paid_in_the_flag"], 0.42)
+
+
+class AReadingNobodyCouldReadIsNotAReadingThatSurvived(unittest.TestCase):
+    """Three states, not two: rejected, surviving, and unreadable.
+
+    A reading whose own span holds a corporate action rejects nothing, because nothing in it was
+    measured on one coordinate system. Counted as "surviving" it says the structure came through
+    every reading intact, which is the opposite of what happened -- and it sends the reader to the
+    chart to settle a top when what needs settling is the split.
+    """
+
+    def test_a_split_leaves_no_reading_surviving(self):
+        pack = evidence(split_inside_the_flag=True)
+
+        self.assertEqual(pack["surviving_readings"], [])
+        self.assertEqual(pack["reading_rejections"], [])
+        self.assertEqual(len(pack["unreadable_readings"]), pack["readings"])
+
+    def test_a_flag_still_forming_is_not_named_as_a_reading_s_failure(self):
+        """The reducer calls it unfinished; one envelope cannot call it both."""
+
+        pack = evidence(flag_sessions=6)
+
+        for rejection in pack["reading_rejections"]:
+            self.assertNotIn(
+                "fundamentals.power_play_exception.flag_minimum_sessions", rejection["failed"]
+            )
