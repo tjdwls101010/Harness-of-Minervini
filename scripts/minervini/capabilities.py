@@ -211,14 +211,12 @@ CAPABILITIES = {
         ),
         _capability(
             "ticker.setup",
-            "Evaluate price geometry, supply contraction, entry confirmation, confirmation debt, and precise invalidation from completed bars plus chart judgments.",
+            "Measure a declared base against completed bars and decide the setup on evidence each route must positively have.",
             inputs=_inputs(
                 {
                     "ticker": _field("string", "US-listed ticker symbol.", required=True),
-                    "price_geometry": _field("enum", "Independent chart judgment for base geometry.", choices=["pass", "fail", "needs_chart"]),
-                    "supply_evidence": _field("enum", "Independent chart judgment for contracting supply and volume.", choices=["pass", "fail", "needs_chart"]),
+                    "swing": _field("string[]", "Repeatable swing date, alternating high and low and ending on the high that is the pivot; every date is checked against the completed bars and a bar that is not the extreme of the span its neighbours bound is refused by name.", required=True),
                     "entry_kind": _field("enum", "Entry structure; TL early is advanced and opt-in.", choices=["completed_pivot", "vcp_cheat", "tl_early"]),
-                    "entry_state": _field("enum", "Whether the named entry is confirmed on completed evidence.", choices=["confirmed", "wait", "needs_chart"]),
                     "invalidation_price": _field("number", "Positive invalidation price; pair with invalidation_condition for a precise level."),
                     "invalidation_condition": _field("string", "Observable invalidation condition; pair with invalidation_price."),
                     "tactic_opt_in": _field("boolean", "Explicitly authorize the [TL-EARLY] tactic.", default=False),
@@ -228,10 +226,10 @@ CAPABILITIES = {
                 },
                 providers=True,
             ),
-            output="READY, WAIT, AVOID, or INCOMPLETE setup state with separate geometry, supply, entry, debt, and invalidation evidence.",
-            limitations=["Completed OHLCV can measure a candidate pivot but cannot certify visual base geometry or supply absorption.", "A VCP label alone never passes the supply gate.", "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation."],
-            status_meanings={"ok": "The setup reducer produced ready, wait, or avoid.", "needs_input": "Required chart evidence remains incomplete or needs_chart.", "partial": "Completed price history stops before the requested session, so the setup is not judged.", "unavailable": "Completed price history is unavailable."},
-            examples=["scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --price-geometry pass --supply-evidence pass --entry-kind completed_pivot --entry-state confirmed", "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --entry-kind tl_early --entry-state confirmed --tactic-opt-in --confirmation-debt 'completed pivot breakout' --later-pivot-price 200 --later-pivot-condition 'completed close above 200' --invalidation-price 190 --invalidation-condition 'completed close below 190'"],
+            output="READY, WAIT, AVOID, or INCOMPLETE setup state, the measurements behind it, the evidence the route required, and contrast evidence reported separately.",
+            limitations=["Swing segmentation is the caller's chart reading; what the bars can check is that each declared date exists, that the chain alternates and ends on a high, and that each bar really is the extreme of its span.", "Ready requires every item of a route's declared evidence, so a base nobody described is incomplete rather than unobjectionable.", "Contrast evidence from other practitioners is reported beside the verdict and never enters it.", "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken."],
+            status_meanings={"ok": "The setup reducer produced ready, wait, or avoid.", "needs_input": "Required evidence is absent, or the declared chain contradicts the bars.", "partial": "Completed price history stops before the requested session, so the setup is not judged.", "unavailable": "Completed price history is unavailable."},
+            examples=["scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --swing 2026-05-06 --swing 2026-05-20 --swing 2026-06-05 --swing 2026-06-19", "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --entry-kind tl_early --tactic-opt-in --confirmation-debt 'completed pivot breakout' --later-pivot-price 200 --later-pivot-condition 'completed close above 200' --invalidation-price 190 --invalidation-condition 'completed close below 190'"],
         ),
         _capability(
             "ticker.fundamentals",

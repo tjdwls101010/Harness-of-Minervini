@@ -215,3 +215,47 @@ class UnusableHistoryTests(unittest.TestCase):
         result = evaluate_setup(build_setup_evidence(None, ["2026-03-19", "2026-04-06", "2026-04-20"]))
 
         self.assertEqual(result["setup_state"], "incomplete")
+
+
+class GoldenDiscriminationTests(unittest.TestCase):
+    """A pattern that measures like a VCP everywhere the numbers are pretty.
+
+    An adversarial review of this design produced it: three contractions, successive ratios
+    of exactly one half, volume drying into the pivot, an expanding-volume breakout closing
+    high in its range -- and a right side that recovered forty percent in three sessions on
+    volume that arrived almost entirely on the down days. Every reported measurement flatters
+    it. The one rule the source states with "must" is the one it fails.
+    """
+
+    def _counterexample(self):
+        frame, anchors = base_series(
+            depths=(30.0, 5.0, 2.5),
+            declines=(60, 6, 6),
+            rallies=(3, 6, 6),
+            volume_profile="distribution",
+        )
+        return build_setup_evidence(frame, anchor_dates(frame, anchors))
+
+    def test_the_flattering_measurements_really_are_flattering(self) -> None:
+        evidence = self._counterexample()
+        numbers = evidence["measurements"]
+
+        self.assertEqual(numbers["contraction_count"], 3)
+        self.assertTrue(numbers["contractions_contract"])
+        self.assertTrue(numbers["pivot_cleared"])
+        self.assertEqual([round(ratio, 4) for ratio in numbers["successive_depth_ratios"]], [0.1667, 0.5])
+
+    def test_and_the_setup_is_still_refused(self) -> None:
+        result = evaluate_setup(self._counterexample())
+
+        self.assertEqual(result["setup_state"], "avoid")
+        self.assertEqual(result["failed"], ["setup.demand_supply_volume_asymmetry"])
+
+    def test_the_compressed_right_side_is_reported_even_though_no_threshold_rejects_it(self) -> None:
+        """The source calls time compression hazardous and supplies no ratio, so it reports."""
+
+        result = evaluate_setup(self._counterexample())
+        compression = signal(result, "setup.time_compression_hazard")
+
+        self.assertEqual(compression["state"], "reported")
+        self.assertLess(compression["measured"], 0.5)

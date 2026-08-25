@@ -551,13 +551,18 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing=[stale_price],
             sources=[_source(prices.meta)],
         )
-    judgments = request.get("chart_judgments")
-    if judgments is not None and not isinstance(judgments, Mapping):
-        raise RequestError("chart_judgments must be an object", "chart_judgments")
+    swings = request.get("swing")
+    if swings is not None and not isinstance(swings, list):
+        raise RequestError("swing must be a list of completed session dates", "swing")
+    entry = request.get("entry")
+    if entry is not None and not isinstance(entry, Mapping):
+        raise RequestError("entry must be an object", "entry")
     evidence = build_setup_evidence(
         prices.data,
-        chart_judgments=judgments,
+        swings or [],
+        entry_kind=request.get("entry_kind") or "completed_pivot",
         tactic_opt_in=request.get("tactic_opt_in") is True,
+        entry=entry,
     )
     result = evaluate_setup(evidence)
     missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]
@@ -567,11 +572,14 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        data={"ticker": ticker, **result},
-        signals=[result["price_geometry"], result["supply_evidence"], result["entry"]],
+        # Contrast evidence rides in the payload, never in `signals`: a reducer or a caller
+        # scanning signal states would read another practitioner's disagreement as this
+        # harness's own missing evidence.
+        data={"ticker": ticker, **result, "contrast": evidence["contrast"]},
+        signals=result["signals"],
         missing=missing,
         sources=[_source(prices.meta)],
-        doctrine_ids=["setup.vcp_supply_contraction"],
+        doctrine_ids=sorted({str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}),
         next_capabilities=["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 
