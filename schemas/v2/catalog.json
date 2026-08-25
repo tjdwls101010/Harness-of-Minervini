@@ -40,6 +40,10 @@
       "schema_file": "ticker.peers.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.peers.schema.json"
     },
+    "ticker.power-play": {
+      "schema_file": "ticker.power-play.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.power-play.schema.json"
+    },
     "ticker.qualify": {
       "schema_file": "ticker.qualify.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.qualify.schema.json"

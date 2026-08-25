@@ -174,6 +174,10 @@ def build_parser() -> JsonArgumentParser:
     setup.add_argument("--later-pivot-condition", metavar="TEXT", help=_input_help("ticker.setup", "later_pivot_condition"))
     _common(setup, "ticker.setup")
 
+    power_play = _capability_parser(ticker_sub, "power-play", "ticker.power-play")
+    power_play.add_argument("ticker", help=_input_help("ticker.power-play", "ticker"))
+    _common(power_play, "ticker.power-play")
+
     fundamentals = _capability_parser(ticker_sub, "fundamentals", "ticker.fundamentals")
     fundamentals.add_argument("ticker", help=_input_help("ticker.fundamentals", "ticker"))
     fundamentals.add_argument("--cik", help=_input_help("ticker.fundamentals", "cik"))

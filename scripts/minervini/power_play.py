@@ -197,4 +197,70 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["measure_power_play"]
+
+
+
+_CLAIM = "fundamentals.power_play_exception"
+# What a Power Play must positively have. Qualification is this list being satisfied, never an
+# absence of objections -- the same rule the setup routes are built on, for the same reason: a
+# structure nobody measured has nothing to object to.
+_REQUIRED = (
+    f"{_CLAIM}.advance_minimum_pct",
+    f"{_CLAIM}.advance_maximum_weeks",
+    f"{_CLAIM}.flag_minimum_sessions",
+    f"{_CLAIM}.flag_maximum_weeks",
+    f"{_CLAIM}.flag_maximum_decline_gate_pct",
+    f"{_CLAIM}.launch_volume_character",
+    f"{_CLAIM}.flag_tightness_or_vcp",
+)
+_CORPORATE_ACTIONS = "corporate_action_evidence"
+
+
+def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
+    """Classify a measured Power Play without deciding what may be done about it.
+
+    Two of the four criteria end in questions completed bars do not answer -- whether volume was
+    *huge* rather than merely expanded, and whether a flag outside ten percent nonetheless shows
+    VCP character -- so a structure that clears every measurable limit comes back incomplete and
+    names the reading it waits on. That is the honest shape of this capability today: it removes
+    candidates deterministically and assembles the evidence for the ones it cannot remove.
+    """
+    signals = {str(signal["id"]): signal for signal in evidence.get("signals") or []}
+    failed: list[str] = []
+    missing: list[str] = []
+    for claim_id in _REQUIRED:
+        signal = signals.get(claim_id)
+        state = None if signal is None else str(signal.get("state"))
+        if state == "pass":
+            continue
+        if state == "fail":
+            failed.append(claim_id)
+        else:
+            missing.append(claim_id)
+
+    # A history that does not carry the event column has not said there was no split, and a span
+    # containing one is a span whose prices are partly the action rather than the stock. Neither
+    # is a finding about the stock, so both are gaps rather than failures.
+    if evidence.get(_CORPORATE_ACTIONS) != "present" or evidence.get("corporate_action_sessions"):
+        missing.append(_CORPORATE_ACTIONS)
+
+    if failed:
+        state = "not_qualified"
+    elif missing:
+        state = "incomplete"
+    else:
+        state = "qualified"
+    return {
+        "power_play_state": state,
+        "required_evidence": list(_REQUIRED),
+        "failed": failed,
+        "missing": missing,
+        "structure": evidence.get("structure") or {},
+        "measurements": evidence.get("measurements") or {},
+        "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
+        "corporate_action_sessions": evidence.get("corporate_action_sessions"),
+        "signals": list(evidence.get("signals") or []),
+    }
+
+
+__all__ = ["evaluate_power_play", "measure_power_play"]
