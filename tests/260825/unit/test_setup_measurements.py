@@ -18,7 +18,7 @@ from scripts.minervini.setup_structure import resolve_structure
 from tests.series import anchor_dates, base_series
 
 
-SPEC = {"volume_baseline_sessions": 50}
+SPEC = {"volume_baseline_sessions": 50, "breakout_volume_baseline_sessions": (20, 30, 50)}
 
 
 def measured(**kwargs) -> dict:
@@ -83,7 +83,7 @@ class InsufficientHistoryTests(unittest.TestCase):
         frame, anchors = base_series()
         structure = resolve_structure(frame, anchor_dates(frame, anchors))
 
-        numbers = measure(frame, structure, {"volume_baseline_sessions": 500})
+        numbers = measure(frame, structure, {**SPEC, "volume_baseline_sessions": 500})
 
         self.assertIsNone(numbers["final_contraction_volume_ratio"])
 
@@ -130,10 +130,15 @@ class BreakoutTests(unittest.TestCase):
                 self.assertGreater(numbers["breakout_volume_ratios"][sessions], 1.0)
 
     def test_the_closing_range_uses_the_formula_the_source_printed(self) -> None:
-        """(Close - Low) / (High - Low), as a percentage; the source's own worked example is 80."""
+        """(Close - Low) / (High - Low), as a percentage; the source's own worked example is 80.
+
+        The bar has to clear the pivot as well as carry those numbers, because the closing
+        range is read on the session the stock left the base rather than on whatever bar the
+        history ends with.
+        """
 
         frame, anchors = base_series()
-        frame.loc[frame.index[-1], ["High", "Low", "Close"]] = [100.0, 90.0, 98.0]
+        frame.loc[frame.index[-1], ["High", "Low", "Close"]] = [120.0, 90.0, 114.0]
         structure = resolve_structure(frame, anchor_dates(frame, anchors))
 
         numbers = measure(frame, structure, SPEC)

@@ -32,7 +32,13 @@ def _unresolved(state: str, problems: list[str]) -> dict[str, Any]:
     return {"state": state, "anchors": [], "contractions": [], "base": None, "problems": problems}
 
 
-def _completed_bars(history: Any) -> pd.DataFrame | None:
+def completed_bars(history: Any) -> pd.DataFrame | None:
+    """Sort and coerce a price history once, so validation and measurement read one frame.
+
+    Both halves used to normalise separately, which meant a frame given out of order or with
+    numeric strings validated against one reading and was measured against another.
+    """
+
     if not isinstance(history, pd.DataFrame) or any(column not in history for column in _REQUIRED_COLUMNS):
         return None
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
@@ -65,7 +71,7 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
     if not declared:
         return _unresolved("unavailable", ["no swing chain was declared"])
 
-    bars = _completed_bars(history)
+    bars = completed_bars(history)
     if bars is None:
         return _unresolved("unavailable", ["completed daily OHLCV is missing or invalid"])
 
@@ -154,4 +160,4 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["resolve_structure"]
+__all__ = ["completed_bars", "resolve_structure"]

@@ -31,20 +31,27 @@ _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of
 
 # What each route must positively have before it can be called ready. Every entry names a
 # claim, so the reason a setup is not ready is always a sentence from the source.
-_STANDARD_EVIDENCE = (
+_BASE_EVIDENCE = (
     "setup.demand_supply_volume_asymmetry",
     "setup.pivot_volume_contraction",
     "setup.contractions_must_contract",
-    "setup.structural_pivot_and_trigger",
+    # Not the V-shape, which the source describes without a ratio, but its other named form:
+    # a right side that produced no pause at all is an absence, and an absence needs no
+    # threshold to observe.
+    "setup.time_compression_hazard",
+    "market.correction_depth_healthy_leader.correction_failure_threshold",
 )
 _ROUTES = {
-    "completed_pivot": _STANDARD_EVIDENCE,
-    "vcp_cheat": _STANDARD_EVIDENCE,
+    "completed_pivot": (*_BASE_EVIDENCE, "setup.structural_pivot_and_trigger"),
     # An early entry is taken before the pivot, so the trigger is the confirmation it owes
     # rather than evidence it already has. The supply gates still apply: they are about the
     # base, not about when the trade is taken.
-    "tl_early": _STANDARD_EVIDENCE[:-1],
+    "tl_early": _BASE_EVIDENCE,
 }
+# A cheat is entered inside the base rather than at its pivot, so it needs the pause's
+# location and recovery fraction measured. Until that exists, borrowing the pivot route's
+# evidence would call a cheat ready on evidence about a different entry.
+_UNMEASURED_ROUTES = {"vcp_cheat": "cheat_geometry"}
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -92,17 +99,33 @@ def _canonical_kind(value: Any) -> str:
     }.get(kind, kind)
 
 
-def _rejects(claim_id: str) -> bool:
-    """Whether a known failure of this claim rejects rather than counting against readiness."""
+def _rejects(identifier: str) -> bool:
+    """Whether a known failure here rejects rather than counting against readiness.
 
-    return doctrine.get_claim(claim_id)["claim"]["kind"] == "hard_gate"
+    A required condition is named either by its claim or by one threshold inside it, so the
+    claim is resolved by walking back from the longest prefix the registry knows.
+    """
+    parts = identifier.split(".")
+    while parts:
+        try:
+            return doctrine.get_claim(".".join(parts))["claim"]["kind"] == "hard_gate"
+        except KeyError:
+            parts.pop()
+    return False
 
 
-def _early_entry_debt(entry: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _early_entry_debt(entry: Mapping[str, Any], price: float | None) -> tuple[dict[str, Any], list[str]]:
     debt = entry.get("confirmation_debt")
     items = [str(item) for item in debt if str(item).strip()] if isinstance(debt, list) else []
     later_pivot = _precise_level(entry.get("minervini_later_pivot"))
     invalidation = _precise_level(entry.get("invalidation"))
+    # A level is only the level it is named after if it sits where that name requires. A
+    # later pivot at or below the current price is already behind the stock, and an
+    # invalidation at or above it is already breached; both validated before this check.
+    if price is not None and later_pivot is not None and float(later_pivot["price"]) <= price:
+        later_pivot = None
+    if price is not None and invalidation is not None and float(invalidation["price"]) >= price:
+        invalidation = None
     resolved = {
         **entry,
         "kind": "tl_early",
@@ -130,25 +153,36 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     structure = payload.get("structure") if isinstance(payload.get("structure"), Mapping) else {}
     measurements = payload.get("measurements") if isinstance(payload.get("measurements"), Mapping) else {}
     signals = [item for item in (payload.get("signals") or []) if isinstance(item, Mapping)]
-    by_id = {str(item.get("id")): item for item in signals}
+    # Only binding evidence can answer a required condition, and two answers to the same
+    # condition is a contradiction rather than a race the last writer wins.
+    by_id: dict[str, Any] = {}
+    contested: set[str] = set()
+    for item in signals:
+        if item.get("binds") is False:
+            continue
+        identifier = str(item.get("id"))
+        if identifier in by_id:
+            contested.add(identifier)
+        by_id[identifier] = item
 
     entry = _mapping(payload.get("entry"))
     kind = _canonical_kind(entry.get("kind")) or "completed_pivot"
     entry["kind"] = kind
     entry_missing: list[str] = []
     if kind == "tl_early":
-        entry, entry_missing = _early_entry_debt(entry)
+        price = measurements.get("last_close")
+        entry, entry_missing = _early_entry_debt(entry, float(price) if isinstance(price, (int, float)) else None)
     required = _ROUTES.get(kind)
     if required is None:
-        required = ()
-        entry_missing = [*entry_missing, "entry_trigger"]
+        required = _BASE_EVIDENCE if kind in _UNMEASURED_ROUTES else ()
+        entry_missing = [*entry_missing, _UNMEASURED_ROUTES.get(kind, "entry_trigger")]
 
     failed: list[str] = []
     missing: list[str] = []
     unsatisfied: list[str] = []
     for claim_id in required:
         item = by_id.get(claim_id)
-        if item is None:
+        if item is None or claim_id in contested:
             missing.append(claim_id)
             continue
         state = str(item.get("state", ""))

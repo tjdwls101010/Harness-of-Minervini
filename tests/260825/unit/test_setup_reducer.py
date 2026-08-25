@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
 TL_EARLY_DECLARATION = {
     "confirmation_debt": ["completed Minervini pivot breakout"],
-    "minervini_later_pivot": {"price": 100.2, "condition": "completed close above 100.2"},
+    "minervini_later_pivot": {"price": 104.5, "condition": "completed close above 104.5"},
     "invalidation": {"price": 96.0, "condition": "completed close below 96.0"},
 }
 
@@ -173,7 +173,7 @@ class EarlyEntryTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
         self.assertEqual(result["entry"]["tactic"], "[TL-EARLY]")
         self.assertEqual(result["entry"]["confirmation_debt"], ["completed Minervini pivot breakout"])
-        self.assertEqual(result["entry"]["minervini_later_pivot"]["price"], 100.2)
+        self.assertEqual(result["entry"]["minervini_later_pivot"]["price"], 104.5)
         self.assertEqual(result["entry"]["invalidation"]["price"], 96.0)
 
     def test_without_the_caller_opting_in_the_tactic_stays_unresolved(self) -> None:
@@ -218,13 +218,14 @@ class UnusableHistoryTests(unittest.TestCase):
 
 
 class GoldenDiscriminationTests(unittest.TestCase):
-    """A pattern that measures like a VCP everywhere the numbers are pretty.
+    """A pattern that measures like a VCP everywhere its numbers are pretty.
 
-    An adversarial review of this design produced it: three contractions, successive ratios
-    of exactly one half, volume drying into the pivot, an expanding-volume breakout closing
-    high in its range -- and a right side that recovered forty percent in three sessions on
-    volume that arrived almost entirely on the down days. Every reported measurement flatters
-    it. The one rule the source states with "must" is the one it fails.
+    An adversarial review of this design produced it: three contractions narrowing left to
+    right, a cleared pivot, and a right side that recovered in three sessions after a decline
+    that took sixty. What refuses it is not the shape -- the source describes V-shaped action
+    as hazardous and supplies no ratio for it -- but the volume, which arrives almost entirely
+    on the down days. The rejection comes from the one rule the source states with "must",
+    and the tests below say exactly which condition did the work.
     """
 
     def _counterexample(self):
@@ -251,18 +252,23 @@ class GoldenDiscriminationTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "avoid")
         self.assertEqual(result["failed"], ["setup.demand_supply_volume_asymmetry"])
 
-    def test_the_compressed_right_side_is_reported_even_though_no_threshold_rejects_it(self) -> None:
-        """The source calls time compression hazardous and supplies no ratio, so it reports."""
+    def test_the_compressed_right_side_travels_with_the_verdict_as_a_measured_ratio(self) -> None:
+        """This right side did develop two pauses, so the absence form does not apply to it.
+
+        What remains is the V-shape, for which the source supplies no ratio at all. The
+        measured left-to-right duration ratio is carried so a reader sees it; nothing here
+        turns it into a rejection the source never wrote.
+        """
 
         result = evaluate_setup(self._counterexample())
         compression = signal(result, "setup.time_compression_hazard")
 
-        self.assertEqual(compression["state"], "reported")
+        self.assertEqual(compression["state"], "pass")
         self.assertLess(compression["measured"], 0.5)
 
 
 class SingleContractionTests(unittest.TestCase):
-    def test_one_contraction_cannot_satisfy_the_rule_that_contractions_narrow(self) -> None:
+    def test_one_contraction_cannot_satisfy_the_rule_that_contractions_narrow(self) -> None:  # noqa: D401
         """With nothing to compare, "smaller from left to right" is unobserved, not satisfied.
 
         A caller who declares only high, low, high gets a sequence with no successive pair

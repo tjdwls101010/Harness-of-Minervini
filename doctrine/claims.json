@@ -2162,7 +2162,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "computability": "chart_assisted",
       "note": "This 3-60 week range (Chapter 10, general VCP/consolidation discussion) does NOT match the '5 to 26 weeks' figure given for stage-2 base patterns in Chapter 5 (basecount.typical_base_duration_5_to_26_weeks). Both are verbatim and both are hedged ('as many as', 'most commonly'); they appear to describe overlapping but not identical things (general consolidation footprint vs. stage-2 base patterns specifically) — a reducer author should decide which applies to which check rather than assuming one supersedes the other.",
@@ -3066,10 +3067,12 @@
       },
       "consumers": [
         "market.snapshot",
-        "market.candidates"
+        "market.candidates",
+        "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "computability": "deterministic",
       "note": "Two distinct thresholds share the value 50: one is the ceiling for a survivable severe-bear-market correction ('as much as 50 percent'), the other is the point past which the source calls the correction 'generally too much' ('more than 50 percent'). Keep both — they frame the same number from opposite sides.",
@@ -9196,7 +9199,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.vcp_contraction_count",
       "title": "A VCP shows two to six contractions, most commonly two to four",
@@ -9268,7 +9272,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.successive_contraction_halving",
       "title": "Each successive contraction runs about half the previous one, with the tolerance left undefined",
@@ -9326,7 +9331,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.contractions_must_contract",
       "title": "Contractions narrow from left to right as supply is absorbed",
@@ -9386,7 +9392,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.demand_supply_volume_asymmetry",
       "title": "Volume must be much bigger on up days than on down days",
@@ -9442,7 +9449,7 @@
           ],
           "unit": "count",
           "exact": true,
-          "direction": "higher_is_better",
+          "direction": "inside_is_better",
           "quote_index": 0
         },
         "volume_baseline_sessions": {
@@ -9470,7 +9477,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.final_contraction_volume_dryup",
       "title": "Volume on the final contraction runs below the 50-day average with one or two extremely low days",
@@ -9498,7 +9506,7 @@
             "supports": "the baseline window, the one-to-two count, and the source's own exception"
           }
         ],
-        "resolution": "mined from Minervini row 3; 'we want to see' with an exception in the same breath is not filter language, so the ratio is a marker, the day count is the range the source gave, and the fifty-session window is a fact about which series to compute"
+        "resolution": "mined from Minervini row 3; 'we want to see' with an exception in the same breath is not filter language, so the ratio is a marker, the day count is the range the source gave, and the fifty-session window is a fact about which series to compute; the ratio's marker carries its direction in the sign of the reported distance, because the passage says 'below the 50-day average' and then exempts the largest-cap stocks in the same breath"
       }
     },
     {
@@ -9531,7 +9539,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.pivot_volume_contraction",
       "title": "Every correct pivot point develops with a contraction in volume",
@@ -9590,7 +9599,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.time_compression_hazard",
       "title": "A right side that develops too fast is time compression and is hazardous",
@@ -9649,7 +9659,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.structural_pivot_and_trigger",
       "title": "The pivot is the high of the completed pause, and the trigger is price above it on expanding volume",
@@ -9721,7 +9732,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.closing_range_formula",
       "title": "Closing range places the close within the bar's range",
@@ -9813,7 +9825,8 @@
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_vcp_doctrine.py"
+        "tests/260825/unit/test_setup_reducer.py",
+        "tests/260825/unit/test_setup_gaming.py"
       ],
       "id": "setup.volume_state_convention",
       "title": "Volume is above or below average by roughly a quarter, against a horizon-specific window",

@@ -48,7 +48,9 @@ class EnvelopeTests(unittest.TestCase):
         self.assertEqual(payload["data"]["setup_state"], "ready")
         self.assertEqual(payload["data"]["measurements"]["contraction_count"], 3)
 
-    def test_every_signal_in_the_envelope_is_one_the_verdict_could_read(self) -> None:
+    def test_no_signal_in_the_envelope_carries_a_state_or_a_flag_the_verdict_must_ignore(self) -> None:
+        """Not that every signal was required -- most report -- but that none of them is contrast."""
+
         payload = run()
 
         for signal in payload["signals"]:
