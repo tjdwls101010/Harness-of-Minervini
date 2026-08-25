@@ -46,6 +46,25 @@
 
 16. **Trend Template 순서를 원전 번호대로 재정렬.** `eligibility.py`가 "in source-map order"라고 주장하면서 실제로는 다른 순서로 저장하고 있었다(원전 5번 `price_above_50sma`가 8번 자리에).
 
+17. **role에 `marker` 추가, 그리고 게이트에서 '구속 여부'를 분리.** Phase 2 설계 리뷰가 짚은 blocker다. role 3종으로는 두 가지를 표현할 수 없었다. 첫째, "each successive contraction contained to about half **(plus or minus a reasonable amount)**"의 0.5 — 출처가 경계를 명시적으로 거부했으니 게이트가 아니고, 단일 목표값이니 밴드가 아니고, 모집단 통계가 아닌 데다 실제로 티커의 연속비와 비교되니 reference도 아니다. 둘째, Ryan의 "volume should increase at least 25%"는 명백한 필터 문장인데 "Minervini 기본 판정에 적용하면 안 된다"는 별개의 이유로 reference로 잘못 내려가 있었다 — 즉 기존 `gate`가 *그 수치가 무엇인가*와 *우리 판정을 구속하는가*를 하나로 뭉개고 있었다.
+   - `marker` — 출처가 비교 기준으로 명명했으나 필터로 진술하지 않은 값. 측정치를 그 값과 거리까지 함께 보고하고, 단독으로도 조합으로도 판정을 나르지 않는다.
+   - 구속 여부는 **새 필드 없이** 기존 `layer`/`attributed_to`에서 파생한다. 실무자·practice 계층도 게이트를 들 수 있게 하되 `evaluate_gate()`가 `binds: false`를 찍어 하네스 판정에 못 들어가게 한다. 검증기의 "Minervini 외 귀속 claim은 게이트 금지"는 이 표기로 교체된다(결정 11의 의도는 유지되고 표현만 정확해진다).
+
+18. **게이트가 항상 수치를 갖는다는 가정이 틀렸다.** "the volume **must** be much bigger on up days than on down days"(row 3)는 필터 언어인데 숫자가 없다. 숫자 없이 결정론적으로 판정 가능한 게이트가 존재하며, 이것이 설계 리뷰가 제시한 반례(V자 분배형 셋업 — 수축 3개·연속비 0.50·볼륨 드라이업·확장 돌파볼륨·DCR 80%가 전부 좋아 보이지만 저점에서 3세션 만에 +41%, down-day 볼륨이 up-day의 4배)를 죽이는 유일한 검사다. 임계 없는 정성 게이트는 claim id에 리듀서 술어를 묶어 표현한다.
+
+19. **검출기 단독 분할은 WAIT까지.** 스윙 분할은 원전이 chart-assisted라고 명시한 부분이다. `READY + confirmation_debt`는 자기모순이므로, 하네스 검출기의 자동 분할은 후보 생성기이고 READY 승격에는 `ticker.chart` 확인 또는 검증된 호출자 구조가 필요하다.
+
+20. **Phase 2는 5개 수직 슬라이스로 나눈다.** 설계 리뷰 blocker 6건 중 셋(호출자 스윙 좌표의 극값 검증, route별 READY 양의 증거 집합 선언, 주봉 집계)이 원 계획에 없던 작업이다. 순서: ①스키마(`marker`/`binds`)+role 오분류 교정 ②표준 VCP 구조검증→측정→판정→CLI ③검출기+차트 확인 흐름 ④Power Play ⑤TL 전술 6종. 미사용 측정 코드를 먼저 머지하지 않는다 — 각 슬라이스가 독립적으로 실행·테스트 가능한 기능을 끝낸다.
+   - **`--price-geometry` / `--supply-evidence` / `--entry-state` 삭제 확정.** 측정 결과를 재진술할 뿐이고 검증 불가능하다. 자유텍스트 메모로 대체하는 것도 "긴 pass 플래그"라서 채택하지 않는다.
+
+21. **Phase 1이 남긴 레지스트리 부채(설계 리뷰가 발견).** Power Play의 `flag_duration_weeks`·`flag_maximum_decline_pct`는 밴드로 등록돼 있으나 인용문이 "To qualify as a power play, the following criteria **must be met**"로 시작한다 — 느슨한 끝(6주/25%)에 게이트를 두고 밴드는 보고용으로 병존시킨다(결정 10의 적용). `setup.consolidation_footprint_3_to_60_weeks`는 원전이 하나의 범위로 준 것을 reference 두 개로 쪼갰다 → 밴드. 실무자 돌파볼륨 셋은 reference가 아니라 비구속 게이트.
+
+22. **슬라이스 ①이 남긴 것 — 이어지는 슬라이스가 처리할 항목.** 2라운드 적대 리뷰가 blocker 없이 major 6건을 냈고, 그중 넷은 슬라이스 ①의 경계 밖이라 여기 기록한다.
+   - **`contrast_*` 상태를 기존 리듀서에 그냥 연결하면 안 된다(슬라이스 ②).** `setup._state()`와 `risk._state()`는 모르는 상태를 기본값 `unavailable`로 낮추고, eligibility는 허용 집합 밖의 값으로 거부한다. 즉 비구속 증거가 무시되는 게 아니라 **누락으로 변질된다.** 비구속 게이트의 측정치가 없을 때 나오는 평범한 `unavailable`도 core completeness를 오염시킨다. `binds:false` 신호는 리듀서 진입 **전에** 별도 채널(`contrast_signals` 또는 `observations`)로 분기하고, core verdict 입력에는 binding 신호만 넣는다. 최소 테스트: contrast pass/fail/unavailable을 각각 모든 리듀서에 투입해 core verdict가 완전히 동일하고 contrast 증거만 보존되는지.
+   - **marker의 `distance`는 의도적으로 노출된다.** 응답 표준이 "측정치와 출처가 명명한 값까지의 거리"를 요구하므로 부호 있는 거리는 없앨 수 없다. 닫힌 것은 *우발적* 오용(상태 어휘가 판정어가 아니고, `threshold()`가 원시값을 안 준다)이고, 부호를 읽어 판정을 만드는 *의도적* 사용은 막지 못한다. "가능한 경로를 전부 차단했다"고 주장하지 않는다.
+   - **claim 단위 귀속은 혼합 소유권을 정확히 표현하지 못한다.** `eligibility.recent_ipo_primary_base`의 40세션은 claim 스스로 "하네스의 환산"이라고 밝히는데 `attributed_to: Minervini` 때문에 `_binds()`가 그 환산값까지 Minervini 게이트로 취급한다. 정확히 하려면 임계 단위 provenance가 필요하고, 그건 새 스키마 변경이다. 지금은 알려진 한계로 둔다 — 40세션은 실제로 판정에 쓰이고 구속돼야 하므로 harness 유래로 표기하면 eligibility가 깨진다.
+   - **복합 조건 게이트는 단독 평가하면 원전을 훼손한다(슬라이스 ④).** `turnaround_min_strong_quarters >= 2`는 원문이 "2개 분기 **또는** 1개 분기가 TTM EPS를 이전 고점 근처/위로"라는 OR이라 첫 가지만 평가하면 유효한 두 번째 경로가 fail이 된다. `receivables_and_inventory_vs_sales_double_trouble_ratio < 2`는 "두 비율이 **모두** 2배 이상이고 설명이 없을 때"라는 AND+예외다. 두 claim의 `rule.summary`가 이 구조를 기록하고 있으니 배선 시 반드시 읽을 것. 설명 유무는 정성 입력이라 `required_inputs`에 유령 항목을 넣지 않았다.
+
 ## 실행 단계
 
 각 단계 공통 게이트: `tdd` 스킬 선행(공개 시임 합의 → RED → GREEN, 테스트는 `./tests` 아래 레포 관례대로 — 기존 `tests/260817`은 보존하고 이번 재작성 스위트는 새 날짜 디렉터리 `tests/2608xx/`에 작성) → codex(sol, xhigh) diff 리뷰 → `validate_harness.py` 0 에러 → `harness-spec.md` Change history 동기 갱신 → 브랜치/PR(한국어 커밋 규칙, 스쿼시 머지). 큰 단계는 구현 전 codex 설계 리뷰 추가.

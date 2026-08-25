@@ -58,17 +58,40 @@ class LayerAndAttributionTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(any("harness" in error for error in result["errors"]), result["errors"])
 
-    def test_a_claim_attributed_to_someone_other_than_minervini_cannot_hold_a_gate(self) -> None:
+    def test_a_gate_attributed_to_another_practitioner_is_evaluated_but_never_binds(self) -> None:
+        """Ryan's "at least 25%" is a filter, and calling it a population statistic was a lie.
+
+        The registry now records it as what it is and `evaluate_gate` marks it non-binding,
+        so the contrast survives without another practitioner's standard being able to
+        reject a candidate this harness judges by Minervini's.
+        """
+
+        record = doctrine.get_claim("practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal")
+
+        self.assertEqual(record["claim"]["attributed_to"], "Ryan")
+        signal = doctrine.evaluate_gate(
+            "practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal",
+            "breakout_volume_increase_min",
+            10.0,
+        )
+
+        self.assertFalse(signal["binds"])
+        self.assertEqual(signal["state"], "contrast_fail")
+        self.assertNotIn(signal["state"], {"fail", "pass"})
+
+    def test_a_harness_layer_record_cannot_hold_a_gate_at_all(self) -> None:
+        """A practice-layer filter has a source behind it; a harness-layer one has none."""
+
         broken = registry()
-        record = next(item for item in broken["claims"] if item.get("attributed_to") == "Ryan" and item["thresholds"])
-        name, specification = next(iter(record["thresholds"].items()))
-        specification.update({"role": "gate", "comparator": ">=", "value": 80})
-        specification.pop("range", None)
+        record = find(broken, "scope.data_integrity")
+        record["thresholds"] = {
+            "invented_limit": {"role": "gate", "comparator": "<=", "value": 10, "unit": "percent", "exact": True, "quote_index": 0}
+        }
 
         result = doctrine.validate(broken)
 
         self.assertFalse(result["valid"])
-        self.assertTrue(any("attributed" in error for error in result["errors"]), result["errors"])
+        self.assertTrue(any("harness layer" in error for error in result["errors"]), result["errors"])
 
 
 class OutOfScopeTests(unittest.TestCase):

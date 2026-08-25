@@ -65,7 +65,7 @@ REQUIRED_THRESHOLDS = (
 # its definition onward. Type checks below reach it through `builtins` on purpose.
 _VALID_KINDS = frozenset({"constitution", "hard_gate", "default", "tactic", "interpretation", "exception", "quarantine"})
 _VALID_LAYERS = frozenset({"canonical", "practice", "harness"})
-_VALID_ROLES = frozenset({"gate", "band", "reference"})
+_VALID_ROLES = frozenset({"gate", "band", "marker", "reference"})
 _COMPARATORS = {
     "<=": lambda measured, limit: measured <= limit,
     ">=": lambda measured, limit: measured >= limit,
@@ -74,6 +74,10 @@ _COMPARATORS = {
 }
 _VALID_CORPORA = frozenset({"Minervini", "TraderLion"})
 _MINIMUM_QUOTATION_LENGTH = 20
+# The one rule whose rejection is about this harness's own request contract rather than a
+# market judgment: an early entry without its confirmation debt is a malformed setup, not a
+# stock that failed somebody's standard.
+_HARNESS_CONTRACT_REJECTIONS = frozenset({"tactic.early_entry_confirmation_debt"})
 
 
 @lru_cache(maxsize=1)
@@ -140,7 +144,17 @@ def threshold(claim_id: str, name: str) -> Any:
     if name not in thresholds:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
-    return specification["range"] if specification["role"] == "band" else specification["value"]
+    role = specification["role"]
+    # A raw number is one comparison away from a verdict, so the two kinds of number that
+    # must never carry one do not come out of here at all. A marker leaves through
+    # `evaluate_marker`, where the distance travels with it; another practitioner's filter
+    # leaves through `evaluate_gate`, where it is stamped as contrast.
+    if role in {"marker", "band"}:
+        evaluator = "evaluate_marker" if role == "marker" else "evaluate_band"
+        raise ValueError(f"{claim_id}.{name} is a {role}; read it through {evaluator} so where the measurement sits travels with it")
+    if not _binds(claim):
+        raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
+    return specification["value"]
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
@@ -151,11 +165,13 @@ def _readable(record: Mapping[str, Any], claim_id: str) -> None:
         raise ValueError(f"{claim_id} is recorded {exclusion} and is audit material; no capability may read its numbers")
 
 
-def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    """One threshold plus the quotation it cites, refusing a role it was not registered as.
+def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """One threshold, the claim it belongs to, and the quotation it cites.
 
     Reading a band as a gate is how a range the source hedged becomes a cliff it never
-    drew, so the mismatch raises here rather than producing a plausible verdict.
+    drew, so the mismatch raises here rather than producing a plausible verdict. The claim
+    travels back with the threshold because whose standard this is decides what the
+    evaluation is allowed to say, and looking it up twice invites the two answers to drift.
     """
     record = get_claim(claim_id)
     _readable(record["claim"], claim_id)
@@ -164,7 +180,7 @@ def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[s
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     if specification["role"] != expected_role:
         raise ValueError(f"{claim_id}.{name} is registered as a {specification['role']}, not a {expected_role}")
-    return specification, record["provenance"]["quotations"][specification["quote_index"]]
+    return specification, record["claim"], record["provenance"]["quotations"][specification["quote_index"]]
 
 
 def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -174,21 +190,72 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
     and a stop that is "basically ten percent" is the negotiation the risk spine exists
     to forbid.
     """
-    specification, _ = _specification(claim_id, name, "gate")
+    specification, claim, _ = _specification(claim_id, name, "gate")
     limit = specification["value"]
     comparator = specification["comparator"]
+    binds = _binds(claim)
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
         "role": "gate",
+        "binds": binds,
         "measured": measured,
         "unit": specification["unit"],
         "required": f"{comparator} {limit}",
     }
+    attribution = claim.get("attributed_to")
+    if attribution is not None:
+        signal["attributed_to"] = attribution
     if measured is None:
         signal["state"] = "unavailable"
     else:
-        signal["state"] = "pass" if _COMPARATORS[comparator](measured, limit) else "fail"
+        passed = _COMPARATORS[comparator](measured, limit)
+        # A non-binding gate is a real filter belonging to someone the harness reads for
+        # contrast. Reporting it as "pass"/"fail" would let a reducer that scans states
+        # generically hand another practitioner's standard a verdict this harness owes to
+        # Minervini's, so the contrast words say the same thing in vocabulary no verdict
+        # can consume.
+        signal["state"] = ("pass" if passed else "fail") if binds else ("contrast_pass" if passed else "contrast_fail")
+    return signal
+
+
+def _binds(record: Mapping[str, Any]) -> bool:
+    """Whether this claim's filter is the one the harness itself applies.
+
+    Attribution is required on the canonical layer precisely so this reads a statement
+    rather than a silence: an earlier version treated a missing name as the house voice,
+    and deleting one line from Ryan's claim made his standard bind.
+    """
+
+    return record.get("layer") == "canonical" and record.get("attributed_to") == "Minervini"
+
+
+def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
+    """Report a measurement beside a value the source named but never made a filter.
+
+    "About half (plus or minus a reasonable amount)" names 0.5 and then declines to say
+    where half stops being half. Compiling that into a comparison would draw the boundary
+    the author refused to draw, so this reports the distance and leaves the reading to
+    the analyst. Its state word is deliberately outside the pass/fail/wait vocabulary the
+    reducers branch on.
+    """
+    specification, _, quotation = _specification(claim_id, name, "marker")
+    value = specification["value"]
+    signal: dict[str, Any] = {
+        "id": f"{claim_id}.{name}",
+        "doctrine_id": claim_id,
+        "role": "marker",
+        "measured": round(measured, _REPORTED_PRECISION) if isinstance(measured, float) else measured,
+        "unit": specification["unit"],
+        "source_value": value,
+        "exact": specification["exact"],
+        "quotation": quotation["text"],
+        "distance": None,
+        "state": "unavailable",
+    }
+    if measured is not None:
+        signal["distance"] = round(measured - value, _REPORTED_PRECISION)
+        signal["state"] = "reported"
     return signal
 
 
@@ -199,7 +266,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     both sit inside 25-35, and a bare pass/fail throws that difference away. The
     quotation travels with the signal so the response can cite what it is reading.
     """
-    specification, quotation = _specification(claim_id, name, "band")
+    specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
@@ -270,6 +337,10 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             errors.append(f"{label} executable record requires a test reference")
         if record["layer"] not in _VALID_LAYERS:
             errors.append(f"{label}.layer is invalid")
+        if record["layer"] == "canonical" and not str(record.get("attributed_to") or "").strip():
+            # Only the canonical layer can bind, so this is where a missing name would be
+            # read as the house voice rather than as an incomplete record.
+            errors.append(f"{label} is canonical and must name its attributed_to")
         if record["computability"] not in _VALID_COMPUTABILITY:
             errors.append(f"{label}.computability is invalid")
         out_of_scope = record.get("out_of_scope")
@@ -310,6 +381,25 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
         if not isinstance(thresholds, Mapping):
             errors.append(f"{label}.thresholds must be an object")
             continue
+        if record["failure"].get("effect") == "not_applicable" and any(
+            isinstance(specification, Mapping) and specification.get("role") == "gate"
+            for specification in thresholds.values()
+        ):
+            # A gate is an executable pass/fail rule by definition, so a claim holding one
+            # and also saying failure does not apply describes itself two ways at once.
+            errors.append(f"{label} holds a gate and cannot declare a failure effect of not_applicable")
+        if record["missing"].get("effect") == "not_applicable" and any(
+            isinstance(specification, Mapping) and specification.get("role") == "gate"
+            for specification in thresholds.values()
+        ):
+            # A filter with no measurement is unanswered, not irrelevant.
+            errors.append(f"{label} holds a gate and cannot declare a missing effect of not_applicable")
+        if record["failure"].get("effect") == "reject" and not _binds(record) and claim_id not in _HARNESS_CONTRACT_REJECTIONS:
+            # A contrast filter reports; the rejection words belong to the standard this
+            # harness actually follows. The exemption is named rather than inferred from the
+            # layer, because a harness-layer record is exempt only when its rejection is
+            # about the request contract, and nothing in the record says which those are.
+            errors.append(f"{label} does not bind and cannot declare a failure effect of reject")
         for name, specification in thresholds.items():
             if not isinstance(specification, Mapping):
                 errors.append(f"{label}.thresholds.{name} must be an object")
@@ -323,7 +413,7 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                 errors.append(f"{label}.thresholds.{name} must say whether the source states it exactly")
             role = specification.get("role")
             if role not in _VALID_ROLES:
-                errors.append(f"{label}.thresholds.{name}.role must be gate, band, or reference")
+                errors.append(f"{label}.thresholds.{name}.role must be gate, band, marker, or reference")
                 continue
             if role == "band":
                 span = specification.get("range")
@@ -349,15 +439,18 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                     errors.append(f"{label}.thresholds.{name} must carry a numeric value")
                 if role == "gate" and specification.get("comparator") not in _COMPARATORS:
                     errors.append(f"{label}.thresholds.{name} is a gate and needs a comparator")
-                if role == "gate" and record["layer"] != "canonical":
-                    # A practice-layer number can inform a judgment and a harness-layer
-                    # record has no source at all; neither may reject a candidate.
-                    errors.append(f"{label}.thresholds.{name} cannot be a gate on the {record['layer']} layer")
-                if role == "gate" and record.get("attributed_to") not in (None, "Minervini"):
-                    # Another practitioner's standard is contrast material. Making it a gate
-                    # would let a voice the harness does not follow reject a candidate.
-                    errors.append(f"{label}.thresholds.{name} is attributed to {record['attributed_to']} and cannot be a gate")
+                if role == "marker" and specification.get("comparator") is not None:
+                    # A marker with a comparator is a gate wearing the word the source
+                    # used to avoid drawing one.
+                    errors.append(f"{label}.thresholds.{name} is a marker and cannot carry a comparator")
+                if role == "gate" and record["layer"] == "harness":
+                    # A harness-layer record has no source at all, so a filter written there
+                    # would be a rejection nobody said. Practice-layer and other-practitioner
+                    # filters are real, and `evaluate_gate` marks them as non-binding rather
+                    # than the registry pretending they are population statistics.
+                    errors.append(f"{label}.thresholds.{name} cannot be a gate on the harness layer")
 
+    _assert_manifest_roles(REQUIRED_THRESHOLDS)
     registered = {record.get("id"): record for record in registry.get("claims", [])}
     for claim_id, name, role in REQUIRED_THRESHOLDS:
         record = registered.get(claim_id)
@@ -371,8 +464,24 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             # A reducer reads a gate's scalar or a band's pair. Swapping the role keeps
             # the name resolvable and hands the reducer the wrong shape mid-verdict.
             errors.append(f"a reducer reads {claim_id}.{name} as a {role} but it is registered as a {specification.get('role')}")
+        if not _binds(record):
+            # Non-binding claims may hold real filters now, which is what makes this rule
+            # necessary: the registry no longer refuses to record another practitioner's
+            # standard, so the place the refusal has to live is the reducers' own manifest.
+            errors.append(f"a reducer reads {claim_id}.{name} but that claim is not binding on this harness")
 
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
+
+
+def _assert_manifest_roles(manifest: tuple[tuple[str, str, str], ...]) -> None:
+    """Refuse a reducer manifest that names a role no reducer may decide with.
+
+    A marker is a signed distance from a value the source declined to bound. Listing one
+    here would hand a reducer that distance under a name that reads like a limit.
+    """
+    named = [f"{claim_id}.{name}" for claim_id, name, role in manifest if role == "marker"]
+    if named:
+        raise ValueError(f"a reducer may not read a marker: {', '.join(named)}")
 
 
 def _is_number(value: Any) -> bool:
@@ -381,4 +490,4 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-__all__ = ["evaluate_band", "evaluate_gate", "get_claim", "list", "threshold", "validate"]
+__all__ = ["evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "threshold", "validate"]
