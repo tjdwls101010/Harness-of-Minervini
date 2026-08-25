@@ -323,13 +323,6 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
         "payout_sensitive_criteria": sorted(payout_sensitive),
-        "alternate_peak": None if len(readings) < 2 else {
-            "peak_date": readings[1]["peak_date"],
-            "peak_high": readings[1]["peak_high"],
-            "flag_sessions": readings[1]["flag_sessions"],
-            "flag_depth_pct": readings[1]["flag_depth_pct"],
-            "advance_pct_closes": readings[1]["advance_pct_closes"],
-        },
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".
         "corporate_action_evidence": measurements["corporate_action_evidence"],
