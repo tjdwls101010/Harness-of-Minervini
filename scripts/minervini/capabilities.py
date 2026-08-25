@@ -215,7 +215,7 @@ CAPABILITIES = {
             inputs=_inputs(
                 {
                     "ticker": _field("string", "US-listed ticker symbol.", required=True),
-                    "swing": _field("string[]", "Repeatable swing date, alternating high and low and ending on the high that is the pivot; every date is checked against the completed bars and a bar that is not the extreme of the span its neighbours bound is refused by name.", required=True),
+                    "swing": _field("string[]", "Repeatable swing date, alternating high and low and ending on the high that is the pivot; every date is checked against the completed bars and a bar that is not the extreme of the span its neighbours bound is refused by name. Omitting it is not an error: the setup comes back incomplete with the base structure named as the evidence it lacks, which is the point at which to render the chart and read the swings off it."),
                     "entry_kind": _field("enum", "Entry structure; TL early is advanced and opt-in.", choices=["completed_pivot", "vcp_cheat", "tl_early"]),
                     "invalidation_price": _field("number", "Positive invalidation price; pair with invalidation_condition for a precise level."),
                     "invalidation_condition": _field("string", "Observable invalidation condition; pair with invalidation_price."),
