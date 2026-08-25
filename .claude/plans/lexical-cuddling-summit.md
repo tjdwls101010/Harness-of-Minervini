@@ -226,7 +226,14 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
   - **슬라이스 ③ 진행 중** (브랜치 `feat/swing-detector`, 미머지). 결정 35~40에 확정 내용. 551 tests OK.
     - 완료: `swings.py`(검출기 + `base_chain` + `canonical_chain`), `parameters` 레지스트리 필드와 `doctrine.parameter()`, `setup`이 검출기를 **내부에서** 실행(seam 제거), `ticker.swings` capability, 차트가 앵커·피벗 오버레이.
     - codex diff 리뷰 1라운드에서 blocker 2건(모호 세션을 알면서 보증 / 돌파 고점이 피벗을 빼앗아 베이스 소멸)과 major 3(±0.5% 정확 일치가 노이즈를 veto) 수정 완료.
-    - **남은 리뷰 지적** — major: `base_chain`이 여러 베이스를 이어붙일 수 있음(`_after_the_last_breakout`로 부분 완화, 재검증 필요), `ticker.setup` 계약 문구가 결정 40과 반대(여전히 "complete는 효과 없다"·"표준 경로는 wait"), `ticker.swings --format compact`가 앵커를 전부 삭제, `setup.swing_segmentation_convention`이 setup의 `doctrine_ids`에 안 실림, bars hash·`detector_version` 부재(`RENDERER_VERSION`도 1.0.0 그대로). minor: unstable 결과의 status·next가 막다른 길, 주봉에 앵커가 거의 안 그려짐(금요일과 정확히 일치할 때만).
+    - **1라운드 지적 7건 전부 처리 완료** (커밋 `5ff84e3` `542bd6c` `7072cd0`). 564 tests OK, 인용 207+6/139 claims, `validate_harness.py` 0 errors.
+      - `base_chain` 재검증에서 **더 나쁜 것**이 나왔다: 이어붙이는 게 아니라 **떠난 베이스를 제안**했다. 블로커 2를 막으려고 넣은 "가격이 넘어서 유지한 마지막 고점" 선호가 현재 베이스를 통째로 건너뛴다 — 몇 달 전 돌파한 베이스의 고점은 전부 그 조건을 통과하고, 지금 만드는 베이스의 고점은 아직 넘지 않았으니 하나도 통과 못 한다. 제거했고, 블로커 2는 `_is_new_high`가 이미 막고 있다.
+      - 스플라이싱 트리머 `_after_the_last_breakout`은 전체 스위트에서 **375회 호출되고 0회 발화**. 실제로 막는 것은 rim 선택(피벗 이전 최고 고점)이고, 트리머는 보증이 거기 있는 것처럼 읽히게 만드는 죽은 가지라 제거했다.
+      - `detector_version`은 **넣지 않기로 했다.** 지문이 두 경우를 이미 가른다 — 지문이 같은데 `differs`면 규칙이 바뀐 것, 지문이 다르면 데이터가 바뀐 것. 손으로 관리하는 버전 문자열은 낡을 자리만 된다.
+    - **자체 반례 탐색 결과** (2라운드 codex와 병렬로 수행):
+      - P1 돌파 후 새 구조 없이 60세션 직진 상승 → 떠난 베이스를 `resolved`로 제안. **버그 아님**: `live_leg`가 123.26을 싣고 앵커는 99.40에서 끝나므로 24% 격차가 응답에 그대로 보인다.
+      - P2 상승 중 등락(±0.8%/-1.5%)이 12세션 5.5% "베이스"로 잡혀 setup이 **WAIT**까지 감. 필수 증거 집합에 베이스 길이·깊이 하한이 없다. 다만 `consolidation_footprint_duration_weeks`가 `short_of_source_range 2.2`로 보고되고, 원전이 3~60주를 **범위로** 준 이상 밴드는 판정할 수 없다 — 설계대로다.
+      - **밴드 어휘 버그 발견(슬라이스 ① 표면, main에 머지됨).** `doctrine.evaluate_band`가 범위의 *좋은 쪽* 바깥을 `within_source_range`로 접는다. `lower_is_better` 깊이 밴드 25~35%에 5.46%를 넣으면 "within"이라고 답한다. 응답 표준의 "범위 안이라는 것은 통과로 보고할 게 아니다"와 정면으로 어긋난다. 판정은 안 바뀌지만(리듀서가 네 단어를 동등 취급) 읽는 사람이 먼저 보는 필드가 거짓을 말한다. **슬라이스 ③ 머지 후 별도 PR.**
     - **프로세스 교훈**: 실패하는 테스트 둘을 고치는 대신 동적 skip으로 바꿔 결함을 가렸다. 리뷰어가 잡았고 되돌렸다.
 - **Phase 3~7 — 미착수.**
 
