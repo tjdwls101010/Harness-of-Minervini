@@ -43,6 +43,7 @@ _VOLUME_STATE = "setup.volume_state_convention"
 _CLOSING_RANGE = "setup.closing_range_formula"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
 _FOOTPRINT = "setup.consolidation_footprint_3_to_60_weeks"
+_FAILURE_RESET = "setup.failure_reset_types"
 
 _RYAN_BREAKOUT = ("practitioners.breakout_volume.ryan_25pct_min_100_200pct_ideal", "breakout_volume_increase_min")
 _ZANGER_BREAKOUT = ("practitioners.breakout_volume.zanger_50pct_over_20day_avg", "breakout_volume_increase_over_20d_avg_min")
@@ -117,11 +118,11 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
     if expansion is None:
         return "unavailable"
     # Clearing the pivot without expanding volume is not the trigger the source describes;
-    # it is the trigger's other half missing. A breakout that later closed back under the
-    # pivot, or a pause that broke its own low on the way there, is not a live trigger either.
+    # it is the trigger's other half missing. Neither is a breakout out of a pause that had
+    # already taken out the base's own low on its way there.
     if not expansion > 1:
         return "fail"
-    if not measurements.get("breakout_held") or not measurements.get("pause_held_to_breakout"):
+    if not measurements.get("pause_held_to_breakout"):
         return "fail"
     return "pass"
 
@@ -195,6 +196,11 @@ def build_setup_evidence(
             _OVERHEAD_SUPPLY,
             "unavailable" if measurements["overhead_supply_above_pivot_pct"] is None else "reported",
             measurements["overhead_supply_above_pivot_pct"],
+        ),
+        _observation(
+            _FAILURE_RESET,
+            "unavailable" if measurements.get("failed_pivot_attempts") is None else "reported",
+            measurements.get("failed_pivot_attempts"),
         ),
         _observation(
             _CHASE_LIMIT,

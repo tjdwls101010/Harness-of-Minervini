@@ -9918,6 +9918,63 @@
         ],
         "resolution": "mined from Minervini row 3; 'a few percentage points' is a limit without a magnitude, so the extension above the pivot is reported beside the sentence and no threshold is registered"
       }
+    },
+    {
+      "id": "setup.failure_reset_types",
+      "title": "A base failure needs a whole new base; a pivot failure can reset and recover",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "price_contractions",
+        "pivot"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "A failure at the pivot can reset and recover within a small number of days, while a failure of the base itself requires building a whole new base before the stock can be bought again."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Earlier attempts at the pivot are counted beside the current one rather than disqualifying it; the source says a pivot failure can reset, and gives no count at which it stops being able to."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a pivot and the sessions after it there is nothing to count."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_gaming.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "This is what I call a failure reset, which comes in two forms: a base failure, which requires building a whole new base before it can be purchased again, and a pivot failure, which can reset and recover within a small number of days.",
+            "supports": "the two failure kinds, and that a pivot failure is recoverable rather than terminal"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the passage names two failure kinds and gives a duration only as 'a small number of days', so the count of earlier attempts is reported and no deadline is registered"
+      }
     }
   ]
 }

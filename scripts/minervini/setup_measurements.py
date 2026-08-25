@@ -82,7 +82,6 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "sessions_since_breakout": None,
             "sessions_after_pivot": None,
             "pause_held_to_breakout": None,
-            "breakout_held": None,
             "pivot_extension_at_breakout_pct": None,
             "failed_pivot_attempts": None,
             "daily_range_median_pct": None,
@@ -136,8 +135,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     above = after_pivot["Close"] > pivot
     # The live breakout is the start of the run price is in now, not the first close above
     # the pivot ever. Reading the first one dates the breakout at a poke that failed months
-    # ago; the source says a pivot failure "can reset and recover", so the earlier attempts
-    # are counted beside the current run rather than standing in for it.
+    # ago; `setup.failure_reset_types` carries the passage saying a pivot failure "can reset
+    # and recover", so the earlier attempts are counted beside the current run rather than
+    # standing in for it.
     below = after_pivot.loc[~above]
     current_run = after_pivot.loc[after_pivot.index > below.index[-1]] if len(below) else after_pivot
     breakout_label = current_run.index[0] if len(current_run) else None
@@ -198,10 +198,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         "breakout_date": breakout_label.date().isoformat() if breakout_label is not None else None,
         "sessions_since_breakout": int(len(since_breakout)) if breakout_label is not None else None,
         "sessions_after_pivot": int(len(after_pivot)),
-        # A pause that broke down before it broke out, and a breakout that gave the pivot
-        # back afterwards, are both facts about whether the trigger is still live.
+        # A pause that broke its base's own low on the way to the breakout took the structure
+        # the pivot was measured from with it, whatever price did afterwards.
         "pause_held_to_breakout": bool((before_breakout["Close"] > float(base["low"])).all()) if breakout_label is not None else None,
-        "breakout_held": bool((since_breakout["Close"] > pivot).all()) if breakout_label is not None else None,
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,
         "pivot_extension_pct": (float(last["Close"]) - pivot) / pivot * 100,

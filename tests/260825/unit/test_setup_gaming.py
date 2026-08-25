@@ -248,3 +248,33 @@ class FailedThenResetTests(unittest.TestCase):
         result = evaluate_setup(build_setup_evidence(frame, chain))
 
         self.assertEqual(result["setup_state"], "ready")
+
+
+class BaseFailureBeforeBreakoutTests(unittest.TestCase):
+    def test_a_pause_that_broke_the_base_low_before_breaking_out_is_not_a_live_trigger(self) -> None:
+        """Undercutting a prior low inside the base is a shakeout the source wants to see.
+
+        Undercutting the base's own low is a different event: the structure the pivot was
+        measured from is gone, and what follows is a new base rather than this one's breakout.
+        """
+
+        frame, anchors = base_series(breakout=False)
+        chain = anchor_dates(frame, anchors)
+        base_low = min(float(frame.loc[chain[position], "Low"]) for position in (1, 3, 5))
+        broken = flat_tail(frame, 4, close=base_low * 0.95, volume=1_500_000.0)
+        recovered = flat_tail(broken, 3, close=float(frame.loc[chain[-1], "High"]) * 1.03, volume=3_000_000.0)
+
+        result = evaluate_setup(build_setup_evidence(recovered, chain))
+
+        self.assertFalse(result["measurements"]["pause_held_to_breakout"])
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_the_entry_distance_is_measured_at_the_breakout_not_at_the_latest_bar(self) -> None:
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        extended = flat_tail(frame, 10, close=140.0, volume=800_000.0)
+
+        measurements = build_setup_evidence(extended, chain)["measurements"]
+
+        self.assertLess(measurements["pivot_extension_at_breakout_pct"], 5.0)
+        self.assertGreater(measurements["pivot_extension_pct"], 30.0)
