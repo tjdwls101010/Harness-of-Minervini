@@ -82,6 +82,8 @@ def _reported(value: Any) -> Any:
         return round(value, _REPORTED_PRECISION)
     if isinstance(value, list):
         return [_reported(item) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _reported(item) for key, item in value.items()}
     return value
 
 
