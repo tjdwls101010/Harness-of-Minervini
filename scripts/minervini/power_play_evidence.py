@@ -129,6 +129,26 @@ def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, 
     }
 
 
+def _read_criteria(measurements: Mapping[str, Any], tight_limit: float) -> tuple[dict[str, str], set[str]]:
+    """One reading's criteria, with whatever a cash payout decided taken back out of them.
+
+    Computed per reading rather than once for the top one, because the tops sit at different
+    sessions and a longer flag holds payouts a shorter one never saw. Left to the top reading
+    alone, an earlier candidate could reject on a depth its own payout manufactured and cast that
+    into "every reading rejects".
+    """
+    criteria = _criteria(measurements, tight_limit)
+    without = _criteria(_without_the_payout(measurements), tight_limit)
+    decided_by_the_payout = {condition for condition, state in criteria.items() if without[condition] != state}
+    return (
+        {
+            condition: "unavailable" if condition in decided_by_the_payout else state
+            for condition, state in criteria.items()
+        },
+        decided_by_the_payout,
+    )
+
+
 def _unmoved(measurements: Mapping[str, Any]) -> bool:
     """Whether this reading's own span is free of corporate actions.
 
@@ -187,15 +207,16 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         below, before = reading["peak_high"], reading["peak_date"]
     exhausted = len(readings) >= _MOST_TOPS_READ
 
-    primary_criteria = _criteria(measurements, tight_limit)
     # Which criteria a cash payout inside the span decided. Everything else it touched, it did
     # not decide, and an ordinary quarterly payment touches nearly nothing against these limits.
-    payout_sensitive = {
-        condition
-        for condition, state in _criteria(_without_the_payout(measurements), tight_limit).items()
-        if state != primary_criteria[condition]
-    }
-    every_criteria = [_criteria(reading, tight_limit) for reading in readings]
+    every_criteria, every_payout_sensitive = map(
+        list, zip(*(_read_criteria(reading, tight_limit) for reading in readings))
+    ) if readings else ([], [])
+    primary_criteria, payout_sensitive = (
+        (every_criteria[0], every_payout_sensitive[0])
+        if readings
+        else _read_criteria(measurements, tight_limit)
+    )
     contested = {
         condition
         for condition in primary_criteria
@@ -223,9 +244,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         {
             "peak_date": reading["peak_date"],
             "failed": [
-                f"{_CLAIM}.{condition}"
-                for condition, state in criteria.items()
-                if state == "fail" and _unmoved(reading)
+                f"{_CLAIM}.{condition}" for condition, state in criteria.items() if state == "fail"
             ],
         }
         for criteria, reading in zip(every_criteria, readings)

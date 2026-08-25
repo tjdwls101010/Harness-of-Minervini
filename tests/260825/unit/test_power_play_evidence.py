@@ -328,3 +328,22 @@ class EveryTopTheSearchCouldHaveLandedOnIsRead(unittest.TestCase):
         pack = evidence(flag_sessions=30, flag_depth_pct=8.0, marginal_new_high_at=(-8, -4))
 
         self.assertGreaterEqual(pack["readings"], 3)
+
+
+class NoReadingRejectsOnWhatThePayoutDecided(unittest.TestCase):
+    def test_a_payout_decided_criterion_carries_no_reading_s_rejection(self):
+        """Read per reading, not once for the top one.
+
+        The tops sit at different sessions, so a longer flag holds payouts a shorter one never
+        saw. Neutralised only for the top reading, an earlier candidate could reject on a depth
+        its own payout manufactured and cast that vote into "every reading rejects".
+        """
+        pack = evidence(flag_sessions=30, flag_depth_pct=30.0, distribution_in_the_flag=2.5)
+        sensitive = {
+            f"fundamentals.power_play_exception.{condition}"
+            for condition in pack["payout_sensitive_criteria"]
+        }
+
+        self.assertTrue(sensitive)
+        for rejection in pack["reading_rejections"]:
+            self.assertEqual(sensitive.intersection(rejection["failed"]), set())
