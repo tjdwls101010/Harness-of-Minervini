@@ -68,6 +68,19 @@ def _summary(claim_id: str) -> str:
     return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
 
 
+_REPORTED_PRECISION = 10
+
+
+def _reported(value: Any) -> Any:
+    """Round for the reader only; every comparison above ran on the measurement itself."""
+
+    if isinstance(value, float):
+        return round(value, _REPORTED_PRECISION)
+    if isinstance(value, list):
+        return [_reported(item) for item in value]
+    return value
+
+
 def _observation(claim_id: str, state: str, measured: Any) -> dict[str, Any]:
     """One claim the source states without a number, evaluated on direction alone.
 
@@ -83,7 +96,7 @@ def _observation(claim_id: str, state: str, measured: Any) -> dict[str, Any]:
         "role": "observation",
         "binds": binds,
         "state": state if binds else f"contrast_{state}" if state in {"pass", "fail"} else state,
-        "measured": measured,
+        "measured": _reported(measured),
         "required": _summary(claim_id),
     }
 
