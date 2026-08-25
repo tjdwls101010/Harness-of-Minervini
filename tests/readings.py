@@ -11,6 +11,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
+from scripts.minervini.setup_structure import bars_fingerprint
 from scripts.minervini.swings import canonical_chain
 
 
@@ -31,6 +32,9 @@ def full(frame: pd.DataFrame, chain: Sequence[str], **overrides):
     readings = {
         "right_side_development": "constructive",
         "chain_completeness": "complete",
+        # A reading is of one picture, so it names the bars it was read from. A test that
+        # modifies the frame has to re-read here, exactly as an analyst has to re-read a chart.
+        "approved_bars": bars_fingerprint(frame),
         "entry_proximity": "at_pivot",
         "entry_price": pivot * 1.001 if pivot else None,
     }

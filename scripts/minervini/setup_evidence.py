@@ -150,7 +150,12 @@ def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
     return "pass" if total > 1 else "fail"
 
 
-def _completeness_state(structure: Mapping[str, Any], reading: str | None, detected: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+def _completeness_state(
+    structure: Mapping[str, Any],
+    reading: str | None,
+    detected: Mapping[str, Any],
+    approved_bars: str | None = None,
+) -> tuple[str, dict[str, Any]]:
     """Whether the harness's own segmentation produced the chain the caller declared.
 
     A caller may say their segmentation is partial -- admitting a gap costs them nothing and
@@ -184,6 +189,14 @@ def _completeness_state(structure: Mapping[str, Any], reading: str | None, detec
         # anything against, and reporting the instability while passing one of the readings is
         # the failure this harness spent a slice learning to name.
         basis["sensitivity"] = detected.get("sensitivity")
+        return "needs_chart", basis
+    # A reading is of one picture. Comparing only the dates let a chain approved from another
+    # vintage of the series vouch for this one, with every date matching while the pivot, the
+    # depths and the base the reader looked at had all moved.
+    fingerprint = detected.get("bars_fingerprint")
+    basis["bars_fingerprint"] = fingerprint
+    if reading is not None and approved_bars != fingerprint:
+        basis["approved_bars"] = approved_bars
         return "needs_chart", basis
     found = [str(anchor["date"]) for anchor in detected.get("anchors") or []]
     basis["detected_anchors"] = len(found)
@@ -312,6 +325,7 @@ def build_setup_evidence(
     entry: Mapping[str, Any] | None = None,
     right_side_development: str | None = None,
     chain_completeness: str | None = None,
+    approved_bars: str | None = None,
     entry_proximity: str | None = None,
     entry_price: float | None = None,
     pivot_reset: str | None = None,
@@ -368,7 +382,7 @@ def build_setup_evidence(
                 "contraction_depths_pct": measurements["contraction_depths_pct"],
             },
         ),
-        _observation(_CHAIN_COMPLETENESS, *_completeness_state(structure, chain_completeness, detected)),
+        _observation(_CHAIN_COMPLETENESS, *_completeness_state(structure, chain_completeness, detected, approved_bars)),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(

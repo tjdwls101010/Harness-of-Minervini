@@ -19,18 +19,25 @@ from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
+from scripts.minervini.setup_structure import bars_fingerprint
 from tests.readings import detected
 from tests.series import anchor_dates, base_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
 def vouched(frame, chain, **overrides):
-    """Every reading satisfied. The detector is not passed anything; it runs on the bars."""
+    """Every reading satisfied, over the bars named. The detector runs on those same bars.
+
+    `frame` is the frame the evidence is built over, not the one the base was drawn from: a
+    reading names the picture it was read from, so a test that adds sessions re-reads here the
+    way an analyst re-reads a chart.
+    """
 
     pivot = float(frame.loc[chain[-1], "High"])
     return {
         "right_side_development": "constructive",
         "chain_completeness": "complete",
+        "approved_bars": bars_fingerprint(frame),
         "entry_proximity": "at_pivot",
         "entry_price": pivot * 1.001,
         **overrides,
@@ -84,6 +91,7 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 "swing": anchor_dates(frame, anchors),
                 "right_side_development": "constructive",
                 "chain_completeness": "complete",
+                "approved_bars": bars_fingerprint(frame),
                 "entry_proximity": "at_pivot",
                 "entry_price": float(frame["Close"].iloc[-1]),
                 "no_cache": True,
@@ -163,7 +171,7 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         collapsed = tail(frame, 2, close=float(frame.loc[chain[5], "Low"]) * 0.7, volume=2_000_000.0)
         recovered = tail(collapsed, 1, close=pivot * 1.02, volume=3_000_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset")))
 
         self.assertTrue(result["measurements"]["base_failed_after_pivot"])
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
@@ -196,7 +204,7 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         long_slip = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(long_slip, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset")))
 
         self.assertEqual(signal(result, "setup.failure_reset_types")["measured"]["sessions_below_pivot_after_breakout"], 60)
 
@@ -229,7 +237,7 @@ class LongResetNeedsJudgingTests(unittest.TestCase):
         under = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(under, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain)))
 
         reset = signal(result, "setup.failure_reset_types")
         self.assertEqual(reset["state"], "needs_chart")
@@ -243,7 +251,7 @@ class LongResetNeedsJudgingTests(unittest.TestCase):
         under = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(under, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="stale_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="stale_reset")))
 
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
 
@@ -265,7 +273,7 @@ class DeadBaseHasNoLiveTriggerTests(unittest.TestCase):
         collapsed = tail(frame, 2, close=float(frame.loc[chain[5], "Low"]) * 0.7, volume=2_000_000.0)
         recovered = tail(collapsed, 1, close=pivot * 1.02, volume=3_000_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain)))
 
         self.assertEqual(signal(result, "setup.structural_pivot_and_trigger")["state"], "fail")
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
@@ -346,7 +354,7 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
         eased, chain = self._gapped_then_eased()
         frame, anchors = base_series(breakout=False)
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain)))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertGreater(chase["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
@@ -356,7 +364,7 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
         eased, chain = self._gapped_then_eased()
         frame, anchors = base_series(breakout=False)
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain, entry_proximity="chased")))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain, entry_proximity="chased")))
 
         self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
         self.assertNotEqual(result["setup_state"], "ready")
@@ -388,7 +396,7 @@ class ProximityReadsWherePriceIsNowTests(unittest.TestCase):
         pivot = float(frame.loc[chain[-1], "High"])
         back_under = tail(frame, 2, close=pivot * 0.99, volume=700_000.0)
 
-        result = evaluate_setup(build_setup_evidence(back_under, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(back_under, chain, **vouched(back_under, chain, pivot_reset="prompt_reset")))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertLess(chase["measured"]["latest_close_extension_above_pivot_pct"], 0)

@@ -177,3 +177,48 @@ def two_bases_series(
         [index[anchor.position].date().isoformat() for anchor in first],
         [index[anchor.position].date().isoformat() for anchor in second],
     )
+
+
+def bases_under_an_older_high_series(*, start: str = "2026-01-02") -> tuple[pd.DataFrame, list[str], list[str]]:
+    """Two bases where the breakout between them never took out the older high.
+
+    `two_bases_series` puts the second rim above everything before it, which happens to satisfy
+    the rim rule by accident. A deep correction, a partial recovery, and a breakout out of that
+    recovery's own pivot is the shape that does not: the old peak still towers over the base
+    being built, so a rim taken as "the highest high before the pivot" reaches back over a
+    completed structure and reports a forty percent correction for an eleven percent base.
+    """
+
+    closes = _leg(55.0, 100.0, 50)
+    first = [Anchor(len(closes) - 1, "high", 100.0)]
+    closes.extend(_leg(100.0, 60.0, 25))
+    first.append(Anchor(len(closes) - 1, "low", 60.0))
+    closes.extend(_leg(60.0, 80.0, 20))
+    first.append(Anchor(len(closes) - 1, "high", 80.0))
+    closes.extend(_leg(80.0, 78.0, 3))
+
+    second: list[Anchor] = []
+    closes.extend(_leg(78.0, 95.0, 18))
+    second.append(Anchor(len(closes) - 1, "high", 95.0))
+    for low, high in ((84.0, 94.8), (88.0, 94.6)):
+        closes.extend(_leg(closes[-1], low, 12))
+        second.append(Anchor(len(closes) - 1, "low", low))
+        closes.extend(_leg(low, high, 10))
+        second.append(Anchor(len(closes) - 1, "high", high))
+    closes.extend(_leg(closes[-1], 93.2, 3))
+
+    steps = [abs(later - earlier) for earlier, later in zip(closes, closes[1:])]
+    wick = 0.15 * min(step for step in steps if step > 0)
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] + wick
+    frame["Low"] = frame["Close"] - wick
+    for anchor in first + second:
+        label = index[anchor.position]
+        frame.loc[label, "High" if anchor.kind == "high" else "Low"] = frame.loc[label, "Close"]
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    return (
+        frame[["Open", "High", "Low", "Close", "Volume"]],
+        [index[anchor.position].date().isoformat() for anchor in first],
+        [index[anchor.position].date().isoformat() for anchor in second],
+    )

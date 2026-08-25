@@ -631,6 +631,14 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     entry = request.get("entry")
     if entry is not None and not isinstance(entry, Mapping):
         raise RequestError("entry must be an object", "entry")
+    # A chart reading with no picture named is a reading of nothing in particular. The value is
+    # printed by both ticker.swings and ticker.chart, so carrying it costs a copy and buys the
+    # one thing the date comparison cannot see: that the approval was of these bars.
+    if request.get("chain_completeness") is not None and request.get("approved_bars") is None:
+        raise RequestError(
+            "approved_bars is required with chain_completeness: name the bars the chain was approved from, as ticker.swings and ticker.chart report them",
+            "approved_bars",
+        )
     for reserved in ("completeness_source", "detected_chain", "segmentation"):
         if request.get(reserved) is not None:
             # Naming a supplier is not being one, and neither is handing in a segmentation and
@@ -644,6 +652,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry=entry,
         right_side_development=request.get("right_side_development"),
         chain_completeness=request.get("chain_completeness"),
+        approved_bars=request.get("approved_bars"),
         entry_price=request.get("entry_price"),
         pivot_reset=request.get("pivot_reset"),
         entry_proximity=request.get("entry_proximity"),
@@ -652,15 +661,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # A reading nobody declared and a reading nothing will corroborate are different absences.
     # The first is fixed by declaring one; the second is fixed by nothing the caller can type,
     # and reporting both as "evidence required" sends a reader looking for an argument.
-    unvouched = evidence["segmentation"].get("state") != "resolved"
-    missing = [
-        {
-            "id": item,
-            "reason": "segmentation_unstable" if unvouched and item == _CHAIN_COMPLETENESS else "evidence_required",
-            "required": True,
-        }
-        for item in result["missing"]
-    ]
+    missing = [{"id": item, "reason": _missing_reason(item, evidence), "required": True} for item in result["missing"]]
     status = "needs_input" if result["setup_state"] == "incomplete" else "ok"
     return envelope(
         "ticker.setup",
@@ -683,6 +684,26 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         ),
         next_capabilities=["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
+
+
+def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:
+    """Which absence this is, because they are not fixed by the same thing.
+
+    A reading nobody declared is fixed by declaring one. A reading the detector will not
+    corroborate is fixed by nothing the caller can type. An approval of other bars is fixed by
+    looking at the current chart again. Reporting all three as "evidence required" sends a
+    reader looking for an argument in two of the three cases.
+    """
+    if item != _CHAIN_COMPLETENESS:
+        return "evidence_required"
+    segmentation = evidence["segmentation"]
+    if segmentation.get("state") != "resolved":
+        return "segmentation_unstable"
+    signal = next((item for item in evidence["signals"] if item.get("id") == _CHAIN_COMPLETENESS), {})
+    measured = signal.get("measured") or {}
+    if "approved_bars" in measured:
+        return "approval_covers_different_bars"
+    return "evidence_required"
 
 
 def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:

@@ -150,6 +150,7 @@ def build_parser() -> JsonArgumentParser:
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
     setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
     setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
+    setup.add_argument("--approved-bars", help=_input_help("ticker.setup", "approved_bars"))
     setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
     setup.add_argument("--pivot-reset", choices=("prompt_reset", "stale_reset", "needs_judgment"), help=_input_help("ticker.setup", "pivot_reset"))
     setup.add_argument("--entry-proximity", choices=("at_pivot", "chased", "needs_judgment"), help=_input_help("ticker.setup", "entry_proximity"))

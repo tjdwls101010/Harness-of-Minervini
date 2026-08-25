@@ -18,7 +18,7 @@ import unittest
 import pandas as pd
 
 from scripts.minervini.swings import base_chain, canonical_chain, segment
-from tests.series import anchor_dates, base_series, two_bases_series
+from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, two_bases_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
@@ -123,6 +123,32 @@ class CanonicalChainTests(unittest.TestCase):
         self.assertEqual(len(chain["bars_fingerprint"]), 64)
         self.assertNotEqual(chain["bars_fingerprint"], moved["bars_fingerprint"])
 
+    def test_a_neighbour_that_finds_an_extra_contraction_is_a_disagreement(self) -> None:
+        """The engine cannot both refuse a finer chain and vouch for one.
+
+        Downstream, a declared chain that adds anchors between the same endpoints is refused by
+        name, because an unfavourable contraction re-cut into smaller ones disappears from the
+        sequence without an endpoint moving. Accepting exactly that from a neighbouring
+        parameter value, on the grounds that every primary anchor is still present, waves
+        through the case the refusal exists for.
+        """
+
+        prices = [80, 90, 100, 95, 90, 90.675, 90, 80, 75, 85, 99, 95, 89, 94, 98, 95, 93, 96, 97, 95]
+        index = pd.bdate_range("2026-01-02", periods=len(prices))
+        frame = pd.DataFrame(
+            {"Open": prices, "High": prices, "Low": prices, "Close": prices, "Volume": [1e6] * len(prices)},
+            index=index,
+        )
+
+        finer = base_chain(segment(frame, retracement_pct=0.5)["anchors"], frame["Close"], frame["Low"])
+        primary = base_chain(segment(frame, retracement_pct=1.0)["anchors"], frame["Close"], frame["Low"])
+        self.assertGreater(len(finer), len(primary))
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unstable")
+        self.assertTrue(chain["sensitivity"])
+
     def test_the_parameters_it_used_travel_with_the_answer(self) -> None:
         frame, _ = base_series()
 
@@ -159,6 +185,36 @@ class OneBaseAtATimeTests(unittest.TestCase):
         chain = canonical_chain(frame)
 
         self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
+
+    def test_a_breakout_that_stayed_under_an_older_peak_still_ends_the_base_it_left(self) -> None:
+        """The rim rule alone only works when the newer rim happens to top everything before it.
+
+        A deep correction, a partial recovery, and a breakout out of that recovery leaves the old
+        peak still towering over the base being built. Taking the highest high before the pivot
+        then reaches back across a completed structure and reports a forty percent correction for
+        an eleven percent base.
+        """
+
+        frame, left_behind, current = bases_under_an_older_high_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual([item["date"] for item in chain["anchors"]], current)
+        self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
+
+    def test_a_poke_above_the_pivot_that_gave_it_all_back_did_not_end_the_base(self) -> None:
+        """Clearing a level and holding it is leaving; clearing it and falling back is failing.
+
+        Trimming on the close alone would cut a failed breakout out of its own base and hand
+        back the rebuild as a fresh structure, which is the opposite of what the source says a
+        pivot failure is.
+        """
+
+        frame, first, _ = two_bases_series(second_high=99.7)
+
+        chain = canonical_chain(frame)
+
+        self.assertTrue(set(first) <= {item["date"] for item in chain["anchors"]})
 
 
 class UnusableHistoryTests(unittest.TestCase):

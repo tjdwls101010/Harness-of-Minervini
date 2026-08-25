@@ -15,6 +15,7 @@ from scripts.minervini.contracts import RequestError
 from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import anchor_dates, base_series
 
 
@@ -29,7 +30,7 @@ def snapshot(**kwargs) -> tuple[ProviderSnapshot, list[str]]:
     return ProviderSnapshot(frame, meta), anchor_dates(frame, anchors)
 
 
-def run(*, swings=None, as_of=None, **kwargs) -> dict:
+def run(*, swings=None, as_of=None, approved_bars=None, **kwargs) -> dict:
     prices, chain = snapshot(**kwargs)
     runtime = Runtime(price_history=lambda ticker, requested: prices)
     request = {
@@ -38,11 +39,47 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
         "swing": chain if swings is None else swings,
         "right_side_development": "constructive",
         "chain_completeness": "complete",
+        "approved_bars": approved_bars or bars_fingerprint(prices.data),
         "entry_proximity": "at_pivot",
         "entry_price": float(prices.data["Close"].iloc[-1]),
         "no_cache": True,
     }
     return execute("ticker.setup", request, runtime=runtime)
+
+
+class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
+    """A chart reading is a reading of a particular picture, and pictures go stale."""
+
+    def test_declaring_a_reading_requires_saying_which_bars_it_was_read_from(self) -> None:
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        with self.assertRaises(RequestError) as raised:
+            execute("ticker.setup", {
+                "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+                "chain_completeness": "complete", "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(raised.exception.field, "approved_bars")
+
+    def test_an_approval_of_other_bars_does_not_carry_over_to_these(self) -> None:
+        """Same dates, different prices, and the reading was of the other picture.
+
+        Comparing only the anchor dates let a chain approved from one vintage of the series
+        vouch for a different one: every date matched while the pivot, the depths and the base
+        the reader actually looked at had all moved.
+        """
+
+        payload = run(approved_bars="0" * 64)
+
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "approval_covers_different_bars")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+
+    def test_the_current_fingerprint_travels_back_so_the_reader_can_re_approve(self) -> None:
+        payload = run(approved_bars="0" * 64)
+
+        self.assertEqual(len(payload["data"]["segmentation"]["bars_fingerprint"]), 64)
 
 
 class WhatDecidedItIsNamedTests(unittest.TestCase):
@@ -195,8 +232,9 @@ class CompactFormatTests(unittest.TestCase):
             "swing": chain,
             "right_side_development": "constructive",
             "chain_completeness": "complete",
+            "approved_bars": bars_fingerprint(prices.data),
             "entry_proximity": "at_pivot",
-        "entry_price": float(prices.data["Close"].iloc[-1]),
+            "entry_price": float(prices.data["Close"].iloc[-1]),
             "no_cache": True,
         }
 
