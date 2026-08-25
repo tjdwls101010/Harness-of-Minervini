@@ -490,6 +490,7 @@ def power_play_series(
     spike_above_peak_pct: float | None = None,
     tie_the_peak_at: int | None = None,
     ancient_equal_high: bool = False,
+    split_inside_the_flag: bool = False,
     start: str = "2026-01-02",
 ) -> pd.DataFrame:
     """Dormancy, then an explosive advance, then a flag that ends on the last bar.
@@ -553,6 +554,15 @@ def power_play_series(
         + [800_000.0] * flag_sessions
     )
     frame["Volume"] = volumes[: len(closes)]
+    if split_inside_the_flag:
+        # A two-for-one forward split partway through the flag: every printed price halves, so
+        # the flag reads as a fifty percent correction that never happened.
+        frame["Stock Splits"] = [0.0] * len(closes)
+        cut = trough + 1
+        frame.iloc[cut, frame.columns.get_loc("Stock Splits")] = 2.0
+        columns = ["Open", "High", "Low", "Close"]
+        frame.iloc[cut:, [frame.columns.get_loc(name) for name in columns]] /= 2
+        return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
     return frame[["Open", "High", "Low", "Close", "Volume"]]
 
 

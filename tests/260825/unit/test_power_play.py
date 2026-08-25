@@ -207,6 +207,18 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
 
         self.assertAlmostEqual(measured["advance_peak_volume_ratio"], 10.0, places=6)
 
+    def test_a_split_inside_the_flag_is_inside_the_measured_span(self):
+        """The flag is measured too, so a corporate action in it is a corporate action here.
+
+        A two-for-one split partway through the flag halves every printed price after it: the
+        flag reads as a fifty percent correction nobody took, and a span that stopped at the peak
+        reported no event at all -- turning a history that cannot be measured into a confident
+        failure on depth.
+        """
+        measured = measure_power_play(power_play_series(split_inside_the_flag=True), SPEC)
+
+        self.assertTrue(measured["corporate_action_sessions"])
+
 
 if __name__ == "__main__":
     unittest.main()

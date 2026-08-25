@@ -160,12 +160,16 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         # column has not reported "no split"; it has reported nothing, and folding those together
         # is how a reverse split that moved nobody's money reads as a hundred percent advance.
         #
-        # The span starts at the volume baseline rather than at the launch, because a split before
-        # the advance leaves the baseline in pre-split share counts while the advance is in
-        # post-split ones: forty quiet sessions at 100K against a launch at 1M is an eight-fold
-        # expansion that never happened.
+        # The span is every session any measurement here reads: from the volume baseline through
+        # the last bar. Both ends were wrong once. Starting at the launch leaves a split before
+        # the advance with the baseline in pre-split share counts and the advance in post-split
+        # ones -- forty quiet sessions at 100K against a launch at 1M is an eight-fold expansion
+        # that never happened. Ending at the peak misses the flag, which is measured too: a
+        # two-for-one split partway through it halves every printed price after it, so the flag
+        # reads as a fifty percent correction nobody took and the history that cannot be measured
+        # comes back as a confident failure on depth.
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
-        "corporate_action_sessions": _corporate_actions(bars, max(0, launch - advance_window), peak),
+        "corporate_action_sessions": _corporate_actions(bars, max(0, launch - advance_window), len(bars) - 1),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / _SESSIONS_PER_WEEK,
         # Three readings of the volume clause, because "commences on huge volume" asks about a
