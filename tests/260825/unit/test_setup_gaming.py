@@ -214,3 +214,37 @@ class BaseDepthTests(unittest.TestCase):
         duration = signals["setup.consolidation_footprint_3_to_60_weeks.consolidation_footprint_duration_weeks"]
         self.assertEqual(depth["role"], "band")
         self.assertEqual(duration["role"], "band")
+
+
+class FailedThenResetTests(unittest.TestCase):
+    """A pivot failure the source says can reset must not fix the breakout date forever.
+
+    Reading the *first* close above the pivot dates the breakout at a poke that failed months
+    ago, which then reports as a breakout that gave the pivot back. The source says a pivot
+    failure "can reset and recover", so the live breakout is the start of the run price is
+    currently in, and the earlier failures are counted beside it.
+    """
+
+    def _reset_series(self):
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        pivot = float(frame.loc[chain[-1], "High"])
+        poke = flat_tail(frame.iloc[:-1], 1, close=pivot * 1.005, volume=700_000.0)
+        pullback = flat_tail(poke, 6, close=pivot * 0.97, volume=600_000.0)
+        recovered = flat_tail(pullback, 3, close=pivot * 1.04, volume=2_500_000.0)
+        return recovered, chain
+
+    def test_the_live_breakout_is_the_run_price_is_in_now(self) -> None:
+        frame, chain = self._reset_series()
+
+        measurements = build_setup_evidence(frame, chain)["measurements"]
+
+        self.assertEqual(measurements["sessions_since_breakout"], 2)
+        self.assertEqual(measurements["failed_pivot_attempts"], 1)
+
+    def test_the_earlier_failure_does_not_by_itself_refuse_the_reset(self) -> None:
+        frame, chain = self._reset_series()
+
+        result = evaluate_setup(build_setup_evidence(frame, chain))
+
+        self.assertEqual(result["setup_state"], "ready")
