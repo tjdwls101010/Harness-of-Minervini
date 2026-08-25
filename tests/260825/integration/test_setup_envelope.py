@@ -9,8 +9,10 @@ that list, because its state words mean something no verdict vocabulary contains
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import tempfile
 import unittest
 
+from scripts.minervini.chart import render_chart_artifacts
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
@@ -80,6 +82,29 @@ class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
         payload = run(approved_bars="0" * 64)
 
         self.assertEqual(len(payload["data"]["segmentation"]["bars_fingerprint"]), 64)
+
+
+class TheChartIsWhereTheApprovalComesFromTests(unittest.TestCase):
+    """The fingerprint is only worth carrying if the path a person walks actually uses it."""
+
+    def test_a_chain_approved_off_the_rendered_chart_is_the_one_setup_accepts(self) -> None:
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = render_chart_artifacts(
+                prices.data, ticker="TEST", as_of=prices.meta.as_of, output_dir=directory
+            )
+
+        payload = execute("ticker.setup", {
+            "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+            "right_side_development": "constructive", "chain_completeness": "complete",
+            "approved_bars": manifest["input_sha256"], "entry_proximity": "at_pivot",
+            "no_cache": True,
+        }, runtime=runtime)
+
+        self.assertEqual([anchor["date"] for anchor in manifest["segmentation"]["anchors"]], chain)
+        self.assertEqual(payload["data"]["setup_state"], "ready")
 
 
 class WhatDecidedItIsNamedTests(unittest.TestCase):

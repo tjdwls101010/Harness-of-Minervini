@@ -61,10 +61,13 @@ def render_chart_artifacts(
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{timeframe}.png"
-        drawn = _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
+        drawn, pivot_drawn = _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
-        artifacts.append({"timeframe": timeframe, "path": str(path), "bars": len(bars), "anchors_drawn": drawn})
+        artifacts.append({
+            "timeframe": timeframe, "path": str(path), "bars": len(bars),
+            "anchors_drawn": drawn, "pivot_drawn": pivot_drawn,
+        })
 
     manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_manifest.json"
     manifest = {
@@ -134,7 +137,7 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     return weekly
 
 
-def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> list[str]:
+def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> tuple[list[str], bool]:
     figure, (price_axis, volume_axis) = plt.subplots(
         2,
         1,
@@ -160,7 +163,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         for label, values in overlays.items():
             if values.notna().any():
                 price_axis.plot(bars.index, values, linewidth=0.9, label=label)
-        drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
+        drawn, pivot_drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
         volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
         price_axis.set_title(f"{ticker} {timeframe.title()} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
@@ -172,12 +175,12 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         figure.autofmt_xdate(rotation=30, ha="right")
         _atomic_figure(figure, path)
-        return drawn
+        return drawn, pivot_drawn
     finally:
         plt.close(figure)
 
 
-def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, Any] | None, timeframe: str) -> list[str]:
+def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, Any] | None, timeframe: str) -> tuple[list[str], bool]:
     """Mark the turning points the detector will corroborate a declared chain against.
 
     Each anchor goes on the bar that contains its session. On the daily chart that bar is the
@@ -187,7 +190,7 @@ def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, A
     """
     anchors = (segmentation or {}).get("anchors") or []
     if not anchors:
-        return []
+        return [], False
     drawn: list[str] = []
     for anchor in anchors:
         stamp = _containing_bar(bars.index, str(anchor["date"]), timeframe)
@@ -200,9 +203,13 @@ def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, A
             label="detected swing" if not drawn else None,
         )
         drawn.append(str(anchor["date"]))
-    if drawn:
+    # The pivot line follows the pivot, not the presence of any anchor at all. A mid-week as_of
+    # drops the unfinished week, so a pivot that landed on that Monday has no weekly bar -- and
+    # a level labelled `pivot` on a chart that does not reach it is a claim about nothing.
+    pivot_drawn = anchors[-1]["date"] in drawn
+    if pivot_drawn:
         price_axis.axhline(float(anchors[-1]["price"]), color="#0b5cad", linewidth=0.8, linestyle="--", alpha=0.7, label="pivot")
-    return drawn
+    return drawn, pivot_drawn
 
 
 def _containing_bar(index: pd.DatetimeIndex, day: str, timeframe: str) -> pd.Timestamp | None:

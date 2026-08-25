@@ -17,10 +17,10 @@ class Capability:
     status_meanings: dict[str, str]
     exit_codes: dict[str, str]
     examples: list[str]
-    # Keys the shared compact filter would strip by name that are this capability's answer
-    # rather than its supporting detail. `anchors` is detail inside a setup's segmentation and
-    # is the entire output of ticker.swings; a filter reading only the name cannot tell those
-    # apart, and it deleted the second one.
+    # Dotted paths under `data` that the shared compact filter would strip by name but that are
+    # this capability's answer rather than its supporting detail. `anchors` is detail inside a
+    # setup's segmentation and is the entire output of ticker.swings, so the exception has to
+    # name a place: keyed on the name alone it also kept the verbose chains under `sensitivity`.
     compact_keeps: frozenset[str] = frozenset()
 
     @property
@@ -106,7 +106,7 @@ def _capability(
     status_meanings: dict[str, str] | None = None,
     exit_codes: dict[str, str] | None = None,
     examples: list[str] | None = None,
-    compact_keeps: tuple[str, ...] = (),
+    compact_keeps: tuple[str, ...] = (),  # dotted paths under `data`
 ) -> Capability:
     return Capability(
         name=name,

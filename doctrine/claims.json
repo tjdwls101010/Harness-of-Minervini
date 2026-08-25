@@ -10047,20 +10047,22 @@
       ],
       "required_inputs": [
         "swing_chain",
-        "chart_review"
+        "completed_daily_bars",
+        "detected_swing_chain",
+        "approved_bars_fingerprint"
       ],
       "thresholds": {},
       "rule": {
-        "summary": "Every anchor in a declared chain is checked against the bars, but whether the chain describes the base's whole structure is not something completed bars can settle, so it is read from the chart and declared."
+        "summary": "Every anchor in a declared chain is checked against the bars, and the chain itself is checked against the segmentation this harness produces over the same bars: the reading counts only when the declared chain is the one the detector produced and the approval names the bars it was read from."
       },
       "computability": "chart_assisted",
       "failure": {
         "effect": "needs_review",
-        "meaning": "A chain declared as partial describes something other than the base being judged, so the setup cannot be ready on it; the reading is the caller's and the engine reports which one it got."
+        "meaning": "The chain is not vouched for: it was declared partial, or it is not the chain the detector produced over these bars, so the setup cannot be ready on it. The engine reports which of the two it was and, for a mismatch, which dates each side has that the other does not."
       },
       "missing": {
         "effect": "incomplete",
-        "meaning": "Without the reading, a chain that skipped or merged contractions is indistinguishable from one that did not, and the engine cannot tell the difference by measurement."
+        "meaning": "Nobody has said the chain describes the base's whole structure, or the detector will not vouch for any chain over these bars, or the approval was of a different vintage of them. A chain that skipped or merged contractions has every anchor sitting at its own span's extreme, so the comparison is what separates it from an honest one."
       },
       "precedence": {
         "tier": "scope_safety_data_integrity",
@@ -10083,7 +10085,7 @@
         "tests/260825/unit/test_setup_round_three.py"
       ],
       "provenance": {
-        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement separates it from an honest one. An independent segmentation would, and building one is a later slice; until then the gap is declared rather than stepped over."
+        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement of the chain alone separates it from an honest one. A second segmentation does, so the detector runs inside the setup, over the same bars, at parameters no request reaches. Two earlier versions trusted something the caller could write instead -- the name of an independent supplier, then the other segmentation handed in as an argument -- and neither is provenance."
       }
     },
     {

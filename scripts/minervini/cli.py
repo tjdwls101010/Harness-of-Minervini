@@ -35,11 +35,22 @@ class JsonArgumentParser(argparse.ArgumentParser):
 _COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies", "measurements", "anchors", "contractions"})
 
 
-def _compact_data(value: Any, keep: frozenset[str] = frozenset()) -> Any:
+def _compact_data(value: Any, keep: frozenset[str] = frozenset(), path: str = "") -> Any:
+    """Drop the verbose basis, keeping the places a capability declared are its answer.
+
+    Places, not key names: `anchors` is the whole output of ticker.swings and is also the
+    detail inside each chain that disagreed with it, and a name-only exception kept both.
+    """
     if isinstance(value, dict):
-        return {key: _compact_data(item, keep) for key, item in value.items() if key not in _COMPACT_OMIT_KEYS - keep}
+        result = {}
+        for key, item in value.items():
+            here = f"{path}.{key}" if path else key
+            if key in _COMPACT_OMIT_KEYS and here not in keep:
+                continue
+            result[key] = _compact_data(item, keep, here)
+        return result
     if isinstance(value, list):
-        return [_compact_data(item, keep) for item in value]
+        return [_compact_data(item, keep, path) for item in value]
     return value
 
 

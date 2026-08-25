@@ -222,3 +222,32 @@ def bases_under_an_older_high_series(*, start: str = "2026-01-02") -> tuple[pd.D
         [index[anchor.position].date().isoformat() for anchor in first],
         [index[anchor.position].date().isoformat() for anchor in second],
     )
+
+
+def hidden_turn_series(*, turn_pct: float = 0.4) -> tuple[pd.DataFrame, list[str], list[str]]:
+    """A base with one turn too small for the detector but big enough to declare.
+
+    This is the shape the equality rule exists for. A caller who keeps every detected date and
+    cuts one contraction into two skips nothing and moves no endpoint, so every anchor is still
+    the extreme of its own span and the structure resolver has nothing to object to -- and the
+    unfavourable contraction is gone from the sequence that gets judged.
+
+    The turn is smaller than the lowest parameter the detector runs at, so it stays invisible at
+    all three and the segmentation is still one it will vouch for. At 0.8 percent the nearest
+    neighbour does see it, the detector refuses to vouch, and the test would be measuring the
+    instability rather than the comparison.
+    """
+
+    frame, anchors = base_series()
+    chain = anchor_dates(frame, anchors)
+    peak, trough = anchors[0].position, anchors[1].position
+    at = (peak + trough) // 2
+    wick = float(frame["High"].iloc[at] - frame["Close"].iloc[at])
+    dip = float(frame["Close"].iloc[at]) * (1 - turn_pct / 200)
+    bounce = dip * (1 + turn_pct / 100)
+    frame.iloc[at, frame.columns.get_indexer(["Open", "Close", "Low"])] = dip
+    frame.iloc[at, frame.columns.get_loc("High")] = dip + wick
+    frame.iloc[at + 1, frame.columns.get_indexer(["Open", "Close", "High"])] = bounce
+    frame.iloc[at + 1, frame.columns.get_loc("Low")] = bounce - wick
+    finer = [chain[0], frame.index[at].date().isoformat(), frame.index[at + 1].date().isoformat(), *chain[1:]]
+    return frame, chain, finer

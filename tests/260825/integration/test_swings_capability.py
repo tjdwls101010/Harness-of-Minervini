@@ -118,6 +118,18 @@ class CompactKeepsTheAnswerTests(unittest.TestCase):
             [anchor["date"] for anchor in payload["data"]["anchors"]],
         )
 
+    def test_the_exception_covers_the_answer_and_not_the_detail_under_it(self) -> None:
+        """A key name is not a place. `sensitivity` is a list of chains that disagreed, and its
+        own anchor lists are exactly the verbose basis compact exists to drop."""
+
+        payload = run(depths=(25.0, 10.0, 1.2))
+
+        compact = format_payload(payload, "compact")
+
+        self.assertTrue(payload["data"]["sensitivity"][0]["anchors"])
+        self.assertNotIn("anchors", compact["data"]["sensitivity"][0])
+        self.assertIn("anchors", compact["data"])
+
     def test_compact_and_full_still_mean_the_same_thing(self) -> None:
         payload = run()
 

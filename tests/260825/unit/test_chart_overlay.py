@@ -39,8 +39,9 @@ class AnchorOverlayTests(unittest.TestCase):
 
         self.assertEqual(written["segmentation"], manifest["segmentation"])
 
-    def test_the_chart_and_the_setup_answer_name_the_same_bars(self) -> None:
-        """One fingerprint across both surfaces, so an approval can be traced to its picture."""
+    def test_the_manifest_names_one_set_of_bars_not_two(self) -> None:
+        """The provenance digest and the segmentation's are the same value, or an approval
+        taken from one of them would not match what the other was cut from."""
 
         frame, _ = base_series()
 
@@ -70,6 +71,29 @@ class AnchorOverlayTests(unittest.TestCase):
         self.assertEqual(drawn["daily"], declared)
         self.assertEqual(drawn["weekly"], declared)
 
+    def test_the_pivot_line_is_not_drawn_on_a_chart_that_does_not_reach_the_pivot(self) -> None:
+        """A level line labelled `pivot` on a chart with no pivot bar is a claim about nothing.
+
+        A mid-week as_of drops the unfinished week from the weekly resample, so a pivot that
+        landed on that Monday has no weekly bar. Drawing the line anyway because some earlier
+        anchor was drawn puts a labelled level on a picture whose own manifest says the pivot
+        is not in it.
+        """
+
+        frame, _ = base_series(start="2026-01-05", breakout=False)
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = render_chart_artifacts(
+                frame, ticker="TEST", as_of=frame.index[-1].date(), output_dir=directory
+            )
+
+        pivot = manifest["segmentation"]["anchors"][-1]["date"]
+        drawn = {item["timeframe"]: item for item in manifest["artifacts"]}
+        self.assertNotIn(pivot, drawn["weekly"]["anchors_drawn"])
+        self.assertFalse(drawn["weekly"]["pivot_drawn"])
+        self.assertIn(pivot, drawn["daily"]["anchors_drawn"])
+        self.assertTrue(drawn["daily"]["pivot_drawn"])
+
     def test_an_unvouched_segmentation_puts_nothing_on_either_timeframe(self) -> None:
         frame, _ = base_series(depths=(25.0, 10.0, 1.2))
 
@@ -79,6 +103,7 @@ class AnchorOverlayTests(unittest.TestCase):
             )
 
         self.assertEqual([artifact["anchors_drawn"] for artifact in manifest["artifacts"]], [[], []])
+        self.assertEqual([artifact["pivot_drawn"] for artifact in manifest["artifacts"]], [False, False])
 
     def test_a_segmentation_the_detector_will_not_vouch_for_draws_nothing(self) -> None:
         """Drawing an unstable chain would show a person a structure the engine refuses to use."""

@@ -21,7 +21,7 @@ from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.readings import detected
-from tests.series import anchor_dates, base_series
+from tests.series import anchor_dates, base_series, hidden_turn_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
@@ -313,15 +313,17 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         added one splits it, and both leave the sequence that gets judged unlike the one the
         segmentation vouched for."""
 
-        frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
-        detected_chain = detected(frame)
-        # One extra turning point the detector did not find, between two it did.
-        finer = [*detected_chain[:2], frame.index[len(frame) // 3].date().isoformat(), *detected_chain[2:]]
+        frame, chain, finer = hidden_turn_series()
+        # The chain has to survive the structure resolver to reach the comparison at all. An
+        # earlier version inserted an out-of-order date, so the resolver rejected it first and
+        # the test passed without the equality rule existing.
+        self.assertEqual(detected(frame), chain)
 
         result = evaluate_setup(build_setup_evidence(frame, finer, **vouched(frame, finer)))
 
         completeness = signal(result, "setup.declared_chain_completeness")
-        self.assertNotEqual(completeness["state"], "pass")
+        self.assertEqual(completeness["state"], "fail")
+        self.assertEqual(completeness["measured"]["differs"]["declared_only"], finer[1:3])
         self.assertNotEqual(result["setup_state"], "ready")
 
     def test_the_chain_the_detector_produced_is_the_one_that_passes(self) -> None:
