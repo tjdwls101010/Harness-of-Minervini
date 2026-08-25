@@ -137,6 +137,8 @@ def base_chain(
     if pivot is None:
         return []
     floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes, allow_reset)
+    if floor is None:
+        return []
     candidates = [index for index in highs if floor <= index <= pivot]
     if not candidates:
         return []
@@ -153,17 +155,20 @@ def _after_the_structure_it_left(
     lows: pd.Series | None,
     volumes: pd.Series | None,
     allow_reset: bool,
-) -> int:
-    """The earliest anchor the rim search may reach, given what price has already left behind."""
+) -> int | None:
+    """The earliest anchor the rim search may reach, or nothing when the bars cannot say."""
 
     if closes is None or lows is None or volumes is None:
         return 0
     until = pd.Timestamp(confirmed[pivot]["date"])
-    left = [
-        index
+    verdicts = [
+        (index, _left_behind(closes, lows, volumes, confirmed[index], until, allow_reset))
         for index in highs
-        if index < pivot and _left_behind(closes, lows, volumes, confirmed[index], until, allow_reset)
+        if index < pivot
     ]
+    if any(verdict is None for _, verdict in verdicts):
+        return None
+    left = [index for index, verdict in verdicts if verdict]
     return left[-1] + 1 if left else 0
 
 
@@ -174,7 +179,7 @@ def _left_behind(
     anchor: dict[str, Any],
     before: pd.Timestamp,
     allow_reset: bool,
-) -> bool:
+) -> bool | None:
     """Whether the stock broke out above this high and has stayed above it since.
 
     Three conditions, each from somewhere: a close above the level, on volume expanding against
@@ -201,7 +206,11 @@ def _left_behind(
     """
     level = float(anchor["price"])
     window = closes.loc[pd.Timestamp(anchor["date"]) : before].iloc[1:-1]
-    crossings = [stamp for stamp in window.loc[window > level].index if _volume_expanded(volumes, stamp)]
+    judged = [(stamp, _volume_expanded(volumes, stamp)) for stamp in window.loc[window > level].index]
+    if any(verdict is None for _, verdict in judged):
+        # A crossing nobody can judge leaves the question open, and an open question is not a no.
+        return None
+    crossings = [stamp for stamp, verdict in judged if verdict]
     if not crossings:
         return False
     if not allow_reset:
@@ -217,7 +226,7 @@ def _left_behind(
     return bool(len(resumed)) and bool((resumed > level).all())
 
 
-def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
+def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool | None:
     """More than the stock had been trading, over the window the source names for a breakout.
 
     The comparison is the number-free half of "moves above the pivot point on expanding volume".
@@ -226,10 +235,13 @@ def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
     """
     sessions = int(doctrine.parameter(_CONVENTION, "breakout_volume_reference_sessions"))
     prior = volumes.loc[:stamp].iloc[-(sessions + 1) : -1]
-    # The whole window, not whatever part of it exists. Comparing against two sessions is not the
-    # observation the source describes, and on a short history it let one busy day cut a base.
+    # The whole window, not whatever part of it exists: comparing against two sessions is not the
+    # observation the source describes. Absent, the answer is unknown rather than no. Folding it
+    # into no made all three readings of the left edge lose the same information and agree, which
+    # the agreement rule then read as settled -- so a base borrowed a contraction from a
+    # structure nobody could tell whether the stock had left.
     if len(prior) < sessions:
-        return False
+        return None
     return float(volumes.at[stamp]) > float(prior.mean())
 
 

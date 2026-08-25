@@ -346,16 +346,38 @@ class UnusableHistoryTests(unittest.TestCase):
 
         self.assertEqual(canonical_chain(broken)["rejection"], "history_contains_invalid_bar_ranges")
 
-    def test_a_breakout_needs_the_whole_window_behind_it(self) -> None:
-        """Two sessions is not "its own fifty-day average", however busy the third one is.
+    def test_a_breakout_with_no_window_behind_it_is_unknown_rather_than_quiet(self) -> None:
+        """Two sessions is not "its own fifty-day average", and it is not a quiet tape either.
 
-        The guard was written, then lost when the window moved into the registry, and reported
-        as done without reading the line back.
+        Returning False for a window that does not exist folded missing evidence into a negative
+        observation, and every reading of the left edge then lost the same information and
+        agreed -- which the agreement rule read as settled.
         """
 
         index = pd.bdate_range("2026-01-02", periods=3)
 
-        self.assertFalse(_volume_expanded(pd.Series([100.0, 100.0, 201.0], index=index), index[2]))
+        self.assertIsNone(_volume_expanded(pd.Series([100.0, 100.0, 201.0], index=index), index[2]))
+
+    def test_a_departure_the_bars_cannot_judge_leaves_the_edge_unsettled(self) -> None:
+        """A crossing inside the first fifty sessions, which no volume window can speak to.
+
+        All three readings came back with the whole history and called that agreement, so a base
+        borrowed a contraction from a structure nobody could tell whether the stock had left.
+        """
+
+        frame = from_legs(
+            ((55, 100.10, 12), (100.10, 59.90, 10), (59.90, 80.10, 8), (80.10, 79.20, 3),
+             (79.20, 95.10, 14), (95.10, 87.90, 14), (87.90, 94.90, 14), (94.90, 98, 1)),
+        )
+        frame["Volume"] = 1_000_000.0
+        cleared = [position for position, label in enumerate(frame.index)
+                   if position > 33 and float(frame.at[label, "Close"]) > 80.10]
+        frame.iloc[cleared[0], frame.columns.get_loc("Volume")] = 5_000_000.0
+
+        chain = canonical_chain(frame)
+
+        self.assertTrue(chain["left_edge_disputed"])
+        self.assertEqual(chain["anchors"], [])
 
     def test_the_neighbouring_multiples_have_to_land_in_the_domain_too(self) -> None:
         """The sweep runs at three multiples, and the upper one leaves the domain first."""
