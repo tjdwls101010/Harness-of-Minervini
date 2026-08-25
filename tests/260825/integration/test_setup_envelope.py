@@ -53,7 +53,7 @@ class EnvelopeTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
+        self.assertIn("setup.declared_chain_completeness", payload["data"]["missing"])
         self.assertEqual(payload["data"]["measurements"]["contraction_count"], 3)
 
     def test_no_signal_in_the_envelope_carries_a_state_or_a_flag_the_verdict_must_ignore(self) -> None:

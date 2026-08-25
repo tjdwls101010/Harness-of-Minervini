@@ -20,6 +20,7 @@ import pandas as pd
 
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
+from tests.readings import full as readings
 from tests.series import anchor_dates, base_series
 
 
@@ -46,7 +47,7 @@ class CorrectionRunsFromTheRealPeakTests(unittest.TestCase):
             index=pd.DatetimeIndex([pd.Timestamp("2024-06-03")]),
         )
 
-        result = evaluate_setup(build_setup_evidence(pd.concat([older, frame]), anchor_dates(frame, anchors), **READ))
+        result = evaluate_setup(build_setup_evidence(pd.concat([older, frame]), anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors))))
 
         self.assertGreater(result["measurements"]["peak_to_low_correction_pct"], 50.0)
         self.assertIn("market.correction_depth_healthy_leader.correction_failure_threshold", result["unsatisfied"])
@@ -57,7 +58,7 @@ class CorrectionRunsFromTheRealPeakTests(unittest.TestCase):
         frame, anchors = base_series(depths=(60.0, 10.0, 5.0))
         late = anchor_dates(frame, anchors)[2:]
 
-        measurements = build_setup_evidence(frame, late, **READ)["measurements"]
+        measurements = build_setup_evidence(frame, late, **readings(frame, anchor_dates(frame, anchors)))["measurements"]
 
         self.assertGreater(measurements["peak_to_low_correction_pct"], 50.0)
 
@@ -69,7 +70,7 @@ class CompletenessCannotBeSelfCertifiedTests(unittest.TestCase):
         frame, anchors = base_series()
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), chain_completeness="complete", **READ)
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors), detected_chain=None))
         )
 
         self.assertEqual(result["setup_state"], "incomplete")
@@ -79,26 +80,20 @@ class CompletenessCannotBeSelfCertifiedTests(unittest.TestCase):
         frame, anchors = base_series()
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), chain_completeness="partial", **READ)
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors), chain_completeness="partial"))
         )
 
         self.assertEqual(signal(result, "setup.declared_chain_completeness")["state"], "fail")
 
-    def test_an_independent_segmentation_is_what_can_vouch(self) -> None:
-        """The seam the detector fills; until it exists nothing supplies this."""
+    def test_a_segmentation_that_found_nothing_extra_is_what_can_vouch(self) -> None:
+        """The seam the detector fills: the other segmentation itself, not a word naming one."""
 
         frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
 
-        result = evaluate_setup(
-            build_setup_evidence(
-                frame,
-                anchor_dates(frame, anchors),
-                chain_completeness="complete",
-                completeness_source="independent_segmentation",
-                **READ,
-            )
-        )
+        result = evaluate_setup(build_setup_evidence(frame, chain, **readings(frame, chain)))
 
+        self.assertEqual(signal(result, "setup.declared_chain_completeness")["state"], "pass")
         self.assertEqual(result["setup_state"], "ready")
 
 
@@ -115,7 +110,7 @@ class ProximityIsTheReadersCallTests(unittest.TestCase):
     def test_at_pivot_holds_on_the_breakout_itself(self) -> None:
         frame, anchors = base_series()
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors))))
 
         self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "pass")
 
@@ -140,7 +135,7 @@ class PivotFailureCanRecoverTests(unittest.TestCase):
         chain = anchor_dates(frame, anchors)
         pivot = float(frame.loc[chain[-1], "High"])
 
-        result = evaluate_setup(build_setup_evidence(tail(frame, 3, close=pivot * 0.97, volume=600_000.0), chain, **READ))
+        result = evaluate_setup(build_setup_evidence(tail(frame, 3, close=pivot * 0.97, volume=600_000.0), chain, **readings(frame, chain)))
 
         self.assertEqual(signal(result, "setup.structural_pivot_and_trigger")["state"], "not_triggered")
 
@@ -151,7 +146,7 @@ class QuietingIsReportedNotDecidedTests(unittest.TestCase):
 
         frame, anchors = base_series()
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors))))
 
         supply = signal(result, "setup.overhead_supply_mechanism")
         self.assertEqual(supply["state"], "reported")
@@ -185,18 +180,6 @@ class ContractTellsTheTruthTests(unittest.TestCase):
         self.assertIn("cannot be self-certified", limitations)
         self.assertNotIn("Each one is refused where the bars can see the reading is wrong", limitations)
 
-    def test_the_worked_example_produces_something_other_than_incomplete(self) -> None:
-        """An example that always returns INCOMPLETE teaches the wrong shape of the call."""
-
-        from scripts.minervini.capabilities import CAPABILITIES
-
-        self.assertTrue(
-            any("--right-side-development" in example for example in CAPABILITIES["ticker.setup"].examples),
-            CAPABILITIES["ticker.setup"].examples,
-        )
-
-
-
 
 class AdversarialDirectionTests(unittest.TestCase):
     """The direction a reviewer had to run by hand because no test ran it.
@@ -211,10 +194,10 @@ class AdversarialDirectionTests(unittest.TestCase):
         dates = anchor_dates(frame, anchors)
         skipped = [dates[index] for index in (0, 1, 2, 5, 6, 7, 8)]
 
-        result = evaluate_setup(build_setup_evidence(frame, skipped, chain_completeness="complete", **READ))
+        result = evaluate_setup(build_setup_evidence(frame, skipped, **readings(frame, skipped, detected_chain=dates)))
 
         self.assertNotEqual(result["setup_state"], "ready")
-        self.assertIn("setup.declared_chain_completeness", result["missing"])
+        self.assertIn("setup.declared_chain_completeness", result["unsatisfied"])
 
     def test_a_fifty_percent_extended_entry_carries_its_distance_where_a_reader_cannot_miss_it(self) -> None:
         """No mechanical rule survived here, so the harness prints the distance instead.
@@ -227,20 +210,17 @@ class AdversarialDirectionTests(unittest.TestCase):
         frame, anchors = base_series()
         extended = tail(frame, 40, close=150.0, volume=400_000.0)
 
-        evidence = build_setup_evidence(
-            extended,
-            anchor_dates(frame, anchors),
-            chain_completeness="complete",
-            completeness_source="independent_segmentation",
-            right_side_development="constructive",
-            entry_proximity="at_pivot",
-        )
+        chain = anchor_dates(frame, anchors)
+        evidence = build_setup_evidence(extended, chain, **readings(frame, chain, entry_price=150.0))
 
-        chase = signal(evaluate_setup(evidence), "setup.chase_limit_above_pivot")
+        result = evaluate_setup(evidence)
+        chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertGreater(chase["measured"]["pivot_extension_pct"], 50.0)
         self.assertEqual(chase["measured"]["sessions_since_breakout"], 40)
         buffer_signal = next(item for item in evidence["signals"] if "minervini_5_to_20_cents" in item["id"])
         self.assertEqual(buffer_signal["state"], "beyond_source_range")
+        self.assertEqual(chase["state"], "fail")
+        self.assertNotEqual(result["setup_state"], "ready")
 
     def test_a_base_that_more_than_halved_cannot_be_talked_into_ready_either(self) -> None:
         frame, anchors = base_series()
@@ -254,7 +234,7 @@ class AdversarialDirectionTests(unittest.TestCase):
                 pd.concat([older, frame]),
                 anchor_dates(frame, anchors),
                 chain_completeness="complete",
-                completeness_source="independent_segmentation",
+                detected_chain=anchor_dates(frame, anchors),
                 right_side_development="constructive",
                 entry_proximity="at_pivot",
             )

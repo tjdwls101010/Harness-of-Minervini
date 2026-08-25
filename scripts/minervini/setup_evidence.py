@@ -131,6 +131,10 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
     # `setup.failure_reset_types` says a pivot failure can reset and recover within a small
     # number of days, so a slip below the pivot is counted rather than held against the base
     # forever; what the trigger reads is where price stands now.
+    if measurements.get("base_failed_after_pivot"):
+        # The structure the pivot was measured from is gone; a later close above a level that
+        # belongs to a dead base is not this base's trigger.
+        return "fail"
     if not measurements.get("currently_above_pivot"):
         return "not_triggered"
     return "pass"
@@ -145,25 +149,34 @@ def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
     return "pass" if total > 1 else "fail"
 
 
-def _completeness_state(structure: Mapping[str, Any], reading: str | None, source: str | None) -> str:
-    """Whether something other than the chain's own author vouched for the chain.
+def _completeness_state(structure: Mapping[str, Any], reading: str | None, detected: Sequence[Any] | None) -> tuple[str, dict[str, Any]]:
+    """Whether an independent segmentation found anything the declared chain left out.
 
     A caller may say their segmentation is partial -- admitting a gap costs them nothing and
     tells the truth. They may not say it is complete: the reading exists to check the chain,
     and a check the checked party performs is the flag this rewrite removed with a longer
-    description on it. `complete` is accepted only from an independent segmentation, which is
-    what the swing detector will supply.
+    description on it.
+
+    An earlier version accepted the *name* of an independent supplier, which a caller can
+    type. So the seam takes the other segmentation itself and does the comparison here: a
+    declared chain is complete when it contains every turning point the detector found. A
+    finer caller chain is fine; a missing one is the skip this exists to catch.
     """
     if str(structure.get("state")) != "resolved":
-        return "unavailable"
+        return "unavailable", {"structure": structure.get("state")}
+    declared = {str(anchor["date"]) for anchor in structure.get("anchors") or []}
     if reading == "partial":
-        return "fail"
-    if reading == "complete" and source == "independent_segmentation":
-        return "pass"
-    return "needs_chart"
+        return "fail", {"declared_anchors": len(declared)}
+    if not detected:
+        return "needs_chart", {"declared_anchors": len(declared), "detected_anchors": None}
+    omitted = sorted({str(date) for date in detected} - declared)
+    basis = {"declared_anchors": len(declared), "detected_anchors": len(set(detected)), "omitted": omitted}
+    if omitted:
+        return "fail", basis
+    return ("pass", basis) if reading == "complete" else ("needs_chart", basis)
 
 
-def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> str:
+def _proximity_state(measurements: Mapping[str, Any], reading: str | None, buffer_signal: Mapping[str, Any]) -> str:
     """The source states the limit and withholds the number, so the reader supplies the call.
 
     What the measurement can still refuse is a reading of "at the pivot" on an entry the
@@ -175,13 +188,16 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> st
     if reading == "chased":
         return "fail"
     if reading == "at_pivot":
-        # The one thing the bars can refuse: there is no entry above a pivot price has not
-        # cleared. Every mechanical rule tried for the rest of it cut in the wrong place --
-        # comparing the entry with the breakout's own extension called a twenty-percent gap
-        # that ticked down "at the pivot" and refused a one-cent advance the day after a
-        # three-percent breakout. The source names the limit and withholds the number, so the
-        # call is the reader's and the distances are printed for them to make it with.
-        return "pass" if measurements.get("pivot_cleared") else "fail"
+        if not measurements.get("pivot_cleared"):
+            return "fail"
+        # "At the pivot" is a claim about the price being paid, so it needs one. And the
+        # source did quantify this once, in cents rather than percent: he waits for the stock
+        # to trade five, ten, or even twenty cents above the pivot. An entry beyond that is
+        # not at the pivot by the only measure the source ever put on the distance -- which is
+        # a check on the reading, not a limit deciding the setup.
+        if buffer_signal["state"] == "unavailable":
+            return "needs_chart"
+        return "fail" if buffer_signal["state"] == "beyond_source_range" else "pass"
     return "needs_chart"
 
 
@@ -197,7 +213,7 @@ def _quieting_state(measurements: Mapping[str, Any]) -> str:
     return "unavailable" if measurements.get("daily_range_median_pct") is None else "reported"
 
 
-def _failure_state(measurements: Mapping[str, Any]) -> str:
+def _failure_state(measurements: Mapping[str, Any], reading: str | None) -> str:
     """The source separates two failures and only one of them is recoverable.
 
     "A base failure, which requires building a whole new base before it can be purchased
@@ -209,10 +225,19 @@ def _failure_state(measurements: Mapping[str, Any]) -> str:
     failed = measurements.get("base_failed_after_pivot")
     if failed is None:
         return "unavailable"
-    # The condition is that the base has not failed. The attempt count and the time spent
-    # below the pivot ride in the measurement, where a reader can weigh "a small number of
-    # days" without a number being invented for them.
-    return "fail" if failed else "pass"
+    if failed:
+        return "fail"
+    if not measurements.get("failed_pivot_attempts"):
+        return "pass"
+    # A pivot failure did happen, and whether it reset "within a small number of days" is a
+    # question the source asks and declines to answer with a number. Reporting the longest
+    # spell below the pivot and calling it a pass answers it silently in the affirmative,
+    # which is how sixty sessions under water read as a prompt reset.
+    if reading == "prompt_reset":
+        return "pass"
+    if reading == "stale_reset":
+        return "fail"
+    return "needs_chart"
 
 
 def _spike_state(measurements: Mapping[str, Any]) -> str:
@@ -257,8 +282,10 @@ def build_setup_evidence(
     entry: Mapping[str, Any] | None = None,
     right_side_development: str | None = None,
     chain_completeness: str | None = None,
-    completeness_source: str | None = None,
+    detected_chain: Sequence[Any] | None = None,
     entry_proximity: str | None = None,
+    entry_price: float | None = None,
+    pivot_reset: str | None = None,
 ) -> dict[str, Any]:
     """Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside it."""
 
@@ -269,6 +296,18 @@ def build_setup_evidence(
     structure = resolve_structure(bars if bars is not None else history, list(swings or []))
     measurements = measure(bars if bars is not None else pd.DataFrame(), structure, spec)
 
+    pivot = measurements.get("pivot")
+    entry_buffer_cents = (
+        (float(entry_price) - float(pivot)) * 100
+        if entry_price is not None and isinstance(pivot, (int, float))
+        else None
+    )
+    # The source quantified this distance exactly once, in cents: he waits for the stock to
+    # trade five, ten, or even twenty cents above the pivot. Read through the band so where
+    # the entry sat travels with it, and so a reading of "at the pivot" on an entry beyond the
+    # only measure the source ever put on the distance is refused by his number, not by one
+    # invented here.
+    entry_buffer = doctrine.evaluate_band(*_MINERVINI_BUFFER, entry_buffer_cents)
     ratios = measurements.get("breakout_volume_ratios") or {}
     position_sessions = spec["breakout_volume_baseline_sessions"][1]
     swing_sessions = spec["breakout_volume_baseline_sessions"][0]
@@ -286,7 +325,7 @@ def build_setup_evidence(
                 "contraction_depths_pct": measurements["contraction_depths_pct"],
             },
         ),
-        _observation(_CHAIN_COMPLETENESS, _completeness_state(structure, chain_completeness, completeness_source), {"structure": structure.get("state"), "source": completeness_source}),
+        _observation(_CHAIN_COMPLETENESS, *_completeness_state(structure, chain_completeness, detected_chain)),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(
@@ -319,17 +358,20 @@ def build_setup_evidence(
         ),
         _observation(
             _FAILURE_RESET,
-            _failure_state(measurements),
+            _failure_state(measurements, pivot_reset),
             {
                 "base_failed_after_pivot": measurements.get("base_failed_after_pivot"),
                 "failed_pivot_attempts": measurements.get("failed_pivot_attempts"),
                 "sessions_below_pivot_after_breakout": measurements.get("sessions_below_pivot_after_breakout"),
+                "longest_spell_below_pivot": measurements.get("longest_spell_below_pivot"),
             },
         ),
         _observation(
             _CHASE_LIMIT,
-            _proximity_state(measurements, entry_proximity),
+            _proximity_state(measurements, entry_proximity, entry_buffer),
             {
+                "entry_price": entry_price,
+                "entry_buffer_above_pivot_cents": entry_buffer_cents,
                 "pivot_extension_pct": measurements.get("pivot_extension_pct"),
                 "pivot_extension_at_breakout_pct": measurements.get("pivot_extension_at_breakout_pct"),
                 "sessions_since_breakout": measurements.get("sessions_since_breakout"),
@@ -342,7 +384,7 @@ def build_setup_evidence(
         # The source's own stated practice, in the units it stated them in: he waits for the
         # stock to trade five, ten, or even twenty cents above the pivot, and says in the same
         # breath that there is no magic number. A band, so it reports where the entry sat.
-        doctrine.evaluate_band(*_MINERVINI_BUFFER, measurements.get("pivot_extension_cents")),
+        entry_buffer,
     ]
 
     contrast = [
@@ -363,6 +405,7 @@ def build_setup_evidence(
                 ("right_side_development", right_side_development),
                 ("chain_completeness", chain_completeness),
                 ("entry_proximity", entry_proximity),
+                ("pivot_reset", pivot_reset),
             )
             if value is not None
         },

@@ -63,6 +63,11 @@
         "required": false,
         "type": "enum"
       },
+      "entry_price": {
+        "description": "The price the entry would be taken at. \"At the pivot\" is a claim about a price, so the reading needs one, and the source quantified this distance once -- five, ten, or even twenty cents above the pivot -- which is what the entry is compared against.",
+        "required": false,
+        "type": "number"
+      },
       "entry_proximity": {
         "choices": [
           "at_pivot",
@@ -108,6 +113,16 @@
         "description": "Bypass both provider-cache reads and writes for this invocation.",
         "required": false,
         "type": "boolean"
+      },
+      "pivot_reset": {
+        "choices": [
+          "prompt_reset",
+          "stale_reset",
+          "needs_judgment"
+        ],
+        "description": "Chart reading of a failure that already happened. The source says a pivot failure can reset and recover within a small number of days and gives no number, so a spell below the pivot is neither waved through nor cut at an invented length; the longest spell is reported and the call is the reader's. Only asked for when a failure was measured.",
+        "required": false,
+        "type": "enum"
       },
       "right_side_development": {
         "choices": [

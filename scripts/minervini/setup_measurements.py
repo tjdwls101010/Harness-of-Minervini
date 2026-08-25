@@ -38,6 +38,16 @@ def _baseline(volume: pd.Series, sessions: int, end: str) -> float | None:
     return float(history.iloc[-sessions:].mean())
 
 
+def _longest_spell(flags: pd.Series) -> int:
+    """The longest unbroken run of True in a boolean series."""
+
+    longest = run = 0
+    for flag in flags:
+        run = run + 1 if flag else 0
+        longest = max(longest, run)
+    return longest
+
+
 def _up_down_volume(bars: pd.DataFrame) -> dict[str, float | None]:
     """Both halves of the source's sentence: the totals, and whether any up day spiked.
 
@@ -103,6 +113,7 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "currently_above_pivot": None,
             "base_failed_after_pivot": None,
             "sessions_below_pivot_after_breakout": None,
+            "longest_spell_below_pivot": None,
             "pivot_extension_cents": None,
             "pivot_extension_at_breakout_pct": None,
             "failed_pivot_attempts": None,
@@ -262,6 +273,9 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # the one being bought.
         "base_failed_after_pivot": bool((since_breakout["Close"] < float(base["low"])).any()) if breakout_label is not None else None,
         "sessions_below_pivot_after_breakout": int((since_breakout["Close"] <= pivot).sum()) if breakout_label is not None else None,
+        # A total cannot tell one long spell under water from several brief ones, and "within
+        # a small number of days" is about a spell.
+        "longest_spell_below_pivot": _longest_spell(since_breakout["Close"] <= pivot) if breakout_label is not None else None,
         "pivot_extension_cents": (float(last["Close"]) - pivot) * 100,
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,

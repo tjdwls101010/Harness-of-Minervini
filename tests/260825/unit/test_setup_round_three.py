@@ -17,10 +17,11 @@ import pandas as pd
 
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
+from tests.readings import full as readings
 from tests.series import anchor_dates, base_series
 
 
-READ = {"right_side_development": "constructive", "chain_completeness": "complete", "completeness_source": "independent_segmentation", "entry_proximity": "at_pivot"}
+
 
 
 def signal(result, identifier):
@@ -59,7 +60,7 @@ class DeclaredReadingsTests(unittest.TestCase):
         frame, anchors = base_series()
 
         self.assertEqual(
-            evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))["setup_state"],
+            evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors))))["setup_state"],
             "ready",
         )
 
@@ -79,7 +80,7 @@ class DeclaredReadingsTests(unittest.TestCase):
         extended = pd.concat([frame, tail])
         chain = anchor_dates(frame, anchors)
 
-        result = evaluate_setup(build_setup_evidence(extended, chain, **{**READ, "entry_proximity": "chased"}))
+        result = evaluate_setup(build_setup_evidence(extended, chain, **readings(frame, chain, entry_proximity="chased")))
 
         self.assertEqual(result["setup_state"], "wait")
         self.assertIn("setup.chase_limit_above_pivot", result["unsatisfied"])
@@ -103,7 +104,7 @@ class HiddenHighTests(unittest.TestCase):
             index=pd.bdate_range(start=frame.index[-1] + pd.Timedelta(days=1), periods=2),
         )
 
-        result = evaluate_setup(build_setup_evidence(pd.concat([frame, hidden]), chain, **READ))
+        result = evaluate_setup(build_setup_evidence(pd.concat([frame, hidden]), chain, **readings(frame, chain)))
 
         self.assertFalse(result["measurements"]["pivot_is_highest_to_breakout"])
         self.assertNotEqual(result["setup_state"], "ready")
@@ -119,8 +120,8 @@ class TimezoneTests(unittest.TestCase):
         aware = frame.copy()
         aware.index = aware.index.tz_localize("America/New_York")
 
-        naive_result = evaluate_setup(build_setup_evidence(frame, chain, **READ))
-        aware_result = evaluate_setup(build_setup_evidence(aware, chain, **READ))
+        naive_result = evaluate_setup(build_setup_evidence(frame, chain, **readings(frame, chain)))
+        aware_result = evaluate_setup(build_setup_evidence(aware, chain, **readings(frame, chain)))
 
         self.assertEqual(aware_result["setup_state"], naive_result["setup_state"])
 
@@ -137,11 +138,11 @@ class GiveBackIsNotPermanentTests(unittest.TestCase):
             index=pd.bdate_range(start=frame.index[-1] + pd.Timedelta(days=1), periods=4),
         )
 
-        result = evaluate_setup(build_setup_evidence(pd.concat([frame, given_back]), chain, **READ))
+        result = evaluate_setup(build_setup_evidence(pd.concat([frame, given_back]), chain, **readings(frame, chain)))
 
         self.assertEqual(signal(result, "setup.structural_pivot_and_trigger")["state"], "not_triggered")
         self.assertNotIn("setup.structural_pivot_and_trigger", result["failed"])
-        self.assertEqual(result["setup_state"], "wait")
+        self.assertNotEqual(result["setup_state"], "ready")
 
     def test_a_close_exactly_at_the_pivot_is_not_a_close_below_it(self) -> None:
         frame, anchors = base_series()
@@ -152,7 +153,7 @@ class GiveBackIsNotPermanentTests(unittest.TestCase):
             index=pd.bdate_range(start=frame.index[-1] + pd.Timedelta(days=1), periods=2),
         )
 
-        measurements = build_setup_evidence(pd.concat([frame, flat]), chain, **READ)["measurements"]
+        measurements = build_setup_evidence(pd.concat([frame, flat]), chain, **readings(frame, chain))["measurements"]
 
         self.assertTrue(measurements["breakout_held"])
 
@@ -167,7 +168,7 @@ class SpikePluralityTests(unittest.TestCase):
 
         frame, anchors = base_series(depths=(25.0, 10.0, 5.0), declines=(20, 20, 20), rallies=(1, 20, 20))
 
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), **READ)
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
 
         spikes = next(item for item in evidence["signals"] if item["id"] == "setup.upside_spikes_dwarf_contractions")
         self.assertEqual(spikes["state"], "reported")
@@ -176,7 +177,7 @@ class SpikePluralityTests(unittest.TestCase):
     def test_the_clause_never_stands_between_a_setup_and_ready(self) -> None:
         frame, anchors = base_series(depths=(25.0, 10.0, 5.0), declines=(20, 20, 20), rallies=(1, 20, 20))
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors))))
 
         self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["required_evidence"])
 

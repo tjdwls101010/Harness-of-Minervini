@@ -557,10 +557,11 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     entry = request.get("entry")
     if entry is not None and not isinstance(entry, Mapping):
         raise RequestError("entry must be an object", "entry")
-    if request.get("completeness_source") is not None:
-        # Naming a supplier is not being one. The seam exists for a segmentation this harness
-        # produced; a request that fills it in by hand claims provenance it does not have.
-        raise RequestError("completeness_source cannot be supplied by the caller", "completeness_source")
+    for reserved in ("completeness_source", "detected_chain"):
+        if request.get(reserved) is not None:
+            # Naming a supplier is not being one, and neither is handing in a segmentation and
+            # calling it independent. The seam exists for one this harness produced.
+            raise RequestError(f"{reserved} cannot be supplied by the caller", reserved)
     evidence = build_setup_evidence(
         prices.data,
         swings or [],
@@ -569,6 +570,8 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry=entry,
         right_side_development=request.get("right_side_development"),
         chain_completeness=request.get("chain_completeness"),
+        entry_price=request.get("entry_price"),
+        pivot_reset=request.get("pivot_reset"),
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)

@@ -15,10 +15,11 @@ import pandas as pd
 
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
+from tests.readings import full as readings
 from tests.series import anchor_dates, base_series
 
 
-READINGS = {"right_side_development": "constructive", "chain_completeness": "complete", "completeness_source": "independent_segmentation", "entry_proximity": "at_pivot"}
+
 
 
 def tail(frame: pd.DataFrame, sessions: int, *, close: float, volume: float) -> pd.DataFrame:
@@ -145,7 +146,7 @@ class RightSideJudgementTests(unittest.TestCase):
         frame, anchors = base_series()
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
         )
 
         self.assertEqual(result["setup_state"], "ready")
@@ -165,7 +166,7 @@ class RightSideJudgementTests(unittest.TestCase):
         frame, anchors = base_series(depths=(25.0,), rallies=(3,))
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
         )
 
         compression = next(item for item in result["signals"] if item["id"] == "setup.time_compression_hazard")
@@ -177,7 +178,7 @@ class RightSideJudgementTests(unittest.TestCase):
 class SignalOwnershipTests(unittest.TestCase):
     def test_a_signal_with_no_binding_flag_at_all_cannot_answer_a_required_condition(self) -> None:
         frame, anchors = base_series()
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
         smuggled = {**evidence, "signals": [
             item for item in evidence["signals"] if item["id"] != "setup.demand_supply_volume_asymmetry"
         ] + [{"id": "setup.demand_supply_volume_asymmetry", "state": "pass", "doctrine_id": "practitioners.x"}]}
@@ -189,7 +190,7 @@ class SignalOwnershipTests(unittest.TestCase):
 
     def test_a_signal_whose_doctrine_id_is_not_the_claim_it_answers_is_refused(self) -> None:
         frame, anchors = base_series()
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
         smuggled = {**evidence, "signals": [
             item for item in evidence["signals"] if item["id"] != "setup.demand_supply_volume_asymmetry"
         ] + [{"id": "setup.demand_supply_volume_asymmetry", "state": "pass", "binds": True, "doctrine_id": "setup.closing_range_formula"}]}
@@ -255,7 +256,7 @@ class SentenceModalityTests(unittest.TestCase):
         final_high = frame.index.get_loc(anchor_dates(frame, anchors)[-3])
         frame.iloc[final_high:-1, frame.columns.get_loc("Volume")] = 200_000.0
         frame.iloc[-1, frame.columns.get_loc("Volume")] = 6_000_000.0
-        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+        return build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
 
     def test_the_should_clause_reports_and_never_blocks(self) -> None:
         result = evaluate_setup(self._spikes_reversed())
@@ -268,7 +269,7 @@ class SentenceModalityTests(unittest.TestCase):
         frame, anchors = base_series(volume_profile="distribution")
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors)))
         )
 
         self.assertEqual(result["setup_state"], "avoid")
