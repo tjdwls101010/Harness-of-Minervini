@@ -136,13 +136,18 @@ def base_chain(
     pivot = _pivot_index(confirmed, highs)
     if pivot is None:
         return []
-    floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes, allow_reset)
-    if floor is None:
-        return []
+    floor, unjudged = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes, allow_reset)
     candidates = [index for index in highs if floor <= index <= pivot]
     if not candidates:
         return []
     rim = max(candidates, key=lambda index: (confirmed[index]["price"], -index))
+    # A departure nobody can judge matters only where knowing it would move this rim. One before
+    # the rim is inside the span the rim already discards, so the chain is the same either way;
+    # one at or after it could cut further. Treating every unjudgeable crossing as decisive threw
+    # away sound recent bases over a small high in the opening fifty sessions, which is where a
+    # provider's arbitrary start puts one.
+    if any(index >= rim for index in unjudged):
+        return []
     window = confirmed[rim : pivot + 1]
     return window if len(window) >= 3 and len(window) % 2 == 1 else []
 
@@ -155,11 +160,11 @@ def _after_the_structure_it_left(
     lows: pd.Series | None,
     volumes: pd.Series | None,
     allow_reset: bool,
-) -> int | None:
-    """The earliest anchor the rim search may reach, or nothing when the bars cannot say."""
+) -> tuple[int, list[int]]:
+    """The earliest anchor the rim search may reach, and the highs the bars could not judge."""
 
     if closes is None or lows is None or volumes is None:
-        return 0
+        return 0, []
     until = pd.Timestamp(confirmed[pivot]["date"])
     verdicts = [
         (index, _left_behind(closes, lows, volumes, confirmed[index], until, allow_reset))
@@ -167,15 +172,8 @@ def _after_the_structure_it_left(
         if index < pivot
     ]
     left = [index for index, verdict in verdicts if verdict]
-    floor = left[-1] if left else -1
-    # An unjudgeable crossing only matters where judging it could move the floor. The floor is
-    # set by the last departure, so one behind that is already inside the discarded span and
-    # changes nothing; one ahead of it is a departure that might exist and would cut further.
-    # Refusing on any of them at all rejected most real histories on their opening fifty
-    # sessions, which have nothing to do with the base being judged.
-    if any(verdict is None and index > floor for index, verdict in verdicts):
-        return None
-    return floor + 1
+    unjudged = [index for index, verdict in verdicts if verdict is None]
+    return (left[-1] + 1 if left else 0), unjudged
 
 
 def _left_behind(

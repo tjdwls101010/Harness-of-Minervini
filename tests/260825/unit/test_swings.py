@@ -260,6 +260,26 @@ class OneBaseAtATimeTests(unittest.TestCase):
         self.assertEqual(chain["anchors"], [])
         self.assertEqual(len(chain["left_edge_readings"]), 3)
 
+    def test_an_unjudgeable_crossing_the_rim_already_discards_changes_nothing(self) -> None:
+        """A provider's history starts wherever it starts, and small highs live there.
+
+        The first fifty sessions have no volume window behind them, so any re-crossing in them is
+        unjudgeable. Treating every one of those as decisive threw away sound recent bases over a
+        high the rim discards anyway -- the chain is identical whether that crossing was a
+        departure or not, because the rim sits far above and after it.
+        """
+
+        frame, _, _ = two_bases_series()
+        noisy = frame.copy()
+        for position, close, high, low in ((4, 65.0, 65.0, 64.9), (5, 60.0, 60.1, 60.0), (30, 66.0, 66.1, 65.9)):
+            label = noisy.index[position]
+            noisy.loc[label, ["Open", "Close"]] = close
+            noisy.loc[label, "High"] = high
+            noisy.loc[label, "Low"] = low
+        noisy.iloc[30, noisy.columns.get_loc("Volume")] = float(noisy["Volume"].iloc[:30].mean()) * 3
+
+        self.assertEqual(canonical_chain(noisy)["anchors"], canonical_chain(frame)["anchors"])
+
     def test_a_seam_between_two_structures_shows_up_as_a_contraction_that_widens(self) -> None:
         """What rejects a spliced history, where the left edge is not itself in dispute.
 
