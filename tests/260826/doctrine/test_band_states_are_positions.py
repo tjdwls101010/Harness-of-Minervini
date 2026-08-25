@@ -176,6 +176,8 @@ class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
         22.5,
         19.99,
         25.01,
+        19.9999,   # below the edge by less than band_position's own precision
+        25.0001,   # and above it by less
         0.0,
         73.0,
     )
@@ -196,19 +198,30 @@ class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
             with self.subTest(raw=repr(raw), printed=printed):
                 self.assertEqual(signal["state"], expected)
 
-    def test_the_band_position_agrees_with_the_state_it_travels_with(self) -> None:
+    def test_the_band_position_never_sits_on_the_other_side_from_the_state(self) -> None:
+        """The two are published at different precisions, so the rule is that they cannot
+        disagree -- not that they resolve each other.
+
+        `band_position` is rounded to four places for a reader, and the state is decided on
+        the printed measurement. A measurement 0.0001 above a range's high edge is genuinely
+        above it and its position rounds to exactly 1.0, so demanding the position be strictly
+        outside would be demanding a precision this field does not claim. What must never
+        happen is the position landing on the *opposite* side from the state, which is the
+        round-one contradiction one field over."""
         for raw, signal in self._signals():
-            with self.subTest(raw=repr(raw), state=signal["state"]):
-                if signal["state"] == "below_source_range":
-                    self.assertLess(signal["band_position"], 0)
-                elif signal["state"] == "above_source_range":
-                    self.assertGreater(signal["band_position"], 1)
+            position, state = signal["band_position"], signal["state"]
+            with self.subTest(raw=repr(raw), state=state, position=repr(position)):
+                if state == "below_source_range":
+                    self.assertLessEqual(position, 0)
+                    self.assertLess(math.copysign(1.0, position), 0)
+                elif state == "above_source_range":
+                    self.assertGreaterEqual(position, 1)
                 else:
-                    self.assertGreaterEqual(signal["band_position"], 0)
-                    self.assertLessEqual(signal["band_position"], 1)
-                    # -0.0 is >= 0 to Python and reads as "just under the low edge" to a
-                    # person, which is the same contradiction one field further along.
-                    self.assertGreater(math.copysign(1.0, signal["band_position"]), 0)
+                    self.assertGreaterEqual(position, 0)
+                    self.assertLessEqual(position, 1)
+                    # Inside the range the position is a true non-negative, never the -0.0 a
+                    # raw-value computation leaves behind at the low edge.
+                    self.assertGreater(math.copysign(1.0, position), 0)
 
     def test_a_difference_a_reader_could_see_is_still_a_difference(self) -> None:
         """Agreeing with the print must not become a tolerance wide enough to swallow a real
