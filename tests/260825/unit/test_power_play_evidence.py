@@ -155,17 +155,38 @@ class ACorporateActionInvalidatesWhatItMoved(unittest.TestCase):
             verdict["failed"],
         )
 
-    def test_a_split_leaves_the_session_counts_deciding(self):
-        """Sixty-five sessions is sixty-five sessions whatever the prices did."""
+    def test_a_split_leaves_no_session_count_deciding_either(self):
+        """The peak is chosen by comparing prices, so an action chooses it too.
 
+        Sixty-five sessions would be sixty-five sessions if the counting started somewhere the
+        action could not move. It does not: the peak is whichever bar printed the highest high,
+        and across a split that comparison is between two share counts. A forward split in the
+        flag halves everything after the peak and leaves it standing; the same event in the other
+        direction doubles it, the flag's own bars outprint the real top, and sixty-five sessions
+        measure as zero. Which way a split happens to run is not a reason to trust a count.
+        """
         pack = build_power_play_evidence(
             power_play_series(flag_sessions=65, split_inside_the_flag=True)
         )
 
         verdict = evaluate_power_play(pack)
 
-        self.assertEqual(verdict["power_play_state"], "not_qualified")
-        self.assertIn("fundamentals.power_play_exception.flag_maximum_weeks", verdict["failed"])
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertEqual(verdict["failed"], [])
+
+    def test_a_split_inside_the_advance_cannot_manufacture_a_long_flag(self):
+        """Halving every print after it makes the last pre-split bar the highest high.
+
+        The flag then runs from a top the stock never made, and the twenty sessions that
+        followed the real one measure as thirty-five -- a confident failure on a limit the
+        structure never approached.
+        """
+        pack = build_power_play_evidence(power_play_series(split_at=70))
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(verdict["failed"], [])
+        self.assertIn("fundamentals.power_play_exception.flag_maximum_weeks", verdict["missing"])
 
     def test_the_measurements_stay_where_a_person_can_read_them(self):
         pack = build_power_play_evidence(power_play_series(split_inside_the_flag=True))

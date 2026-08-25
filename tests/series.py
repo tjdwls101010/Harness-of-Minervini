@@ -698,3 +698,28 @@ def wick_after_the_launch_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     frame.iloc[launch, frame.columns.get_loc("Volume")] = 10_000_000.0
     frame["Stock Splits"] = [0.0] * len(closes)
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
+
+
+def stale_volume_regime_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A quiet stretch immediately before the move, and a busier regime well behind it.
+
+    Forty sessions at ten million, then thirty-one at one million, then a ten-session thrust at
+    five million that carries fifty to a hundred and ten, then a flag. Against the volume the
+    stock actually traded before the move began, the thrust is five times. Against a fixed window
+    forty to eighty sessions ahead of the peak, it is half -- a launch that plainly expanded,
+    removed as a known failure by a regime the stock left months earlier.
+    """
+
+    closes = [50.0] * 71 + _leg(50.0, 110.0, 10)
+    peak = len(closes) - 1
+    closes = closes + [106.0] * 20
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.002
+    frame["Low"] = frame["Close"] * 0.998
+    frame.iloc[peak, frame.columns.get_loc("High")] = 110.0
+    frame["Volume"] = (
+        [10_000_000.0] * 40 + [1_000_000.0] * 31 + [5_000_000.0] * 10 + [1_000_000.0] * 20
+    )
+    frame["Stock Splits"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]

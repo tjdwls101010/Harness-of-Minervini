@@ -14,6 +14,7 @@ import pandas as pd
 
 from scripts.minervini.power_play import measure_power_play
 from tests.series import (
+    stale_volume_regime_series,
     dormancy_low_before_the_launch_series,
     power_play_series,
     reverse_split_series,
@@ -247,11 +248,58 @@ class TheActionSpanCoversEverySessionAMeasurementReads(unittest.TestCase):
     and a ratio built on it is arithmetic about the split.
     """
 
-    def test_a_split_the_baseline_reads_but_the_launch_precedes_is_reported(self):
-        # Index 10 sits inside the baseline the peak-anchored reading takes its median from, and
-        # ahead of the launch bar's own forty-session lookback.
-        bars = power_play_series(split_at=10)
+    def test_a_split_at_the_first_session_the_baseline_reads_is_reported(self):
+        """The default series launches at index 59, so its baseline opens at index 19.
+
+        The bound is the one that has been wrong twice: too late, and a split whose share count
+        the median is already mixing goes unmentioned.
+        """
+        bars = power_play_series(split_at=19)
 
         measurements = measure_power_play(bars, SPEC)
 
-        self.assertTrue(measurements["corporate_action_sessions"])
+        self.assertEqual(measurements["corporate_action_sessions"], ["2026-01-29"])
+
+    def test_a_split_one_session_ahead_of_the_baseline_is_not_reported(self):
+        """The other side of the same bound: nothing here reads it, so it is not this span's."""
+
+        bars = power_play_series(split_at=18)
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["corporate_action_sessions"], [])
+
+
+class OneAnchorForThePriceAndTheTime(unittest.TestCase):
+    """The advance's size and the advance's length have to be measured from the same session.
+
+    The price is read close to close, because a single intraday wick to half the peak is not a
+    move the stock made. Reading the duration from the lowest *low* then counts from a different
+    day: a forty-session advance whose second-to-last bar wicked down measures as one week, and
+    the eight-week limit it should have failed never sees it.
+    """
+
+    def test_the_duration_counts_from_the_session_the_price_is_read_from(self):
+        bars = wick_after_the_launch_series()
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["advance_weeks"], 2.0)
+
+    def test_the_launch_ratio_reads_the_session_the_move_commenced_on(self):
+        bars = wick_after_the_launch_series()
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["launch_volume_ratio"], 10.0)
+
+
+class TheBaselineIsTheVolumeTheStockLeft(unittest.TestCase):
+    def test_a_regime_the_stock_left_does_not_decide_what_expansion_is(self):
+        """Five times the volume it traded before the move, against a fixed stale window."""
+
+        bars = stale_volume_regime_series()
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["advance_peak_volume_ratio"], 5.0)

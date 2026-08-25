@@ -122,31 +122,42 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     if not len(before):
         return _empty("history_has_no_sessions_before_the_peak")
 
+    # The extremes reading, reported and never gating. A bar that wicked to forty-nine three days
+    # after a launch from fifty is the lowest low of the window without being where anything
+    # began: read as the advance's origin it measured the price move from seventy-five instead of
+    # fifty, and put the ten-times-volume session that started the move outside the span looked at.
     low_label = before["Low"].idxmin()
     advance_low = float(before.loc[low_label, "Low"])
-    launch = int(bars.index.get_loc(low_label))
-    # Which session the move began on is not something the bars settle, so neither reading is
-    # anchored on a guess about it. Both are taken across the window the criterion allows.
-    #
-    # Anchored on the lowest low instead, a bar that wicked to forty-nine three days after a
-    # launch from fifty started the reading inside the advance: the price move measured from
-    # seventy-five rather than fifty and reported forty-seven percent, while the ten-times-volume
-    # session that began it fell outside the window the volume was looked for in. Both halves of
-    # that failed together, and both came from the same guess.
     advance_low_close = float(before["Close"].min())
-    # What the same stock traded before the whole window, so no session of the advance is in its
-    # own baseline. Required in full rather than taken as far as it reaches: sliced to a shorter
-    # lookback, five real tickers reported the same peak, advance and flag while this ratio moved,
-    # because the only thing that had changed was how many sessions were left to average.
+    # One session anchors the size of the move, its length, and the volume it came out of. Reading
+    # the price close to close and the duration from the lowest low counts them from two different
+    # days: a forty-session advance whose late bar wicked down reports eight weeks of price gain
+    # in one week of time, and the eight-week limit never sees it.
+    #
+    # The *last* session at that close, not the first. Ties are the normal case -- a stock sitting
+    # quiet for forty sessions closes at its low repeatedly -- and the first of them dates the
+    # advance to wherever the loaded history happens to begin. The last one is the last session the
+    # stock was still at its low, which is the session the move left.
+    lows = before.index[before["Close"] == advance_low_close]
+    launch = int(bars.index.get_loc(lows[-1]))
+    # What the stock traded before this move began, so no session of the advance is in its own
+    # baseline. Anchored to the launch rather than to a fixed offset from the peak, because a
+    # window forty to eighty sessions ahead of the peak is whatever regime the stock was in then:
+    # forty old sessions at ten million behind thirty-one quiet ones at one million made a
+    # five-times launch measure as half, and removed it as a known failure.
+    #
+    # Required in full rather than taken as far as it reaches: sliced to a shorter lookback, five
+    # real tickers reported the same peak, advance and flag while this ratio moved, because the
+    # only thing that had changed was how many sessions were left to average.
     #
     # The median, not the mean. One 400M session in an otherwise 400K history lifts the mean to
     # 10M, and a genuine ten-fold expansion to 4M then measures as 0.38 of it -- an advance that
     # plainly expanded, removed as a known failure by an outlier behind it.
     start = peak - advance_window
-    baseline = bars.iloc[start - advance_window:start] if start >= advance_window else bars.iloc[0:0]
+    baseline = bars.iloc[launch - advance_window:launch] if launch >= advance_window else bars.iloc[0:0]
     # The first session anything here reads. Derived from the baseline rather than restated, so
     # moving the baseline moves the span checked for corporate actions with it.
-    earliest = max(0, start - advance_window if len(baseline) else start)
+    earliest = max(0, launch - advance_window if len(baseline) else min(start, launch))
 
     baseline_volume = float(baseline["Volume"].median()) if len(baseline) else None
     measurable = baseline_volume is not None and baseline_volume > 0
@@ -205,7 +216,10 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # the expansion was *huge*, and whether it came at the commencement rather than in the
         # middle, is what the chart is asked -- and the date beside the ratio is what that
         # question is asked about.
-        "launch_volume_ratio": float(bars.iloc[launch]["Volume"]) / baseline_volume if measurable else None,
+        # The first session of the move rather than the last session before it: "an explosive
+        # price move commences on huge volume" points at the bar that did the commencing, and the
+        # anchor is by construction the last quiet one.
+        "launch_volume_ratio": float(bars.iloc[min(launch + 1, peak)]["Volume"]) / baseline_volume if measurable else None,
         "advance_peak_volume_ratio": float(before["Volume"].max()) / baseline_volume if measurable else None,
         "advance_peak_volume_date": before.index[int(before["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
         "advance_volume_ratio": float(before["Volume"].mean()) / baseline_volume if measurable else None,
@@ -235,15 +249,25 @@ _REQUIRED = (
     f"{_CLAIM}.flag_tightness_or_vcp",
 )
 _CORPORATE_ACTIONS = "corporate_action_evidence"
-# What a split moves and what it does not. A corporate action rescales every printed price and
-# every share count, so a depth, an advance and a volume ratio measured across one are arithmetic
-# about the action rather than about the stock. How many sessions elapsed is untouched by it.
+# What a corporate action costs a reading, which is all of it. A split rescales every printed
+# price and every share count, so a depth, an advance and a volume ratio measured across one are
+# arithmetic about the action rather than about the stock.
 #
-# Detecting an action and then letting the depth it manufactured reject the stock is worse than
-# not detecting it: a fifty-five percent flag that never happened comes back as a confident
-# finding. So these criteria stop deciding while the action stands, and the measurements stay in
-# the payload for a person to read -- the same separation an uncorroborated chain gets in the
-# setup path, and for the same reason.
+# The session counts looked exempt -- sixty-five sessions is sixty-five sessions whatever the
+# prices did -- and they are not, because the peak they are counted from is itself chosen by
+# comparing prices. A forward split in the flag halves everything after the real top and leaves
+# it standing, which is what made the exemption look sound; the same event in the other direction
+# doubles the flag's own bars until they outprint the top, and a sixty-five session flag measures
+# as zero. A split inside the advance makes the last pre-split bar the highest high and hands
+# back a thirty-five session flag for a structure that had twenty.
+#
+# Detecting an action and then letting what it manufactured reject the stock is worse than not
+# detecting it: the answer comes back as a confident finding about price action that never
+# happened. So while an action stands in the span, nothing here decides, and the measurements
+# stay in the payload for a person to read -- the same separation an uncorroborated chain gets in
+# the setup path, and for the same reason.
+
+
 # The one criterion a structure can miss by not having happened yet. Twelve sessions is the least
 # a flag can be and still be one, so a shorter flag has not failed the criterion -- it has not
 # finished, and the only thing it needs is time.
@@ -253,12 +277,6 @@ _CORPORATE_ACTIONS = "corporate_action_evidence"
 # below which a new high stops counting; calling the four sessions after it a failure removes a
 # twenty-session flag from consideration on the strength of one cent.
 _STILL_FORMING = f"{_CLAIM}.flag_minimum_sessions"
-_MOVED_BY_A_CORPORATE_ACTION = (
-    f"{_CLAIM}.advance_minimum_pct",
-    f"{_CLAIM}.flag_maximum_decline_gate_pct",
-    f"{_CLAIM}.flag_tightness_or_vcp",
-    f"{_CLAIM}.launch_volume_character",
-)
 
 
 def reading_rejects(criteria: Mapping[str, str], *, corporate_action_unmoved: bool) -> bool:
@@ -272,13 +290,12 @@ def reading_rejects(criteria: Mapping[str, str], *, corporate_action_unmoved: bo
     The trust rule has to be the reducer's own, or the two would drift into calling a structure
     settled on a failure the reducer will not use. Hence one predicate, read from both sides.
     """
-    for claim_id in _REQUIRED:
-        condition = claim_id[len(_CLAIM) + 1:]
-        if criteria.get(condition) != "fail" or claim_id == _STILL_FORMING:
-            continue
-        if corporate_action_unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION:
-            return True
-    return False
+    if not corporate_action_unmoved:
+        return False
+    return any(
+        criteria.get(claim_id[len(_CLAIM) + 1:]) == "fail" and claim_id != _STILL_FORMING
+        for claim_id in _REQUIRED
+    )
 
 
 def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
@@ -305,7 +322,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
         agreed = claim_id[len(_CLAIM) + 1:] not in contested
-        trusted = agreed and (unmoved or claim_id not in _MOVED_BY_A_CORPORATE_ACTION)
+        trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
         if state == "fail" and claim_id != _STILL_FORMING and trusted:
