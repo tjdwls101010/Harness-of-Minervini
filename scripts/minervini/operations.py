@@ -645,6 +645,9 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "fundamentals.power_play_exception",
             "convention.trading_week",
             "convention.power_play_top_candidates",
+            # The candidates are the turning points that convention cuts, so the rule deciding
+            # which highs count as tops is cited beside the one deciding how far down they argue.
+            "setup.swing_segmentation_convention",
             "scope.data_integrity",
         ],
         next_capabilities=["ticker.chart"] if awaits_a_chart else [],

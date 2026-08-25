@@ -104,7 +104,10 @@ class AGapNamesWhatWouldActuallyCloseIt(unittest.TestCase):
         )
 
     def test_a_criterion_the_two_readings_answer_differently_says_that(self):
-        payload = run(power_play_series(advance_pct=102.0, flag_depth_pct=8.0))
+        # A genuine second top inside the flag: price falls away from it by more than the
+        # retracement, so it is a turning point rather than one of the flag's descending bars,
+        # which are no longer read as candidate structures at all.
+        payload = run(power_play_series(advance_pct=102.0, flag_depth_pct=8.0, marginal_new_high_at=-6))
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
         contested = payload["data"]["contested_criteria"]
 

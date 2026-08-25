@@ -814,32 +814,6 @@ def anchor_moving_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
-def lower_top_reshuffling_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
-    """A payout that leaves the highest top alone and reorders the ones under it.
-
-    The peak prints last and is untouched by the ex-date, so its date, its anchor and its flag are
-    the same on either scale. Two lower tops sit on opposite sides of the distribution and are
-    within a dollar of each other, so which of them the chain reaches second is the payout's
-    answer rather than the stock's.
-    """
-
-    index = pd.bdate_range(start=start, periods=121)
-    closes = [50.0] * 40 + [78.0] * 10 + [50.0] * 20 + [79.0] * 10 + [50.0] * 20 + [100.0] + [96.0] * 20
-    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
-    frame["High"] = frame["Close"] * 1.002
-    frame["Low"] = frame["Close"] * 0.998
-    frame.iloc[100, frame.columns.get_loc("High")] = 100.0
-    frame["Volume"] = [400_000.0] * 100 + [2_400_000.0] + [800_000.0] * 20
-    frame["Stock Splits"] = [0.0] * len(closes)
-    frame["Dividends"] = [0.0] * len(closes)
-    # Between the two lower tops. On the tape the later one prints lower than the earlier; with
-    # every print on one scale it prints higher.
-    frame.iloc[60, frame.columns.get_loc("Dividends")] = 2.0
-    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
-    frame.iloc[60:, paid] -= 2.0
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
-
-
 def payout_that_only_moves_a_gate_series(
     *, payout: float = 0.30, start: str = "2026-01-02"
 ) -> pd.DataFrame:
@@ -862,6 +836,40 @@ def payout_that_only_moves_a_gate_series(
         [dormant] * 60
         + [dormant + (ramp_top - dormant) * (step + 1) / 25 for step in range(25)]
         + [peak]
+        + [flag] * 30
+    )
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 26 + [800_000.0] * 30
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    frame.iloc[70, frame.columns.get_loc("Dividends")] = payout
+    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+    frame.iloc[70:, paid] -= payout
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_payout_decided_criterion_under_a_lower_top_series(
+    *, payout: float = 0.30, start: str = "2026-01-02"
+) -> pd.DataFrame:
+    """The gate the payout decided, with a genuine earlier top that rejects on that same gate.
+
+    Built as the gate fixture with a pullback inside the advance, so the search has a second
+    turning point to land on. Read from that top the advance is only eighty-odd percent and fails
+    outright; read from the peak it lands either side of the limit depending on which scale the
+    prints are on. The chain is therefore loud with a rejection on a criterion that has no
+    trustworthy answer, which is exactly the combination a verdict must not resolve by counting
+    votes.
+    """
+
+    dormant, mid, dip, peak, flag = 50.0, 95.0, 90.0, 99.9, 94.0
+    closes = (
+        [dormant] * 60
+        + [dormant + (mid - dormant) * (step + 1) / 18 for step in range(18)]
+        + [mid - (mid - dip) * (step + 1) / 4 for step in range(4)]
+        + [dip + (peak - dip) * (step + 1) / 4 for step in range(4)]
         + [flag] * 30
     )
     index = pd.bdate_range(start=start, periods=len(closes))

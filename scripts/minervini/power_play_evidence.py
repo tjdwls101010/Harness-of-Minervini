@@ -18,11 +18,13 @@ from typing import Any
 from . import doctrine
 from .setup_structure import _DISTRIBUTION_COLUMN, read_bars
 from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
+from .swings import _typical_range_pct, segment
 
 
 _CLAIM = "fundamentals.power_play_exception"
 _WEEK = "convention.trading_week"
 _TOPS = "convention.power_play_top_candidates"
+_SEGMENTATION = "setup.swing_segmentation_convention"
 # A runaway guard, not a doctrine limit: the longest chain any cached history produced was
 # nineteen tops. Hitting it is reported, never silently truncated into an agreement.
 _MOST_TOPS_READ = 200
@@ -213,7 +215,33 @@ def _unmoved(measurements: Mapping[str, Any]) -> bool:
     )
 
 
-def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, Any]) -> dict[str, Any]:
+def _turning_points(history: Any) -> frozenset[str] | None:
+    """The highs the segmentation this harness already owns calls turning points.
+
+    A candidate top is a high price has since fallen away from, which is what the detector
+    confirms and what a reader would draw on the chart. Every descending high is a weaker thing
+    entirely: inside a flag it includes the bar that printed a hundredth of a percent above the
+    last one, and reading the structure from there is reading a bar rather than a top.
+
+    The retracement is derived the way ticker.swings derives it, from the same registered
+    convention, so both capabilities cut the same bars at the same places. What is not borrowed is
+    that capability's refusal to vouch when a neighbouring parameter would move an anchor: it
+    exists to corroborate a chain a caller declared, and here the disagreement is reported as a
+    disputed top rather than as no reading at all.
+    """
+
+    bars, _ = read_bars(history)
+    typical = _typical_range_pct(bars)
+    if typical is None:
+        return None
+    multiple = float(doctrine.parameter(_SEGMENTATION, "retracement_range_multiple"))
+    anchors = segment(bars, retracement_pct=multiple * typical)["anchors"]
+    return frozenset(str(anchor["date"]) for anchor in anchors if anchor["kind"] == "high")
+
+
+def _walk_the_tops(
+    history: Any, spec: Mapping[str, Any], first: Mapping[str, Any], turning_points: frozenset[str] | None = None
+) -> dict[str, Any]:
     readings: list[dict[str, Any]] = []
     below, before = None, None
     top = first["peak_high"]
@@ -233,7 +261,9 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
     first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
     may_contest = 0
-    while len(readings) < _MOST_TOPS_READ:
+    steps = 0
+    while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
+        steps += 1
         reading = first if not readings else measure_power_play(history, spec, below=below, before=before)
         if reading["rejection"] is not None:
             # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
@@ -243,6 +273,12 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
             if reading["rejection"] != _NO_MORE_TOPS:
                 ran_out_of_history = True
             break
+        # Walked past rather than read. The bar is still where the next search starts from -- the
+        # tops below it are found by descending -- but it is not a reading of the structure, so it
+        # neither contests a criterion nor has to consent to a rejection.
+        if readings and turning_points is not None and str(reading["peak_date"]) not in turning_points:
+            below, before = reading["peak_high"], reading["peak_date"]
+            continue
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
             if first_non_contesting is None:
@@ -283,7 +319,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     measurements = measure_power_play(history, spec)
     actions = measurements["corporate_action_sessions"]
 
-    walk = _walk_the_tops(history, spec, measurements)
+    walk = _walk_the_tops(history, spec, measurements, _turning_points(history))
     readings, first_non_contesting = walk["readings"], walk["first_non_contesting"]
     ran_out_of_history, may_contest = walk["ran_out_of_history"], walk["may_contest"]
     exhausted = len(readings) >= _MOST_TOPS_READ
@@ -300,7 +336,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     adjusted: dict[str, Any] | None = None
     reordered = False
     if on_one_scale is not None and measurements["peak_date"] is not None:
-        adjusted = _walk_the_tops(on_one_scale, spec, measure_power_play(on_one_scale, spec))
+        adjusted = _walk_the_tops(
+            on_one_scale, spec, measure_power_play(on_one_scale, spec), _turning_points(on_one_scale)
+        )
         reordered = _signature(walk) != _signature(adjusted)
 
     # Then which criteria the payout decided, paired reading by reading against that same scale.

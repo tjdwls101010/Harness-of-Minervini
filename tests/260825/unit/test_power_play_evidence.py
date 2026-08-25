@@ -337,7 +337,9 @@ class NoVerdictRestsOnWhatThePayoutDecided(unittest.TestCase):
         and none of those is the reading whose answer the payout decided -- so the chain is loud
         with rejections while the criterion the verdict would rest on has no answer at all.
         """
-        pack = build_power_play_evidence(payout_that_only_moves_a_gate_series())
+        from tests.series import a_payout_decided_criterion_under_a_lower_top_series
+
+        pack = build_power_play_evidence(a_payout_decided_criterion_under_a_lower_top_series())
         criterion = "fundamentals.power_play_exception.advance_minimum_pct"
 
         verdict = evaluate_power_play(pack)
@@ -456,7 +458,10 @@ class TheReadingCountsAccountForEveryTopTaken(unittest.TestCase):
         the tops that were read cannot be called agreement among all of them. It is agreement
         among the tops taken, and the field that says so points at the count and the cut.
         """
-        pack = evidence(flag_depth_pct=40.0)
+        # A turning point fifteen percent below the peak: past the bound, so it cannot contest,
+        # and still a top the chain read and had to hear from. A deep flag no longer produces one
+        # by itself now that the flag's own descending bars are not candidates.
+        pack = evidence(later_high=21.0 / 0.85)
 
         self.assertTrue(pack["first_non_contesting_reading"])
         self.assertIn("rejected_under_every_top_read", pack)
@@ -671,15 +676,43 @@ class TheChainItselfIsPartOfTheSignature(unittest.TestCase):
     The highest top can keep its date and its boundaries while the tops beneath it change places
     -- and those are the readings that decide whether a criterion is contested and whether the
     rejection stands. A signature that stops at the primary reading misses it.
+
+    Asserted on the signature rather than through a price series, and deliberately. Once the
+    candidates became confirmed turning points, no fixture reached this: to change a turning
+    point's rank a payout has to overcome a real retracement, and one that large moves the
+    structure's boundaries too and is caught by the check that runs first. The check stays because
+    what makes it unreachable is a convention, and a convention is a thing that changes.
     """
 
-    def test_a_payout_that_only_reshuffles_the_lower_tops_unsettles_the_reading(self):
-        from tests.series import lower_top_reshuffling_payout_series
+    def _walk(self, *dates):
+        return {
+            "readings": [
+                {
+                    "peak_date": date, "advance_anchor_date": "2026-01-05", "flag_low_date": "2026-06-01",
+                    "baseline_first_session": "2025-11-03", "baseline_last_session": "2026-01-02",
+                    "measured_span_first_session": "2025-11-03",
+                }
+                for date in dates
+            ],
+            "may_contest": len(dates),
+            "ran_out_of_history": False,
+        }
 
-        pack = build_power_play_evidence(lower_top_reshuffling_payout_series())
+    def test_the_same_primary_under_a_different_chain_is_a_different_reading(self):
+        from scripts.minervini.power_play_evidence import _signature
 
-        self.assertEqual(pack["peak_identity"], "disputed")
-        self.assertEqual(evaluate_power_play(pack)["failed"], [])
+        one = self._walk("2026-06-08", "2026-04-17")
+        other = self._walk("2026-06-08", "2026-04-21")
+
+        self.assertNotEqual(_signature(one), _signature(other))
+
+    def test_the_same_chain_is_the_same_reading(self):
+        from scripts.minervini.power_play_evidence import _signature
+
+        self.assertEqual(
+            _signature(self._walk("2026-06-08", "2026-04-17")),
+            _signature(self._walk("2026-06-08", "2026-04-17")),
+        )
 
 
 class TheSignatureHasToCoverTheAnswersToo(unittest.TestCase):
