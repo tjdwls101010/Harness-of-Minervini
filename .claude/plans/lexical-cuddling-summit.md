@@ -175,6 +175,7 @@
 파일: `scripts/minervini/operations.py`, `cli.py`, `capabilities.py`, `CLAUDE.md`, `.claude/skills/*/SKILL.md`.
 
 - **조합 출처 연계**(C5): `ticker.risk` 최종 판정이 컴포넌트 envelope 참조(티커·세션·해시) 검증 — 무출처 수동 enum 조합으로 BUY-READY 불가.
+- **인용된 `doctrine_id`가 실제로 해소되는지 검증하는 테스트가 없다** (④-b에서 발견). 봉투는 존재하지 않는 claim id를 인용할 수 있고, 그 인용을 따라간 독자는 아무것도 찾지 못한다 — 실제로 ④-b 작업 중 미등록 claim을 인용했는데 809개 테스트 중 하나도 걸리지 않았다. AST로 `doctrine_ids=[...]` 키워드 인자 안의 문자열 상수(모듈 레벨 상수 이름 포함)를 모아 레지스트리에서 해소되는지 검사한다. 이것이 하네스 자신의 무결성 계층에서 지금 비어 있는 자리다.
 - CIK 조회 capability(SEC company_tickers.json), 프로즈-인터페이스 중복 제거(envelope 계약 4문장 등), 스킬-CLAUDE.md 중복 제거(Power Play·시장 방어·사이징 금지 반복), 스킬 frontmatter 스코프 문구 동기화.
 - CLAUDE.md 갱신: 부분 청산 허용 스코프 문구(결정 2), 응답 언어 규칙(결정 6), 계약 어휘 번역 규칙, 어닝 리스크 문장, 베이스 카운트 문장, trade traction 질문 UX(결정 7), "time as evidence"에 D+2 측정 앵커 연결, 6분류 카테고리별 해석 차이 명시. 111줄 예산 준수 — 늘어난 만큼 중복 제거로 상쇄.
 
