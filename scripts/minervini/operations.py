@@ -585,6 +585,8 @@ def _segmentation_reason(chain: Mapping[str, Any]) -> str:
     are different problems, and a single reason word would hide which one a reader is looking
     at.
     """
+    if chain.get("rejection"):
+        return str(chain["rejection"])
     if chain.get("ambiguous_sessions_in_base"):
         return "ambiguous_session_inside_the_base"
     if chain.get("sensitivity"):
@@ -595,6 +597,9 @@ def _segmentation_reason(chain: Mapping[str, Any]) -> str:
 def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
+    # Before the provider, not after: a malformed request that reaches the network comes back as
+    # a provider outage when the fault was the caller's, and pays for a fetch nobody can use.
+    _refuse_unusable_setup_request(request)
     try:
         prices = _cached_provider(
             runtime,
@@ -632,22 +637,6 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     entry = request.get("entry")
     if entry is not None and not isinstance(entry, Mapping):
         raise RequestError("entry must be an object", "entry")
-    # A chart reading with no picture named is a reading of nothing in particular. The value is
-    # printed by both ticker.swings and ticker.chart, so carrying it costs a copy and buys the
-    # one thing the date comparison cannot see: that the approval was of these bars. Only for
-    # `complete`, which is the reading it gates -- a caller admitting a gap is telling the truth
-    # whichever vintage they read it from, and charging them for the receipt would be the
-    # opposite of costing them nothing.
-    if request.get("chain_completeness") == "complete" and request.get("approved_bars") is None:
-        raise RequestError(
-            "approved_bars is required with chain_completeness: name the bars the chain was approved from, as ticker.swings and ticker.chart report them",
-            "approved_bars",
-        )
-    for reserved in ("completeness_source", "detected_chain", "segmentation"):
-        if request.get(reserved) is not None:
-            # Naming a supplier is not being one, and neither is handing in a segmentation and
-            # calling it independent. The seam exists for one this harness produced.
-            raise RequestError(f"{reserved} cannot be supplied by the caller", reserved)
     evidence = build_setup_evidence(
         prices.data,
         swings or [],
@@ -667,13 +656,18 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # and reporting both as "evidence required" sends a reader looking for an argument.
     unvouched = evidence["segmentation"].get("state") != "resolved"
     missing = [{"id": item, "reason": _missing_reason(item, evidence), "required": True} for item in result["missing"]]
-    if result["setup_state"] != "incomplete":
-        status = "ok"
-    elif unvouched:
+    if unvouched:
         # The same gap ticker.swings calls unavailable, and for the same reason: the parameters
         # are out of the caller's reach and the chart draws no anchors for a chain the detector
         # refuses, so needs_input named nothing they could supply and the chart was a dead end.
+        #
+        # Ahead of the reducer's own state, not only when it came back incomplete. A hard gate
+        # failing on an uncorroborated chain is still a verdict read off a segmentation nothing
+        # vouched for, and letting it through returned ok, AVOID, and a pointer at ticker.risk
+        # over a data-integrity gap the engine already knew about.
         status = "unavailable"
+    elif result["setup_state"] != "incomplete":
+        status = "ok"
     else:
         status = "needs_input"
     return envelope(
@@ -697,6 +691,27 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         ),
         next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
+
+
+def _refuse_unusable_setup_request(request: Mapping[str, Any]) -> None:
+    """What no amount of price history could make valid."""
+
+    for reserved in ("completeness_source", "detected_chain", "segmentation"):
+        if request.get(reserved) is not None:
+            # Naming a supplier is not being one, and neither is handing in a segmentation and
+            # calling it independent. The seam exists for one this harness produced.
+            raise RequestError(f"{reserved} cannot be supplied by the caller", reserved)
+    # A chart reading with no picture named is a reading of nothing in particular. The value is
+    # printed by both ticker.swings and ticker.chart, so carrying it costs a copy and buys the
+    # one thing the date comparison cannot see: that the approval was of these bars. Only for
+    # `complete`, which is the reading it gates -- a caller admitting a gap is telling the truth
+    # whichever vintage they read it from, and charging them for the receipt would be the
+    # opposite of costing them nothing.
+    if request.get("chain_completeness") == "complete" and request.get("approved_bars") is None:
+        raise RequestError(
+            "approved_bars is required with chain_completeness complete: name the bars the chain was approved from, as ticker.swings and ticker.chart report them",
+            "approved_bars",
+        )
 
 
 def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:

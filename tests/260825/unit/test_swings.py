@@ -17,6 +17,7 @@ import unittest
 
 import pandas as pd
 
+from scripts.minervini.setup_structure import bars_fingerprint
 from scripts.minervini.swings import base_chain, canonical_chain, segment
 from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, turn_between_neighbours_series, two_bases_series, unstable_series
 
@@ -276,6 +277,23 @@ class UnusableHistoryTests(unittest.TestCase):
 
         self.assertEqual(chain["state"], "unavailable")
         self.assertEqual(chain["anchors"], [])
+        # Which kind of unusable, because a repeated session and a history that simply has no
+        # base in it send a reader to different places.
+        self.assertEqual(chain["rejection"], "history_repeats_a_session")
+
+    def test_a_session_that_traded_nothing_is_data_rather_than_a_fault(self) -> None:
+        """The chart accepts a halted session, so the fingerprint it is approved by must too.
+
+        Refusing zero volume here let a chart render successfully with no input digest at all,
+        and an artifact with no digest cannot be the thing a setup approval names.
+        """
+
+        frame, _ = base_series()
+        halted = frame.copy()
+        halted.iloc[10, halted.columns.get_loc("Volume")] = 0.0
+
+        self.assertEqual(canonical_chain(halted)["state"], "resolved")
+        self.assertEqual(len(bars_fingerprint(halted)), 64)
 
     def test_a_retracement_that_is_not_a_positive_percentage_is_refused(self) -> None:
         frame, _ = base_series()

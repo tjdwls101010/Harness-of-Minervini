@@ -41,25 +41,42 @@ def completed_bars(history: Any) -> pd.DataFrame | None:
     numeric strings validated against one reading and was measured against another.
     """
 
+    return read_bars(history)[0]
+
+
+def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
+    """The completed bars, or nothing and the reason there are none.
+
+    Callers that only measure want the frame; a capability reporting unavailability wants to say
+    which kind it was. Silently returning nothing turned a provider handing back the same session
+    twice into "this history segments into no base", which points a reader at the wrong problem.
+    """
+
     if not isinstance(history, pd.DataFrame) or any(column not in history for column in _REQUIRED_COLUMNS):
-        return None
+        return None, "history_missing_required_columns"
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
-    if bars.isna().any().any() or (bars <= 0).any().any():
-        return None
+    if bars.isna().any().any():
+        return None, "history_contains_non_numeric_values"
+    prices = [column for column in _REQUIRED_COLUMNS if column != "Volume"]
+    # A halted session really does trade nothing, so zero volume is data rather than a fault. A
+    # zero price is not: the chart boundary already refuses those, and the two have to agree or a
+    # chart renders while the fingerprint it is supposed to be approved by comes back empty.
+    if (bars[prices] <= 0).any().any() or (bars["Volume"] < 0).any():
+        return None, "history_contains_non_positive_values"
     index = pd.DatetimeIndex(bars.index)
     # Two rows under one label make a bar lookup return a Series, and reading a price off it
     # raises inside the detector -- an internal contract failure where the envelope should carry
     # typed unavailability.
     if index.has_duplicates:
-        return None
+        return None, "history_repeats_a_session"
     # The production provider returns the exchange's own tz-aware index while the fixtures
     # are naive, so a swing date parsed from a string matched one and missed the other.
     if index.tz is not None:
         index = index.tz_convert(None) if index.tz is not None else index
     bars.index = index.normalize()
-    return bars if bars.index.is_monotonic_increasing else bars.sort_index()
+    return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
 
 
 def bars_fingerprint(history: Any) -> str | None:
@@ -194,4 +211,4 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["completed_bars", "resolve_structure"]
+__all__ = ["bars_fingerprint", "completed_bars", "read_bars", "resolve_structure"]

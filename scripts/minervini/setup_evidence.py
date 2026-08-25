@@ -204,7 +204,7 @@ def _completeness_state(
     # depths and the base the reader looked at had all moved.
     fingerprint = detected.get("bars_fingerprint")
     basis["bars_fingerprint"] = fingerprint
-    if reading is not None and approved_bars != fingerprint:
+    if reading == "complete" and approved_bars != fingerprint:
         basis["approved_bars"] = approved_bars
         return "needs_chart", basis
     found = [str(anchor["date"]) for anchor in detected.get("anchors") or []]

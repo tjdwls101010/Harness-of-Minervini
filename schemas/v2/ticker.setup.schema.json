@@ -176,7 +176,7 @@
       "needs_input": "Required evidence is absent, or the declared chain contradicts the bars, and a caller can supply what is missing.",
       "ok": "The setup reducer produced ready, wait, or avoid.",
       "partial": "Completed price history stops before the requested session, so the setup is not judged.",
-      "unavailable": "Completed price history is unavailable, or the detector will not vouch for any segmentation of these bars -- the same gap ticker.swings reports, and no argument to this command changes it, so no next capability is offered."
+      "unavailable": "Completed price history is unavailable, or the detector will not vouch for any segmentation of these bars -- the same gap ticker.swings reports, and no argument to this command changes it, so no next capability is offered. That gap outranks whatever the reducer made of the chain, including a hard-gate failure, because a verdict read off a segmentation nothing vouched for is uncorroborated too."
     },
     "summary": "Measure a declared base against completed bars and decide the setup on evidence each route must positively have."
   }

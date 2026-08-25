@@ -26,7 +26,7 @@ from typing import Any
 import pandas as pd
 
 from . import doctrine
-from .setup_structure import bars_fingerprint, completed_bars
+from .setup_structure import bars_fingerprint, read_bars
 
 
 _CONVENTION = "setup.swing_segmentation_convention"
@@ -58,7 +58,7 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
         "ambiguous_sessions": [],
         "retracement_pct": float(retracement_pct),
     }
-    bars = completed_bars(history)
+    bars, _ = read_bars(history)
     if bars is None or bars.empty:
         return empty
 
@@ -256,7 +256,7 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     multiple = float(doctrine.parameter(_CONVENTION, "retracement_range_multiple"))
     offsets = [float(value) for value in doctrine.parameter(_CONVENTION, "sensitivity_offsets")]
 
-    bars = completed_bars(history)
+    bars, rejection = read_bars(history)
     sessions = 0 if bars is None else int(len(bars))
     source = bars if bars is not None else history
     typical = _typical_range_pct(bars)
@@ -271,6 +271,7 @@ def canonical_chain(history: Any) -> dict[str, Any]:
             "state": "unavailable", "anchors": [], "live_leg": None, "ambiguous_sessions": [],
             "sensitivity": [], "ambiguous_sessions_in_base": [], "parameters": parameters,
             "sessions": sessions, "bars_fingerprint": bars_fingerprint(source),
+            "rejection": rejection or "history_has_no_measurable_range",
         }
     retracement = multiple * typical
     closes = None if bars is None else bars["Close"]
@@ -311,6 +312,7 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         "parameters": parameters,
         "sessions": sessions,
         "bars_fingerprint": bars_fingerprint(source),
+        "rejection": None,
     }
 
 

@@ -16,7 +16,7 @@ from scripts.minervini.chart import render_chart_artifacts
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import anchor_dates, base_series
 
@@ -71,7 +71,46 @@ class AGapTheEngineKnowsAboutOutranksTheCallersTests(unittest.TestCase):
         self.assertEqual(completeness["measured"]["reading"], "partial")
 
 
+class RefusedBeforeAnythingIsFetchedTests(unittest.TestCase):
+    def test_a_request_no_history_could_rescue_never_reaches_the_provider(self) -> None:
+        """Validating after the fetch reports the caller's fault as a provider outage.
+
+        It also pays for a fetch whose result cannot be used, and on a provider that happens to
+        be down the caller is told to retry something that was never going to work.
+        """
+
+        calls = []
+
+        def provider(ticker, requested):
+            calls.append(ticker)
+            raise ProviderUnavailable("down")
+
+        runtime = Runtime(price_history=provider)
+
+        with self.assertRaises(RequestError) as raised:
+            execute("ticker.setup", {
+                "ticker": "TEST", "as_of": "2026-06-25", "swing": [],
+                "chain_completeness": "complete", "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(raised.exception.field, "approved_bars")
+        self.assertEqual(calls, [])
+
+
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
+    def test_it_outranks_a_verdict_read_off_the_chain_nothing_vouched_for(self) -> None:
+        """A hard gate failing on an uncorroborated chain is still uncorroborated.
+
+        Letting the reducer's own state decide first returned ok, AVOID, and a pointer at
+        ticker.risk over a data-integrity gap the engine already knew about.
+        """
+
+        payload = run(daily_range_pct=0.5, hidden_bounce=True, volume_profile="distribution")
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(payload["next_capabilities"], [])
+
     def test_a_segmentation_nothing_will_vouch_for_stops_the_route_rather_than_routing_on(self) -> None:
         """The same gap, answered two different ways by two capabilities.
 
@@ -117,6 +156,20 @@ class TheApprovalNamesItsOwnBarsTests(unittest.TestCase):
 
         self.assertEqual(payload["data"]["declared_readings"]["chain_completeness"], "partial")
         self.assertNotEqual(payload["data"]["setup_state"], "ready")
+
+    def test_a_reading_that_asks_for_the_chart_is_not_an_approval_of_other_bars(self) -> None:
+        """`needs_chart` names a reader who has not looked yet, not one who looked elsewhere."""
+
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        payload = execute("ticker.setup", {
+            "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+            "chain_completeness": "needs_chart", "no_cache": True,
+        }, runtime=runtime)
+
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "evidence_required")
 
     def test_an_approval_of_other_bars_does_not_carry_over_to_these(self) -> None:
         """Same dates, different prices, and the reading was of the other picture.
