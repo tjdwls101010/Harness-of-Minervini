@@ -377,7 +377,12 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         for signal in evidence.get("signals") or []
     ]
 
-    if failed:
+    # A criterion both readings agreed on, or a rejection both readings reached by their own
+    # routes. The second leaves nothing trustworthy to name -- reporting the primary reading's
+    # list would name limits the rival says were never exceeded -- but there is no reading of
+    # these bars under which the structure qualifies, and that is a finished answer.
+    rejected_under_every_reading = bool(evidence.get("rejected_under_every_reading"))
+    if failed or rejected_under_every_reading:
         state = "not_qualified"
     elif missing:
         state = "incomplete"
@@ -392,6 +397,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
         "contested_criteria": sorted(contested),
+        "rejected_under_every_reading": rejected_under_every_reading,
         "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),

@@ -240,3 +240,36 @@ class TheMachineChannelSaysWhatTheReducerSays(unittest.TestCase):
         self.assertEqual(
             states["fundamentals.power_play_exception.advance_minimum_pct"], "fail"
         )
+
+
+class BothReadingsRejectingIsAnAnswer(unittest.TestCase):
+    """Agreeing that it is not a Power Play is agreement, even about different limits.
+
+    Read from the marginal new high the advance is too small and took too long; read from the
+    top it exceeded, the flag has run past six weeks. No single criterion is agreed, so nothing
+    is trusted enough to name -- but there is no reading of these bars under which this is a
+    Power Play, and reporting that as an open question waits for evidence that would not change
+    it.
+    """
+
+    def _pack(self):
+        return evidence(advance_pct=110.0, flag_sessions=36, marginal_new_high_at=-3)
+
+    def test_a_verdict_no_reading_disputes_is_reported(self):
+        verdict = evaluate_power_play(self._pack())
+
+        self.assertEqual(verdict["power_play_state"], "not_qualified")
+
+    def test_no_criterion_only_one_reading_failed_is_named(self):
+        """The rejection stands; which limit carried it does not."""
+
+        verdict = evaluate_power_play(self._pack())
+
+        self.assertEqual(verdict["failed"], [])
+        self.assertTrue(verdict["rejected_under_every_reading"])
+
+    def test_one_reading_rejecting_alone_is_still_an_open_question(self):
+        verdict = evaluate_power_play(evidence(marginal_new_high_at=-5))
+
+        self.assertEqual(verdict["power_play_state"], "incomplete")
+        self.assertFalse(verdict["rejected_under_every_reading"])

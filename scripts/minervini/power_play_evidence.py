@@ -181,6 +181,11 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         ),
     ]
     return {
+        # Whether every reading of these bars rejects, whatever each one rejected on. Computed
+        # here because it is a fact about the two readings, and the reducer only ever sees one.
+        "rejected_under_every_reading": bool(contested)
+        and _rejects(measurements, tight_limit)
+        and _rejects(alternate, tight_limit),
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
