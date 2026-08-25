@@ -20,6 +20,7 @@ from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
 from scripts.minervini.setup_structure import bars_fingerprint
+from scripts.minervini.swings import canonical_chain
 from tests.readings import detected
 from tests.series import anchor_dates, base_series, borrowed_contraction_series, hidden_turn_series
 
@@ -339,49 +340,49 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class VolumeIsWhatSeparatesTwoStructuresTests(unittest.TestCase):
-    """The boundary the source supplies, where price alone supplied only a magnitude.
+class WhereTheBaseBeginsIsNotSettledByTheBarsTests(unittest.TestCase):
+    """The one judgment in the segmentation that no rule got right, and what follows from it.
 
-    Read on price, this history is a forty percent base whose depths contract the whole way --
-    forty, fifteen, seven -- and every price-only rule for cutting it deleted evidence a gate
-    reads. The stock closed above the eighty level on expanding volume and never came back
-    under, which is the source's own buy point, so what is above it is a different structure.
+    Read on price, this history is a forty percent base whose depths contract the whole way.
+    Read with the source's own breakout observation -- a close above eighty on expanding volume,
+    held ever since -- what is above eighty is a different structure with one contraction and no
+    sequence to judge. Both readings are defensible and they disagree, so the detector vouches
+    for neither: every rule that picked one deleted or borrowed a contraction, and each of those
+    reached `ready` on a chain the engine had edited.
     """
 
-    def test_a_high_broken_out_of_on_expanding_volume_is_not_part_of_this_base(self) -> None:
+    def test_a_disputed_left_edge_is_vouched_for_neither_way(self) -> None:
         frame, left_behind, current = borrowed_contraction_series()
 
-        chain = detected(frame)
+        chain = canonical_chain(frame)
 
-        self.assertEqual(chain, current)
-        self.assertFalse(set(left_behind) & set(chain))
+        self.assertEqual(chain["state"], "unstable")
+        self.assertTrue(chain["left_edge_disputed"])
+        self.assertEqual(chain["anchors"], [])
+        # Every reading travels, so a person can see what the disagreement was about.
+        self.assertIn([*left_behind, *current], chain["left_edge_readings"])
+        self.assertIn(current, chain["left_edge_readings"])
 
-    def test_the_same_price_path_without_the_volume_is_not_a_departure(self) -> None:
-        """Price alone reads the two identically, which is why the boundary is not on price.
+    def test_the_same_price_path_without_the_volume_is_not_disputed_at_all(self) -> None:
+        """Price alone reads the two identically, which is why the dispute is about volume.
 
-        Drifting above a prior high on quiet volume is the stock still inside its correction.
-        A fixture that only ever expands would show the boundary firing and never show that
-        volume is what fires it.
+        Drifting above a prior high on quiet volume is the stock still inside its correction, so
+        there is only one reading and the detector vouches for it.
         """
 
         quiet, left_behind, current = borrowed_contraction_series(breakout_volume=False)
         loud, _, _ = borrowed_contraction_series()
 
         self.assertTrue(quiet["Close"].equals(loud["Close"]))
-        self.assertEqual(detected(loud), current)
-        self.assertEqual(detected(quiet), [*left_behind, *current])
+        chain = canonical_chain(quiet)
+        self.assertEqual(chain["state"], "resolved")
+        self.assertFalse(chain["left_edge_disputed"])
+        self.assertEqual([item["date"] for item in chain["anchors"]], [*left_behind, *current])
 
-    def test_the_structure_left_behind_does_not_lend_its_contractions(self) -> None:
-        """One contraction is no sequence, and the older structure's is not the fix for that."""
-
+    def test_nothing_downstream_measures_a_chain_the_edge_was_disputed_on(self) -> None:
         frame, _, _ = borrowed_contraction_series()
-        chain = detected(frame)
 
-        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
-
-        self.assertEqual(len(result["measurements"]["contraction_depths_pct"]), 1)
-        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "unavailable")
-        self.assertNotEqual(result["setup_state"], "ready")
+        self.assertEqual(detected(frame), [])
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):

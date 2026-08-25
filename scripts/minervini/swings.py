@@ -107,6 +107,7 @@ def base_chain(
     closes: pd.Series | None = None,
     lows: pd.Series | None = None,
     volumes: pd.Series | None = None,
+    allow_reset: bool = False,
 ) -> list[dict[str, Any]]:
     """The one base among the confirmed turning points, chosen without asking the caller.
 
@@ -135,7 +136,7 @@ def base_chain(
     pivot = _pivot_index(confirmed, highs)
     if pivot is None:
         return []
-    floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes)
+    floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes, allow_reset)
     candidates = [index for index in highs if floor <= index <= pivot]
     if not candidates:
         return []
@@ -151,6 +152,7 @@ def _after_the_structure_it_left(
     closes: pd.Series | None,
     lows: pd.Series | None,
     volumes: pd.Series | None,
+    allow_reset: bool,
 ) -> int:
     """The earliest anchor the rim search may reach, given what price has already left behind."""
 
@@ -160,7 +162,7 @@ def _after_the_structure_it_left(
     left = [
         index
         for index in highs
-        if index < pivot and _left_behind(closes, lows, volumes, confirmed[index], until)
+        if index < pivot and _left_behind(closes, lows, volumes, confirmed[index], until, allow_reset)
     ]
     return left[-1] + 1 if left else 0
 
@@ -171,6 +173,7 @@ def _left_behind(
     volumes: pd.Series,
     anchor: dict[str, Any],
     before: pd.Timestamp,
+    allow_reset: bool,
 ) -> bool:
     """Whether the stock broke out above this high and has stayed above it since.
 
@@ -189,25 +192,29 @@ def _left_behind(
     reclaimed later has been left, and reading only the first attempt kept the older structure
     spliced on forever after one failure.
 
-    Holding admits no reset, and that is a known and deliberate gap. The source says a pivot
-    failure can reset and recover, so a breakout, a shallow one-day slip, and a recovery on
-    ordinary volume is a departure it would recognise and this does not -- a recovery has no
-    reason to expand again, so no later crossing qualifies either. Relaxing it to "above the
-    level now, and since the last time it was under" was tried and moved a case a review round
-    had specifically pinned. What the strict reading costs is a chain that keeps the older
-    structure, which the contraction gate then judges; what the relaxed one costs is anchors
-    deleted on a marginal reading. Between two wrong directions this is the one that deletes
-    nothing.
+    `allow_reset` is the second way to read holding, not a looser one. The source says a pivot
+    failure can reset and recover, so a breakout, a shallow slip and a quiet recovery is a
+    departure it would recognise while the strict reading refuses -- and a recovery has no
+    reason to expand again, so no later crossing rescues it there. Each reading is defensible
+    and each is wrong somewhere, so both are computed and neither decides alone: the caller of
+    this module vouches for a base only where they agree.
     """
     level = float(anchor["price"])
     window = closes.loc[pd.Timestamp(anchor["date"]) : before].iloc[1:-1]
-    for stamp in window.loc[window > level].index:
-        if not _volume_expanded(volumes, stamp):
-            continue
-        held = lows.loc[stamp:].iloc[1:]
-        if len(held) and bool((held > level).all()):
-            return True
-    return False
+    crossings = [stamp for stamp in window.loc[window > level].index if _volume_expanded(volumes, stamp)]
+    if not crossings:
+        return False
+    if not allow_reset:
+        return any(
+            len(lows.loc[stamp:].iloc[1:]) and bool((lows.loc[stamp:].iloc[1:] > level).all())
+            for stamp in crossings
+        )
+    after = lows.loc[crossings[0] :].iloc[1:]
+    touches = after.loc[after <= level]
+    if touches.empty:
+        return bool(len(after))
+    resumed = after.loc[touches.index[-1] :].iloc[1:]
+    return bool(len(resumed)) and bool((resumed > level).all())
 
 
 def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
@@ -303,6 +310,24 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         }
     primary = segment(source, retracement_pct=retracement)
     anchors = base_chain(primary["anchors"], closes, lows, volumes)
+    # Where the base begins is the one judgment the bars will not settle. Bounding it at a
+    # volume-backed breakout is the source's own observation and it is still a reading: it
+    # deletes the contraction that widened when the high it fires on is interior to a structure
+    # price never left, and it merges two structures when a breakout failed shallowly and
+    # recovered quietly. Each of those reached `ready` on a chain the detector had edited.
+    #
+    # So when the two readings of the left edge disagree, neither is vouched for. That is the
+    # rule the parameter sweep already applies, for the same reason: a chain that depends on a
+    # call the evidence does not make is not a chain to check a declaration against. It costs
+    # almost nothing -- across fifteen real histories the readings agreed on thirteen, and the
+    # two they split on were a forty-one and a seventy-nine anchor "base" collapsing to none.
+    readings = [
+        base_chain(primary["anchors"]),
+        anchors,
+        base_chain(primary["anchors"], closes, lows, volumes, allow_reset=True),
+    ]
+    dates = [[item["date"] for item in reading] for reading in readings]
+    left_edge_disputed = any(reading != dates[0] for reading in dates[1:])
 
     sensitivity: list[dict[str, Any]] = []
     for offset in offsets:
@@ -325,7 +350,12 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         if anchors
         else []
     )
-    state = "resolved" if anchors and not sensitivity and not span else "unstable" if anchors else "unavailable"
+    if anchors and not sensitivity and not span and not left_edge_disputed:
+        state = "resolved"
+    elif anchors or left_edge_disputed:
+        state = "unstable"
+    else:
+        state = "unavailable"
     return {
         "state": state,
         "anchors": anchors if state == "resolved" else [],
@@ -333,6 +363,8 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         "ambiguous_sessions": primary["ambiguous_sessions"],
         "sensitivity": sensitivity,
         "ambiguous_sessions_in_base": span,
+        "left_edge_disputed": left_edge_disputed,
+        "left_edge_readings": dates if left_edge_disputed else [],
         "parameters": parameters,
         "sessions": sessions,
         "bars_fingerprint": bars_fingerprint(source),

@@ -234,8 +234,38 @@ class OneBaseAtATimeTests(unittest.TestCase):
 
         self.assertEqual([round(item["price"]) for item in chain["anchors"]], [100, 80, 90, 85, 92])
 
+    def test_a_left_edge_only_one_reading_finds_is_vouched_for_by_none(self) -> None:
+        """A breakout, a shallow slip, and a quiet recovery, which the readings split on.
+
+        Strict holding never sees the departure, because the slip discards the crossing and a
+        recovery has no reason to expand again; reading holding as "out of it since the last
+        touch" does see it. Each is defensible, so the chain rests on a call the bars did not
+        make, and picking either reached `ready` -- one by borrowing the older structure's
+        contraction, the other by deleting the one that widened.
+        """
+
+        frame = from_legs(
+            ((55, 100.10, 55), (100.10, 59.90, 25), (59.90, 80.10, 20), (80.10, 79.20, 3),
+             (79.20, 80.60, 2), (80.60, 79.95, 1), (79.95, 82.0, 3), (82.0, 95.10, 14),
+             (95.10, 87.90, 10), (87.90, 94.90, 10), (94.90, 98, 1)),
+        )
+        frame["Volume"] = 1_000_000.0
+        cleared = [position for position, label in enumerate(frame.index)
+                   if position > 100 and float(frame.at[label, "Close"]) > 80.10]
+        frame.iloc[cleared[0], frame.columns.get_loc("Volume")] = 5_000_000.0
+
+        chain = canonical_chain(frame)
+
+        self.assertTrue(chain["left_edge_disputed"])
+        self.assertEqual(chain["anchors"], [])
+        self.assertEqual(len(chain["left_edge_readings"]), 3)
+
     def test_a_seam_between_two_structures_shows_up_as_a_contraction_that_widens(self) -> None:
-        """What rejects a spliced history, since the segmentation deliberately does not."""
+        """What rejects a spliced history, where the left edge is not itself in dispute.
+
+        The chain is read here at the whole-history reading, because the point is the seam the
+        contraction gate sees rather than whether the three left-edge readings agree.
+        """
 
         frame = from_legs(
             ((55, 100, 55), (100, 90, 12), (90, 95, 10), (95, 80, 12), (80, 97, 10), (97, 93, 8),
@@ -245,14 +275,15 @@ class OneBaseAtATimeTests(unittest.TestCase):
             start="2025-05-01",
         )
 
-        chain = canonical_chain(frame)
-        prices = [item["price"] for item in chain["anchors"]]
+        parameters = canonical_chain(frame)["parameters"]
+        whole = base_chain(segment(frame, retracement_pct=parameters["retracement_pct"])["anchors"])
+        prices = [item["price"] for item in whole]
         depths = [
             100 * (prices[index] - prices[index + 1]) / prices[index]
             for index in range(0, len(prices) - 1, 2)
         ]
 
-        self.assertEqual(len(chain["anchors"]), 9)
+        self.assertEqual(len(whole), 9)
         self.assertTrue(any(later > earlier for earlier, later in zip(depths, depths[1:])), depths)
 
 

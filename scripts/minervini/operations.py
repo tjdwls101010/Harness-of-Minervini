@@ -587,6 +587,8 @@ def _segmentation_reason(chain: Mapping[str, Any]) -> str:
     """
     if chain.get("rejection"):
         return str(chain["rejection"])
+    if chain.get("left_edge_disputed"):
+        return "base_left_edge_ambiguous"
     if chain.get("ambiguous_sessions_in_base"):
         return "ambiguous_session_inside_the_base"
     if chain.get("sensitivity"):
