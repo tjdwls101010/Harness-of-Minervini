@@ -55,6 +55,12 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
 
     if not isinstance(history, pd.DataFrame) or any(column not in history for column in _REQUIRED_COLUMNS):
         return None, "history_missing_required_columns"
+    # A repeated column name makes the selection below return two columns under one label, and
+    # everything downstream then compares a frame with a scalar. A provider flattening a
+    # multi-level header can produce exactly that, and it raised where the envelope should have
+    # carried typed unavailability.
+    if history.columns.has_duplicates:
+        return None, "history_repeats_a_column"
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")

@@ -73,7 +73,7 @@
     "status_meanings": {
       "ok": "A segmentation the detector will vouch for.",
       "partial": "Completed price history stops before the requested session.",
-      "unavailable": "No segmentation this capability will stand behind: the history is unusable as bars at all (missing columns, non-numeric values, a repeated session), neighbouring multiples disagree, a session inside the base both extended and reversed a move, or the history segments into no base. The reason names which. Not needs_input, because the parameters are deliberately out of the caller's reach and no argument would change the answer."
+      "unavailable": "No segmentation this capability will stand behind: the history is unusable as bars at all (missing or repeated columns, an index that is not dates, non-numeric or non-finite values, a repeated session, a bar whose open or close sits outside its own range), neighbouring multiples disagree, a session inside the base both extended and reversed a move, or the history segments into no base. The reason names which. Not needs_input, because the parameters are deliberately out of the caller's reach and no argument would change the answer."
     },
     "summary": "Propose the harness's own swing segmentation for a ticker, so a person can look at it before a setup rests on it."
   }

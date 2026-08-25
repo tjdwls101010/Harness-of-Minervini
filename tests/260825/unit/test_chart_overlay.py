@@ -224,6 +224,10 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         def missing_column(frame): frame.drop(columns=["Volume"], inplace=True)
         def non_date_index(frame): frame.index = ["not-a-date", *frame.index[1:]]
 
+        def repeated_column(frame):
+            frame["spare"] = frame["Close"]
+            frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
+
         def late_evening_zone(frame):
             # Two exchange dates, one of which becomes the next UTC day if the zone is converted
             # rather than dropped. Everything above is naive, which is how a whole timezone seam
@@ -242,7 +246,8 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             ("negative volume", negative_volume), ("high below low", high_below_low),
             ("open above high", open_above_high), ("nan close", nan_close), ("infinite high", infinite_high),
             ("repeated session", repeated_session), ("missing column", missing_column),
-            ("non-date index", non_date_index), ("late evening zone", late_evening_zone),
+            ("non-date index", non_date_index), ("repeated column", repeated_column),
+            ("late evening zone", late_evening_zone),
             ("two sessions one zone day", two_sessions_one_zone_day),
         ]
         for label, mutate in mutations:
