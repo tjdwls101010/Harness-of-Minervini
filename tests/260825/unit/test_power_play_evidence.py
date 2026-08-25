@@ -273,3 +273,33 @@ class BothReadingsRejectingIsAnAnswer(unittest.TestCase):
 
         self.assertEqual(verdict["power_play_state"], "incomplete")
         self.assertFalse(verdict["rejected_under_every_reading"])
+
+
+class ADistributionDecidesOnlyWhatItActuallyMoved(unittest.TestCase):
+    """A payout is a known amount, so it does not have to invalidate everything the way a split does.
+
+    Blocking on any distribution would leave every dividend payer permanently unreadable, and an
+    ordinary quarterly payment is a fraction of a percent against a twenty-five percent limit.
+    What matters is whether the answer turns on it: a thirty percent flag that is twenty-three
+    without the payout has been decided by the payout, and a twelve percent flag has not.
+    """
+
+    def test_a_payout_that_carries_the_verdict_stops_the_criterion_deciding(self):
+        pack = evidence(flag_depth_pct=30.0, distribution_in_the_flag=1.5)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertIn("flag_maximum_decline_gate_pct", pack["payout_sensitive_criteria"])
+        self.assertNotIn(
+            "fundamentals.power_play_exception.flag_maximum_decline_gate_pct", verdict["failed"]
+        )
+
+    def test_an_ordinary_payout_leaves_the_criterion_deciding(self):
+        pack = evidence(flag_depth_pct=30.0, distribution_in_the_flag=0.05)
+
+        verdict = evaluate_power_play(pack)
+
+        self.assertEqual(pack["payout_sensitive_criteria"], [])
+        self.assertIn(
+            "fundamentals.power_play_exception.flag_maximum_decline_gate_pct", verdict["failed"]
+        )

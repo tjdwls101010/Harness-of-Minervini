@@ -26,22 +26,35 @@ from typing import Any
 
 import pandas as pd
 
-from .setup_structure import _CORPORATE_ACTION_COLUMN, read_bars
+from .setup_structure import _CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN, read_bars
 
 
-def _corporate_actions(bars: pd.DataFrame, start: int, end: int) -> list[str] | None:
-    """The dated split events inside a span, or nothing when the input could not say."""
+def _paid_between(bars: pd.DataFrame, start: int, end: int) -> float | None:
+    """What a holder was paid in cash across a span, or nothing when the input could not say.
 
-    if _CORPORATE_ACTION_COLUMN not in bars:
+    Reported as an amount rather than as an event, because that is the difference between a
+    distribution and a split: the split's effect on a ratio is a rescale of unknown reach, and
+    this one is a number that can be added back to the price it came out of.
+    """
+    if _DISTRIBUTION_COLUMN not in bars:
+        return None
+    return float(bars.iloc[start:end + 1][_DISTRIBUTION_COLUMN].sum())
+
+
+def _dated_events(bars: pd.DataFrame, column: str, start: int, end: int) -> list[str] | None:
+    """The dated events of one kind inside a span, or nothing when the input could not say."""
+
+    if column not in bars:
         return None
     span = bars.iloc[start:end + 1]
-    return [stamp.date().isoformat() for stamp in span.index[span[_CORPORATE_ACTION_COLUMN] > 0]]
+    return [stamp.date().isoformat() for stamp in span.index[span[column] > 0]]
 
 
 def _empty(reason: str | None) -> dict[str, Any]:
     return {
         "peak_date": None,
         "peak_high": None,
+        "peak_close": None,
         "advance_low": None,
         "advance_low_date": None,
         "advance_pct": None,
@@ -49,6 +62,9 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_low_close": None,
         "corporate_action_evidence": None,
         "corporate_action_sessions": None,
+        "distribution_sessions": None,
+        "distribution_paid_in_the_flag": None,
+        "distribution_paid_in_the_advance": None,
         "measured_span_first_session": None,
         "baseline_first_session": None,
         "baseline_last_session": None,
@@ -169,14 +185,22 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     baseline = bars.iloc[launch - advance_window:launch] if launch >= advance_window else bars.iloc[0:0]
     # The first session anything here reads. Derived from the baseline rather than restated, so
     # moving the baseline moves the span checked for corporate actions with it.
-    earliest = max(0, launch - advance_window if len(baseline) else min(start, launch))
+    # With no baseline to reach back through, the advance window itself is the earliest thing read.
+    earliest = max(0, launch - advance_window if len(baseline) else start)
 
+    # The advance itself, which is the span the anchor and the peak bound. Read across the whole
+    # eight-week window instead, the numerator overlapped the baseline -- dormancy compared with
+    # itself, so a heavy session before the move commenced reported as the expansion it commenced
+    # on -- and it stopped one bar short of the peak, which in a one-session advance dropped the
+    # only session there was and read a six-times launch as no expansion at all.
+    advance = bars.iloc[launch + 1:peak + 1]
     baseline_volume = float(baseline["Volume"].median()) if len(baseline) else None
     measurable = baseline_volume is not None and baseline_volume > 0
 
     return {
         "peak_date": peak_label.date().isoformat(),
         "peak_high": peak_high,
+        "peak_close": float(bars.iloc[peak]["Close"]),
         "advance_low": advance_low,
         "advance_low_date": low_label.date().isoformat(),
         # Three readings of one move, because the raw tape cannot tell a move from a corporate
@@ -209,7 +233,12 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # reads as a fifty percent correction nobody took and the history that cannot be measured
         # comes back as a confident failure on depth.
         "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
-        "corporate_action_sessions": _corporate_actions(bars, earliest, len(bars) - 1),
+        "corporate_action_sessions": _dated_events(bars, _CORPORATE_ACTION_COLUMN, earliest, len(bars) - 1),
+        "distribution_sessions": _dated_events(bars, _DISTRIBUTION_COLUMN, earliest, len(bars) - 1),
+        # Split by the span each criterion reads, because a payout only moves the measurement it
+        # was paid inside of.
+        "distribution_paid_in_the_flag": _paid_between(bars, peak + 1, len(bars) - 1),
+        "distribution_paid_in_the_advance": _paid_between(bars, launch + 1, peak),
         # The three boundaries the numbers above are counted between. A duration reported without
         # the session it is counted from cannot be checked, and the anchor is deliberately not the
         # extremes date printed beside it.
@@ -239,9 +268,9 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         # price move commences on huge volume" points at the bar that did the commencing, and the
         # anchor is by construction the last quiet one.
         "launch_volume_ratio": float(bars.iloc[min(launch + 1, peak)]["Volume"]) / baseline_volume if measurable else None,
-        "advance_peak_volume_ratio": float(before["Volume"].max()) / baseline_volume if measurable else None,
-        "advance_peak_volume_date": before.index[int(before["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
-        "advance_volume_ratio": float(before["Volume"].mean()) / baseline_volume if measurable else None,
+        "advance_peak_volume_ratio": float(advance["Volume"].max()) / baseline_volume if measurable else None,
+        "advance_peak_volume_date": advance.index[int(advance["Volume"].to_numpy().argmax())].date().isoformat() if measurable else None,
+        "advance_volume_ratio": float(advance["Volume"].mean()) / baseline_volume if measurable else None,
         "flag_sessions": int(len(flag)),
         "flag_weeks": len(flag) / week,
         "flag_depth_pct": (peak_high - float(flag["Low"].min())) / peak_high * 100 if len(flag) else None,
@@ -355,13 +384,16 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # reports a forty percent advance as an open question, and trusting everything reports a limit
     # the rival reading says was never exceeded.
     contested = set(evidence.get("contested_criteria") or ())
-    settled = not contested
+    # A payout inside the span is the third way a criterion can stop being the stock's own.
+    payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
+    settled = not contested and not payout_sensitive
     failed: list[str] = []
     missing: list[str] = []
     for claim_id in _REQUIRED:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
-        agreed = claim_id[len(_CLAIM) + 1:] not in contested
+        condition = claim_id[len(_CLAIM) + 1:]
+        agreed = condition not in contested and condition not in payout_sensitive
         trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
@@ -416,9 +448,11 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
         "contested_criteria": sorted(contested),
+        "payout_sensitive_criteria": sorted(payout_sensitive),
         "rejected_under_every_reading": rejected_under_every_reading,
         "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
+        "distribution_sessions": evidence.get("distribution_sessions"),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
         "signals": reported,
     }

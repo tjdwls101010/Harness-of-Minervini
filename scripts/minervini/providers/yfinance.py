@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..clock import resolve_as_of
-from ..setup_structure import _CORPORATE_ACTION_COLUMN
+from ..setup_structure import _CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN
 from . import ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry
 
 
@@ -30,7 +30,7 @@ def _complete_rows(frame: pd.DataFrame) -> np.ndarray:
     """
 
     complete = np.ones(len(frame), dtype=bool)
-    for column in (*OHLCV_COLUMNS, _CORPORATE_ACTION_COLUMN):
+    for column in (*OHLCV_COLUMNS, _CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN):
         if column in frame:
             values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64", na_value=np.nan)
             complete &= np.isfinite(values)

@@ -39,6 +39,9 @@ _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 # identically while one of them is measurable and the other is not, so a Power Play verdict needs
 # a digest of its own before a chart approval can be bound to it.
 _CORPORATE_ACTION_COLUMN = "Stock Splits"
+# The other event that takes a printed price down without taking anyone's money with it. A split
+# rescales; a distribution subtracts. Both leave a decline in the tape that the company paid for.
+_DISTRIBUTION_COLUMN = "Dividends"
 # Two bars can legitimately tie for a span's extreme, and the anchor's own value is the
 # one the maximum was taken from, so this only absorbs float representation noise.
 _EXTREME_TOLERANCE = 1e-12
@@ -76,7 +79,11 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_repeats_a_column"
     if history.empty:
         return None, "history_has_no_completed_bars"
-    carried = (*_REQUIRED_COLUMNS, _CORPORATE_ACTION_COLUMN) if _CORPORATE_ACTION_COLUMN in history else _REQUIRED_COLUMNS
+    carried = _REQUIRED_COLUMNS + tuple(
+        column
+        for column in (_CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN)
+        if column in history
+    )
     bars = history.loc[:, list(carried)].copy()
     # `to_numeric` launders anything it can cast, and several things it can cast are not prices:
     # a boolean becomes 1.0, a complex number loses its imaginary part, a datetime becomes epoch

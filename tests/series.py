@@ -492,6 +492,8 @@ def power_play_series(
     ancient_equal_high: bool = False,
     split_inside_the_flag: bool = False,
     split_at: int | None = None,
+    distribution_in_the_flag: float | None = None,
+    volume_spike_before_the_launch: float | None = None,
     corporate_actions: bool = True,
     marginal_new_high_at: int | None = None,
     start: str = "2026-01-02",
@@ -562,11 +564,23 @@ def power_play_series(
         + [800_000.0] * flag_sessions
     )
     frame["Volume"] = volumes[: len(closes)]
+    if volume_spike_before_the_launch is not None:
+        # One heavy session a week ahead of the anchor. It is dormancy, not advance: a numerator
+        # that reaches back past the anchor reports it as the expansion the move commenced on.
+        frame.iloc[launch - 5, frame.columns.get_loc("Volume")] = (
+            400_000.0 * volume_spike_before_the_launch
+        )
     if not corporate_actions:
         # A history that cannot say whether a split happened. The provider supplies the column,
         # so this is the shape of an input from somewhere that does not.
         return frame[["Open", "High", "Low", "Close", "Volume"]]
     frame["Stock Splits"] = [0.0] * len(closes)
+    if distribution_in_the_flag is not None:
+        # A cash distribution paid partway through the flag. It comes out of the printed price on
+        # its ex-date, so the decline the flag measures is partly the payout -- and unlike a split
+        # the amount is known, which is what lets the reading say whether it changed the answer.
+        frame["Dividends"] = [0.0] * len(closes)
+        frame.iloc[trough, frame.columns.get_loc("Dividends")] = distribution_in_the_flag
     if split_at is not None:
         # A two-for-one forward split at a caller-chosen session, printed the way a raw feed
         # prints one: everything *before* it carries the pre-split price and share count, so the
@@ -585,7 +599,10 @@ def power_play_series(
         frame.iloc[cut, frame.columns.get_loc("Stock Splits")] = 2.0
         columns = ["Open", "High", "Low", "Close"]
         frame.iloc[cut:, [frame.columns.get_loc(name) for name in columns]] /= 2
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
+    columns = ["Open", "High", "Low", "Close", "Volume", "Stock Splits"]
+    if "Dividends" in frame:
+        columns.append("Dividends")
+    return frame[columns]
 
 
 def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> pd.DataFrame:

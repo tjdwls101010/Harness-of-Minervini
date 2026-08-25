@@ -353,3 +353,52 @@ class TheReadingNamesTheSessionItCountsFrom(unittest.TestCase):
                     index.index(measurements["measured_span_first_session"]),
                     index.index(measurements["baseline_first_session"]),
                 )
+
+
+class ACashDistributionMovesThePriceToo(unittest.TestCase):
+    """A split is not the only event that drops a printed price without moving anyone's money.
+
+    A special distribution comes out of the price on its ex-date, so a flag measured across one
+    is partly the payout. The provider already supplies the column; nothing carried it far enough
+    to be read.
+    """
+
+    def test_the_distribution_column_reaches_the_measurement(self):
+        bars = power_play_series()
+        bars["Dividends"] = 0.0
+        bars.iloc[-3, bars.columns.get_loc("Dividends")] = 1.5
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["distribution_sessions"], [str(bars.index[-3].date())])
+
+    def test_a_history_without_the_column_says_so_rather_than_no_distribution(self):
+        bars = power_play_series()
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertIsNone(measurements["distribution_sessions"])
+
+
+class TheVolumeIsReadAcrossTheAdvanceAndNowhereElse(unittest.TestCase):
+    """The numerator has to be the span the anchor and the peak bound, and only that span.
+
+    Reaching back to the window's start puts sessions in the numerator that are also in the
+    baseline, so dormancy is compared against itself; stopping short of the peak drops the bar
+    the move ended on, which in a one-session advance is the whole advance.
+    """
+
+    def test_a_one_session_advance_reads_the_session_it_happened_on(self):
+        bars = power_play_series(advance_sessions=1, advance_volume_multiple=6.0)
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["advance_sessions"], 1)
+        self.assertEqual(measurements["advance_peak_volume_ratio"], 6.0)
+
+    def test_a_heavy_session_before_the_anchor_is_not_the_advance_expanding(self):
+        bars = power_play_series(advance_volume_multiple=1.0, volume_spike_before_the_launch=10.0)
+
+        measurements = measure_power_play(bars, SPEC)
+
+        self.assertEqual(measurements["advance_peak_volume_ratio"], 1.0)

@@ -88,6 +88,30 @@ def _tightness_state(depth: float | None, limit: float) -> str:
     return "pass" if depth <= limit else "needs_chart"
 
 
+def _without_the_payout(measurements: Mapping[str, Any]) -> dict[str, Any]:
+    """The same measurements with the cash the company paid added back to the price it left.
+
+    Not a correction of the tape -- the printed prices stay printed. It is the second reading the
+    criteria are checked against, so that a payout decides a verdict only when the verdict was
+    going to turn on it. Blocking on any distribution instead would leave every dividend payer
+    unreadable for months at a time over a fraction of a percent.
+    """
+    adjusted = dict(measurements)
+    paid_in_the_flag = measurements["distribution_paid_in_the_flag"]
+    if paid_in_the_flag and measurements["flag_depth_pct"] is not None:
+        peak_high = measurements["peak_high"]
+        adjusted["flag_depth_pct"] = (
+            (peak_high - measurements["flag_low"] - paid_in_the_flag) / peak_high * 100
+        )
+    paid_in_the_advance = measurements["distribution_paid_in_the_advance"]
+    if paid_in_the_advance and measurements["advance_pct_closes"] is not None:
+        low_close = measurements["advance_low_close"]
+        adjusted["advance_pct_closes"] = (
+            (measurements["peak_close"] + paid_in_the_advance) / low_close - 1
+        ) * 100
+    return adjusted
+
+
 def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
     """How each criterion reads on one set of measurements, without the payloads."""
 
@@ -140,6 +164,13 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     # An earlier top the search span does not contain is not a competing reading of this
     # structure; there is nothing to disagree with.
     primary_criteria = _criteria(measurements, tight_limit)
+    # Which criteria a cash payout inside the span decided. Everything else it touched, it did
+    # not decide, and an ordinary quarterly payment touches nearly nothing against these limits.
+    payout_sensitive = {
+        condition
+        for condition, state in _criteria(_without_the_payout(measurements), tight_limit).items()
+        if state != primary_criteria[condition]
+    }
     contested = (
         {
             condition
@@ -196,6 +227,7 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         # readings can both reject and still disagree about which limit did it, and reporting the
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
+        "payout_sensitive_criteria": sorted(payout_sensitive),
         "alternate_peak": None if not contested else {
             "peak_date": alternate["peak_date"],
             "peak_high": alternate["peak_high"],
@@ -206,6 +238,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".
         "corporate_action_evidence": measurements["corporate_action_evidence"],
+        # Surfaced beside the split events rather than left in the payload: a payout that decided
+        # a criterion is the reason that criterion stopped deciding, and the reader is owed it.
+        "distribution_sessions": measurements["distribution_sessions"],
         "corporate_action_sessions": actions,
         "spec": spec,
         "measurements": measurements,

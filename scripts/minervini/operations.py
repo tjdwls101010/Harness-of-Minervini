@@ -586,6 +586,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         f"fundamentals.power_play_exception.{condition}"
         for condition in verdict["contested_criteria"]
     }
+    payout_sensitive = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["payout_sensitive_criteria"]
+    }
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
@@ -599,6 +603,8 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             return "corporate_action_evidence_missing" if verdict[
                 "corporate_action_evidence"
             ] != "present" else "corporate_action_inside_the_measured_span"
+        if item in payout_sensitive:
+            return "distribution_inside_the_measured_span"
         if item in contested:
             return "peak_identity_disputed"
         # The one gap that closes by itself. Reported as a chart reading, it would be closed by
