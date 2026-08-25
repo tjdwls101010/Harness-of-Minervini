@@ -107,7 +107,7 @@ class EarlyEntryRelationshipTests(unittest.TestCase):
 class SignalMapTests(unittest.TestCase):
     def _evidence(self):
         frame, anchors = base_series()
-        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
+        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
 
     def test_a_non_binding_signal_cannot_stand_in_for_a_required_one(self) -> None:
         evidence = self._evidence()
@@ -146,7 +146,7 @@ class RightSideDevelopmentTests(unittest.TestCase):
 
         frame, anchors = base_series(depths=(25.0,), rallies=(3,))
 
-        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")
+        evidence = build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")
 
         compression = next(item for item in evidence["signals"] if item["id"] == "setup.time_compression_hazard")
         self.assertEqual(compression["state"], "fail")
@@ -175,7 +175,7 @@ class VolumeAsymmetryTests(unittest.TestCase):
 
         frame, anchors = base_series(volume_profile="distribution")
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "avoid")
         self.assertIn("setup.demand_supply_volume_asymmetry", result["failed"])
@@ -186,8 +186,8 @@ class NormalisationTests(unittest.TestCase):
         frame, anchors = base_series()
         chain = anchor_dates(frame, anchors)
 
-        forward = evaluate_setup(build_setup_evidence(frame, chain, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
-        reversed_ = evaluate_setup(build_setup_evidence(frame.iloc[::-1], chain, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
+        forward = evaluate_setup(build_setup_evidence(frame, chain, right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot"))
+        reversed_ = evaluate_setup(build_setup_evidence(frame.iloc[::-1], chain, right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot"))
 
         self.assertEqual(reversed_["setup_state"], forward["setup_state"])
 
@@ -196,7 +196,7 @@ class NormalisationTests(unittest.TestCase):
         chain = anchor_dates(frame, anchors)
         as_text = frame.astype(str)
 
-        result = evaluate_setup(build_setup_evidence(as_text, chain, right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
+        result = evaluate_setup(build_setup_evidence(as_text, chain, right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot"))
 
         self.assertEqual(result["setup_state"], "ready")
 
@@ -213,7 +213,7 @@ class BaseDepthTests(unittest.TestCase):
 
         frame, anchors = base_series(depths=(55.0, 10.0, 5.0))
 
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot"))
+        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot"))
 
         self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("market.correction_depth_healthy_leader.correction_failure_threshold", result["unsatisfied"])
@@ -221,7 +221,7 @@ class BaseDepthTests(unittest.TestCase):
     def test_base_depth_and_duration_are_reported_against_the_ranges_the_source_gave(self) -> None:
         frame, anchors = base_series()
 
-        signals = {item["id"]: item for item in build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", entry_proximity="at_pivot")["signals"]}
+        signals = {item["id"]: item for item in build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive", chain_completeness="complete", completeness_source="independent_segmentation", entry_proximity="at_pivot")["signals"]}
 
         depth = signals["market.correction_depth_healthy_leader.healthy_correction_range"]
         duration = signals["setup.consolidation_footprint_3_to_60_weeks.consolidation_footprint_duration_weeks"]

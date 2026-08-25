@@ -25,7 +25,7 @@
     ],
     "examples": [
       "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --swing 2026-05-06 --swing 2026-05-20 --swing 2026-06-05 --swing 2026-06-19",
-      "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --entry-kind tl_early --tactic-opt-in --confirmation-debt 'completed pivot breakout' --later-pivot-price 200 --later-pivot-condition 'completed close above 200' --invalidation-price 190 --invalidation-condition 'completed close below 190'"
+      "scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --swing 2026-05-06 --swing 2026-05-20 --swing 2026-06-05 --swing 2026-06-19 --right-side-development constructive --entry-proximity at_pivot"
     ],
     "exit_codes": {
       "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
@@ -44,7 +44,15 @@
           "partial",
           "needs_chart"
         ],
-        "description": "Chart reading of whether the declared chain is the base's whole structure. Every anchor is checked against the bars, but a chain that skipped or merged a contraction has anchors that are genuinely their spans' extremes, so no measurement separates it from an honest one. Without this the setup stays incomplete rather than accepting a segmentation nobody vouched for.",
+        "description": "Whether the declared chain is the base's whole structure. A caller may say partial, which admits a gap. A caller may not say complete: the reading exists to check the chain, and the chain's own author cannot perform that check, so complete counts only when completeness_source names an independent segmentation. Until one exists the standard route stops at wait.",
+        "required": false,
+        "type": "enum"
+      },
+      "completeness_source": {
+        "choices": [
+          "independent_segmentation"
+        ],
+        "description": "Who supplied the completeness reading. Only an independent segmentation can vouch for a chain the caller declared.",
         "required": false,
         "type": "enum"
       },
@@ -139,9 +147,11 @@
     "limitations": [
       "Swing segmentation is the caller's chart reading; what the bars can check is that each declared date exists, that the chain alternates and ends on a high, and that each bar really is the extreme of its span.",
       "Ready requires every item of a route's declared evidence, so a base nobody described is incomplete rather than unobjectionable.",
-      "Three of those items are chart readings rather than measurements, because completed bars cannot settle a V-shaped right side, whether a chain describes the base's whole structure, or how far above the pivot stops being close to it. Each one is refused where the bars can see the reading is wrong, all three are listed back in declared_readings, and everything else in the verdict is measured and cannot be declared away.",
+      "Three of those items are readings rather than measurements, because completed bars cannot settle a V-shaped right side, whether a chain describes the base's whole structure, or how far above the pivot stops being close to it. Two of them the bars can still refuse: a right side with no pause at all is not constructive, and an entry further from the pivot than the breakout was is not at the pivot. The third cannot be self-certified at all, so the standard route stops at wait until an independent segmentation exists to vouch for the chain.",
+      "All three readings are listed back in declared_readings so the share of the verdict that came from a person is visible, and everything else in it is measured and cannot be declared away.",
+      "Price quieting down on the right side is reported rather than decided: the source says 'noticeably' and gives no number, and a strict comparison of two medians passed a pause two ten-thousandths of a percentage point tighter than its base. The volume half of that same sentence is a gate, because a contraction either happened or it did not.",
       "Contrast evidence from other practitioners is reported beside the verdict and never enters it.",
-      "The breakout is the first completed close above the pivot after it, and a later close back under the pivot fails the trigger rather than being re-dated: a pivot failure can reset, but the reset is a new structure somebody has to declare, not a rename of the old one.",
+      "The breakout is the first completed close above the pivot after it and is never re-dated, so its volume and closing range are read where the stock actually left the base. Where price stands now is a separate fact: the source says a pivot failure can reset and recover, so a slip below the pivot is counted beside the trigger rather than held against the base, and the trigger reads whether price is above the pivot today.",
       "A chain declared from a late high is not a misread swing and is not refused; what it leaves above the entry is measured instead and reported as overhead supply.",
       "The correction the depth limit reads runs from the highest high in the price history the provider returned to the lowest low after it, not from the base the caller declared, and both dates travel with it so a reader can see whether the peak belongs to this base or an older one.",
       "A cheat entry is not measurable yet: it is entered inside the base rather than at its pivot, so it returns incomplete naming the cheat geometry it needs rather than borrowing the pivot breakout's evidence.",

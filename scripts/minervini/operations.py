@@ -565,6 +565,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry=entry,
         right_side_development=request.get("right_side_development"),
         chain_completeness=request.get("chain_completeness"),
+        completeness_source=request.get("completeness_source"),
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)

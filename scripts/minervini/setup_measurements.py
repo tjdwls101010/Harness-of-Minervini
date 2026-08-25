@@ -100,6 +100,7 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
             "sessions_after_pivot": None,
             "pause_low_held_to_breakout": None,
             "breakout_held": None,
+            "currently_above_pivot": None,
             "pivot_extension_at_breakout_pct": None,
             "failed_pivot_attempts": None,
             "daily_range_median_pct": None,
@@ -182,16 +183,16 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
     # percent collapse read as a ten percent base.
     # ...and the low is the low of that correction: the lowest the stock went after the peak,
     # not the lowest of the contractions the caller chose to declare.
+    #
+    # A version of this bounded the peak to the leg the base sits in, on the reasoning that a
+    # decline the stock had fully recovered from belonged to the previous base. The passage
+    # says the opposite in its own next clause: a stock that fell more than half "could fail
+    # as it reaches or slightly surpasses a new high. This is due to excessive overhead supply
+    # created by the steep price decline." The recovery is when the danger arrives.
     through_base = bars.loc[: pd.Timestamp(base["end"])]
-    # Bounded to the leg this base belongs to: the last session that traded under the base's
-    # own low ends the previous correction, so a peak the stock already fell through and
-    # recovered from does not set this one.
-    base_low_value = float(base["low"])
-    earlier_lows = through_base.loc[through_base["Low"] < base_low_value]
-    leg = through_base.loc[earlier_lows.index[-1] :] if len(earlier_lows) else through_base
-    peak = float(leg["High"].max())
-    peak_label = leg["High"].idxmax()
-    correction_low = float(leg.loc[peak_label:, "Low"].min())
+    peak = float(through_base["High"].max())
+    peak_label = through_base["High"].idxmax()
+    correction_low = float(through_base.loc[peak_label:, "Low"].min())
     breakout_baselines = tuple(spec["breakout_volume_baseline_sessions"])
     span = (float(breakout["High"]) - float(breakout["Low"])) if breakout is not None else None
 
@@ -249,6 +250,10 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         # shakeout undercuts a prior low inside the base, before the pause completed.
         "pause_low_held_to_breakout": bool((before_breakout["Close"] >= float(final["low"])).all()) if breakout_label is not None else None,
         "breakout_held": bool((since_breakout["Close"] >= pivot).all()) if breakout_label is not None else None,
+        # `setup.failure_reset_types` says a pivot failure can reset and recover, so where
+        # price stands now is a different fact from whether it ever slipped, and the trigger
+        # reads this one while the attempts are counted beside it.
+        "currently_above_pivot": bool(float(last["Close"]) > pivot),
         "failed_pivot_attempts": failed_attempts,
         "pivot_extension_at_breakout_pct": ((float(breakout["Close"]) - pivot) / pivot * 100) if breakout is not None else None,
         "pivot_extension_pct": (float(last["Close"]) - pivot) / pivot * 100,

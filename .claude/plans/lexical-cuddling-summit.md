@@ -75,7 +75,15 @@
 
 26. **원전 문장의 조동사가 곧 role이다.** 슬라이스 ②에서 반복해 나온 패턴이다. 한 문장 안에서도 갈린다 — "the volume **must** be much bigger on up days … and a few of the price spikes **should** be large"는 게이트 하나와 보고 하나다. 둘을 같은 게이트에 묶었더니 출처가 헤지한 절이 must의 권한을 빌려 최대 상승일과 최대 하락일의 머리카락 차이로 후보를 거부했다. 복수형도 마찬가지다 — "a few of the price spikes"를 최대값 하나로 축약하면 문장이 묻지 않은 것에 답하게 된다.
 
-27. **교정 깊이는 이 베이스가 나온 하락에서 잰다.** 베이스 자신의 저점 아래로 거래된 마지막 세션까지만 거슬러 올라간다. 완전히 회복된 하락은 이전 베이스의 것이고, 그것이 만든 오버헤드 서플라이는 옛 고점까지의 랠리가 이미 소화했기 때문이다. 진입 위에 지금 남은 것은 `overhead_supply_above_pivot_pct`가 따로 재고, "52주 고점 대비 얼마나 아래인가"는 `ticker.qualify`의 Trend Template이 게이트한다 — 합성으로 덮인다.
+27. **교정 깊이는 이력상 고점에서 잰다 — 내가 원전을 거꾸로 읽었다.** 완전히 회복된 하락은 그 랠리가 오버헤드 서플라이를 소화했으므로 이전 베이스의 것이라고 판단해 창을 좁혔었다. 인용문의 바로 다음 절이 정반대를 말한다 — "A correction of more than 50 percent is generally too much, and a stock could fail **as it reaches or slightly surpasses a new high**. This is due to excessive overhead supply created by the steep price decline." **회복이 위험이 사라지는 시점이 아니라 위험이 도착하는 시점이다.** 프로바이더가 준 이력의 최고점과 그 이후 최저점으로 되돌렸다.
+
+28. **호출자는 자기 체인의 완결성을 스스로 보증할 수 없다.** `--chain-completeness complete`를 도입해놓고 그 체인을 제출한 사람이 직접 선언하게 뒀는데, 그러면 검사 대상이 검사를 수행하는 것이라 `--price-geometry pass`가 더 긴 설명을 달고 돌아온 것과 같다. `partial`은 받는다(구멍을 인정하는 데 비용이 없고 사실을 말한다). `complete`는 `--completeness-source independent_segmentation`이 함께 올 때만 유효하고, 그 공급자가 슬라이스 ③의 검출기다. **따라서 표준 경로는 슬라이스 ③ 전까지 WAIT가 상한이다** — 결정 19가 검출기 단독에 건 것과 같은 제약이 반대 방향에서 적용된다.
+
+29. **판단 입력은 "측정이 반박할 수 있는가"로 등급이 갈린다.** 셋 중 둘은 반박된다 — pause가 없는데 constructive, 돌파 시점보다 더 멀어졌는데 at_pivot("as close to the pivot as possible"의 가장 가까운 지점은 돌파다). 완결성은 반박 자체가 불가능하므로 독립 공급자를 요구한다. 계약 문서에 "셋 다 bars가 틀린 선언을 거부한다"고 써놨던 것은 사실이 아니었고 정정했다.
+
+30. **피벗 실패는 회복할 수 있어야 한다.** 첫 돌파를 고정하는 것은 맞지만(볼륨·DCR을 종목이 실제로 베이스를 떠난 세션에서 재야 하므로), 한 번 피벗 아래로 닫으면 영구히 트리거 불가로 만든 것은 claim과 정반대였다. 트리거는 **지금 피벗 위에 있는가**를 읽고, 실패 횟수는 그 옆에 센다.
+
+31. **"noticeably"에 엄격한 부등호를 대입하면 안 된다.** 가격이 조용해졌는가를 `pause 중앙값 < base 중앙값`으로 판정했더니 0.0024%p 차이가 양성 증거가 됐다. 출처가 정도부사를 쓰고 숫자를 안 줬으면 판정이 아니라 보고다. 같은 문장의 볼륨 절은 게이트로 남는다 — 수축은 일어났거나 안 일어났거나이기 때문이다.
 
 ## 실행 단계
 

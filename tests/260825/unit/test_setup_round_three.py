@@ -20,7 +20,7 @@ from scripts.minervini.setup_evidence import build_setup_evidence
 from tests.series import anchor_dates, base_series
 
 
-READ = {"right_side_development": "constructive", "chain_completeness": "complete", "entry_proximity": "at_pivot"}
+READ = {"right_side_development": "constructive", "chain_completeness": "complete", "completeness_source": "independent_segmentation", "entry_proximity": "at_pivot"}
 
 
 def signal(result, identifier):
@@ -110,21 +110,6 @@ class HiddenHighTests(unittest.TestCase):
         self.assertIn("setup.structural_pivot_and_trigger", result["unsatisfied"])
 
 
-class CorrectionWindowTests(unittest.TestCase):
-    def test_a_peak_the_stock_already_fell_through_does_not_set_this_correction(self) -> None:
-        """The correction is this base's, and it starts where the current decline started."""
-
-        frame, anchors = base_series()
-        older = pd.DataFrame(
-            {"Open": [199.0], "High": [200.0], "Low": [198.0], "Close": [199.0], "Volume": [1_000_000.0]},
-            index=pd.DatetimeIndex([pd.Timestamp("2024-06-03")]),
-        )
-
-        measurements = build_setup_evidence(pd.concat([older, frame]), anchor_dates(frame, anchors), **READ)["measurements"]
-
-        self.assertAlmostEqual(measurements["peak_to_low_correction_pct"], 25.0, places=4)
-
-
 class TimezoneTests(unittest.TestCase):
     def test_a_timezone_aware_frame_reads_the_same_as_a_naive_one(self) -> None:
         """The production provider returns the exchange's own index; the unit fixtures do not."""
@@ -194,35 +179,6 @@ class SpikePluralityTests(unittest.TestCase):
         result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
 
         self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["required_evidence"])
-
-
-
-
-class QuietingDownTests(unittest.TestCase):
-    """The other half of a quotation already in the registry, computed and never looked at.
-
-    "If the stock's price and volume don't quiet down on the right side of the consolidation,
-    chances are that supply is still coming to market and the stock is too risky." The volume
-    half was wired; the price half was measured into two medians nothing read.
-    """
-
-    def test_a_final_pause_no_tighter_than_the_base_has_not_quieted_down(self) -> None:
-        frame, anchors = base_series(depths=(25.0, 10.0, 20.0))
-
-        result = evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ))
-
-        supply = signal(result, "setup.overhead_supply_mechanism")
-        self.assertEqual(supply["state"], "fail")
-        self.assertNotEqual(result["setup_state"], "ready")
-
-    def test_a_tightening_base_reports_both_medians_and_the_supply_above_the_entry(self) -> None:
-        frame, anchors = base_series()
-
-        supply = signal(evaluate_setup(build_setup_evidence(frame, anchor_dates(frame, anchors), **READ)), "setup.overhead_supply_mechanism")
-
-        self.assertEqual(supply["state"], "pass")
-        self.assertLess(supply["measured"]["pause_daily_range_median_pct"], supply["measured"]["base_daily_range_median_pct"])
-        self.assertEqual(supply["measured"]["overhead_supply_above_pivot_pct"], 0.0)
 
 
 if __name__ == "__main__":

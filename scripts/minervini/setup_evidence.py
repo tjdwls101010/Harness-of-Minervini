@@ -125,9 +125,10 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
         return "fail"
     if not measurements.get("pause_low_held_to_breakout") or not measurements.get("pivot_is_highest_to_breakout"):
         return "fail"
-    # `setup.failure_reset_types` says a pivot failure can reset and recover, so a breakout
-    # that gave the pivot back is timing that has not happened rather than a base disqualified.
-    if not measurements.get("breakout_held"):
+    # `setup.failure_reset_types` says a pivot failure can reset and recover within a small
+    # number of days, so a slip below the pivot is counted rather than held against the base
+    # forever; what the trigger reads is where price stands now.
+    if not measurements.get("currently_above_pivot"):
         return "not_triggered"
     return "pass"
 
@@ -141,14 +142,20 @@ def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
     return "pass" if total > 1 else "fail"
 
 
-def _completeness_state(structure: Mapping[str, Any], reading: str | None) -> str:
-    """Whether the caller vouched for the chain describing the base's whole structure."""
+def _completeness_state(structure: Mapping[str, Any], reading: str | None, source: str | None) -> str:
+    """Whether something other than the chain's own author vouched for the chain.
 
+    A caller may say their segmentation is partial -- admitting a gap costs them nothing and
+    tells the truth. They may not say it is complete: the reading exists to check the chain,
+    and a check the checked party performs is the flag this rewrite removed with a longer
+    description on it. `complete` is accepted only from an independent segmentation, which is
+    what the swing detector will supply.
+    """
     if str(structure.get("state")) != "resolved":
         return "unavailable"
     if reading == "partial":
         return "fail"
-    if reading == "complete":
+    if reading == "complete" and source == "independent_segmentation":
         return "pass"
     return "needs_chart"
 
@@ -165,26 +172,30 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> st
     if reading == "chased":
         return "fail"
     if reading == "at_pivot":
-        # The only reading the bars can refuse: there is no entry above a pivot price has not
-        # cleared. How far above it stops being "close" the source declines to say, so that
-        # part stays the reader's -- what this enforces is that the reader made the call, with
-        # the distance and the breakout's age printed beside it.
-        return "pass" if measurements.get("pivot_cleared") else "fail"
+        # "As close to the pivot as possible" has a closest available point, and it is the
+        # breakout. How much further than that stops being close the source declines to say,
+        # but price standing further from the pivot than it did when it left the base is not
+        # a reading the bars leave open.
+        if not measurements.get("pivot_cleared"):
+            return "fail"
+        now = measurements.get("pivot_extension_pct")
+        at_breakout = measurements.get("pivot_extension_at_breakout_pct")
+        if now is None or at_breakout is None:
+            return "unavailable"
+        return "pass" if now <= at_breakout else "fail"
     return "needs_chart"
 
 
 def _quieting_state(measurements: Mapping[str, Any]) -> str:
     """"If the stock's price and volume don't quiet down on the right side ... too risky."
 
-    The volume half of that sentence is the pivot-volume contraction. This is the price half,
-    and it needs no number either: the pause either printed tighter bars than the base it
-    ends or it did not.
+    The volume half of that sentence is the pivot-volume contraction, which needs no number
+    because a contraction either happened or it did not. The price half says "quiets down
+    noticeably", and a strict less-than is not that word: it passed a base whose pause was
+    two ten-thousandths of a percentage point tighter. Both medians and the close-to-close
+    change are reported, and the reading is the analyst's.
     """
-    pause = measurements.get("daily_range_median_pct")
-    base = measurements.get("base_daily_range_median_pct")
-    if pause is None or base is None:
-        return "unavailable"
-    return "pass" if pause < base else "fail"
+    return "unavailable" if measurements.get("daily_range_median_pct") is None else "reported"
 
 
 def _spike_state(measurements: Mapping[str, Any]) -> str:
@@ -229,6 +240,7 @@ def build_setup_evidence(
     entry: Mapping[str, Any] | None = None,
     right_side_development: str | None = None,
     chain_completeness: str | None = None,
+    completeness_source: str | None = None,
     entry_proximity: str | None = None,
 ) -> dict[str, Any]:
     """Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside it."""
@@ -257,7 +269,7 @@ def build_setup_evidence(
                 "contraction_depths_pct": measurements["contraction_depths_pct"],
             },
         ),
-        _observation(_CHAIN_COMPLETENESS, _completeness_state(structure, chain_completeness), structure.get("state")),
+        _observation(_CHAIN_COMPLETENESS, _completeness_state(structure, chain_completeness, completeness_source), {"structure": structure.get("state"), "source": completeness_source}),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(

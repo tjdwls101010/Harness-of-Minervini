@@ -38,6 +38,7 @@ def run(*, swings=None, as_of=None, **kwargs) -> dict:
         "swing": chain if swings is None else swings,
         "right_side_development": "constructive",
         "chain_completeness": "complete",
+        "completeness_source": "independent_segmentation",
         "entry_proximity": "at_pivot",
         "no_cache": True,
     }
@@ -163,6 +164,7 @@ class CompactFormatTests(unittest.TestCase):
             "swing": chain,
             "right_side_development": "constructive",
             "chain_completeness": "complete",
+        "completeness_source": "independent_segmentation",
             "entry_proximity": "at_pivot",
             "no_cache": True,
         }
