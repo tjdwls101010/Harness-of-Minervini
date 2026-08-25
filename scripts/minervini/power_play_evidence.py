@@ -420,6 +420,9 @@ def _turning_points(history: Any) -> frozenset[str] | None:
     # has no domain for, and the upper neighbour leaves that domain first. Nothing here is a
     # turning point then, which puts every descending high back in the candidate set -- more tops
     # may contest, which is the safe direction for a measurement nobody can take.
+    # No fixture stands on the upper edge, and none can: `2.6 * typical` steps from
+    # 99.99999999999999 to 100.00000000000001 across the whole float grid of OHLC shapes, so a
+    # test of `< 100` against `<= 100` has no history to run on.
     if not all(0 < (multiple + offset) * typical < 100 for offset in offsets):
         return None
     found: set[str] = set()
@@ -470,6 +473,8 @@ def _tops_the_order_would_have_confirmed(bars: Any, run: Mapping[str, Any]) -> s
             continue
         earlier = [anchor for anchor in anchors if anchor < session]
         start = earlier[-1] if earlier else dates[0]
+        # Open at the start, and the strictness is only ever visible when the anchor there is a
+        # low: every high anchor is already a candidate, so including one again changes nothing.
         window = bars.loc[
             (bars.index > pd.Timestamp(start)) & (bars.index < pd.Timestamp(session))
         ]
@@ -497,7 +502,9 @@ def _walk_the_tops(
     # date in hand decides against evidence already in the envelope: one cent on a later high used
     # to delete a hundred-and-eight percent advance in five weeks from consideration entirely.
     #
-    # The count bound is a runaway guard. Reaching it is reported rather than passed over.
+    # The count bound is a runaway guard, and unreachable by construction: the measured span runs
+    # eight weeks of advance plus six of flag, so the descent has at most seventy sessions to find
+    # tops in. It guards a bug in the descent, not a history.
     bound = spec["candidate_top_maximum_distance_pct"]
     first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
