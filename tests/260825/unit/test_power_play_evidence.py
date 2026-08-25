@@ -529,3 +529,29 @@ class AnUnreadableTopBlocksTheRejectionItCannotVoteOn(unittest.TestCase):
         self.assertTrue(pack["unreadable_readings"])
         self.assertEqual(verdict["failed"], [])
         self.assertEqual(verdict["power_play_state"], "incomplete")
+
+
+class RejectingAndQualifyingAskDifferentQuestions(unittest.TestCase):
+    """A far top blocks a rejection and does not block a qualification, on purpose.
+
+    Rejecting claims that no reading of these bars is a Power Play, so one reading that stands is
+    enough to withdraw it. Qualifying claims that *this* reading is one, and a top the registered
+    distance puts outside this structure has no standing to answer that. The quantifiers differ,
+    so the evidence that settles them differs.
+    """
+
+    def test_a_top_outside_the_distance_does_not_contest_a_criterion(self):
+        pack = build_power_play_evidence(
+            power_play_series(dormant_price=10.0, flag_sessions=20, flag_depth_pct=8.0, later_high=21.0 / 0.9 + 0.01)
+        )
+
+        self.assertTrue(pack["readings_cut_at"])
+        self.assertEqual(pack["contested_criteria"], [])
+
+    def test_but_it_does_withdraw_the_rejection(self):
+        pack = build_power_play_evidence(
+            power_play_series(dormant_price=10.0, flag_sessions=20, flag_depth_pct=8.0, later_high=21.0 / 0.9 + 0.01)
+        )
+
+        self.assertFalse(pack["every_top_rejects"])
+        self.assertTrue(pack["surviving_readings"])

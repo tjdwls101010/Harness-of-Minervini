@@ -402,3 +402,28 @@ class TheVolumeIsReadAcrossTheAdvanceAndNowhereElse(unittest.TestCase):
         measurements = measure_power_play(bars, SPEC)
 
         self.assertEqual(measurements["advance_peak_volume_ratio"], 1.0)
+
+
+class TheChainWalksStrictlyDownward(unittest.TestCase):
+    """Each candidate is searched strictly below the last, so distance only grows.
+
+    The prefix of tops allowed to contest a criterion is computed as a running count, which is
+    only correct if the chain cannot leave the registered distance and come back. It cannot, and
+    this is where that is nailed down: the search bound is `High < below`, so a chain that ever
+    stepped back up would be reading the same top twice.
+    """
+
+    def test_each_top_stands_below_the_one_before_it(self):
+        bars = power_play_series(flag_sessions=30, flag_depth_pct=8.0)
+        below = before = None
+        heights = []
+        for _ in range(12):
+            reading = measure_power_play(bars, SPEC, below=below, before=before)
+            if reading["rejection"] is not None:
+                break
+            heights.append(reading["peak_high"])
+            below, before = reading["peak_high"], reading["peak_date"]
+
+        self.assertGreater(len(heights), 2)
+        self.assertEqual(heights, sorted(heights, reverse=True))
+        self.assertEqual(len(heights), len(set(heights)))
