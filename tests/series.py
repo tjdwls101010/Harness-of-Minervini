@@ -911,3 +911,24 @@ def two_tops_that_both_await_the_chart_series(*, start: str = "2026-01-02") -> p
     frame["Stock Splits"] = [0.0] * len(closes)
     frame["Dividends"] = [0.0] * len(closes)
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_top_the_history_ends_before_series(*, flag_depth_pct: float = 12.0, start: str = "2026-01-02") -> pd.DataFrame:
+    """A clean structure whose next candidate top sits behind the first loaded bar.
+
+    The frame opens on a confirmed high a few percent under the peak -- close enough to contest
+    every criterion -- and there is no history behind it to measure a structure from. So the walk
+    stops there rather than reading it, and the reading it never made is the one that would have
+    had a vote.
+    """
+
+    frame = power_play_series(
+        dormancy_sessions=41,
+        advance_sessions=1,
+        flag_sessions=12,
+        flag_depth_pct=flag_depth_pct,
+        start=start,
+    )
+    columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
+    frame.iloc[0, columns] = [20.0, 20.1, 19.9, 20.0]
+    return frame

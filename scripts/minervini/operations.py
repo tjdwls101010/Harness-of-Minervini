@@ -643,6 +643,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         f"fundamentals.power_play_exception.{condition}"
         for condition in verdict["payout_sensitive_criteria"]
     }
+    awaiting_elsewhere = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["awaiting_chart_under_another_top"]
+    }
     # While an action stands, no criterion here was measured on one coordinate system, so the
     # cause of every gap is the action rather than anything a reader could supply.
     unreadable = (
@@ -651,12 +655,20 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         or verdict["distribution_evidence"] != "present"
     )
 
-    # Which criteria this run actually asked a reader about. A gap reported as waiting on a chart
-    # with no key anywhere in the envelope to answer it is a contradiction one line apart.
+    # Which criteria this run is still asking a reader about. Answered questions come back in the
+    # payload with their answer, so counting those too would leave the envelope asking forever --
+    # it would name a key that comes back already answered, and the next run would say the same.
+    # And a gap reported as waiting on a chart with no key to answer it is a contradiction one
+    # line apart.
     awaited = {
         f"fundamentals.power_play_exception.{question['condition']}"
         for question in verdict["chart_questions"]
+        if question["answered"] is None
     }
+    # A rejection is finished. Whatever it left unsatisfied stays in the payload as the shape of
+    # the rejection, but it is not evidence anybody still owes -- neither the reason nor the
+    # required flag may read as an instruction.
+    decided = verdict["power_play_state"] == "not_qualified"
 
     def _reason(item: str) -> str:
         if item in reasons:
@@ -667,6 +679,8 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             if verdict["distribution_evidence"] != "present":
                 return "distribution_evidence_missing"
             return "corporate_action_inside_the_measured_span"
+        if item == "lower_top_left_unread":
+            return "history_ends_before_lower_top"
         if item in set(verdict["held_by_short_history"]):
             return "history_ends_before_lower_top"
         if item in set(verdict["held_by_another_top"]):
@@ -675,23 +689,37 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             return "distribution_inside_the_measured_span"
         if item in contested:
             return "peak_identity_disputed"
+        # The highest top answered it and a top that may contest it has not been looked at. What
+        # closes it is that top's chart, not settling which top the structure hangs from.
+        if item in awaiting_elsewhere:
+            return "chart_unread_under_another_top"
         # The one gap that closes by itself. Reported as a chart reading, it would be closed by
         # whatever approval seam answers the chart -- and a twelve-session minimum would have been
         # waived by a reading of the volume.
         if item == FLAG_STILL_FORMING:
             return "flag_still_forming"
-        # A criterion still open on a structure the bars settled. No key was issued for it and
-        # none could be, so telling the reader a chart is what it waits on sends them to draw a
-        # picture that has nothing left to decide.
+        # Two ways a chart criterion stops being something a chart closes. The structure was
+        # rejected -- by the bars, or by this caller's own `absent` reading of another criterion --
+        # and nothing supplied now moves it. Or no key was issued for it, because the reading it
+        # belongs to was already out when the questions were handed round.
+        if decided:
+            return "structure_is_already_rejected"
         if item not in awaited:
             return "rejected_before_a_chart_was_needed"
         return "chart_reading_required"
 
-    missing = [{"id": item, "reason": _reason(item), "required": True} for item in verdict["missing"]]
+    missing = [
+        {"id": item, "reason": (reason := _reason(item)), "required": reason != "structure_is_already_rejected"}
+        for item in verdict["missing"]
+    ]
     # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
     # when a chart is what one of its gaps is actually waiting on.
+    # Both chart gaps, because both are closed by looking at a picture -- one at the highest top's
+    # chart and one at a contesting top's. Pointing at the capability for the first and not the
+    # second would leave a reader told to read a chart with nowhere sent to draw it.
     awaits_a_chart = verdict["power_play_state"] == "incomplete" and any(
-        item["reason"] == "chart_reading_required" for item in missing
+        item["reason"] in ("chart_reading_required", "chart_unread_under_another_top")
+        for item in missing
     )
     return envelope(
         "ticker.power-play",

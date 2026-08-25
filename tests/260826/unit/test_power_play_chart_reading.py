@@ -110,6 +110,28 @@ class AnApprovalIsBoundToWhatWasMeasured(unittest.TestCase):
 
         self.assertEqual(other["unmatched_chart_readings"], [key])
 
+    def test_every_part_of_the_question_moves_the_key(self) -> None:
+        """The four things the prose says the key binds, each shown to actually bind.
+
+        Checked against the function rather than through a fixture per part, because the point is
+        that no component is decorative -- a boundary that never reaches the digest would let an
+        approval of one reading answer for another.
+        """
+        from scripts.minervini.power_play_evidence import _BOUNDARIES, _CHART_CONDITIONS, _chart_key
+
+        reading = dict.fromkeys(_BOUNDARIES, "2026-01-02")
+        reading.update({name: 1.0 for name in _CHART_CONDITIONS.values()})
+        base = _chart_key("digest", "launch_volume_character", reading)
+
+        self.assertNotEqual(base, _chart_key("other-digest", "launch_volume_character", reading))
+        self.assertNotEqual(base, _chart_key("digest", "flag_tightness_or_vcp", reading))
+        for boundary in _BOUNDARIES:
+            with self.subTest(boundary=boundary):
+                moved = {**reading, boundary: "2026-01-03"}
+                self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", moved))
+        remeasured = {**reading, _CHART_CONDITIONS["launch_volume_character"]: 1.01}
+        self.assertNotEqual(base, _chart_key("digest", "launch_volume_character", remeasured))
+
     def test_a_payout_inside_the_span_changes_the_key(self) -> None:
         """Same prices on the tape, different prices on one scale.
 
@@ -152,24 +174,13 @@ class WhatAnApprovalCanNeverClose(unittest.TestCase):
         self.assertIn("fundamentals.power_play_exception.flag_minimum_sessions", verdict["missing"])
         self.assertEqual(verdict["power_play_state"], "incomplete")
 
-    def test_a_disputed_peak_is_not_settled_by_answering_one_of_the_tops(self) -> None:
-        """Answering the highest top leaves the lower one still asking.
-
-        Both tops ask the same question about different spans, so a reading of one is not a
-        reading of the other -- and a criterion the two tops now answer differently is disputed,
-        which is the truth of it: the reader settled one chart and the search has another.
-        """
+    def test_answering_one_of_two_tops_never_reaches_qualified(self) -> None:
+        """What it does instead -- abstain rather than dispute -- is pinned next door, in
+        tests/260826/unit/test_power_play_abstention.py. Here only that it cannot close."""
         history = two_tops_that_both_await_the_chart_series()
         answered, _ = self._answer_everything_for_reading(history, 0)
-        verdict = evaluate_power_play(answered)
 
-        self.assertEqual(verdict["peak_identity"], "disputed")
-        self.assertNotEqual(verdict["power_play_state"], "qualified")
-        volume = next(
-            signal for signal in verdict["signals"]
-            if signal["id"].endswith("launch_volume_character")
-        )
-        self.assertEqual(volume["withheld"], "peak_identity_disputed")
+        self.assertNotEqual(evaluate_power_play(answered)["power_play_state"], "qualified")
 
     def test_answering_every_top_that_may_contest_is_what_settles_it(self) -> None:
         """The honest cost of two candidate structures: a reader looks at both charts."""

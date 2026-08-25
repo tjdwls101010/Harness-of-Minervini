@@ -114,10 +114,44 @@ class ARejectedStructureAsksNothing(unittest.TestCase):
         self.assertEqual(payload["data"]["chart_questions"], [])
         self.assertEqual(
             reasons["fundamentals.power_play_exception.flag_tightness_or_vcp"],
-            "rejected_before_a_chart_was_needed",
+            "structure_is_already_rejected",
         )
         self.assertEqual(payload["next_capabilities"], [])
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AGapOnARejectedStructureIsNotAnInstruction(unittest.TestCase):
+    """`required` and the reason both say what is left to do, so on a finished answer both stop.
+
+    A rejected structure still carries criteria nobody satisfied -- that is what rejection looks
+    like from the inside. Reporting them as required evidence waiting on a chart tells a reader to
+    go and close something that no longer decides anything, and contradicts the `ok` status one
+    line up.
+    """
+
+    def test_a_reader_s_own_absent_reading_closes_the_rest_of_the_questions(self) -> None:
+        frame = power_play_series()
+        volume = next(
+            q for q in run(frame)["data"]["chart_questions"]
+            if q["condition"] == "launch_volume_character"
+        )
+        payload = run(frame, chart_readings=[f'{volume["key"]}=absent'])
+
+        self.assertEqual(payload["data"]["power_play_state"], "not_qualified")
+        gaps = {item["id"].split(".")[-1]: item for item in payload["missing"]}
+        tightness = gaps["flag_tightness_or_vcp"]
+        self.assertEqual(tightness["reason"], "structure_is_already_rejected")
+        self.assertFalse(tightness["required"])
+        self.assertEqual(payload["next_capabilities"], [])
+
+    def test_a_question_already_answered_is_not_reported_as_still_waiting(self) -> None:
+        """Otherwise the envelope asks forever: the key it names comes back already answered."""
+        frame = power_play_series()
+        keys = [f'{q["key"]}=observed' for q in run(frame)["data"]["chart_questions"]]
+        payload = run(frame, chart_readings=keys)
+
+        self.assertEqual(payload["missing"], [])
+        self.assertEqual(payload["next_capabilities"], [])

@@ -408,6 +408,10 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # contest, is not agreement that this is not a Power Play.
     every_top_rejects = bool(evidence.get("every_top_rejects"))
     contested = set(evidence.get("contested_criteria") or ())
+    # A criterion the highest top answered and a top that may contest it has not. It blocks like a
+    # dispute and closes like a chart gap, so it is carried separately all the way to the reason a
+    # reader acts on.
+    awaiting_elsewhere = set(evidence.get("awaiting_chart_under_another_top") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
     # Only the tops speak to this. A payout withholds the criterion it decided and says so under
@@ -432,7 +436,11 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
         condition = claim_id[len(_CLAIM) + 1:]
-        agreed = condition not in contested and condition not in payout_sensitive
+        agreed = (
+            condition not in contested
+            and condition not in payout_sensitive
+            and condition not in awaiting_elsewhere
+        )
         trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
@@ -457,6 +465,14 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         missing.append(_DISTRIBUTIONS)
     if not settled:
         missing.append("peak_identity")
+    # A top the loaded history ends before is a top nobody read. The chain already refuses to
+    # reject while one of these stands -- silence is not consent to a rejection -- and it is not
+    # consent to a qualification either. Nothing else here would stop one: `every_top_rejects`
+    # already excludes this case, so a structure whose highest top passes everything and whose
+    # next candidate could not be measured would otherwise come back clear on a chain that stopped
+    # short. Only more history closes it.
+    if ran_out_of_history:
+        missing.append("lower_top_left_unread")
 
     # Whatever the reducer declined, the machine channel declines too -- each under the cause that
     # actually withdrew it, because a reader who fixes the wrong thing has not fixed anything.
@@ -480,6 +496,10 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         _decline({str(signal["id"]) for signal in signals.values()} | set(_BANDS_BESIDE.values()), cause)
     _decline({f"{_CLAIM}.{condition}" for condition in payout_sensitive}, "distribution_inside_the_measured_span")
     _decline({f"{_CLAIM}.{condition}" for condition in contested}, "peak_identity_disputed")
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in awaiting_elsewhere},
+        "chart_unread_under_another_top",
+    )
     _decline(set(held_by_short_history), "history_ends_before_lower_top")
     _decline(set(held_by_another_top), "structure_stands_under_another_top")
     reported = [
@@ -508,6 +528,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
         "contested_criteria": sorted(contested),
+        "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),

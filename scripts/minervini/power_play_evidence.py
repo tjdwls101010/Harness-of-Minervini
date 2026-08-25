@@ -117,6 +117,12 @@ def _tightness_state(depth: float | None, limit: float) -> str:
     return "pass" if depth <= limit else "needs_chart"
 
 
+# What a reading says when it has declined to answer rather than disagreed. Two readings of the
+# same bars can only dispute a criterion by both answering it: a payout that decided one of them
+# withdrew that answer, and a chart nobody has read never gave one.
+_ABSTAINS = ("unavailable", "needs_chart")
+
+
 def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
     """How each criterion reads on one set of measurements, without the payloads."""
 
@@ -282,8 +288,9 @@ _CHART_ANSWERS = {"observed": "pass", "absent": "fail"}
 # The vocabulary itself, for the request boundary. Read from the same dict the answers are
 # applied from, so the words a caller may spell cannot drift from the words that do anything.
 CHART_READING_WORDS = tuple(_CHART_ANSWERS)
-_CHART_READING = "convention.power_play_chart_reading"
-_CHART_KEY_LENGTH = 16
+# Long enough that "a key names one question" is a fact rather than a probability. The key is
+# copied, never typed, so the extra characters cost a caller nothing.
+_CHART_KEY_LENGTH = 32
 
 
 def _chart_key(fingerprint: str, condition: str, reading: Mapping[str, Any]) -> str:
@@ -521,13 +528,25 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
     contested = {
         condition
         for condition in primary_criteria
-        if any(
-            criteria[condition] not in ("unavailable", primary_criteria[condition])
+        if primary_criteria[condition] not in _ABSTAINS
+        and any(
+            criteria[condition] not in _ABSTAINS and criteria[condition] != primary_criteria[condition]
             for criteria in every_criteria[:may_contest]
         )
     }
+    # Not a dispute, and not nothing either. The highest top's answer stands and a top that may
+    # contest it has not been looked at, so the criterion cannot close -- but what closes it is
+    # reading that top's chart, not settling which top the structure hangs from. Reported as a
+    # disputed peak it would send the reader to a question the bars answer and no chart can.
+    awaiting_elsewhere = {
+        condition
+        for condition in primary_criteria
+        if primary_criteria[condition] not in _ABSTAINS
+        and any(criteria[condition] == "needs_chart" for criteria in every_criteria[1:may_contest])
+    }
     if reordered:
         contested = set(primary_criteria)
+        awaiting_elsewhere = set()
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
     # nothing -- and folding it into the survivors reports the structure as intact under every
@@ -636,6 +655,8 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
         # readings can both reject and still disagree about which limit did it, and reporting the
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
+        # Separate from the contested set because it closes on a different action.
+        "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".

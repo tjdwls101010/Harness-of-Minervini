@@ -82,7 +82,7 @@
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
-      "ok": "The evidence contract is complete: either the bars settled it against the stock, or every criterion including the ones a reader answered is satisfied. The state says which -- a qualified Power Play here waives only unavailable verified fundamentals and never eligibility, setup, market, integrity or risk.",
+      "ok": "The question this capability was asked has a finished answer, and the state says which one. `not_qualified` is a rejection -- reached by the bars, or by a reader's own `absent` reading of a criterion the bars declined to decide -- and a rejection leaves criteria nobody satisfied behind it, reported with required false because closing them would change nothing. `qualified` means every criterion is satisfied and nothing is outstanding. Neither is a waiver of anything: no surface consumes this state yet, ticker.fundamentals keeps its growth gap as a gap, and ticker.risk has no input that would let this reach a BUY-READY verdict.",
       "partial": "Nothing measurable failed, and the structure is not qualified either -- a chart reading, corporate-action evidence, or both are still missing, and each gap names its own cause.",
       "unavailable": "Completed price history is unavailable, or the history is unusable as bars at all -- the reason names which, in the same vocabulary ticker.swings and ticker.chart use."
     },
