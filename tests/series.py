@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from collections.abc import Sequence
+
 import pandas as pd
 
 
@@ -495,7 +497,7 @@ def power_play_series(
     distribution_in_the_flag: float | None = None,
     volume_spike_before_the_launch: float | None = None,
     corporate_actions: bool = True,
-    marginal_new_high_at: int | None = None,
+    marginal_new_high_at: int | Sequence[int] | None = None,
     start: str = "2026-01-02",
 ) -> pd.DataFrame:
     """Dormancy, then an explosive advance, then a flag that ends on the last bar.
@@ -544,7 +546,17 @@ def power_play_series(
         # A hundredth of a percent above the peak, late in an otherwise ordinary flag. Nothing in
         # the source says how large a new high has to be before it means something, so the search
         # takes it and the flag before it becomes advance.
-        frame.iloc[marginal_new_high_at, frame.columns.get_loc("High")] = peak * 1.0001
+        #
+        # Several of them, given a sequence: each ticks above the last, so a reading that steps
+        # down one top at a time walks through the ticks and never reaches the structure. Each is
+        # a hundredth of a percent above its predecessor, in the order given.
+        positions = (
+            [marginal_new_high_at]
+            if isinstance(marginal_new_high_at, int)
+            else list(marginal_new_high_at)
+        )
+        for step, position in enumerate(positions, start=1):
+            frame.iloc[position, frame.columns.get_loc("High")] = peak * (1 + 0.0001 * step)
     if tie_the_peak_at is not None:
         # A later session that prints exactly the peak's high without exceeding it. Nothing
         # explosive happened there, so a rule that reads the flag from the last equal high

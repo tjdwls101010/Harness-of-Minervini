@@ -21,6 +21,9 @@ from .power_play import measure_power_play, reading_rejects
 
 _CLAIM = "fundamentals.power_play_exception"
 _WEEK = "convention.trading_week"
+# A runaway guard, not a doctrine limit: the longest chain any cached history produced was
+# nineteen tops. Hitting it is reported, never silently truncated into an agreement.
+_MOST_TOPS_READ = 200
 
 
 def compile_power_play_spec() -> dict[str, Any]:
@@ -126,43 +129,64 @@ def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, 
     }
 
 
-def _rejects(measurements: Mapping[str, Any], tight_limit: float) -> bool:
-    """Whether this reading rejects on the strength of its own span.
+def _unmoved(measurements: Mapping[str, Any]) -> bool:
+    """Whether this reading's own span is free of corporate actions.
 
-    Each reading carries its own corporate-action span, because the two structures cover
-    different sessions and a split inside one of them says nothing about the other.
+    Each reading carries its own span, because the tops cover different sessions and a split
+    inside one of them says nothing about another.
     """
-    unmoved = (
+    return (
         measurements["corporate_action_evidence"] == "present"
         and not measurements["corporate_action_sessions"]
     )
-    return reading_rejects(_criteria(measurements, tight_limit), corporate_action_unmoved=unmoved)
 
 
 def build_power_play_evidence(history: Any) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
-    The structure is found rather than declared, so the same bars are read twice: once from the
-    highest top of the search span, and once from the highest top below it. When the two readings
-    answer the criteria the same way, which one the search happened to land on did not matter.
-    When they differ, the verdict rests on a choice the bars did not make, and the source names
-    no size below which a new high stops counting -- a hundredth of a percent above the last high
-    restarts the flag and turns twenty sessions into four. Neither is vouched for then.
+    The structure is found rather than declared, so the same bars are read from every top the
+    search could have landed on: the highest of the span, then the highest below that, and down
+    until the span holds no more. The source names no size below which a new high stops counting
+    -- a hundredth of a percent above the last high restarts the flag and turns thirty sessions
+    into four -- so a criterion decides only where every reading answers it the same way, and a
+    rejection stands only where every reading reaches one.
 
-    The same rule the segmentation already runs on its own parameters, for the same reason.
+    Two readings were not enough, and the shortfall was not theoretical: two ticks a hundredth of
+    a percent apart inside one flag hand the search three tops, and both of the first two reject
+    while the structure they sit inside has nothing decisive against it. Across every cached
+    history the chain runs one to nineteen tops, and twenty-two of twenty-three still reject on a
+    criterion every reading agreed on.
     """
 
     spec = compile_power_play_spec()
-    measurements = measure_power_play(history, spec)
     tight_limit = float(doctrine.threshold(_CLAIM, "tight_action_maximum_pct"))
+    measurements = measure_power_play(history, spec)
     actions = measurements["corporate_action_sessions"]
-    alternate = (
-        measure_power_play(history, spec, below=measurements["peak_high"], before=measurements["peak_date"])
-        if measurements["peak_high"] is not None
-        else measurements
-    )
-    # An earlier top the search span does not contain is not a competing reading of this
-    # structure; there is nothing to disagree with.
+
+    readings: list[dict[str, Any]] = []
+    below, before = None, None
+    top = measurements["peak_high"]
+    # Bounded twice. By price, because a top the stock later exceeded by more than the tightness
+    # this criterion itself allows was overtaken rather than consolidated against: the flag
+    # hanging from it contains sessions outside the range the criterion describes, so it is not a
+    # competing reading of this structure but a different, older one. Unbounded, the chain walks
+    # one bar at a time down an ordinary advance and every criterion ends up contested by a bar
+    # nobody would call a top -- measured across the cached histories, the bound takes the chains
+    # from one-to-nineteen readings down to one-to-fifteen and raises the tickers still rejecting
+    # on a named, agreed criterion from twenty-two of twenty-three to all of them.
+    #
+    # And by count, so a pathological history cannot spin here. Reaching that bound is reported
+    # rather than passed over as agreement.
+    while len(readings) < _MOST_TOPS_READ:
+        reading = measurements if not readings else measure_power_play(history, spec, below=below, before=before)
+        if reading["rejection"] is not None:
+            break
+        if top is not None and (top - reading["peak_high"]) / top * 100 > tight_limit:
+            break
+        readings.append(reading)
+        below, before = reading["peak_high"], reading["peak_date"]
+    exhausted = len(readings) >= _MOST_TOPS_READ
+
     primary_criteria = _criteria(measurements, tight_limit)
     # Which criteria a cash payout inside the span decided. Everything else it touched, it did
     # not decide, and an ordinary quarterly payment touches nearly nothing against these limits.
@@ -171,15 +195,42 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         for condition, state in _criteria(_without_the_payout(measurements), tight_limit).items()
         if state != primary_criteria[condition]
     }
-    contested = (
-        {
-            condition
-            for condition, state in primary_criteria.items()
-            if _criteria(alternate, tight_limit)[condition] != state
-        }
-        if alternate["rejection"] is None
-        else set()
+    every_criteria = [_criteria(reading, tight_limit) for reading in readings]
+    contested = {
+        condition
+        for condition in primary_criteria
+        if any(criteria[condition] != primary_criteria[condition] for criteria in every_criteria)
+    }
+    # A rejection every top agrees on is a rejection whichever top the search landed on. Left at
+    # the two nearest tops it was not "every reading" at all, and it said so in its own name.
+    # A truncated chain has readings nobody took, so it cannot claim they agreed.
+    rejected_under_every_reading = (
+        bool(contested)
+        and not exhausted
+        and all(reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
+                for criteria, reading in zip(every_criteria, readings))
     )
+    surviving = [
+        reading["peak_date"]
+        for criteria, reading in zip(every_criteria, readings)
+        if not reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
+    ]
+    # What each reading rejected on. `failed` carries only the criteria every reading agreed on,
+    # so a rejection the readings reached by different routes would otherwise arrive as a verdict
+    # with nothing behind it -- a state no signal explains, which is the shape this harness treats
+    # as a defect everywhere else.
+    reading_rejections = [
+        {
+            "peak_date": reading["peak_date"],
+            "failed": [
+                f"{_CLAIM}.{condition}"
+                for condition, state in criteria.items()
+                if state == "fail" and _unmoved(reading)
+            ],
+        }
+        for criteria, reading in zip(every_criteria, readings)
+        if reading_rejects(criteria, corporate_action_unmoved=_unmoved(reading))
+    ]
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -212,28 +263,28 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         ),
     ]
     return {
-        # Whether every reading of these bars rejects, whatever each one rejected on. Computed
-        # here because it is a fact about the two readings, and the reducer only ever sees one.
-        "rejected_under_every_reading": bool(contested)
-        and _rejects(measurements, tight_limit)
-        and _rejects(alternate, tight_limit),
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
         },
         "peak_identity": "disputed" if contested else "settled",
+        "readings": len(readings),
+        "readings_exhausted": exhausted,
+        "surviving_readings": surviving,
+        "reading_rejections": reading_rejections,
+        "rejected_under_every_reading": rejected_under_every_reading,
         # Which criteria the choice of top actually moved. The reducer reads this rather than the
         # summary word, because agreeing on the verdict is not agreeing on every criterion: two
         # readings can both reject and still disagree about which limit did it, and reporting the
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
         "payout_sensitive_criteria": sorted(payout_sensitive),
-        "alternate_peak": None if not contested else {
-            "peak_date": alternate["peak_date"],
-            "peak_high": alternate["peak_high"],
-            "flag_sessions": alternate["flag_sessions"],
-            "flag_depth_pct": alternate["flag_depth_pct"],
-            "advance_pct_closes": alternate["advance_pct_closes"],
+        "alternate_peak": None if len(readings) < 2 else {
+            "peak_date": readings[1]["peak_date"],
+            "peak_high": readings[1]["peak_high"],
+            "flag_sessions": readings[1]["flag_sessions"],
+            "flag_depth_pct": readings[1]["flag_depth_pct"],
+            "advance_pct_closes": readings[1]["advance_pct_closes"],
         },
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".
