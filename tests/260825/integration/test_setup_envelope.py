@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import tempfile
 import unittest
+from unittest import mock
 
 import pandas as pd
 
@@ -217,6 +218,26 @@ class TheRenderersRefusalSurvivesToTheEnvelopeTests(unittest.TestCase):
         self.assertEqual(payload["as_of"]["date"], "2026-06-25")
         self.assertEqual(payload["request"]["ticker"], "TEST")
         self.assertIn("history_index_is_not_dates", payload["missing"][0]["reason"])
+
+    def test_a_defect_in_the_renderer_is_not_dressed_up_as_missing_data(self) -> None:
+        """Catching every ValueError would report a bug, and a malformed request, as absent bars.
+
+        The refusal has its own type for that reason: a caller who is told the provider returned
+        nothing goes looking at the provider.
+        """
+
+        frame, _ = base_series()
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        runtime = Runtime(price_history=lambda ticker, requested: ProviderSnapshot(frame, meta))
+
+        with mock.patch("scripts.minervini.chart._render_png", side_effect=ValueError("boom")):
+            with tempfile.TemporaryDirectory() as directory:
+                with self.assertRaises(ValueError):
+                    execute("ticker.chart", {
+                        "ticker": "TEST", "as_of": frame.index[-1].date().isoformat(),
+                        "output_dir": directory, "no_cache": True,
+                    }, runtime=runtime)
 
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):

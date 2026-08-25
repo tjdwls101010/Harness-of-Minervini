@@ -1578,9 +1578,11 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
+    from .chart import UnrenderableHistory
+
     try:
         result = _render(prices.data, ticker, clock, destination)
-    except ValueError as error:
+    except UnrenderableHistory as error:
         # The renderer refuses unusable history by raising, and an unhandled raise becomes an
         # internal_error envelope with the request and the explicit as_of stripped off it. The
         # reason it named is the whole point of naming one.

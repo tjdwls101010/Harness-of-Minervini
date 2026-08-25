@@ -11,6 +11,7 @@ import json
 import tempfile
 import unittest
 
+import numpy as np
 import pandas as pd
 from pathlib import Path
 
@@ -236,6 +237,22 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         def positional_index_as_objects(frame):
             frame.index = pd.Index([label.value for label in frame.index], dtype=object)
 
+        def numpy_boolean(frame):
+            frame["Volume"] = frame["Volume"].astype(object)
+            frame.iloc[3, frame.columns.get_loc("Volume")] = np.bool_(True)
+
+        def price_word(frame):
+            frame["Close"] = frame["Close"].astype(object)
+            frame.iloc[4, frame.columns.get_loc("Close")] = "True"
+
+        def missing_value(frame):
+            frame["Close"] = frame["Close"].astype(object)
+            frame.iloc[6, frame.columns.get_loc("Close")] = pd.NA
+
+        def timestamp_as_price(frame):
+            frame["Close"] = frame["Close"].astype(object)
+            frame.iloc[8, frame.columns.get_loc("Close")] = pd.Timestamp("2026-01-01")
+
         def repeated_column(frame):
             frame["spare"] = frame["Close"]
             frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
@@ -262,6 +279,8 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             ("missing stamp", missing_stamp), ("positional index", positional_index),
             ("boolean prices", boolean_prices), ("boolean in object column", boolean_in_an_object_column),
             ("positional index as objects", positional_index_as_objects),
+            ("numpy boolean", numpy_boolean), ("price word", price_word),
+            ("missing value", missing_value), ("timestamp as price", timestamp_as_price),
             ("late evening zone", late_evening_zone),
             ("two sessions one zone day", two_sessions_one_zone_day),
         ]

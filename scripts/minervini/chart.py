@@ -27,6 +27,15 @@ from .swings import canonical_chain
 
 # 1.1.0 draws the detector's turning points and pivot, and records per timeframe which
 # of them the picture actually contains.
+class UnrenderableHistory(ValueError):
+    """Price history this boundary will not draw, named so a caller can tell it from a bug.
+
+    The renderer refuses bad data and bad requests with the same exception type, and a handler
+    that caught every ValueError reported a malformed ticker -- and any genuine defect in the
+    plotting stack -- as though the provider had returned unusable bars.
+    """
+
+
 RENDERER_VERSION = "1.1.0"
 _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _TICKER_PATTERN = re.compile(r"[A-Z][A-Z0-9.-]{0,9}")
@@ -111,12 +120,12 @@ def _as_of_date(value: str | date) -> date:
 
 def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
     if not isinstance(daily_ohlcv, pd.DataFrame):
-        raise ValueError("daily_ohlcv must be a DataFrame")
+        raise UnrenderableHistory("daily_ohlcv must be a DataFrame")
     missing = [column for column in _REQUIRED_COLUMNS if column not in daily_ohlcv.columns]
     if missing:
-        raise ValueError(f"daily_ohlcv is missing required columns: {', '.join(missing)}")
+        raise UnrenderableHistory(f"daily_ohlcv is missing required columns: {', '.join(missing)}")
     if daily_ohlcv.empty:
-        raise ValueError("daily_ohlcv contains no completed bars")
+        raise UnrenderableHistory("daily_ohlcv contains no completed bars")
 
     # The measuring boundary owns what a usable bar is and how its index is read, so the frame
     # this renders is the frame that gets measured. Normalising here as well is how the two came
@@ -124,11 +133,11 @@ def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
     # and the same session landed on two different dates.
     bars, rejection = read_bars(daily_ohlcv)
     if rejection is not None:
-        raise ValueError(f"daily_ohlcv is not usable price history: {rejection}")
+        raise UnrenderableHistory(f"daily_ohlcv is not usable price history: {rejection}")
     if bars is None or bars.empty:
-        raise ValueError("daily_ohlcv contains no completed bars")
+        raise UnrenderableHistory("daily_ohlcv contains no completed bars")
     if bars.index[-1].date() > as_of:
-        raise ValueError("daily_ohlcv contains a bar after as_of")
+        raise UnrenderableHistory("daily_ohlcv contains a bar after as_of")
     return bars
 
 
@@ -142,7 +151,7 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     # takes the last completed week and its anchors off the chart, and on a short history it
     # raised instead.
     if weekly.empty:
-        raise ValueError("daily_ohlcv contains no completed weekly bars as_of")
+        raise UnrenderableHistory("daily_ohlcv contains no completed weekly bars as_of")
     return weekly
 
 
@@ -276,4 +285,4 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
-__all__ = ["RENDERER_VERSION", "render_chart_artifacts"]
+__all__ = ["RENDERER_VERSION", "UnrenderableHistory", "render_chart_artifacts"]
