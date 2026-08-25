@@ -318,3 +318,32 @@ class ThePayloadDoesNotGetToRewriteTheContract(unittest.TestCase):
         ))
 
         self.assertEqual(result["entry"]["kind"], "completed_pivot")
+
+
+class APriceHasToBeAPrice(unittest.TestCase):
+    """True is not one dollar, and infinity is not a level anybody can be stopped out at.
+
+    `bool` is a subclass of `int`, so a truth value walked straight through the numeric check and
+    became a stop at 1.00. Infinity and NaN went through the greater-than-zero test just as
+    quietly. Both arrive as a precise invalidation the route was built to insist on.
+    """
+
+    ANSWERED = {
+        "prior_day_low": {"price": 98.0, "condition": "yesterday's low"},
+        "gap_below_prior_low": {"state": "pass", "condition": "gapped and reclaimed"},
+    }
+
+    def test_a_boolean_is_not_an_invalidation_price(self) -> None:
+        result = verdict("oops_reversal", **self.ANSWERED, invalidation={"price": True, "condition": "below the low"})
+
+        self.assertIn("precise_invalidation", result["missing"])
+
+    def test_infinity_is_not_a_later_pivot(self) -> None:
+        for price in (float("inf"), float("nan")):
+            with self.subTest(price=price):
+                result = verdict(
+                    "oops_reversal", **self.ANSWERED,
+                    minervini_later_pivot={"price": price, "condition": "above the pivot"},
+                )
+
+                self.assertIn("minervini_later_pivot", result["missing"])

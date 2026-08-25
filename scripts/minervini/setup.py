@@ -14,6 +14,8 @@ turn somebody else's disagreement into this harness's incompleteness.
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
@@ -187,7 +189,17 @@ def _precise_level(value: Any) -> dict[str, Any] | None:
     item = _mapping(value)
     price = item.get("price")
     condition = item.get("condition")
-    if isinstance(price, (int, float)) and price > 0 and isinstance(condition, str) and condition.strip():
+    # Not bool, which is a subclass of int and walked through as a stop at one dollar, and not
+    # infinity or NaN, which pass a greater-than-zero test and name no level anybody can be
+    # stopped out at.
+    if (
+        isinstance(price, (int, float))
+        and not isinstance(price, bool)
+        and math.isfinite(price)
+        and price > 0
+        and isinstance(condition, str)
+        and condition.strip()
+    ):
         return item
     return None
 
