@@ -166,10 +166,16 @@ def _after_the_structure_it_left(
         for index in highs
         if index < pivot
     ]
-    if any(verdict is None for _, verdict in verdicts):
-        return None
     left = [index for index, verdict in verdicts if verdict]
-    return left[-1] + 1 if left else 0
+    floor = left[-1] if left else -1
+    # An unjudgeable crossing only matters where judging it could move the floor. The floor is
+    # set by the last departure, so one behind that is already inside the discarded span and
+    # changes nothing; one ahead of it is a departure that might exist and would cut further.
+    # Refusing on any of them at all rejected most real histories on their opening fifty
+    # sessions, which have nothing to do with the base being judged.
+    if any(verdict is None and index > floor for index, verdict in verdicts):
+        return None
+    return floor + 1
 
 
 def _left_behind(
