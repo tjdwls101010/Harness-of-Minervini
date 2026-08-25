@@ -279,67 +279,67 @@ class SkippedChainAgainstADetectorTests(unittest.TestCase):
         """The seam the detector fills, exercised through the seam rather than around it."""
 
         frame, anchors = base_series(depths=(30.0, 5.0, 10.0, 2.0))
-        full = anchor_dates(frame, anchors)
-        skipped = [full[index] for index in (0, 1, 2, 5, 6, 7, 8)]
+        detected = anchor_dates(frame, anchors)
+        skipped = [detected[index] for index in (0, 1, 2, 5, 6, 7, 8)]
 
         result = evaluate_setup(
-            build_setup_evidence(frame, skipped, **vouched(frame, skipped, detected_chain=full))
+            build_setup_evidence(frame, skipped, **vouched(frame, skipped, detected_chain=detected))
         )
 
         completeness = signal(result, "setup.declared_chain_completeness")
         self.assertEqual(completeness["state"], "fail")
-        self.assertTrue(completeness["measured"]["omitted"])
+        self.assertTrue(completeness["measured"]["differs"]["detected_only"])
         self.assertNotEqual(result["setup_state"], "ready")
 
 
 
 
-class RefinementKeepsTheStructureTests(unittest.TestCase):
-    """A subset check threw away order and endpoints, which let the pivot be replaced.
+class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
+    """Allowing a finer caller chain looked harmless and was not.
 
-    Appending two later swings to a chain the detector agrees with keeps every detected date
-    present -- and moves the pivot to a lower high the stock clears more easily. A refinement
-    of a structure keeps that structure's start, its pivot, and the order of what lies between.
+    Everything downstream measures the declared chain, so a caller who keeps every detected
+    date and cuts one unfavourable contraction into four smaller ones skips nothing, moves no
+    endpoint, and still deletes the contraction from the sequence that gets judged. A
+    segmentation can vouch for the segmentation it produced and no other.
     """
 
-    def _refined_past_the_pivot(self):
-        frame, anchors = base_series(breakout=False)
-        detected = anchor_dates(frame, anchors)
-        drift = tail(frame, 1, close=97.0, volume=500_000.0)
-        lower_high = tail(drift, 1, close=98.5, volume=500_000.0)
-        cleared = tail(lower_high, 1, close=99.0, volume=2_500_000.0)
-        extended_chain = [*detected, drift.index[-1].date().isoformat(), lower_high.index[-1].date().isoformat()]
-        return cleared, detected, extended_chain
-
-    def test_appending_swings_past_the_pivot_is_not_a_refinement(self) -> None:
-        frame, detected, extended_chain = self._refined_past_the_pivot()
-
-        result = evaluate_setup(
-            build_setup_evidence(
-                frame,
-                extended_chain,
-                right_side_development="constructive",
-                chain_completeness="complete",
-                detected_chain=detected,
-                entry_proximity="at_pivot",
-                entry_price=99.0,
-            )
-        )
-
-        completeness = signal(result, "setup.declared_chain_completeness")
-        self.assertEqual(completeness["state"], "fail")
-        self.assertIn("endpoints", completeness["measured"])
-        self.assertNotEqual(result["setup_state"], "ready")
-
-    def test_a_finer_chain_between_the_same_endpoints_is_a_refinement(self) -> None:
-        frame, anchors = base_series()
+    def test_a_finer_chain_between_the_same_endpoints_is_not_the_chain_that_was_vouched_for(self) -> None:
+        frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
         chain = anchor_dates(frame, anchors)
 
         result = evaluate_setup(
             build_setup_evidence(frame, chain, **vouched(frame, chain, detected_chain=[chain[0], chain[3], chain[-1]]))
         )
 
+        completeness = signal(result, "setup.declared_chain_completeness")
+        self.assertEqual(completeness["state"], "fail")
+        self.assertTrue(completeness["measured"]["differs"]["declared_only"])
+        self.assertNotEqual(result["setup_state"], "ready")
+
+    def test_the_chain_the_detector_produced_is_the_one_that_passes(self) -> None:
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+
+        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
+
         self.assertEqual(signal(result, "setup.declared_chain_completeness")["state"], "pass")
+        self.assertEqual(result["setup_state"], "ready")
+
+
+class EntryBelongsToThisRouteTests(unittest.TestCase):
+    def test_an_entry_below_the_pivot_is_a_different_route_not_a_close_one(self) -> None:
+        """Buying under the pivot is a cheat or an early tactic; it is not this trigger."""
+
+        frame, anchors = base_series()
+        chain = anchor_dates(frame, anchors)
+        under = float(frame.loc[chain[-1], "High"]) * 0.9995
+
+        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain, entry_price=under)))
+
+        chase = signal(result, "setup.chase_limit_above_pivot")
+        self.assertFalse(chase["measured"]["entry_above_pivot"])
+        self.assertEqual(chase["state"], "fail")
+        self.assertNotEqual(result["setup_state"], "ready")
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):

@@ -171,19 +171,17 @@ def _completeness_state(structure: Mapping[str, Any], reading: str | None, detec
         return "needs_chart", {"declared_anchors": len(declared), "detected_anchors": None}
     found = [_iso_day(date) for date in detected]
     basis: dict[str, Any] = {"declared_anchors": len(declared), "detected_anchors": len(found)}
-    # A subset check throws away order and ends, which let a caller keep every detected date
-    # and append two more -- moving the pivot to a lower high while reporting nothing omitted.
-    # A refinement of a structure keeps that structure's start, its pivot, and the order of
-    # everything between.
-    omitted = [date for date in found if date not in declared]
-    basis["omitted"] = omitted
-    if omitted:
-        return "fail", basis
-    if found and (declared[0] != found[0] or declared[-1] != found[-1]):
-        basis["endpoints"] = {"declared": [declared[0], declared[-1]], "detected": [found[0], found[-1]]}
-        return "fail", basis
-    if not _is_subsequence(found, declared):
-        basis["ordering"] = "detected turning points do not appear in order inside the declared chain"
+    # Equality, because everything downstream measures the *declared* chain. Allowing a finer
+    # caller chain between the same endpoints looked like harmless refinement and was not: an
+    # unfavourable twenty-eight percent contraction re-cut into four smaller ones disappears
+    # from the sequence without a single anchor being skipped or an endpoint moved. What can
+    # vouch for a segmentation is another segmentation, and it can only vouch for the one it
+    # produced.
+    if declared != found:
+        basis["differs"] = {
+            "declared_only": [date for date in declared if date not in found],
+            "detected_only": [date for date in found if date not in declared],
+        }
         return "fail", basis
     return ("pass", basis) if reading == "complete" else ("needs_chart", basis)
 
@@ -197,12 +195,7 @@ def _iso_day(value: Any) -> str:
         return str(value)
 
 
-def _is_subsequence(inner: Sequence[str], outer: Sequence[str]) -> bool:
-    iterator = iter(outer)
-    return all(any(item == candidate for candidate in iterator) for item in inner)
-
-
-def _proximity_state(measurements: Mapping[str, Any], reading: str | None, executable: bool | None) -> str:
+def _proximity_state(measurements: Mapping[str, Any], reading: str | None, executable: bool | None, above_pivot: bool | None) -> str:
     """The source states the limit and withholds the number, so the reader supplies the call.
 
     What the measurement can still refuse is a reading of "at the pivot" on an entry the
@@ -221,15 +214,20 @@ def _proximity_state(measurements: Mapping[str, Any], reading: str | None, execu
         # to trade five, ten, or even twenty cents above the pivot. An entry beyond that is
         # not at the pivot by the only measure the source ever put on the distance -- which is
         # a check on the reading, not a limit deciding the setup.
+        if above_pivot is False:
+            # Below the pivot is a different entry route -- a cheat or an early tactic -- not
+            # this one taken close to its trigger.
+            return "fail"
         if executable is None:
             return "needs_chart"
         # The band that reports this distance is registered as a band and its own record says
         # it was never promoted to a gate; using its edge as a ceiling made it decide a
         # required condition, and put the boundary in an absurd place besides -- an entry a
         # dollar *below* the pivot read as inside the range while twenty-one cents above it
-        # read as chased. What the bars can say is whether the price is one the stock is
-        # trading at: an entry outside the latest completed session's range is not an entry
-        # available now, whatever it would have been worth on the day it was available.
+        # read as chased. What completed bars can say is narrower than "available now", which
+        # they cannot say at all: they can say the tape shows that price in the most recent
+        # session. How stale that makes it is what `sessions_since_breakout` and the distance
+        # from the latest close are printed for.
         return "pass" if executable else "fail"
     return "needs_chart"
 
@@ -341,6 +339,9 @@ def build_setup_evidence(
     # only measure the source ever put on the distance is refused by his number, not by one
     # invented here.
     entry_buffer = doctrine.evaluate_band(*_MINERVINI_BUFFER, entry_buffer_cents)
+    entry_above_pivot = (
+        None if entry_price is None or not isinstance(pivot, (int, float)) else float(entry_price) > float(pivot)
+    )
     session = measurements.get("latest_session_range")
     entry_executable = (
         None
@@ -412,9 +413,10 @@ def build_setup_evidence(
         ),
         _observation(
             _CHASE_LIMIT,
-            _proximity_state(measurements, entry_proximity, entry_executable),
+            _proximity_state(measurements, entry_proximity, entry_executable, entry_above_pivot),
             {
                 "entry_price": entry_price,
+                "entry_above_pivot": entry_above_pivot,
                 "entry_available_in_latest_session": entry_executable,
                 "entry_buffer_above_pivot_cents": entry_buffer_cents,
                 "entry_extension_above_pivot_pct": entry_extension_pct,
