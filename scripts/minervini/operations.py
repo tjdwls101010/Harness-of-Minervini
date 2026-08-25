@@ -843,10 +843,10 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # The detector's own convention decided the chain every measurement was read off, so it
         # is cited alongside the claims the signals name. Deriving the list from signals alone
         # left the one rule that is the harness's rather than the source's out of the answer.
-        doctrine_ids=sorted(
-            {str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}
-            | {_SEGMENTATION_CONVENTION}
-        ),
+        # The reducer's own list rather than a second derivation of it: the declared tactic is a
+        # claim this verdict was reached under, and it appears in no signal because the caller
+        # declared it instead of the bars measuring it.
+        doctrine_ids=sorted({*result["doctrine_ids"], _SEGMENTATION_CONVENTION}),
         next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 
@@ -886,6 +886,11 @@ def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:
     looking at the current chart again. Reporting all three as "evidence required" sends a
     reader looking for an argument in two of the three cases.
     """
+    # Not evidence the caller could have supplied. "Early" is a time, and the source names five
+    # tactics; what closes this is picking one, and telling a reader to supply evidence sends them
+    # looking for a measurement of a tactic nobody named.
+    if item == "named_entry_tactic":
+        return "no_tactic_named"
     if item != _CHAIN_COMPLETENESS:
         return "evidence_required"
     segmentation = evidence["segmentation"]
