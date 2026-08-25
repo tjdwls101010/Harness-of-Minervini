@@ -33,6 +33,7 @@ _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of
 # claim, so the reason a setup is not ready is always a sentence from the source.
 _BASE_EVIDENCE = (
     "setup.demand_supply_volume_asymmetry",
+    "setup.upside_spikes_dwarf_contractions",
     "setup.pivot_volume_contraction",
     "setup.contractions_must_contract",
     # Not the V-shape, which the source describes without a ratio, but its other named form:

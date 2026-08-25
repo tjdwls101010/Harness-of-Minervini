@@ -29,6 +29,7 @@ from .setup_structure import completed_bars, resolve_structure
 # the requirement and no magnitude, so the predicate reads a direction and the required
 # text comes from the claim rather than from a string written here.
 _VOLUME_ASYMMETRY = "setup.demand_supply_volume_asymmetry"
+_UPSIDE_SPIKES = "setup.upside_spikes_dwarf_contractions"
 _PIVOT_VOLUME = "setup.pivot_volume_contraction"
 _CONTRACTIONS_CONTRACT = "setup.contractions_must_contract"
 _PIVOT_TRIGGER = "setup.structural_pivot_and_trigger"
@@ -128,19 +129,26 @@ def _trigger_state(measurements: Mapping[str, Any], expansion: float | None) -> 
 
 
 def _asymmetry_state(measurements: Mapping[str, Any]) -> str:
-    """Both clauses of the source's sentence, neither of which carries a number.
+    """The clause the source states with "must": volume bigger on up days than on down days."""
 
-    The second clause is about price: "a few of the price spikes to the upside should be
-    large, dwarfing the contractions". An earlier version compared the largest up-day volume
-    with the largest down-day volume, which answers a sentence the source did not write and
-    passes a base that drifts up on heavy volume and drops in violent single sessions.
-    """
     total = measurements.get("up_down_volume_ratio")
+    if total is None:
+        return "unavailable"
+    return "pass" if total > 1 else "fail"
+
+
+def _spike_state(measurements: Mapping[str, Any]) -> str:
+    """The clause the source states with "should", and it is about price, not volume.
+
+    An earlier version compared the largest up-day volume with the largest down-day volume,
+    which answers a sentence nobody wrote, and bound the answer to the same hard gate as the
+    "must" clause, which let a hair's difference reject a candidate.
+    """
     up_spike = measurements.get("largest_up_day_return_pct")
     down_spike = measurements.get("largest_down_day_return_pct")
-    if total is None or up_spike is None or down_spike is None:
+    if up_spike is None or down_spike is None:
         return "unavailable"
-    return "pass" if total > 1 and up_spike > down_spike else "fail"
+    return "pass" if up_spike > down_spike else "fail"
 
 
 def _right_side_state(measurements: Mapping[str, Any], judgment: str | None) -> str:
@@ -189,6 +197,11 @@ def build_setup_evidence(
 
     signals = [
         _observation(_VOLUME_ASYMMETRY, _asymmetry_state(measurements), measurements["up_down_volume_ratio"]),
+        _observation(
+            _UPSIDE_SPIKES,
+            _spike_state(measurements),
+            {"largest_up_day_return_pct": measurements["largest_up_day_return_pct"], "largest_down_day_return_pct": measurements["largest_down_day_return_pct"]},
+        ),
         # Measured inside the base. Borrowing the fifty-day marker's number to decide with
         # would put a value the registry marked undecidable back into a verdict.
         _observation(

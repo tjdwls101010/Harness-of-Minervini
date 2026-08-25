@@ -253,5 +253,47 @@ class ContractMatchesImplementationTests(unittest.TestCase):
         self.assertNotIn("run price is currently in", limitations)
 
 
+
+
+class SentenceModalityTests(unittest.TestCase):
+    """One sentence, two clauses, two different words: "must" and "should".
+
+    "the volume must be much bigger on up days than on down days, and a few of the price
+    spikes to the upside should be large, dwarfing the contractions". Binding both to one
+    hard gate made a hair's difference between the largest up day and the largest down day
+    reject a candidate on a clause the source hedged.
+    """
+
+    def _spikes_reversed(self):
+        """Every other condition satisfied, so the state comes from this clause alone."""
+
+        frame, anchors = base_series(depths=(25.0, 10.0, 5.0), declines=(2, 2, 2), rallies=(20, 20, 20))
+        change = frame["Close"].diff()
+        frame.loc[change > 0, "Volume"] = 2_000_000.0
+        frame.loc[change < 0, "Volume"] = 1_000_000.0
+        # Volume dries into the pivot area so the pivot-volume gate is satisfied too.
+        final_high = frame.index.get_loc(anchor_dates(frame, anchors)[-3])
+        frame.iloc[final_high:-1, frame.columns.get_loc("Volume")] = 200_000.0
+        frame.iloc[-1, frame.columns.get_loc("Volume")] = 6_000_000.0
+        return build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+
+    def test_the_must_clause_rejects_and_the_should_clause_does_not(self) -> None:
+        result = evaluate_setup(self._spikes_reversed())
+
+        self.assertEqual(result["setup_state"], "wait")
+        self.assertNotIn("setup.upside_spikes_dwarf_contractions", result["failed"])
+        self.assertIn("setup.upside_spikes_dwarf_contractions", result["unsatisfied"])
+
+    def test_reversing_the_volume_totals_is_what_rejects(self) -> None:
+        frame, anchors = base_series(volume_profile="distribution")
+
+        result = evaluate_setup(
+            build_setup_evidence(frame, anchor_dates(frame, anchors), right_side_development="constructive")
+        )
+
+        self.assertEqual(result["setup_state"], "avoid")
+        self.assertEqual(result["failed"], ["setup.demand_supply_volume_asymmetry"])
+
+
 if __name__ == "__main__":
     unittest.main()

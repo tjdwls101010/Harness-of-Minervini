@@ -9975,6 +9975,63 @@
         ],
         "resolution": "mined from Minervini row 3; the passage names two failure kinds and gives a duration only as 'a small number of days', so the count of earlier attempts is reported and no deadline is registered"
       }
+    },
+    {
+      "id": "setup.upside_spikes_dwarf_contractions",
+      "title": "A few upside price spikes should be large enough to dwarf the contractions",
+      "kind": "default",
+      "layer": "canonical",
+      "attributed_to": "Minervini",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "vcp"
+      ],
+      "required_inputs": [
+        "base_daily_bars"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "A few of the upside price spikes across the base should be large enough to dwarf the contractions, which happen on relatively lower volume."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "The source says these spikes 'should' be large, not that they must be, so a base whose largest decline outruns its largest advance is reported for review rather than rejected."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the base's daily bars there are no spikes to compare."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260825/unit/test_setup_round_two.py"
+      ],
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "In other words, the volume must be much bigger on up days than on down days, and a few of the price spikes to the upside should be large, dwarfing the contractions that have occurred on relatively lower volume.",
+            "supports": "the second clause, stated with 'should' where the first is stated with 'must'"
+          }
+        ],
+        "resolution": "mined from Minervini row 3; the sentence carries two requirements at two strengths, and binding both to one hard gate let a clause the source hedged with 'should' reject a candidate. The volume clause stays the gate; this clause reports."
+      }
     }
   ]
 }
