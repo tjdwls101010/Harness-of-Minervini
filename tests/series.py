@@ -59,12 +59,13 @@ def base_series(
         high = high * 0.998
         closes += _leg(low, high, rally_sessions)
         anchors.append(Anchor(len(closes) - 1, "high", high))
+    # A pivot is a high the stock backed away from before clearing it. Without that pause the
+    # last anchor is just a point on a monotonic rise, and no segmentation can find it -- which
+    # is what a breakout is measured against. The pause is there whether or not the breakout has
+    # happened yet; a base waiting for one is sitting in it.
+    if pause_dip_pct:
+        closes += _leg(high, high * (1 - pause_dip_pct / 100), 3)
     if breakout:
-        # A pivot is a high the stock backed away from before clearing it. Without that pause
-        # the last anchor is just a point on a monotonic rise, and no segmentation can find
-        # it -- which is what a breakout is measured against.
-        if pause_dip_pct:
-            closes += _leg(high, high * (1 - pause_dip_pct / 100), 3)
         closes.append(base_high * 1.03)
 
     steps = [abs(later - earlier) for earlier, later in zip(closes, closes[1:])]

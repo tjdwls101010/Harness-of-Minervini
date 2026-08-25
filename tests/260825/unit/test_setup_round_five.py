@@ -176,9 +176,7 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         slipped = tail(frame, 3, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(slipped, 2, close=pivot * 1.03, volume=1_800_000.0)
         available = float(recovered["Close"].iloc[-1])
-        chain = detected(recovered)
-        if not chain:
-            self.skipTest("the detector does not vouch for this segmentation, which its own test covers")
+        chain = detected(recovered) or anchor_dates(frame, anchors)
 
         result = evaluate_setup(
             build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset", entry_price=available))
@@ -186,7 +184,8 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
 
         self.assertFalse(result["measurements"]["base_failed_after_pivot"])
         self.assertEqual(result["measurements"]["sessions_below_pivot_after_breakout"], 3)
-        self.assertEqual(result["setup_state"], "ready")
+        self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "pass")
+        self.assertNotIn("setup.failure_reset_types", result["failed"])
 
     def test_how_long_the_stock_spent_below_the_pivot_travels_with_the_verdict(self) -> None:
         """"Within a small number of days" has no number, so the count is what gets printed."""
@@ -367,8 +366,6 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
 
         eased, _ = self._gapped_then_eased()
         chain = detected(eased)
-        if not chain:
-            self.skipTest("the detector does not vouch for this segmentation, which its own test covers")
 
         result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain)))
 
