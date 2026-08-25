@@ -661,6 +661,22 @@
           "comparator": "<=",
           "exact": false,
           "quote_index": 2
+        },
+        "flag_maximum_weeks": {
+          "role": "gate",
+          "comparator": "<=",
+          "value": 6,
+          "unit": "weeks",
+          "exact": false,
+          "quote_index": 2
+        },
+        "flag_decline_ceiling_pct": {
+          "role": "gate",
+          "comparator": "<=",
+          "value": 25,
+          "unit": "percent",
+          "exact": false,
+          "quote_index": 2
         }
       },
       "failure": {
@@ -1089,11 +1105,12 @@
       },
       "thresholds": {
         "management_closes_below_average": {
-          "role": "reference",
+          "role": "gate",
           "value": 2,
           "unit": "count",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -1538,18 +1555,23 @@
         "summary": "A stage 2 advance should show at least a 25-30 percent prior rally off the 52-week low before being called underway"
       },
       "thresholds": {
-        "min_pct_rally_off_52wk_low_for_stage2_confirmation": {
-          "role": "reference",
+        "stage2_confirmation_rally_minimum_pct": {
+          "role": "gate",
+          "comparator": ">=",
           "value": 25,
           "unit": "percent",
           "exact": false,
           "quote_index": 0
         },
-        "min_pct_rally_off_52wk_low_for_stage2_confirmation_high": {
-          "role": "reference",
-          "value": 30,
+        "stage2_confirmation_rally_band_pct": {
+          "role": "band",
+          "range": [
+            25,
+            30
+          ],
           "unit": "percent",
           "exact": false,
+          "direction": "higher_is_better",
           "quote_index": 0
         }
       },
@@ -1935,18 +1957,15 @@
         "summary": "A stage 2 advance typically tops after three to five bases, with abrupt failures more common in later bases"
       },
       "thresholds": {
-        "typical_base_count_before_top_low": {
-          "role": "reference",
-          "value": 3,
+        "typical_base_count_before_top": {
+          "role": "band",
+          "range": [
+            3,
+            5
+          ],
           "unit": "count",
           "exact": false,
-          "quote_index": 0
-        },
-        "typical_base_count_before_top_high": {
-          "role": "reference",
-          "value": 5,
-          "unit": "count",
-          "exact": false,
+          "direction": "lower_is_better",
           "quote_index": 0
         }
       },
@@ -2016,20 +2035,6 @@
         "summary": "Base patterns within a stage 2 advance most commonly last 5 to 26 weeks"
       },
       "thresholds": {
-        "typical_base_duration_low": {
-          "role": "reference",
-          "value": 5,
-          "unit": "weeks",
-          "exact": true,
-          "quote_index": 0
-        },
-        "typical_base_duration_high": {
-          "role": "reference",
-          "value": 26,
-          "unit": "weeks",
-          "exact": true,
-          "quote_index": 0
-        },
         "outer_bound_short_term_move_duration_low": {
           "role": "reference",
           "value": 4,
@@ -2042,6 +2047,17 @@
           "value": 52,
           "unit": "weeks",
           "exact": false,
+          "quote_index": 0
+        },
+        "typical_base_duration_weeks": {
+          "role": "band",
+          "range": [
+            5,
+            26
+          ],
+          "unit": "weeks",
+          "exact": true,
+          "direction": "inside_is_better",
           "quote_index": 0
         }
       },
@@ -2102,18 +2118,15 @@
         "summary": "A constructive consolidation's price-action footprint can run from 3 to as many as 60 weeks"
       },
       "thresholds": {
-        "consolidation_footprint_duration_low": {
-          "role": "reference",
-          "value": 3,
+        "consolidation_footprint_duration_weeks": {
+          "role": "band",
+          "range": [
+            3,
+            60
+          ],
           "unit": "weeks",
           "exact": false,
-          "quote_index": 0
-        },
-        "consolidation_footprint_duration_high": {
-          "role": "reference",
-          "value": 60,
-          "unit": "weeks",
-          "exact": false,
+          "direction": "inside_is_better",
           "quote_index": 0
         }
       },
@@ -2243,7 +2256,7 @@
       },
       "thresholds": {
         "typical_max_years_since_ipo": {
-          "role": "reference",
+          "role": "marker",
           "value": 10,
           "unit": "years",
           "exact": false,
@@ -2590,25 +2603,28 @@
       },
       "thresholds": {
         "screen_rs_12m_min": {
-          "role": "reference",
+          "role": "gate",
           "value": 69,
           "unit": "percentile",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "comparator": ">"
         },
         "screen_pct_off_52wk_high_max": {
-          "role": "reference",
+          "role": "gate",
           "value": 25,
           "unit": "percent",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "comparator": "<="
         },
         "screen_pct_above_52wk_low_min": {
-          "role": "reference",
+          "role": "gate",
           "value": 30,
           "unit": "percent",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "comparator": ">"
         },
         "screen_sma200_rising_confirmation_window": {
           "role": "reference",
@@ -2995,14 +3011,14 @@
           "direction": "lower_is_better"
         },
         "severe_bear_correction_ceiling": {
-          "role": "reference",
+          "role": "marker",
           "value": 50,
           "unit": "percent",
           "exact": true,
           "quote_index": 0
         },
         "correction_failure_threshold": {
-          "role": "reference",
+          "role": "marker",
           "value": 50,
           "unit": "percent",
           "exact": true,
@@ -3554,15 +3570,16 @@
       },
       "thresholds": {
         "leading_industry_group_count": {
-          "role": "reference",
+          "role": "band",
           "unit": "count",
           "exact": false,
           "quote_index": 0,
-          "value": [
+          "note": "the source's compound wording '3 or 4 to as many as 8 to 10' flattened; the flattening is the transcriber's",
+          "range": [
             3,
             10
           ],
-          "note": "the source's compound wording '3 or 4 to as many as 8 to 10' flattened; the flattening is the transcriber's"
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -3896,15 +3913,16 @@
       },
       "thresholds": {
         "other_group_names_showing_rs_early": {
-          "role": "reference",
+          "role": "band",
           "unit": "count",
           "exact": false,
           "quote_index": 0,
-          "value": [
+          "note": "an observation of how many peers usually show strength, not a measurement",
+          "range": [
             1,
             2
           ],
-          "note": "an observation of how many peers usually show strength, not a measurement"
+          "direction": "higher_is_better"
         }
       },
       "failure": {
@@ -4046,11 +4064,12 @@
           "quote_index": 0
         },
         "cycle_end_confirmation_closes": {
-          "role": "reference",
+          "role": "gate",
           "value": 2,
           "unit": "closes",
           "exact": true,
-          "quote_index": 1
+          "quote_index": 1,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -4888,7 +4907,7 @@
       },
       "thresholds": {
         "code_33_quarters_required": {
-          "role": "reference",
+          "role": "marker",
           "value": 3,
           "unit": "quarters",
           "exact": true,
@@ -4962,7 +4981,7 @@
       },
       "thresholds": {
         "estimate_revision_significance_threshold_percent": {
-          "role": "reference",
+          "role": "marker",
           "value": 5,
           "unit": "percent",
           "exact": false,
@@ -5454,7 +5473,7 @@
       },
       "thresholds": {
         "turnaround_min_strong_quarters": {
-          "role": "reference",
+          "role": "marker",
           "value": 2,
           "unit": "quarters",
           "exact": true,
@@ -5522,7 +5541,7 @@
       },
       "thresholds": {
         "turnaround_recent_growth_percent": {
-          "role": "reference",
+          "role": "marker",
           "value": 100,
           "unit": "percent",
           "exact": false,
@@ -5684,7 +5703,7 @@
       },
       "thresholds": {
         "market_leader_min_earnings_growth_percent": {
-          "role": "reference",
+          "role": "marker",
           "value": 20,
           "unit": "percent",
           "exact": false,
@@ -6080,15 +6099,16 @@
       },
       "thresholds": {
         "growth_stock_pe_premium_vs_market_multiple": {
-          "role": "reference",
+          "role": "band",
           "unit": "multiple",
           "exact": false,
           "quote_index": 0,
-          "value": [
+          "note": "an open-ended 'can trade at' observation, not a bounded range",
+          "range": [
             3,
             4
           ],
-          "note": "an open-ended 'can trade at' observation, not a bounded range"
+          "direction": "inside_is_better"
         }
       },
       "failure": {
@@ -6394,7 +6414,7 @@
       },
       "thresholds": {
         "receivables_and_inventory_vs_sales_double_trouble_ratio": {
-          "role": "reference",
+          "role": "marker",
           "value": 2,
           "unit": "ratio",
           "exact": false,
@@ -6777,7 +6797,7 @@
       },
       "thresholds": {
         "rs_rating_min": {
-          "role": "reference",
+          "role": "marker",
           "value": 80,
           "unit": "percentile",
           "exact": true,
@@ -7043,11 +7063,12 @@
       },
       "thresholds": {
         "quiet_period_minimum": {
-          "role": "reference",
+          "role": "gate",
           "value": 1,
           "unit": "weeks",
           "exact": false,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
@@ -7366,7 +7387,7 @@
       },
       "thresholds": {
         "breakout_volume_increase_over_50d_avg_min": {
-          "role": "reference",
+          "role": "marker",
           "value": 50,
           "unit": "percent",
           "exact": false,
@@ -7433,11 +7454,12 @@
       },
       "thresholds": {
         "breakout_volume_increase_min": {
-          "role": "reference",
+          "role": "gate",
           "value": 25,
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         },
         "breakout_volume_increase_ideal": {
           "role": "band",
@@ -7451,7 +7473,7 @@
           "direction": "higher_is_better"
         },
         "base_length_min": {
-          "role": "reference",
+          "role": "marker",
           "value": 4,
           "unit": "weeks",
           "exact": false,
@@ -7526,11 +7548,12 @@
       },
       "thresholds": {
         "breakout_volume_increase_over_20d_avg_min": {
-          "role": "reference",
+          "role": "gate",
           "value": 50,
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">"
         }
       },
       "failure": {
@@ -7739,7 +7762,7 @@
           "direction": "lower_is_better"
         },
         "min_days_volume_follow_through": {
-          "role": "reference",
+          "role": "marker",
           "value": 3,
           "unit": "sessions",
           "exact": true,
@@ -9008,11 +9031,12 @@
       },
       "thresholds": {
         "eod_volume_increase_over_recent_history_min": {
-          "role": "reference",
+          "role": "gate",
           "value": 50,
           "unit": "percent",
           "exact": true,
-          "quote_index": 0
+          "quote_index": 0,
+          "comparator": ">="
         }
       },
       "failure": {
