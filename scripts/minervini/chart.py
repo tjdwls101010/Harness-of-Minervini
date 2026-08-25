@@ -21,10 +21,13 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
+from .setup_structure import bars_fingerprint
 from .swings import canonical_chain
 
 
-RENDERER_VERSION = "1.0.0"
+# 1.1.0 draws the detector's turning points and pivot, and records per timeframe which
+# of them the picture actually contains.
+RENDERER_VERSION = "1.1.0"
 _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _TICKER_PATTERN = re.compile(r"[A-Z][A-Z0-9.-]{0,9}")
 
@@ -47,7 +50,8 @@ def render_chart_artifacts(
     directory = Path(output_dir).expanduser().resolve()
     directory.mkdir(parents=True, exist_ok=True)
 
-    input_sha256 = _input_sha256(daily)
+    # The same digest the segmentation carries, so an approval can be traced to its picture.
+    input_sha256 = bars_fingerprint(daily)
     weekly = _weekly_bars(daily, as_of_date)
     # The chart is where a person turns the detector's proposal into an approval, so it draws
     # what they are being asked to approve. A chart without the anchors makes that approval a
@@ -57,8 +61,10 @@ def render_chart_artifacts(
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{timeframe}.png"
-        _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
-        artifacts.append({"timeframe": timeframe, "path": str(path), "bars": len(bars)})
+        drawn = _render_png(bars, path, symbol, timeframe, as_of_date, segmentation)
+        # What the picture contains, rather than what was available to put in it. A reader
+        # asked to approve a chain off this chart needs to know which anchors it actually shows.
+        artifacts.append({"timeframe": timeframe, "path": str(path), "bars": len(bars), "anchors_drawn": drawn})
 
     manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_manifest.json"
     manifest = {
@@ -118,18 +124,6 @@ def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
     return bars
 
 
-def _input_sha256(daily: pd.DataFrame) -> str:
-    records = [
-        {
-            "date": timestamp.date().isoformat(),
-            **{column: float(row[column]) for column in _REQUIRED_COLUMNS},
-        }
-        for timestamp, row in daily.iterrows()
-    ]
-    canonical = json.dumps({"columns": _REQUIRED_COLUMNS, "bars": records}, separators=(",", ":"), sort_keys=True, allow_nan=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     weekly = daily.resample("W-FRI").agg(
         {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
@@ -140,7 +134,7 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     return weekly
 
 
-def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> None:
+def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> list[str]:
     figure, (price_axis, volume_axis) = plt.subplots(
         2,
         1,
@@ -166,7 +160,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         for label, values in overlays.items():
             if values.notna().any():
                 price_axis.plot(bars.index, values, linewidth=0.9, label=label)
-        _draw_anchors(price_axis, bars, segmentation)
+        drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
         volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
         price_axis.set_title(f"{ticker} {timeframe.title()} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
@@ -178,36 +172,50 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         figure.autofmt_xdate(rotation=30, ha="right")
         _atomic_figure(figure, path)
+        return drawn
     finally:
         plt.close(figure)
 
 
-def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, Any] | None) -> None:
+def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, Any] | None, timeframe: str) -> list[str]:
     """Mark the turning points the detector will corroborate a declared chain against.
 
-    Only anchors that fall on a bar in this timeframe are drawn: a weekly chart has no session
-    to place a Tuesday low on, and inventing one would put a mark where nothing happened.
+    Each anchor goes on the bar that contains its session. On the daily chart that bar is the
+    session itself; on the weekly chart it is the week the session fell in, whose label is that
+    week's Friday. Requiring the anchor's own date to be a bar left almost every anchor off the
+    weekly chart, because a swing lands on a Friday about one time in five.
     """
     anchors = (segmentation or {}).get("anchors") or []
     if not anchors:
-        return
-    sessions = {stamp.date().isoformat(): stamp for stamp in bars.index}
-    drawn = False
+        return []
+    drawn: list[str] = []
     for anchor in anchors:
-        stamp = sessions.get(str(anchor["date"]))
+        stamp = _containing_bar(bars.index, str(anchor["date"]), timeframe)
         if stamp is None:
             continue
-        price = float(anchor["price"])
         price_axis.plot(
-            [stamp], [price],
+            [stamp], [float(anchor["price"])],
             marker="v" if anchor["kind"] == "high" else "^",
             color="#0b5cad", markersize=7, linestyle="none",
             label="detected swing" if not drawn else None,
         )
-        drawn = True
-    pivot = anchors[-1]
-    if str(pivot["date"]) in sessions:
-        price_axis.axhline(float(pivot["price"]), color="#0b5cad", linewidth=0.8, linestyle="--", alpha=0.7, label="pivot")
+        drawn.append(str(anchor["date"]))
+    if drawn:
+        price_axis.axhline(float(anchors[-1]["price"]), color="#0b5cad", linewidth=0.8, linestyle="--", alpha=0.7, label="pivot")
+    return drawn
+
+
+def _containing_bar(index: pd.DatetimeIndex, day: str, timeframe: str) -> pd.Timestamp | None:
+    """The bar a session belongs to, or nothing when this chart does not reach it."""
+
+    stamp = pd.Timestamp(day)
+    position = int(index.searchsorted(stamp))
+    if position >= len(index):
+        return None
+    label = index[position]
+    if timeframe == "daily" and label != stamp:
+        return None
+    return label
 
 
 def _atomic_figure(figure: plt.Figure, path: Path) -> None:

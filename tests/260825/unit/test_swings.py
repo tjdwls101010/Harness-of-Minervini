@@ -106,6 +106,23 @@ class CanonicalChainTests(unittest.TestCase):
         self.assertEqual(chain["anchors"], [])
         self.assertTrue(chain["sensitivity"])
 
+    def test_the_bars_it_was_cut_from_travel_with_the_answer(self) -> None:
+        """Which of two things moved, when a declaration that used to match stops matching.
+
+        The setup capability re-runs the detector and refuses a chain it did not produce, so a
+        mismatch is loud. What it does not say is whether the rules changed or the data did.
+        Same fingerprint and a mismatch means the rules moved; a different fingerprint means
+        the provider handed back different bars.
+        """
+
+        frame, _ = base_series()
+
+        chain = canonical_chain(frame)
+        moved = canonical_chain(frame.assign(Close=frame["Close"] * 1.01))
+
+        self.assertEqual(len(chain["bars_fingerprint"]), 64)
+        self.assertNotEqual(chain["bars_fingerprint"], moved["bars_fingerprint"])
+
     def test_the_parameters_it_used_travel_with_the_answer(self) -> None:
         frame, _ = base_series()
 

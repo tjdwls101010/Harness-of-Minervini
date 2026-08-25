@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date
+import hashlib
+import json
 import math
 from typing import Any
 
@@ -53,6 +55,27 @@ def completed_bars(history: Any) -> pd.DataFrame | None:
         index = index.tz_convert(None) if index.tz is not None else index
     bars.index = index.normalize()
     return bars if bars.index.is_monotonic_increasing else bars.sort_index()
+
+
+def bars_fingerprint(history: Any) -> str | None:
+    """One digest of the completed bars, so three surfaces can name the same input.
+
+    A chain proposed by `ticker.swings`, the chart a person approved it from, and the setup
+    that re-cut it all run over bars the provider could have revised in between. Without this
+    a declaration that used to match and now does not is indistinguishable from a rule change:
+    same fingerprint means the rules moved, a different one means the data did.
+    """
+    bars = completed_bars(history)
+    if bars is None:
+        return None
+    records = [
+        {"date": stamp.date().isoformat(), **{column: float(row[column]) for column in _REQUIRED_COLUMNS}}
+        for stamp, row in bars.iterrows()
+    ]
+    canonical = json.dumps(
+        {"columns": _REQUIRED_COLUMNS, "bars": records}, separators=(",", ":"), sort_keys=True, allow_nan=False
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _session(bars: pd.DataFrame, value: Any) -> pd.Timestamp | None:

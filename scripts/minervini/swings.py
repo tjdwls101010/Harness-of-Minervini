@@ -26,7 +26,7 @@ from typing import Any
 import pandas as pd
 
 from . import doctrine
-from .setup_structure import completed_bars
+from .setup_structure import bars_fingerprint, completed_bars
 
 
 _CONVENTION = "setup.swing_segmentation_convention"
@@ -207,6 +207,7 @@ def canonical_chain(history: Any) -> dict[str, Any]:
         "ambiguous_sessions_in_base": span,
         "parameters": parameters,
         "sessions": sessions,
+        "bars_fingerprint": bars_fingerprint(source),
     }
 
 
