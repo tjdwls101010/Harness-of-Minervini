@@ -10,6 +10,7 @@ from typing import Any
 from .capabilities import CAPABILITIES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
+from .setup import tactic_conditions
 from .providers import redact
 
 
@@ -251,6 +252,13 @@ def build_parser() -> JsonArgumentParser:
     return parser
 
 
+# What a person can honestly say about a condition they went to the chart to read: they saw it,
+# they saw it was not there, or they could not tell. Three words rather than free text, because
+# the difference between the first two is the whole of what the reducer needs and prose cannot
+# carry it.
+_TACTIC_READINGS = {"observed": "pass", "absent": "fail", "unclear": "needs_chart"}
+
+
 def _operation(args: argparse.Namespace) -> str:
     if args.command in {"doctrine", "market", "ticker", "watchlist"}:
         return f"{args.command}.{getattr(args, args.command + '_command')}"
@@ -273,14 +281,40 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
         entry: dict[str, Any] = {}
         if confirmation_debt:
             entry["confirmation_debt"] = confirmation_debt
+        conditions = tactic_conditions(request.get("entry_kind"))
         for declaration in tactic_evidence:
-            name, separator, reading = str(declaration).partition("=")
-            if not separator or not name.strip() or not reading.strip():
+            name, separator, rest = str(declaration).partition("=")
+            verdict, colon, reading = rest.partition(":")
+            name, verdict, reading = name.strip(), verdict.strip().lower(), reading.strip()
+            if not separator or not colon or not name or not reading:
                 raise RequestError(
-                    "tactic evidence is written condition=what you read, as the tactic's claim names the condition",
+                    "tactic evidence is written condition=observed|absent|unclear:what you read",
                     "tactic_evidence",
                 )
-            entry[name.strip()] = {"state": "pass", "condition": reading.strip()}
+            # Dropped silently, a misspelled condition leaves the caller looking at a gap they
+            # believe they filled. The declared tactic's claim knows its own names, so say them.
+            if conditions is not None and name not in conditions:
+                raise RequestError(
+                    f"{name} is not a condition of this tactic; it requires {', '.join(sorted(conditions))}",
+                    "tactic_evidence",
+                )
+            # Two answers to one condition is a contradiction, not a correction. Silently keeping
+            # the last one picks a winner the caller never chose.
+            if name in entry:
+                raise RequestError(
+                    f"{name} was declared twice; a condition takes one reading",
+                    "tactic_evidence",
+                )
+            # The grade is asked for rather than inferred. Stamping every line as observed made
+            # "the stock did not gap below it" arrive as evidence that it did, and no amount of
+            # reading the prose afterwards recovers what the caller meant.
+            state = _TACTIC_READINGS.get(verdict)
+            if state is None:
+                raise RequestError(
+                    f"{name} needs one of observed, absent or unclear before the colon",
+                    "tactic_evidence",
+                )
+            entry[name] = {"state": state, "condition": reading}
         if later_pivot_price is not None or later_pivot_condition is not None:
             entry["minervini_later_pivot"] = {"price": later_pivot_price, "condition": later_pivot_condition}
         if invalidation_price is not None or invalidation_condition is not None:

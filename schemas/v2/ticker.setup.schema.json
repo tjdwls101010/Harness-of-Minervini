@@ -149,7 +149,7 @@
         "type": "string[]"
       },
       "tactic_evidence": {
-        "description": "Repeatable condition=what you read, one per condition the declared tactic requires; the tactic's registered claim names them and describe reports each gap under its own name.",
+        "description": "Repeatable condition=observed|absent|unclear:what you read, one per condition the declared tactic requires. Observed satisfies it, absent counts against the tactic, unclear leaves it owed; the tactic's registered claim names the conditions and a name it does not have is refused.",
         "required": false,
         "type": "string[]"
       },

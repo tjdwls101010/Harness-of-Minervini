@@ -250,7 +250,7 @@ CAPABILITIES = {
                     "invalidation_condition": _field("string", "Observable invalidation condition; pair with invalidation_price."),
                     "tactic_opt_in": _field("boolean", "Explicitly authorize the [TL-EARLY] tactic.", default=False),
                     "confirmation_debt": _field("string[]", "Repeatable unpaid confirmation required by a TL early entry."),
-                    "tactic_evidence": _field("string[]", "Repeatable condition=what you read, one per condition the declared tactic requires; the tactic's registered claim names them and describe reports each gap under its own name."),
+                    "tactic_evidence": _field("string[]", "Repeatable condition=observed|absent|unclear:what you read, one per condition the declared tactic requires. Observed satisfies it, absent counts against the tactic, unclear leaves it owed; the tactic's registered claim names the conditions and a name it does not have is refused."),
                     "later_pivot_price": _field("number", "Later Minervini pivot price required by a TL early entry."),
                     "later_pivot_condition": _field("string", "Later pivot confirmation condition required by a TL early entry."),
                 },

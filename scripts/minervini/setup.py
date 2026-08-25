@@ -101,12 +101,35 @@ def _tactic_declarations(
             owed.append(condition)
             continue
         declared[condition] = answer
-        state = _state(answer, default="pass") if isinstance(answer, (Mapping, bool, str)) else "pass"
+        stated = answer.get("state", answer.get("status")) if isinstance(answer, Mapping) else (
+            answer if isinstance(answer, (bool, str)) else None
+        )
+        if stated is None:
+            # A declaration with no state word is the caller saying what they read, and it stands.
+            continue
+        # One that carries a state word goes by that word, and by nothing else. Reading an
+        # ungradeable word as the good outcome is what let "state: not observed" arrive as a pass:
+        # the default was satisfaction, so a denial nobody could parse became one.
+        state = _state(stated, default="")
         if state in _FAIL or state in _WAIT:
             denied.append(condition)
-        elif state in _MISSING:
+        elif state not in _PASS:
             owed.append(condition)
     return owed, denied, declared
+
+
+def tactic_conditions(tactic: Any) -> frozenset[str] | None:
+    """The condition names this tactic requires, or None if the value names no tactic.
+
+    Public because the request boundary needs them: a caller declaring evidence for a condition
+    the tactic does not have has made a typo, and the only place that can say so is the place that
+    knows the names.
+    """
+
+    canonical = _canonical_kind(tactic)
+    if canonical not in _TACTICS:
+        return None
+    return frozenset(name.rsplit(".", 1)[1] for name in _tactic_conditions(canonical))
 
 
 def _tactic_conditions(tactic: str) -> tuple[str, ...]:
@@ -341,4 +364,4 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["evaluate_setup"]
+__all__ = ["evaluate_setup", "tactic_conditions"]

@@ -202,3 +202,21 @@ class EveryTacticCanActuallyBeCompleted(unittest.TestCase):
         for tactic, answers in self.ANSWERS.items():
             with self.subTest(tactic=tactic):
                 self.assertEqual(verdict(tactic, **answers)["setup_state"], "ready")
+
+
+class AWordTheReducerCannotReadIsNotAPass(unittest.TestCase):
+    def test_an_unrecognised_state_leaves_the_condition_owed(self) -> None:
+        """Defaulting an unknown word to satisfied is how a denial becomes a pass.
+
+        A declaration carrying no state at all is the caller saying what they saw, and it stands.
+        A declaration that carries a state word this reducer does not know is a reading nobody
+        here can grade, and grading it as the good outcome is the one answer it must not get.
+        """
+        result = verdict(
+            "oops_reversal",
+            prior_day_low={"price": 98.0, "condition": "yesterday's low"},
+            gap_below_prior_low={"state": "not observed", "condition": "no gap"},
+        )
+
+        self.assertNotEqual(result["setup_state"], "ready")
+        self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
