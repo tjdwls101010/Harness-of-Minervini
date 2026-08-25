@@ -235,5 +235,23 @@ class ExtendedBreakoutTests(unittest.TestCase):
         self.assertLess(measurements["pivot_extension_at_breakout_pct"], 5.0)
 
 
+
+
+class ContractMatchesImplementationTests(unittest.TestCase):
+    def test_the_published_limitations_describe_the_breakout_rule_the_code_uses(self) -> None:
+        """The contract said one thing while the code did another, for one whole round.
+
+        `--help` and `describe` both read these strings, so a stale limitation is not an
+        internal note: it is the interface telling a caller something false.
+        """
+
+        from scripts.minervini.capabilities import CAPABILITIES
+
+        limitations = " ".join(CAPABILITIES["ticker.setup"].limitations)
+
+        self.assertIn("first completed close above the pivot", limitations)
+        self.assertNotIn("run price is currently in", limitations)
+
+
 if __name__ == "__main__":
     unittest.main()
