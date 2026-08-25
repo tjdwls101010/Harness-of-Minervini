@@ -105,26 +105,26 @@ class MeasuresTheStructureTheSourceDescribes(unittest.TestCase):
         self.assertIsNotNone(full["advance_volume_ratio"])
         self.assertIsNone(clipped["advance_volume_ratio"])
 
-    def test_a_reverse_split_advances_the_tape_and_nothing_else(self):
-        """The advance is read three ways because the raw tape cannot tell a move from a split.
+    def test_a_reverse_split_is_named_rather_than_measured_away(self):
+        """A one-for-two reverse split doubles every printed price and moves nobody's money.
 
-        A one-for-two reverse split doubles every printed price overnight. Extremes and raw
-        closes both report the hundred percent the first criterion asks for, on a stock whose
-        holders gained nothing. The provider does not adjust for corporate actions -- its own
-        coverage says so -- so the adjusted closes are the only reading that knows.
+        Both price readings report the hundred percent the first criterion asks for, because both
+        read the tape and the tape really did double. The provider does not adjust for corporate
+        actions -- its own coverage says so -- so the event is the only thing that knows, and the
+        answer is that the advance cannot be measured here rather than that it happened.
         """
         measured = measure_power_play(reverse_split_series(), SPEC)
 
         self.assertAlmostEqual(measured["advance_pct_closes"], 100.0, places=6)
-        self.assertAlmostEqual(measured["advance_pct_adjusted"], 0.0, places=6)
+        self.assertEqual(measured["corporate_action_sessions"], ["2026-02-27"])
 
-    def test_a_history_without_adjusted_closes_has_no_adjusted_reading(self):
-        """Absent, not zero. A missing correction is a gap, and a gap is not a measurement."""
+    def test_a_history_without_the_event_column_has_not_said_there_was_no_split(self):
+        """Absence of evidence. The column being missing is a gap, never a quiet "none"."""
 
         measured = measure_power_play(power_play_series(), SPEC)
 
-        self.assertIsNone(measured["advance_pct_adjusted"])
-        self.assertIsNotNone(measured["advance_pct_closes"])
+        self.assertEqual(measured["corporate_action_evidence"], "missing")
+        self.assertIsNone(measured["corporate_action_sessions"])
 
     def test_an_equal_high_from_before_the_structure_is_not_this_flag_s_start(self):
         """Reading the peak from the first equal high anywhere is the mirror of reading the last.

@@ -133,7 +133,11 @@ def completed_daily_bars(
     frame = fetch_with_one_retry(
         "yfinance",
         "daily_bars",
-        lambda: ticker.history(start=start, end=end, interval="1d", auto_adjust=False, actions=False),
+        # Actions on, adjustment off: the prices stay the ones the tape printed, and the split
+        # events arrive beside them. Without the events a reverse split is indistinguishable from
+        # a hundred percent overnight advance, which is the exact size the Power Play criteria
+        # ask about, and the frame alone cannot tell a caller that it does not know.
+        lambda: ticker.history(start=start, end=end, interval="1d", auto_adjust=False, actions=True),
     )
     if not isinstance(frame, pd.DataFrame):
         raise ProviderUnavailable("yfinance", "invalid_daily_bar_response", operation="daily_bars")
@@ -174,6 +178,7 @@ def completed_daily_bars(
                 "requested_start": start,
                 "requested_end_exclusive": end,
                 "adjusted": False,
+                "corporate_actions": True,
                 "requested_session": clock.date.isoformat(),
                 "last_completed_bar": last_completed_bar.isoformat(),
             },

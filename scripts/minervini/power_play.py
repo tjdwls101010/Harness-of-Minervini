@@ -48,6 +48,15 @@ def _change(bars: pd.DataFrame, column: str, start: int, end: int) -> float | No
     return (float(bars.iloc[end][column]) - first) / first * 100 if first > 0 else None
 
 
+def _corporate_actions(bars: pd.DataFrame, start: int, end: int) -> list[str] | None:
+    """The dated split events inside a span, or nothing when the input could not say."""
+
+    if _CORPORATE_ACTION_COLUMN not in bars:
+        return None
+    span = bars.iloc[start:end + 1]
+    return [stamp.date().isoformat() for stamp in span.index[span[_CORPORATE_ACTION_COLUMN] > 0]]
+
+
 def _empty(reason: str | None) -> dict[str, Any]:
     return {
         "peak_date": None,
@@ -56,7 +65,8 @@ def _empty(reason: str | None) -> dict[str, Any]:
         "advance_low_date": None,
         "advance_pct": None,
         "advance_pct_closes": None,
-        "advance_pct_adjusted": None,
+        "corporate_action_evidence": None,
+        "corporate_action_sessions": None,
         "advance_sessions": None,
         "advance_weeks": None,
         "launch_volume_ratio": None,
@@ -145,7 +155,17 @@ def measure_power_play(history: Any, spec: Mapping[str, Any]) -> dict[str, Any]:
         # ticker whose advance actually reached a hundred percent it was 101.8 against 96.4.
         "advance_pct": (peak_high - advance_low) / advance_low * 100 if advance_low > 0 else None,
         "advance_pct_closes": _change(bars, "Close", launch - 1, peak),
-        "advance_pct_adjusted": _change(bars, _CORPORATE_ACTION_COLUMN, launch - 1, peak),
+        # Whether a corporate action sits anywhere the measurements read, and -- separately --
+        # whether the input was in a position to say. A history that does not carry the event
+        # column has not reported "no split"; it has reported nothing, and folding those together
+        # is how a reverse split that moved nobody's money reads as a hundred percent advance.
+        #
+        # The span starts at the volume baseline rather than at the launch, because a split before
+        # the advance leaves the baseline in pre-split share counts while the advance is in
+        # post-split ones: forty quiet sessions at 100K against a launch at 1M is an eight-fold
+        # expansion that never happened.
+        "corporate_action_evidence": "present" if _CORPORATE_ACTION_COLUMN in bars else "missing",
+        "corporate_action_sessions": _corporate_actions(bars, max(0, launch - advance_window), peak),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / _SESSIONS_PER_WEEK,
         # Three readings of the volume clause, because "commences on huge volume" asks about a

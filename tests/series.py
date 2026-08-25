@@ -557,7 +557,7 @@ def power_play_series(
 
 
 def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> pd.DataFrame:
-    """A flat stock through a 1-for-`factor` reverse split, carrying the adjusted closes.
+    """A flat stock through a 1-for-`factor` reverse split, carrying the split event.
 
     Nothing happens to the company or to anyone's money. The raw tape doubles overnight and
     then goes sideways, which is the shape of every number the first Power Play criterion
@@ -577,8 +577,11 @@ def reverse_split_series(*, factor: float = 2.0, start: str = "2026-01-02") -> p
     # One shakeout inside the flat stretch, so the advance has a single lowest session to start
     # from rather than forty tied ones.
     frame.iloc[len(before) - 5, frame.columns.get_loc("Low")] = 4.9
-    frame["Adj Close"] = [price * factor for price in before] + after
-    return frame[["Open", "High", "Low", "Close", "Volume", "Adj Close"]]
+    # The event column the provider fills: zero on every ordinary session, the ratio on the day
+    # it happened. A one-for-two reverse split is 0.5.
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame.iloc[len(before), frame.columns.get_loc("Stock Splits")] = 1 / factor
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits"]]
 
 
 def wide_launch_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:

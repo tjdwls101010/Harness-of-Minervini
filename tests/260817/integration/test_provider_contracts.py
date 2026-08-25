@@ -77,7 +77,11 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(ticker.calls[0]["end"], "2026-08-15")
         self.assertEqual(ticker.calls[0]["start"], "2023-08-10")
         self.assertFalse(ticker.calls[0]["auto_adjust"])
-        self.assertFalse(ticker.calls[0]["actions"])
+        # Actions on, adjustment still off. The prices stay the ones the tape printed, and the
+        # split events come with them: without the events a one-for-two reverse split is
+        # indistinguishable from a hundred percent overnight advance.
+        self.assertTrue(ticker.calls[0]["actions"])
+        self.assertIs(snapshot.meta.coverage["corporate_actions"], True)
         self.assertEqual(snapshot.meta.as_of, date(2026, 8, 14))
         self.assertIsInstance(snapshot.meta, SnapshotMeta)
 
