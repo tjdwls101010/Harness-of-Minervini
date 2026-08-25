@@ -21,6 +21,7 @@ import json
 import math
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 
@@ -57,7 +58,7 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
-    if bars.isna().any().any():
+    if bars.isna().any().any() or not bool(np.isfinite(bars.to_numpy(dtype=float)).all()):
         return None, "history_contains_non_numeric_values"
     prices = [column for column in _REQUIRED_COLUMNS if column != "Volume"]
     # A halted session really does trade nothing, so zero volume is data rather than a fault. A

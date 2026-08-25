@@ -21,7 +21,7 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
-from .setup_structure import bars_fingerprint
+from .setup_structure import bars_fingerprint, read_bars
 from .swings import canonical_chain
 
 
@@ -124,6 +124,13 @@ def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
         raise ValueError("daily_ohlcv contains invalid OHLCV ranges")
     if ((bars["Open"] < bars["Low"]) | (bars["Open"] > bars["High"]) | (bars["Close"] < bars["Low"]) | (bars["Close"] > bars["High"])).any():
         raise ValueError("daily_ohlcv open and close must fall inside each high-low range")
+    # The measuring boundary's own definition of a usable bar, applied here too. Two definitions
+    # let a chart render successfully off bars the setup refuses -- all-zero prices, or two
+    # stamps on one date -- and the artifact then carried a null digest, which is the one thing
+    # a setup approval has to name. A picture nothing can be approved from is not a success.
+    _, rejection = read_bars(bars)
+    if rejection is not None:
+        raise ValueError(f"daily_ohlcv is not usable price history: {rejection}")
     return bars
 
 

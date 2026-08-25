@@ -10,9 +10,12 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+
+import pandas as pd
 from pathlib import Path
 
 from scripts.minervini.chart import _draw_anchors, render_chart_artifacts
+from scripts.minervini.setup_structure import bars_fingerprint
 from scripts.minervini.swings import canonical_chain
 from tests.series import anchor_dates, base_series, unstable_series
 
@@ -166,6 +169,49 @@ class ThePivotLineFollowsThePivotTests(unittest.TestCase):
 
         self.assertTrue(pivot_drawn)
         self.assertEqual(axis.levels, [float(segmentation["anchors"][-1]["price"])])
+
+
+class OneIdeaOfAUsableBarTests(unittest.TestCase):
+    """A picture nothing can be approved from is not a success.
+
+    The chart validated bars its own way and the setup validated them another, so a render could
+    succeed off bars the measuring side refuses -- and the artifact then carried a null digest,
+    which is the one thing a setup approval has to name. The envelope still said ok and pointed
+    at ticker.setup, which is the absence of provenance read as success.
+    """
+
+    def _refused(self, frame) -> str:
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError) as raised:
+                render_chart_artifacts(frame, ticker="TEST", as_of=frame.index[-1].date(), output_dir=directory)
+        return str(raised.exception)
+
+    def test_a_session_with_no_price_at_all_is_refused_by_both(self) -> None:
+        frame, _ = base_series()
+        frame.iloc[5, :4] = 0.0
+
+        self.assertIsNone(bars_fingerprint(frame))
+        self.assertIn("history_contains_non_positive_values", self._refused(frame))
+
+    def test_two_stamps_on_one_date_are_refused_by_both(self) -> None:
+        frame, _ = base_series()
+        frame = frame.iloc[:5].copy()
+        frame.index = [
+            pd.Timestamp("2026-01-02 09:30"), pd.Timestamp("2026-01-02 16:00"),
+            pd.Timestamp("2026-01-05 16:00"), pd.Timestamp("2026-01-06 16:00"), pd.Timestamp("2026-01-07 16:00"),
+        ]
+
+        self.assertIsNone(bars_fingerprint(frame))
+        self.assertIn("history_repeats_a_session", self._refused(frame))
+
+    def test_an_infinite_price_leaves_as_unavailable_rather_than_an_exception(self) -> None:
+        """`read_bars` passed it and the digest raised on it, which is an internal failure where
+        the envelope should have carried typed unavailability."""
+
+        frame, _ = base_series()
+        frame.iloc[7, frame.columns.get_loc("High")] = float("inf")
+
+        self.assertIsNone(bars_fingerprint(frame))
 
 
 if __name__ == "__main__":
