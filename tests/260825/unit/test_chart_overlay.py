@@ -203,15 +203,7 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         self.assertIsNone(bars_fingerprint(frame))
         self.assertIn("history_repeats_a_session", self._refused(frame))
 
-    def test_the_two_surfaces_never_disagree_about_a_frame(self) -> None:
-        """The invariant, rather than one rule at a time.
-
-        What went wrong was not any single check but that there were two lists of them. Pinning
-        the rules one by one would let the lists drift apart again between the pinned ones.
-        """
-
-        base, _ = base_series()
-
+    def _mutations(self):
         def zero_prices(frame): frame.iloc[5, 0:4] = 0.0
         def negative_close(frame): frame.iloc[9, frame.columns.get_loc("Close")] = -1.0
         def negative_volume(frame): frame.iloc[9, frame.columns.get_loc("Volume")] = -5.0
@@ -222,9 +214,16 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
         def repeated_session(frame): frame.index = [frame.index[0], *frame.index[1:-1], frame.index[0]]
         def missing_column(frame): frame.drop(columns=["Volume"], inplace=True)
         def non_date_index(frame): frame.index = ["not-a-date", *frame.index[1:]]
-
         def missing_stamp(frame): frame.index = [pd.NaT, *frame.index[1:]]
         def positional_index(frame): frame.index = pd.RangeIndex(len(frame))
+        def two_sessions_one_zone_day(frame):
+            frame.index = pd.DatetimeIndex(
+                [pd.Timestamp("2026-01-02 00:30"), pd.Timestamp("2026-01-02 23:30"), *frame.index[2:]]
+            ).tz_localize("America/New_York")
+
+        def repeated_column(frame):
+            frame["spare"] = frame["Close"]
+            frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
 
         def boolean_prices(frame):
             for column in ("Open", "High", "Low", "Close"):
@@ -234,12 +233,15 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             frame["Volume"] = frame["Volume"].astype(object)
             frame.iloc[3, frame.columns.get_loc("Volume")] = True
 
-        def positional_index_as_objects(frame):
-            frame.index = pd.Index([label.value for label in frame.index], dtype=object)
-
         def numpy_boolean(frame):
             frame["Volume"] = frame["Volume"].astype(object)
             frame.iloc[3, frame.columns.get_loc("Volume")] = np.bool_(True)
+
+        def positional_index_as_objects(frame):
+            frame.index = pd.Index([label.value for label in frame.index], dtype=object)
+
+        def numpy_positional_index(frame):
+            frame.index = pd.Index([np.int64(label.value) for label in frame.index], dtype=object)
 
         def price_word(frame):
             frame["Close"] = frame["Close"].astype(object)
@@ -253,43 +255,75 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
             frame["Close"] = frame["Close"].astype(object)
             frame.iloc[8, frame.columns.get_loc("Close")] = pd.Timestamp("2026-01-01")
 
-        def repeated_column(frame):
-            frame["spare"] = frame["Close"]
-            frame.columns = ["Open", "High", "Low", "Close", "Volume", "Close"]
+        def complex_prices(frame):
+            for column in ("Open", "High", "Low", "Close"):
+                frame[column] = [complex(value, 3.0) for value in frame[column]]
+
+        def datetime_prices(frame):
+            for column in ("Open", "High", "Low", "Close"):
+                frame[column] = pd.to_datetime("2026-01-01")
+
+        # Every one of these has to be refused, and by the reason named. Checking only that the
+        # two surfaces agree passes when both are wrong together, which is how a complex-valued
+        # history was measured -- and fingerprinted identically to a real one.
+        return {
+            "zero prices": (zero_prices, "history_contains_non_positive_values"),
+            "negative close": (negative_close, "history_contains_non_positive_values"),
+            "negative volume": (negative_volume, "history_contains_non_positive_values"),
+            "high below low": (high_below_low, "history_contains_invalid_bar_ranges"),
+            "open above high": (open_above_high, "history_contains_invalid_bar_ranges"),
+            "nan close": (nan_close, "history_contains_non_numeric_values"),
+            "infinite high": (infinite_high, "history_contains_non_numeric_values"),
+            "boolean prices": (boolean_prices, "history_contains_non_numeric_values"),
+            "boolean in object column": (boolean_in_an_object_column, "history_contains_non_numeric_values"),
+            "numpy boolean": (numpy_boolean, "history_contains_non_numeric_values"),
+            "price word": (price_word, "history_contains_non_numeric_values"),
+            "missing value": (missing_value, "history_contains_non_numeric_values"),
+            "timestamp as price": (timestamp_as_price, "history_contains_non_numeric_values"),
+            "complex prices": (complex_prices, "history_contains_non_numeric_values"),
+            "datetime prices": (datetime_prices, "history_contains_non_numeric_values"),
+            "repeated session": (repeated_session, "history_repeats_a_session"),
+            "two sessions one zone day": (two_sessions_one_zone_day, "history_repeats_a_session"),
+            "missing column": (missing_column, "history_missing_required_columns"),
+            "repeated column": (repeated_column, "history_repeats_a_column"),
+            "non-date index": (non_date_index, "history_index_is_not_dates"),
+            "missing stamp": (missing_stamp, "history_index_is_not_dates"),
+            "positional index": (positional_index, "history_index_is_not_dates"),
+            "positional index as objects": (positional_index_as_objects, "history_index_is_not_dates"),
+            "numpy positional index": (numpy_positional_index, "history_index_is_not_dates"),
+        }
+
+    def test_every_unusable_frame_is_refused_by_the_reason_it_earned(self) -> None:
+        base, _ = base_series()
+
+        for label, (mutate, reason) in self._mutations().items():
+            with self.subTest(frame=label):
+                frame = base.copy()
+                mutate(frame)
+                self.assertEqual(read_bars(frame)[1], reason)
+
+    def test_the_two_surfaces_never_disagree_about_a_frame(self) -> None:
+        """The invariant, rather than one rule at a time.
+
+        What went wrong was not any single check but that there were two lists of them. Pinning
+        the rules one by one would let the lists drift apart again between the pinned ones.
+        """
+
+        base, _ = base_series()
 
         def late_evening_zone(frame):
             # Two exchange dates, one of which becomes the next UTC day if the zone is converted
-            # rather than dropped. Everything above is naive, which is how a whole timezone seam
-            # sat between the two surfaces with the matrix reporting agreement.
+            # rather than dropped. A naive-only matrix reported agreement across a whole seam.
             frame.index = pd.DatetimeIndex(
                 [pd.Timestamp("2026-01-01 23:30"), pd.Timestamp("2026-01-02 16:00"), *frame.index[2:]]
             ).tz_localize("America/New_York")
 
-        def two_sessions_one_zone_day(frame):
-            frame.index = pd.DatetimeIndex(
-                [pd.Timestamp("2026-01-02 00:30"), pd.Timestamp("2026-01-02 23:30"), *frame.index[2:]]
-            ).tz_localize("America/New_York")
-
-        mutations = [
-            ("untouched", lambda frame: None), ("zero prices", zero_prices), ("negative close", negative_close),
-            ("negative volume", negative_volume), ("high below low", high_below_low),
-            ("open above high", open_above_high), ("nan close", nan_close), ("infinite high", infinite_high),
-            ("repeated session", repeated_session), ("missing column", missing_column),
-            ("non-date index", non_date_index), ("repeated column", repeated_column),
-            ("missing stamp", missing_stamp), ("positional index", positional_index),
-            ("boolean prices", boolean_prices), ("boolean in object column", boolean_in_an_object_column),
-            ("positional index as objects", positional_index_as_objects),
-            ("numpy boolean", numpy_boolean), ("price word", price_word),
-            ("missing value", missing_value), ("timestamp as price", timestamp_as_price),
-            ("late evening zone", late_evening_zone),
-            ("two sessions one zone day", two_sessions_one_zone_day),
-        ]
+        mutations = [("untouched", lambda frame: None), ("late evening zone", late_evening_zone)]
+        mutations += [(label, mutate) for label, (mutate, _) in self._mutations().items()]
         for label, mutate in mutations:
             with self.subTest(frame=label):
                 frame = base.copy()
                 mutate(frame)
-                # Both sides have to answer, rather than one of them raising something the
-                # envelope has no word for.
                 accepted = read_bars(frame)[1] is None
                 try:
                     with tempfile.TemporaryDirectory() as directory:
@@ -382,6 +416,21 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
 
         self.assertIsNone(rejection)
         self.assertEqual([str(bars.index[0].date()), str(bars.index[1].date())], ["2026-01-01", "2026-01-02"])
+
+    def test_a_complex_price_cannot_fingerprint_as_the_real_one(self) -> None:
+        """Discarding an imaginary part produced the same sixty-four characters.
+
+        The digest is what a setup approval names, so two different histories agreeing on it is
+        a person approving a chart drawn from bars they never saw.
+        """
+
+        real, _ = base_series()
+        imagined = real.copy()
+        for column in ("Open", "High", "Low", "Close"):
+            imagined[column] = [complex(value, 3.0) for value in imagined[column]]
+
+        self.assertIsNotNone(bars_fingerprint(real))
+        self.assertIsNone(bars_fingerprint(imagined))
 
     def test_an_infinite_price_leaves_as_unavailable_rather_than_an_exception(self) -> None:
         """`read_bars` passed it and the digest raised on it, which is an internal failure where

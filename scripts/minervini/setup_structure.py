@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date
 import hashlib
+import numbers
 import json
 import math
 from typing import Any
@@ -64,11 +65,13 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     if history.empty:
         return None, "history_has_no_completed_bars"
     bars = history.loc[:, _REQUIRED_COLUMNS].copy()
-    # Booleans survive `to_numeric` as booleans, and comparing one with a price raises further
-    # down. Whole numbers are prices too, so only the boolean case is refused -- and it is refused
-    # by value, because an object column holds the same booleans while advertising a dtype that
-    # says nothing about them.
-    if any(_holds_a_boolean(bars[column]) for column in _REQUIRED_COLUMNS):
+    # `to_numeric` launders anything it can cast, and several things it can cast are not prices:
+    # a boolean becomes 1.0, a complex number loses its imaginary part, a datetime becomes epoch
+    # nanoseconds. Each was accepted and measured, and the complex case fingerprinted identically
+    # to a real history with the same real part -- a provenance collision, not a rounding one.
+    # So the column has to already be real numbers, or strings of them, rather than merely
+    # castable to them.
+    if any(not _holds_real_numbers(bars[column]) for column in _REQUIRED_COLUMNS):
         return None, "history_contains_non_numeric_values"
     for column in _REQUIRED_COLUMNS:
         bars[column] = pd.to_numeric(bars[column], errors="coerce")
@@ -88,8 +91,9 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
         return None, "history_contains_invalid_bar_ranges"
     # A positional index converts silently -- integers become nanoseconds since 1970 -- so a
     # frame that never carried dates would be measured against dates it never had. By value
-    # again: an object Index of the same integers reads as dates just as quietly.
-    if any(isinstance(label, (int, float)) and not isinstance(label, bool) for label in bars.index):
+    # again, and by what the value is rather than which Python class holds it: `np.int64` is not
+    # an `int`, and an object Index of those read as dates just as quietly.
+    if any(_is_a_number(label) for label in bars.index):
         return None, "history_index_is_not_dates"
     try:
         index = pd.DatetimeIndex(bars.index)
@@ -126,12 +130,35 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
 
 
-def _holds_a_boolean(column: pd.Series) -> bool:
-    if pd.api.types.is_bool_dtype(column):
-        return True
-    if column.dtype != object:
+def _is_a_number(value: Any) -> bool:
+    """A real number, whichever library's scalar is holding it -- booleans excepted."""
+
+    if isinstance(value, (bool, np.bool_)):
         return False
-    return any(isinstance(value, bool) for value in column)
+    return isinstance(value, numbers.Real)
+
+
+def _holds_real_numbers(column: pd.Series) -> bool:
+    """Whether every entry is a price, rather than something that can be cast into one."""
+
+    if pd.api.types.is_float_dtype(column) or pd.api.types.is_integer_dtype(column):
+        return True
+    # Object and string columns are inspected entry by entry. A provider handing back numbers as
+    # text is ordinary; one handing back booleans, complex numbers or timestamps is not, and the
+    # dtype alone tells the two apart in neither case.
+    if column.dtype != object and not pd.api.types.is_string_dtype(column):
+        return False
+    for value in column:
+        if _is_a_number(value):
+            continue
+        if isinstance(value, str):
+            try:
+                float(value)
+            except ValueError:
+                return False
+            continue
+        return False
+    return True
 
 
 def bars_fingerprint(history: Any) -> str | None:
