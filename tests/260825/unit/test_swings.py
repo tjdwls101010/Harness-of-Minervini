@@ -18,7 +18,7 @@ import unittest
 import pandas as pd
 
 from scripts.minervini.swings import base_chain, canonical_chain, segment
-from tests.series import anchor_dates, base_series
+from tests.series import anchor_dates, base_series, two_bases_series
 
 
 class RecoversTheSourcesOwnExampleTests(unittest.TestCase):
@@ -114,6 +114,34 @@ class CanonicalChainTests(unittest.TestCase):
         self.assertIn("retracement_pct", chain["parameters"])
         self.assertIn("sensitivity_offsets_pct", chain["parameters"])
         self.assertEqual(chain["sessions"], len(frame))
+
+
+class OneBaseAtATimeTests(unittest.TestCase):
+    """Which structure the chain describes when the history holds more than one."""
+
+    def test_the_base_proposed_is_the_one_price_is_in_now_not_one_it_left(self) -> None:
+        """A base the stock is thirty percent above is a memory, not a proposal.
+
+        Preferring a high price had closed above and held put the pivot on the older base:
+        every high of the base the stock had already left qualifies by that test, and the base
+        it is actually building does not, because price has not cleared it yet.
+        """
+
+        frame, left_behind, current = two_bases_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual([item["date"] for item in chain["anchors"]], current)
+        self.assertNotEqual([item["date"] for item in chain["anchors"]], left_behind)
+
+    def test_the_older_structure_is_not_spliced_onto_the_current_one(self) -> None:
+        """Two consolidations with a breakout between them are two bases, not one deep one."""
+
+        frame, left_behind, _ = two_bases_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
 
 
 class UnusableHistoryTests(unittest.TestCase):

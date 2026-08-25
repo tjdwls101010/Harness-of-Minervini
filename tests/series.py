@@ -121,3 +121,59 @@ def anchor_dates(frame: pd.DataFrame, anchors: list[Anchor]) -> list[str]:
     """The alternating high/low chain a caller would declare for this series."""
 
     return [frame.index[anchor.position].date().isoformat() for anchor in anchors]
+
+
+def two_bases_series(
+    *,
+    first_high: float = 100.0,
+    second_high: float = 130.0,
+    first_depths: tuple[float, ...] = (25.0, 10.0, 5.0),
+    second_depths: tuple[float, ...] = (15.0, 8.0, 4.0),
+    advance: int = 25,
+    start: str = "2026-01-02",
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+    """A base the stock already broke out of, and the base it built above it.
+
+    One history holding two completed structures is what tells a proposal apart from a memory:
+    a detector that answers with the older base is describing a level the stock is thirty
+    percent above. Both chains come back so a test can name which one it expected.
+    """
+
+    closes = _leg(first_high * 0.55, first_high, 55)
+    first: list[Anchor] = [Anchor(len(closes) - 1, "high", first_high)]
+    second: list[Anchor] = []
+
+    def consolidate(rim: float, depths: tuple[float, ...], anchors: list[Anchor]) -> float:
+        high = rim
+        for depth in depths:
+            low = high * (1 - depth / 100)
+            closes.extend(_leg(high, low, 12))
+            anchors.append(Anchor(len(closes) - 1, "low", low))
+            high = high * 0.998
+            closes.extend(_leg(low, high, 10))
+            anchors.append(Anchor(len(closes) - 1, "high", high))
+        # The pause that makes the last high a pivot rather than a point on a rise.
+        closes.extend(_leg(high, high * 0.985, 3))
+        return high
+
+    first_pivot = consolidate(first_high, first_depths, first)
+    closes.extend(_leg(closes[-1], second_high, advance))
+    second.append(Anchor(len(closes) - 1, "high", second_high))
+    consolidate(second_high, second_depths, second)
+
+    steps = [abs(later - earlier) for earlier, later in zip(closes, closes[1:])]
+    wick = 0.15 * min(step for step in steps if step > 0)
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] + wick
+    frame["Low"] = frame["Close"] - wick
+    for anchor in first + second:
+        label = index[anchor.position]
+        frame.loc[label, "High" if anchor.kind == "high" else "Low"] = frame.loc[label, "Close"]
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    assert first_pivot < second_high
+    return (
+        frame[["Open", "High", "Low", "Close", "Volume"]],
+        [index[anchor.position].date().isoformat() for anchor in first],
+        [index[anchor.position].date().isoformat() for anchor in second],
+    )
