@@ -32,7 +32,7 @@ from .providers.nasdaq import SecurityRecord, current_security_master, historica
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
-from .power_play import evaluate_power_play
+from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import build_power_play_evidence
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
@@ -579,12 +579,41 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "corporate_action_inside_the_measured_span"
             if verdict["corporate_action_sessions"]
             else "corporate_action_evidence_missing"
-        )
+        ),
+        "peak_identity": "peak_identity_disputed",
     }
-    missing = [
-        {"id": item, "reason": reasons.get(item, "chart_reading_required"), "required": True}
-        for item in verdict["missing"]
-    ]
+    contested = {
+        f"fundamentals.power_play_exception.{condition}"
+        for condition in verdict["contested_criteria"]
+    }
+    # While an action stands, no criterion here was measured on one coordinate system, so the
+    # cause of every gap is the action rather than anything a reader could supply.
+    unreadable = (
+        verdict["corporate_action_evidence"] != "present" or verdict["corporate_action_sessions"]
+    )
+
+    def _reason(item: str) -> str:
+        if item in reasons:
+            return reasons[item]
+        if unreadable:
+            return "corporate_action_evidence_missing" if verdict[
+                "corporate_action_evidence"
+            ] != "present" else "corporate_action_inside_the_measured_span"
+        if item in contested:
+            return "peak_identity_disputed"
+        # The one gap that closes by itself. Reported as a chart reading, it would be closed by
+        # whatever approval seam answers the chart -- and a twelve-session minimum would have been
+        # waived by a reading of the volume.
+        if item == FLAG_STILL_FORMING:
+            return "flag_still_forming"
+        return "chart_reading_required"
+
+    missing = [{"id": item, "reason": _reason(item), "required": True} for item in verdict["missing"]]
+    # A rejection is finished, so it proposes nothing; an incomplete answer proposes a chart only
+    # when a chart is what one of its gaps is actually waiting on.
+    awaits_a_chart = verdict["power_play_state"] == "incomplete" and any(
+        item["reason"] == "chart_reading_required" for item in missing
+    )
     return envelope(
         "ticker.power-play",
         request=_clean_request({**request, "ticker": ticker}),
@@ -595,7 +624,7 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         missing=missing,
         sources=[_source(prices.meta)],
         doctrine_ids=["fundamentals.power_play_exception", "scope.data_integrity"],
-        next_capabilities=["ticker.chart"] if verdict["power_play_state"] == "incomplete" else [],
+        next_capabilities=["ticker.chart"] if awaits_a_chart else [],
     )
 
 

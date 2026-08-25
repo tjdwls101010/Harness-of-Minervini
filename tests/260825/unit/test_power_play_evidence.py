@@ -198,3 +198,45 @@ class ACorporateActionInvalidatesWhatItMoved(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheMachineChannelSaysWhatTheReducerSays(unittest.TestCase):
+    """`signals` is read by machines, so a state the reducer refuses to use cannot sit in it.
+
+    The reducer already declines a criterion it cannot trust -- but the signal it declined went
+    out unchanged, carrying `fail` on a depth the split manufactured and `beyond_source_range` on
+    the band beside it. A caller reading the machine channel got a confident rejection the
+    verdict channel had already withdrawn.
+    """
+
+    def _states(self, pack):
+        verdict = evaluate_power_play(pack)
+        return {signal["id"]: signal["state"] for signal in verdict["signals"]}
+
+    def test_a_split_withholds_every_state_it_moved(self):
+        states = self._states(build_power_play_evidence(power_play_series(split_inside_the_flag=True)))
+
+        self.assertEqual(set(states.values()), {"unavailable"})
+
+    def test_a_withheld_signal_keeps_its_measurement_and_names_the_cause(self):
+        verdict = evaluate_power_play(
+            build_power_play_evidence(power_play_series(split_inside_the_flag=True))
+        )
+        depth = next(
+            signal for signal in verdict["signals"]
+            if signal["id"] == "fundamentals.power_play_exception.flag_maximum_decline_gate_pct"
+        )
+
+        self.assertEqual(depth["withheld"], "corporate_action_inside_the_measured_span")
+        self.assertIsNotNone(depth["measured"])
+
+    def test_a_contested_criterion_withholds_only_what_the_choice_moved(self):
+        pack = evidence(advance_pct=40.0, marginal_new_high_at=100)
+        states = self._states(pack)
+
+        self.assertEqual(
+            states["fundamentals.power_play_exception.advance_maximum_weeks"], "unavailable"
+        )
+        self.assertEqual(
+            states["fundamentals.power_play_exception.advance_minimum_pct"], "fail"
+        )

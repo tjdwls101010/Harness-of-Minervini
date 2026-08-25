@@ -276,7 +276,8 @@ _CORPORATE_ACTIONS = "corporate_action_evidence"
 # high a hundredth of a percent above the last one restarts the flag, and the source names no size
 # below which a new high stops counting; calling the four sessions after it a failure removes a
 # twenty-session flag from consideration on the strength of one cent.
-_STILL_FORMING = f"{_CLAIM}.flag_minimum_sessions"
+FLAG_STILL_FORMING = f"{_CLAIM}.flag_minimum_sessions"
+_STILL_FORMING = FLAG_STILL_FORMING
 
 
 def reading_rejects(criteria: Mapping[str, str], *, corporate_action_unmoved: bool) -> bool:
@@ -296,6 +297,26 @@ def reading_rejects(criteria: Mapping[str, str], *, corporate_action_unmoved: bo
         criteria.get(claim_id[len(_CLAIM) + 1:]) == "fail" and claim_id != _STILL_FORMING
         for claim_id in _REQUIRED
     )
+
+
+# Which reported band each criterion shares a measurement with. A band is not required evidence
+# and no reducer reads it, but it is in the machine channel beside the gate, measured off the same
+# peak -- so when the gate is withheld and the band is not, the channel contradicts itself one
+# line down.
+_BANDS_BESIDE = {
+    f"{_CLAIM}.flag_minimum_sessions": f"{_CLAIM}.flag_duration_weeks",
+    f"{_CLAIM}.flag_maximum_weeks": f"{_CLAIM}.flag_duration_weeks",
+    f"{_CLAIM}.flag_maximum_decline_gate_pct": f"{_CLAIM}.flag_maximum_decline_pct",
+}
+
+
+def _withhold(signal: Mapping[str, Any], cause: str) -> dict[str, Any]:
+    """The measurement kept, the verdict withdrawn, the reason named.
+
+    `unavailable` rather than a new word, because that is what every other reading in the harness
+    says when it has a number it cannot turn into an answer.
+    """
+    return {**signal, "state": "unavailable", "withheld": cause}
 
 
 def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
@@ -338,6 +359,24 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     if not settled:
         missing.append("peak_identity")
 
+    # Whatever the reducer declined, the machine channel declines too.
+    if not unmoved:
+        cause = (
+            "corporate_action_evidence_missing"
+            if evidence.get(_CORPORATE_ACTIONS) != "present"
+            else "corporate_action_inside_the_measured_span"
+        )
+        withheld = {str(signal["id"]) for signal in signals.values()}
+        withheld |= set(_BANDS_BESIDE.values())
+    else:
+        cause = "peak_identity_disputed"
+        withheld = {f"{_CLAIM}.{condition}" for condition in contested}
+        withheld |= {_BANDS_BESIDE[claim_id] for claim_id in withheld if claim_id in _BANDS_BESIDE}
+    reported = [
+        _withhold(signal, cause) if str(signal["id"]) in withheld else dict(signal)
+        for signal in evidence.get("signals") or []
+    ]
+
     if failed:
         state = "not_qualified"
     elif missing:
@@ -356,8 +395,8 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "alternate_peak": evidence.get("alternate_peak"),
         "corporate_action_evidence": evidence.get(_CORPORATE_ACTIONS),
         "corporate_action_sessions": evidence.get("corporate_action_sessions"),
-        "signals": list(evidence.get("signals") or []),
+        "signals": reported,
     }
 
 
-__all__ = ["evaluate_power_play", "measure_power_play", "reading_rejects"]
+__all__ = ["FLAG_STILL_FORMING", "evaluate_power_play", "measure_power_play", "reading_rejects"]

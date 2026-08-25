@@ -82,3 +82,35 @@ class TheEnvelopeKeepsTheThreeApart(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AGapNamesWhatWouldActuallyCloseIt(unittest.TestCase):
+    """Two gaps here are not chart readings, and calling them one is how a gate leaks.
+
+    A flag with six sessions needs six more, not an eye; a criterion the two readings of the
+    structure answer differently needs the top settled, not an eye either. Reported as
+    `chart_reading_required`, both would be closed by whatever approval seam eventually answers
+    the chart -- and the twelve-session minimum would have been waived by a reading of something
+    else entirely.
+    """
+
+    def test_a_flag_that_has_not_finished_says_so_rather_than_asking_for_a_chart(self):
+        payload = run(power_play_series(flag_sessions=6))
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+
+        self.assertEqual(
+            reasons["fundamentals.power_play_exception.flag_minimum_sessions"],
+            "flag_still_forming",
+        )
+
+    def test_a_criterion_the_two_readings_answer_differently_says_that(self):
+        payload = run(power_play_series(advance_pct=102.0, flag_depth_pct=8.0))
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        contested = payload["data"]["contested_criteria"]
+
+        self.assertTrue(contested)
+        for condition in contested:
+            self.assertEqual(
+                reasons[f"fundamentals.power_play_exception.{condition}"],
+                "peak_identity_disputed",
+            )
