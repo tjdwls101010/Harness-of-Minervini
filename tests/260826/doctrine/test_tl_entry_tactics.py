@@ -90,3 +90,31 @@ class TheSourceIsTheOnlyAuthorHere(unittest.TestCase):
                     if name.startswith("tactic.")
                     and any(word in name for word in ("opening_range", "intraday", "high_volume_close"))]
         self.assertEqual(invented, [])
+
+
+class WhatMakesTheTacticItselfIsInItsClaim(unittest.TestCase):
+    """The shared terms are shared, so a tactic made only of them is a tactic in name only.
+
+    The reducer reads a route's conditions by subtracting what every early entry owes from what
+    the claim requires. A claim whose whole list is shared terms comes back with nothing of its
+    own, and the route stops being distinguishable from the generic one this replaced -- silently,
+    because subtracting to empty raises nothing.
+    """
+
+    SHARED = {"technical_eligibility", "entry_trigger", "invalidation", "confirmation_debt", "tactic_opt_in"}
+
+    def test_every_tactic_requires_something_no_other_early_entry_does(self) -> None:
+        registry = claims()
+        bare = [name for name in DEFINED if not set(registry[name]["required_inputs"]) - self.SHARED]
+        self.assertEqual(bare, [])
+
+    def test_no_two_tactics_are_made_of_the_same_conditions(self) -> None:
+        registry = claims()
+        own = {name: frozenset(registry[name]["required_inputs"]) - self.SHARED for name in DEFINED}
+        duplicates = [
+            (first, second)
+            for index, first in enumerate(DEFINED)
+            for second in DEFINED[index + 1:]
+            if own[first] == own[second]
+        ]
+        self.assertEqual(duplicates, [])
