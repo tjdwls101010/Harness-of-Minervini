@@ -56,7 +56,7 @@
     "limitations": [
       "This is runtime doctrine, not a full book transcript or citation browser.",
       "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time.",
-      "A threshold's role bounds what it may do: a gate decides pass or fail, a band reports a measurement inside a range the source stated as a range, a marker reports a measurement beside a single value the source named without bounding it, and a reference is never compared with a ticker's measurement at all.",
+      "A threshold's role bounds what it may do: a gate decides pass or fail, a band reports where a measurement sat against a range the source stated as a range, which can be inside it or past either edge, and names which edge is the good one, a marker reports a measurement beside a single value the source named without bounding it, and a reference is never compared with a ticker's measurement at all.",
       "A claim on the practice layer or attributed to a practitioner other than Minervini may hold a real filter, but that gate reports contrast_pass or contrast_fail and no reducer reads it.",
       "A claim marked out_of_scope records doctrine this harness may not act on, such as position sizing, and no capability consumes it."
     ],
