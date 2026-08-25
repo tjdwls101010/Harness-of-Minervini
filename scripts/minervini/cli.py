@@ -159,7 +159,21 @@ def build_parser() -> JsonArgumentParser:
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
-    setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
+    # The five the source defines, spelled out rather than hidden behind one word for "early".
+    # An argument that only takes these names says what the tactics are wherever it is read.
+    setup.add_argument(
+        "--entry-kind",
+        choices=(
+            "completed_pivot",
+            "vcp_cheat",
+            "key_support_level_reclaim",
+            "consolidation_pivot_breakout",
+            "key_moving_average_pullback",
+            "oops_reversal",
+            "key_support_level_pullback",
+        ),
+        help=_input_help("ticker.setup", "entry_kind"),
+    )
     setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
     setup.add_argument("--approved-bars", help=_input_help("ticker.setup", "approved_bars"))
     setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
