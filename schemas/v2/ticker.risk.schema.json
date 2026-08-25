@@ -88,7 +88,6 @@
         "choices": [
           "supports_convergence",
           "does_not_support_convergence",
-          "waived_by_exception",
           "incomplete"
         ],
         "description": "Fundamentals verdict from ticker.fundamentals.",

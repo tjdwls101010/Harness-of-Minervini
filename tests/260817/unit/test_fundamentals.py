@@ -18,6 +18,19 @@ def load_fixture(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text())
 
 
+FILED_SAFETY_EVIDENCE = {
+    "source": "sec_filed_facts",
+    "filings": [{
+        "filed_at": "2026-05-01",
+        "accounting_basis": "US-GAAP",
+        "accounting_integrity": {"status": "clear"},
+        "going_concern": {"status": "clear"},
+        "dilution": {"status": "clear"},
+        "quarterly": [{"period": "2026-Q1", "end": "2026-03-31", "diluted_shares": 100.0}],
+    }],
+}
+
+
 class FundamentalsEvaluatorTests(unittest.TestCase):
     def test_uses_only_facts_filed_by_as_of_and_preserves_sec_basis(self) -> None:
         result = evaluate_fundamentals(load_fixture("filed_evidence.json"), as_of="2026-05-10")
@@ -63,42 +76,18 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         self.assertIn("going_concern", result["missing"])
         self.assertIn("dilution", result["missing"])
 
-    def test_power_play_waives_only_verified_fundamentals_with_full_proof(self) -> None:
-        evidence = {
-            "source": "sec_filed_facts",
-            "filings": [{
-                "filed_at": "2026-05-01",
-                "accounting_basis": "US-GAAP",
-                "accounting_integrity": {"status": "clear"},
-                "going_concern": {"status": "clear"},
-                "dilution": {"status": "clear"},
-                "quarterly": [{"period": "2026-Q1", "end": "2026-03-31", "diluted_shares": 100.0}],
-            }],
-        }
-        proof = {
-            "detected": True,
-            "quality": "textbook",
-            "fundamentals_exception": {
-                "status": "map_authorized_only_for_this_vcp-qualified_setup",
-                "may_omit": ["verified_fundamentals"],
-            },
-            "technical_eligibility": "pass",
-            "price_volume_structure": "pass",
-            "market_alignment": "pass",
-            "risk_controls": "pass",
-        }
+    def test_an_integrity_contradiction_still_governs(self) -> None:
+        """What the removed waiver test was also covering, kept.
 
-        waived = evaluate_fundamentals(evidence, as_of="2026-05-10", power_play=proof)
-        incomplete_proof = copy.deepcopy(proof)
-        incomplete_proof.pop("risk_controls")
-        unproven = evaluate_fundamentals(evidence, as_of="2026-05-10", power_play=incomplete_proof)
-        unsafe = copy.deepcopy(evidence)
+        The Power Play half of it is gone with the argument it tested: five caller-supplied
+        fields turned missing growth data into `waived_by_exception` without a price bar being
+        read. This is the part that was about the filings.
+        """
+        unsafe = copy.deepcopy(FILED_SAFETY_EVIDENCE)
         unsafe["filings"][0]["going_concern"] = {"status": "substantial_doubt"}
-        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10", power_play=proof)
 
-        self.assertEqual(waived["fundamentals_state"], "waived_by_exception")
-        self.assertEqual(waived["quality"]["state"], "waived_by_exception")
-        self.assertEqual(unproven["fundamentals_state"], "incomplete")
+        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10")
+
         self.assertEqual(blocked["fundamentals_state"], "does_not_support_convergence")
         self.assertEqual(blocked["integrity"]["going_concern"]["state"], "contradicts")
 

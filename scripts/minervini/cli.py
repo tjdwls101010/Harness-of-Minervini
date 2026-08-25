@@ -177,10 +177,6 @@ def build_parser() -> JsonArgumentParser:
     fundamentals = _capability_parser(ticker_sub, "fundamentals", "ticker.fundamentals")
     fundamentals.add_argument("ticker", help=_input_help("ticker.fundamentals", "ticker"))
     fundamentals.add_argument("--cik", help=_input_help("ticker.fundamentals", "cik"))
-    fundamentals.add_argument("--power-play-quality", choices=("textbook", "acceptable"), help=_input_help("ticker.fundamentals", "power_play_quality"))
-    for option in ("fundamentals_exception", "technical_eligibility", "price_volume_structure", "market_alignment", "risk_controls"):
-        field = f"power_play_{option}"
-        fundamentals.add_argument(f"--{field.replace('_', '-')}", action="store_true", help=_input_help("ticker.fundamentals", field))
     _common(fundamentals, "ticker.fundamentals")
 
     peers = _capability_parser(ticker_sub, "peers", "ticker.peers")
@@ -198,7 +194,7 @@ def build_parser() -> JsonArgumentParser:
     risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))
     risk.add_argument("--eligibility-state", choices=("eligible", "avoid", "incomplete"), help=_input_help("ticker.risk", "eligibility_state"))
     risk.add_argument("--setup-state", choices=("ready", "wait", "avoid", "incomplete"), help=_input_help("ticker.risk", "setup_state"))
-    risk.add_argument("--fundamentals-state", choices=("supports_convergence", "does_not_support_convergence", "waived_by_exception", "incomplete"), help=_input_help("ticker.risk", "fundamentals_state"))
+    risk.add_argument("--fundamentals-state", choices=("supports_convergence", "does_not_support_convergence", "incomplete"), help=_input_help("ticker.risk", "fundamentals_state"))
     risk.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.risk", "invalidation_condition"))
     for field in ("completed_stop_breach", "live_stop_check", "live_stop_breach"):
         risk.add_argument(f"--{field.replace('_', '-')}", action="store_true", help=_input_help("ticker.risk", field))
@@ -282,28 +278,6 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
             state = request.pop(request_name, None)
             if state is not None:
                 request[component_name] = {"state": state}
-    if operation == "ticker.fundamentals":
-        quality = request.pop("power_play_quality", None)
-        exception = request.pop("power_play_fundamentals_exception", False)
-        proof = {
-            name.removeprefix("power_play_"): request.pop(name, False)
-            for name in (
-                "power_play_technical_eligibility",
-                "power_play_price_volume_structure",
-                "power_play_market_alignment",
-                "power_play_risk_controls",
-            )
-        }
-        if quality is not None or exception or any(proof.values()):
-            request["power_play"] = {
-                "detected": quality is not None,
-                "quality": quality,
-                "fundamentals_exception": {
-                    "status": "map_authorized_only_for_this_vcp-qualified_setup" if exception else "not_authorized",
-                    "may_omit": ["verified_fundamentals"] if exception else [],
-                },
-                **{name: "pass" if passed else "unavailable" for name, passed in proof.items()},
-            }
     return request
 
 

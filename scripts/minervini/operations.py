@@ -786,9 +786,6 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[{"id": "cik", "reason": "stable_historical_identity_required", "required": True}],
         )
-    power_play = request.get("power_play")
-    if power_play is not None and not isinstance(power_play, Mapping):
-        raise RequestError("power_play must be an object", "power_play")
     try:
         snapshot = _cached_provider(
             runtime,
@@ -809,12 +806,10 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[_missing_provider(error)],
         )
-    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat(), power_play=power_play)
+    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat())
     missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
     status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
     doctrine_ids = ["scope.data_integrity"]
-    if power_play is not None:
-        doctrine_ids.append("fundamentals.power_play_exception")
     return envelope(
         "ticker.fundamentals",
         request=_clean_request({**request, "ticker": ticker}),

@@ -59,45 +59,6 @@
         "required": false,
         "type": "boolean"
       },
-      "power_play_fundamentals_exception": {
-        "default": false,
-        "description": "Request the sole verified-fundamentals waiver.",
-        "required": false,
-        "type": "boolean"
-      },
-      "power_play_market_alignment": {
-        "default": false,
-        "description": "Assert separately verified market alignment.",
-        "required": false,
-        "type": "boolean"
-      },
-      "power_play_price_volume_structure": {
-        "default": false,
-        "description": "Assert separately verified VCP-quality structure.",
-        "required": false,
-        "type": "boolean"
-      },
-      "power_play_quality": {
-        "choices": [
-          "textbook",
-          "acceptable"
-        ],
-        "description": "VCP-qualified Power Play quality.",
-        "required": false,
-        "type": "enum"
-      },
-      "power_play_risk_controls": {
-        "default": false,
-        "description": "Assert separately verified risk controls.",
-        "required": false,
-        "type": "boolean"
-      },
-      "power_play_technical_eligibility": {
-        "default": false,
-        "description": "Assert separately verified technical eligibility.",
-        "required": false,
-        "type": "boolean"
-      },
       "ticker": {
         "description": "US-listed ticker symbol.",
         "required": true,
