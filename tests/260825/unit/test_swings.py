@@ -202,6 +202,21 @@ class OneBaseAtATimeTests(unittest.TestCase):
         self.assertEqual([item["date"] for item in chain["anchors"]], current)
         self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
 
+    def test_a_breakout_bar_that_opened_under_the_level_still_left_it_behind(self) -> None:
+        """Holding starts the session after the one that cleared it.
+
+        A breakout opens under the level and travels through it, so reading the crossing bar's
+        own low as a failure to hold made every realistic breakout fail the test -- and, because
+        the neighbouring parameters disagreed about it, took the whole segmentation to unstable.
+        """
+
+        frame, left_behind, current = bases_under_an_older_high_series(realistic_breakout=True)
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "resolved")
+        self.assertEqual([item["date"] for item in chain["anchors"]], current)
+
     def test_a_poke_above_the_pivot_that_gave_it_all_back_did_not_end_the_base(self) -> None:
         """Clearing a level and holding it is leaving; clearing it and falling back is failing.
 

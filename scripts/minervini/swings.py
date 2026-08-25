@@ -121,6 +121,14 @@ def base_chain(
     A version of this trim was removed on the evidence that it never fired across the whole
     suite. That was a fact about the fixtures, not about the shape: every one of them put the
     newer rim above everything before it, which satisfies the rim rule by accident.
+
+    The cost is measured and deliberate. A base whose interior rally overshoots an earlier one
+    and then holds above it is described from the overshoot rather than from the peak the whole
+    correction ran from, so it comes back shorter and shallower than a reader would draw it.
+    That direction is the safe one: an understated base reports its span and contraction count
+    as short of the source's ranges, where a spliced one reports a fabricated structure that
+    looks legitimate. The correction depth is unaffected either way -- it is read from the
+    history's own peak rather than from the declared base.
     """
     highs = [index for index, anchor in enumerate(confirmed) if anchor["kind"] == "high"]
     if not highs:
@@ -158,12 +166,19 @@ def _after_the_structure_it_left(
 
 
 def _cleared_and_held(closes: pd.Series, lows: pd.Series, anchor: dict[str, Any], until: pd.Timestamp) -> bool:
+    """Whether price left this high behind, rather than poking through it and falling back.
+
+    Holding starts the session after the one that cleared it. A breakout bar opens under the
+    level it clears and travels through it, so counting its own low as a failure to hold made
+    every realistic breakout fail this test -- and, because the neighbouring parameters
+    disagreed about it, turned the whole segmentation unstable.
+    """
     level = float(anchor["price"])
     after = closes.loc[pd.Timestamp(anchor["date"]) : until].iloc[1:]
     above = after.loc[after > level]
     if above.empty:
         return False
-    return bool((lows.loc[above.index[0] : until] > level).all())
+    return bool((lows.loc[above.index[0] : until].iloc[1:] > level).all())
 
 
 def _pivot_index(confirmed: list[dict[str, Any]], highs: list[int]) -> int | None:
