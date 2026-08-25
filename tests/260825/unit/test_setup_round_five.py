@@ -339,32 +339,34 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
         self.assertEqual(result["setup_state"], "ready")
 
 
-class ADeepBaseIsStillOneBaseTests(unittest.TestCase):
-    """Contractions that contract the whole way describe one structure, however deep it is."""
+class VolumeIsWhatSeparatesTwoStructuresTests(unittest.TestCase):
+    """The boundary the source supplies, where price alone supplied only a magnitude.
 
-    def test_a_forty_percent_base_whose_depths_contract_is_read_as_one(self) -> None:
+    Read on price, this history is a forty percent base whose depths contract the whole way --
+    forty, fifteen, seven -- and every price-only rule for cutting it deleted evidence a gate
+    reads. The stock closed above the eighty level on expanding volume and never came back
+    under, which is the source's own buy point, so what is above it is a different structure.
+    """
+
+    def test_a_high_broken_out_of_on_expanding_volume_is_not_part_of_this_base(self) -> None:
         frame, left_behind, current = borrowed_contraction_series()
+
         chain = detected(frame)
 
-        result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
+        self.assertEqual(chain, current)
+        self.assertFalse(set(left_behind) & set(chain))
 
-        self.assertEqual(chain, [*left_behind, *current])
-        depths = result["measurements"]["contraction_depths_pct"]
-        self.assertEqual([round(depth) for depth in depths], [40, 15, 7])
-        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "pass")
-
-    def test_its_depth_is_reported_against_the_source_range_it_sits_outside(self) -> None:
-        """Forty percent clears the fifty percent gate and sits past the healthy band. Both are
-        said, because the gate is what decides and the band is what a reader weighs."""
+    def test_the_structure_left_behind_does_not_lend_its_contractions(self) -> None:
+        """One contraction is no sequence, and the older structure's is not the fix for that."""
 
         frame, _, _ = borrowed_contraction_series()
         chain = detected(frame)
 
         result = evaluate_setup(build_setup_evidence(frame, chain, **vouched(frame, chain)))
 
-        self.assertEqual(signal(result, "market.correction_depth_healthy_leader.correction_failure_threshold")["state"], "pass")
-        band = signal(result, "market.correction_depth_healthy_leader.healthy_correction_range")
-        self.assertEqual(band["state"], "beyond_source_range")
+        self.assertEqual(len(result["measurements"]["contraction_depths_pct"]), 1)
+        self.assertEqual(signal(result, "setup.contractions_must_contract")["state"], "unavailable")
+        self.assertNotEqual(result["setup_state"], "ready")
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):

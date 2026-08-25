@@ -569,7 +569,8 @@ def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         data={"ticker": ticker, **chain},
         missing=[] if resolved else [{"id": "stable_segmentation", "reason": _segmentation_reason(chain), "required": True}],
         sources=[_source(prices.meta)],
-        doctrine_ids=[_SEGMENTATION_CONVENTION],
+        # The convention is the harness's; the boundary it bounds the base at is the source's.
+        doctrine_ids=[_SEGMENTATION_CONVENTION, "setup.structural_pivot_and_trigger"],
         # A proposal is not an approval, and the chart is where a person turns one into the
         # other. With nothing proposed the chart draws no anchors, so pointing at it would send
         # a reader to a picture that cannot answer what they came for.

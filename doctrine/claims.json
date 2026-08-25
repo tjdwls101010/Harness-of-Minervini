@@ -10111,16 +10111,16 @@
         },
         "sensitivity_offsets": {
           "value": [
-            -0.25,
-            0.25
+            -0.1,
+            0.1
           ],
           "unit": "multiple_of_typical_daily_range",
           "affects_verdict": true,
-          "note": "Neighbouring multiples the segmentation is re-run at. A chain that changes when the multiple moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading."
+          "note": "Neighbouring multiples the segmentation is re-run at, one unit of the multiple's own stated precision either side. A chain that changes when the multiple moves within the precision it was named at is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading. The size is the multiple's precision rather than a figure chosen to make more names resolve: on real histories most do not, because real price structure has no single canonical scale, and an unsettled segmentation is the honest answer for those."
         }
       },
       "rule": {
-        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain at a retracement scaled to the stock's own typical daily range, refuses to vouch for one that neighbouring multiples disagree with, and never lets the caller choose the multiple, the starting anchor, or the pivot."
+        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain at a retracement scaled to the stock's own typical daily range, bounds the base at any high the stock broke out above on expanding volume and has held, refuses to vouch for a chain that neighbouring multiples disagree with, and never lets the caller choose the multiple, the starting anchor, or the pivot."
       },
       "computability": "deterministic",
       "failure": {
@@ -10154,7 +10154,7 @@
         "tests/260825/doctrine/test_parameters.py"
       ],
       "provenance": {
-        "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition."
+        "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition. The one part of it that is not the harness's own is the base's left boundary: three price-only rules for it failed, because on price alone a rally above an earlier rally top inside a correction and a fresh consolidation under an old peak are the same picture at different magnitudes, and the source supplies no magnitude. It supplies the other half of the observation instead -- the buy point is price moving above the pivot on expanding volume -- so leaving a structure is read as a breakout out of it, per setup.structural_pivot_and_trigger."
       }
     }
   ]

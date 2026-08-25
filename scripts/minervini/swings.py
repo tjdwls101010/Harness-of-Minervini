@@ -30,6 +30,10 @@ from .setup_structure import bars_fingerprint, completed_bars
 
 
 _CONVENTION = "setup.swing_segmentation_convention"
+_TRIGGER = "setup.structural_pivot_and_trigger"
+# The window Minervini names when he says he likes to see volume eclipse an average. His figure
+# is a marker, so what it lends here is the span to average over, never a level to clear.
+_BREAKOUT_VOLUME_SESSIONS = 50
 
 
 def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
@@ -101,32 +105,32 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
     }
 
 
-def base_chain(confirmed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def base_chain(
+    confirmed: list[dict[str, Any]],
+    closes: pd.Series | None = None,
+    lows: pd.Series | None = None,
+    volumes: pd.Series | None = None,
+) -> list[dict[str, Any]]:
     """The one base among the confirmed turning points, chosen without asking the caller.
 
-    The pivot is picked first, then the rim: the highest high at or before it, because that is
-    the peak the correction ran from and the same peak the depth limit measures against. There
-    is no second rule, and arriving at that took three attempts worth writing down.
+    The pivot is picked first. The rim is then the highest high at or before it -- the peak the
+    correction ran from, and the peak the depth limit measures against -- but the search stops
+    at any high the stock has already left, because the contractions of a structure price
+    departed from are not this base's contractions.
 
-    Twice a trim was added to stop the rim reaching back across "a structure price already
-    left", on the reading that a base under an older peak is really two. Each version broke
-    something the plain rule does not. Cutting at a high price cleared and held deletes the
-    anchors carrying the contraction that widened, so twenty-five then thirty comes back as four
-    and a half then two and a half and the detector vouches for its own edit. Measuring that
-    departure only up to the pivot misses one completed on the pivot bar and counts one price
-    came back under afterwards. Measuring it to the last bar instead makes every interior high
-    of a base "left" the moment the stock breaks out, and the base vanishes entirely.
+    Getting that boundary wrong reaches `ready` on evidence that is not there, in either
+    direction. Reach back too far and an older structure supplies a contraction the current one
+    lacks: a base with one contraction has no sequence to judge, until a decline from two
+    structures ago is spliced in front of it and the depths read forty, fifteen, seven. Cut too
+    eagerly and the contraction that widened is deleted, so twenty-five then thirty comes back
+    as four and a half then two and a half. Neither erring direction is safe.
 
-    They failed because the distinction is not observable. Inside a correction, price rallying
-    above an earlier rally top is a contraction, not a departure, and there is nothing in the
-    bars that separates that from a fresh consolidation under an old peak -- only a magnitude
-    the source never supplies. What the source does supply is `contractions_must_contract`, a
-    gate in the required evidence: a history that really is two structures spliced together
-    shows a contraction that widens at the seam and is rejected there, by name. A history whose
-    depths contract the whole way is one deep base, and reading it as one is correct.
-
-    Leaving a base is breaking out of it, and that prints a high above everything before it,
-    which the rim rule already lands on without help.
+    Three price-only rules were tried for the boundary and all three failed, because on price
+    alone a rally above an earlier rally top inside a correction and a fresh consolidation under
+    an old peak are the same picture at different magnitudes -- and the source supplies no
+    magnitude. What it does supply is the other half of the observation: the buy point is price
+    moving above the pivot *on expanding volume*. Leaving is a breakout, a breakout has a volume
+    signature, and that signature is what tells the two apart without inventing a number.
     """
     highs = [index for index, anchor in enumerate(confirmed) if anchor["kind"] == "high"]
     if not highs:
@@ -134,9 +138,80 @@ def base_chain(confirmed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     pivot = _pivot_index(confirmed, highs)
     if pivot is None:
         return []
-    rim = max((index for index in highs if index <= pivot), key=lambda index: (confirmed[index]["price"], -index))
+    floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows, volumes)
+    candidates = [index for index in highs if floor <= index <= pivot]
+    if not candidates:
+        return []
+    rim = max(candidates, key=lambda index: (confirmed[index]["price"], -index))
     window = confirmed[rim : pivot + 1]
     return window if len(window) >= 3 and len(window) % 2 == 1 else []
+
+
+def _after_the_structure_it_left(
+    confirmed: list[dict[str, Any]],
+    highs: list[int],
+    pivot: int,
+    closes: pd.Series | None,
+    lows: pd.Series | None,
+    volumes: pd.Series | None,
+) -> int:
+    """The earliest anchor the rim search may reach, given what price has already left behind."""
+
+    if closes is None or lows is None or volumes is None:
+        return 0
+    until = pd.Timestamp(confirmed[pivot]["date"])
+    left = [
+        index
+        for index in highs
+        if index < pivot and _left_behind(closes, lows, volumes, confirmed[index], until)
+    ]
+    return left[-1] + 1 if left else 0
+
+
+def _left_behind(
+    closes: pd.Series,
+    lows: pd.Series,
+    volumes: pd.Series,
+    anchor: dict[str, Any],
+    before: pd.Timestamp,
+) -> bool:
+    """Whether the stock broke out above this high and has stayed above it since.
+
+    Three conditions, each from somewhere: a close above the level, on volume expanding against
+    what the stock had been trading -- the source's own buy point, stated without a number -- and
+    every low since above it, because clearing a level and giving it back is a pivot failure that
+    belongs to the base rather than ending it.
+
+    The crossing has to happen before the pivot formed. Without that, the current base's own
+    breakout clears every interior high at once on expanding volume, and the base it broke out
+    of disappears from under it.
+
+    Holding is read to the last completed bar rather than to the pivot, because whether the stock
+    is out of a structure is a fact about now: a high price came back under afterwards was never
+    left. Any qualifying crossing counts, not the first -- a level poked through once and
+    reclaimed later has been left, and reading only the first attempt kept the older structure
+    spliced on forever after one failure.
+    """
+    level = float(anchor["price"])
+    window = closes.loc[pd.Timestamp(anchor["date"]) : before].iloc[1:-1]
+    for stamp in window.loc[window > level].index:
+        if not _volume_expanded(volumes, stamp):
+            continue
+        held = lows.loc[stamp:].iloc[1:]
+        if len(held) and bool((held > level).all()):
+            return True
+    return False
+
+
+def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
+    """More than the stock had been trading, over the window the source names for a breakout.
+
+    The comparison is the number-free half of "moves above the pivot point on expanding volume".
+    Minervini's own figure -- volume eclipsing its fifty-day average -- is registered as a marker
+    rather than a gate, so it supplies the window to look over and never the amount to clear.
+    """
+    prior = volumes.loc[:stamp].iloc[-(_BREAKOUT_VOLUME_SESSIONS + 1) : -1]
+    return bool(len(prior)) and float(volumes.at[stamp]) > float(prior.mean())
 
 
 def _pivot_index(confirmed: list[dict[str, Any]], highs: list[int]) -> int | None:
@@ -198,15 +273,18 @@ def canonical_chain(history: Any) -> dict[str, Any]:
             "sessions": sessions, "bars_fingerprint": bars_fingerprint(source),
         }
     retracement = multiple * typical
+    closes = None if bars is None else bars["Close"]
+    lows = None if bars is None else bars["Low"]
+    volumes = None if bars is None else bars["Volume"]
     primary = segment(source, retracement_pct=retracement)
-    anchors = base_chain(primary["anchors"])
+    anchors = base_chain(primary["anchors"], closes, lows, volumes)
 
     sensitivity: list[dict[str, Any]] = []
     for offset in offsets:
         neighbour = (multiple + offset) * typical
         if neighbour <= 0:
             continue
-        found = base_chain(segment(source, retracement_pct=neighbour)["anchors"])
+        found = base_chain(segment(source, retracement_pct=neighbour)["anchors"], closes, lows, volumes)
         # The same chain, not a chain the same anchors survive into. Accepting a neighbour that
         # cut an extra contraction between the same endpoints would wave through exactly what a
         # declared chain is refused for downstream: an unfavourable contraction re-cut into

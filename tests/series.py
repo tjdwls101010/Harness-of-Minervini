@@ -44,6 +44,7 @@ def base_series(
     pause_dip_pct: float = 1.5,
     breakout: bool = True,
     daily_range_pct: float | None = None,
+    hidden_bounce: bool = False,
     start: str = "2026-01-02",
 ) -> tuple[pd.DataFrame, list[Anchor]]:
     closes = _leg(base_high * 0.55, base_high, run_up)
@@ -90,6 +91,8 @@ def base_series(
         half = daily_range_pct / 200
         frame["High"] = frame["Close"] * (1 + half)
         frame["Low"] = frame["Close"] * (1 - half)
+    if hidden_bounce:
+        _insert_bounce_between_neighbours(frame, anchors, daily_range_pct)
     pinned = {anchor.position: anchor.kind for anchor in anchors}
     for position, kind in pinned.items():
         label = index[position]
@@ -342,18 +345,6 @@ def from_legs(
     return frame[["Open", "High", "Low", "Close", "Volume"]]
 
 
-def unstable_series(**kwargs) -> tuple[pd.DataFrame, list[Anchor]]:
-    """A base the detector refuses to vouch for, because neighbouring multiples cut it apart.
-
-    The retracement is scaled to the stock's own typical daily range, so instability is produced
-    by the width of the bars rather than by shrinking a contraction: at this width the
-    neighbouring multiples straddle one of the turns and disagree about the chain. No session is
-    ambiguous here, which keeps the two reasons a segmentation can fail apart.
-    """
-
-    return base_series(daily_range_pct=0.8, **kwargs)
-
-
 def turn_between_neighbours_series(*, daily_range_pct: float = 1.0) -> pd.DataFrame:
     """A decline interrupted by one bounce sized to fall between two neighbouring multiples.
 
@@ -382,3 +373,44 @@ def turn_between_neighbours_series(*, daily_range_pct: float = 1.0) -> pd.DataFr
     frame["High"] = frame["Close"] * (1 + half)
     frame["Low"] = frame["Close"] * (1 - half)
     return frame[["Open", "High", "Low", "Close", "Volume"]]
+
+
+def _insert_bounce_between_neighbours(frame: pd.DataFrame, anchors: list[Anchor], daily_range_pct: float | None) -> None:
+    """Put one turn inside the first decline that only the lower neighbouring multiple can see.
+
+    Sized from the registry rather than by hand: the retracement is derived from the bars, so a
+    fixture with a chosen bounce is tuned to whatever the multiple happens to be today and goes
+    quietly meaningless the next time it moves.
+    """
+
+    from scripts.minervini import doctrine
+
+    if not daily_range_pct:
+        raise ValueError("hidden_bounce needs an explicit daily_range_pct so the scale is known")
+    convention = "setup.swing_segmentation_convention"
+    multiple = float(doctrine.parameter(convention, "retracement_range_multiple"))
+    lower = multiple + min(float(value) for value in doctrine.parameter(convention, "sensitivity_offsets"))
+    half = daily_range_pct / 200
+    at = (anchors[0].position + anchors[1].position) // 2
+    fraction = (lower + multiple) / 2 * daily_range_pct / 100
+    dip = float(frame["Close"].iloc[at])
+    bounce = dip * (1 - half) * (1 + fraction) / (1 + half)
+    frame.iloc[at + 1, frame.columns.get_indexer(["Open", "Close"])] = bounce
+    frame.iloc[at + 1, frame.columns.get_loc("High")] = bounce * (1 + half)
+    frame.iloc[at + 1, frame.columns.get_loc("Low")] = bounce * (1 - half)
+
+
+def unstable_series(**kwargs) -> tuple[pd.DataFrame, list[Anchor]]:
+    """A base the detector refuses to vouch for, because neighbouring multiples cut it apart.
+
+    The turn is placed by the registry's own numbers, so the fixture follows the parameter rather
+    than being retuned behind it. No session is ambiguous here, which keeps the two reasons a
+    segmentation can fail apart.
+    """
+
+    # Wide enough that the bounce has room to sit between two multiples, narrow enough that the
+    # declared anchors are still the extremes of their spans: the last contraction of this base
+    # moves less per session than a full-width bar, so a realistic width makes the structure
+    # resolver reject the fixture before the detector is ever consulted.
+    kwargs.setdefault("daily_range_pct", 0.5)
+    return base_series(hidden_bounce=True, **kwargs)

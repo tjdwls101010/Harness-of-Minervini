@@ -59,7 +59,7 @@ class AGapTheEngineKnowsAboutOutranksTheCallersTests(unittest.TestCase):
         segmentation the detector refused to vouch for nowhere in it.
         """
 
-        payload = run(daily_range_pct=0.8, chain_completeness="partial")
+        payload = run(daily_range_pct=0.5, hidden_bounce=True, chain_completeness="partial")
 
         self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
         self.assertEqual(payload["data"]["setup_state"], "incomplete")
@@ -81,7 +81,7 @@ class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):
         they could supply.
         """
 
-        payload = run(daily_range_pct=0.8)
+        payload = run(daily_range_pct=0.5, hidden_bounce=True)
 
         self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
         self.assertEqual(payload["status"], "unavailable")
@@ -184,7 +184,7 @@ class WhatDecidedItIsNamedTests(unittest.TestCase):
         and telling them "evidence required" sends them to look for an argument.
         """
 
-        payload = run(daily_range_pct=0.8)
+        payload = run(daily_range_pct=0.5, hidden_bounce=True)
 
         self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
         reasons = {item["id"]: item["reason"] for item in payload["missing"]}
