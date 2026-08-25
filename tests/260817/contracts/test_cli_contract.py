@@ -47,6 +47,8 @@ EXPECTED_CAPABILITIES = {
     "watchlist.annotate",
     "watchlist.export",
 }
+# Every capability needs a path here, or the parity sweeps below silently skip it: ticker.swings
+# was in EXPECTED_CAPABILITIES and not here, so its help and its parser were never checked.
 COMMAND_PATHS = {
     "capabilities": ("capabilities",),
     "describe": ("describe",),
@@ -56,6 +58,7 @@ COMMAND_PATHS = {
     "market.snapshot": ("market", "snapshot"),
     "market.candidates": ("market", "candidates"),
     "ticker.qualify": ("ticker", "qualify"),
+    "ticker.swings": ("ticker", "swings"),
     "ticker.setup": ("ticker", "setup"),
     "ticker.fundamentals": ("ticker", "fundamentals"),
     "ticker.peers": ("ticker", "peers"),

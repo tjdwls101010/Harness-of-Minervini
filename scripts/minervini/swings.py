@@ -101,34 +101,26 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
     }
 
 
-def base_chain(
-    confirmed: list[dict[str, Any]],
-    closes: pd.Series | None = None,
-    lows: pd.Series | None = None,
-) -> list[dict[str, Any]]:
+def base_chain(confirmed: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The one base among the confirmed turning points, chosen without asking the caller.
 
-    The pivot is picked first. The rim is then the highest high at or before it, because that is
-    the peak the correction ran from and the same peak the depth limit measures against -- but
-    the search cannot reach back across a structure the stock has already left, or a forty
-    percent correction from an old peak gets reported as the depth of the eleven percent base
-    being built under it.
+    The pivot is picked first, then the rim: the highest high at or before it, because that is
+    the peak the correction ran from and the same peak the depth limit measures against.
 
-    Leaving is clearing a high and staying above it. Clearing it and giving it all back is a
-    pivot failure, which the source says belongs to the base rather than ending it, so a poke
-    above the pivot followed by a decline through it does not start a new structure.
+    A history holding two structures under one older peak therefore comes back as one long
+    chain rather than the newer half. That is deliberate, and it took two attempts to see why.
+    A trim was written to cut the older structure away, on the argument that a spliced base
+    reports a forty percent correction for an eleven percent one. What it actually did was
+    delete the anchors carrying the contraction that widened -- a chain whose depths ran
+    twenty-five then thirty percent came back as four and a half then two and a half, and the
+    detector vouched for its own edit as the base's whole structure. That is the forgery this
+    module exists to make impossible, performed by the module itself.
 
-    A version of this trim was removed on the evidence that it never fired across the whole
-    suite. That was a fact about the fixtures, not about the shape: every one of them put the
-    newer rim above everything before it, which satisfies the rim rule by accident.
-
-    The cost is measured and deliberate. A base whose interior rally overshoots an earlier one
-    and then holds above it is described from the overshoot rather than from the peak the whole
-    correction ran from, so it comes back shorter and shallower than a reader would draw it.
-    That direction is the safe one: an understated base reports its span and contraction count
-    as short of the source's ranges, where a spliced one reports a fabricated structure that
-    looks legitimate. The correction depth is unaffected either way -- it is read from the
-    history's own peak rather than from the declared base.
+    Left whole, the same history fails `setup.contractions_must_contract`, a gate in the
+    required evidence rather than a band that only reports. The messy history is described as
+    messy and rejected on a sentence from the source, instead of being tidied into something
+    that passes. The trim also changed nothing on the cases it was written for: when the newer
+    structure's rim tops everything before it, the rim rule already lands on it.
     """
     highs = [index for index, anchor in enumerate(confirmed) if anchor["kind"] == "high"]
     if not highs:
@@ -136,49 +128,9 @@ def base_chain(
     pivot = _pivot_index(confirmed, highs)
     if pivot is None:
         return []
-    floor = _after_the_structure_it_left(confirmed, highs, pivot, closes, lows)
-    candidates = [index for index in highs if floor <= index <= pivot]
-    if not candidates:
-        return []
-    rim = max(candidates, key=lambda index: (confirmed[index]["price"], -index))
+    rim = max((index for index in highs if index <= pivot), key=lambda index: (confirmed[index]["price"], -index))
     window = confirmed[rim : pivot + 1]
     return window if len(window) >= 3 and len(window) % 2 == 1 else []
-
-
-def _after_the_structure_it_left(
-    confirmed: list[dict[str, Any]],
-    highs: list[int],
-    pivot: int,
-    closes: pd.Series | None,
-    lows: pd.Series | None,
-) -> int:
-    """The earliest anchor the rim search may reach, given what price has already left behind."""
-
-    if closes is None or lows is None:
-        return 0
-    pivot_date = pd.Timestamp(confirmed[pivot]["date"])
-    left = [
-        index
-        for index in highs
-        if index < pivot and _cleared_and_held(closes, lows, confirmed[index], pivot_date)
-    ]
-    return left[-1] + 1 if left else 0
-
-
-def _cleared_and_held(closes: pd.Series, lows: pd.Series, anchor: dict[str, Any], until: pd.Timestamp) -> bool:
-    """Whether price left this high behind, rather than poking through it and falling back.
-
-    Holding starts the session after the one that cleared it. A breakout bar opens under the
-    level it clears and travels through it, so counting its own low as a failure to hold made
-    every realistic breakout fail this test -- and, because the neighbouring parameters
-    disagreed about it, turned the whole segmentation unstable.
-    """
-    level = float(anchor["price"])
-    after = closes.loc[pd.Timestamp(anchor["date"]) : until].iloc[1:]
-    above = after.loc[after > level]
-    if above.empty:
-        return False
-    return bool((lows.loc[above.index[0] : until].iloc[1:] > level).all())
 
 
 def _pivot_index(confirmed: list[dict[str, Any]], highs: list[int]) -> int | None:
@@ -227,17 +179,15 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     bars = completed_bars(history)
     sessions = 0 if bars is None else int(len(bars))
     source = bars if bars is not None else history
-    closes = bars["Close"] if bars is not None else None
-    lows = bars["Low"] if bars is not None else None
     primary = segment(source, retracement_pct=retracement)
-    anchors = base_chain(primary["anchors"], closes, lows)
+    anchors = base_chain(primary["anchors"])
 
     sensitivity: list[dict[str, Any]] = []
     for offset in offsets:
         neighbour = retracement + offset
         if neighbour <= 0:
             continue
-        found = base_chain(segment(source, retracement_pct=neighbour)["anchors"], closes, lows)
+        found = base_chain(segment(source, retracement_pct=neighbour)["anchors"])
         # The same chain, not a chain the same anchors survive into. Accepting a neighbour that
         # cut an extra contraction between the same endpoints would wave through exactly what a
         # declared chain is refused for downstream: an unfavourable contraction re-cut into

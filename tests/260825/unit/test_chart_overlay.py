@@ -12,7 +12,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.minervini.chart import render_chart_artifacts
+from scripts.minervini.chart import _draw_anchors, render_chart_artifacts
+from scripts.minervini.swings import canonical_chain
 from tests.series import anchor_dates, base_series
 
 
@@ -117,6 +118,54 @@ class AnchorOverlayTests(unittest.TestCase):
 
         self.assertEqual(manifest["segmentation"]["state"], "unstable")
         self.assertEqual(manifest["segmentation"]["anchors"], [])
+
+
+class RecordingAxis:
+    """Enough of an axis to say what was asked of it, and nothing else.
+
+    The manifest's `pivot_drawn` is what a reader sees, and a test that only checks it is
+    checking one half of a coupling against itself: make the axhline unconditional again and
+    leave the flag alone, and every other test here still passes. The drawing is not observable
+    through a rendered PNG, so this is where the coupling gets pinned.
+    """
+
+    def __init__(self) -> None:
+        self.markers: list[float] = []
+        self.levels: list[float] = []
+
+    def plot(self, _x, y, **_kwargs) -> None:
+        self.markers.append(float(y[0]))
+
+    def axhline(self, level, **_kwargs) -> None:
+        self.levels.append(float(level))
+
+
+class ThePivotLineFollowsThePivotTests(unittest.TestCase):
+    def test_no_level_is_drawn_when_the_pivot_has_no_bar_on_this_timeframe(self) -> None:
+        frame, _ = base_series(start="2026-01-05", breakout=False)
+        segmentation = canonical_chain(frame)
+        weekly = frame.resample("W-FRI").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
+        ).dropna()
+        weekly = weekly.loc[weekly.index.date <= frame.index[-1].date()]
+        axis = RecordingAxis()
+
+        drawn, pivot_drawn = _draw_anchors(axis, weekly, segmentation, "weekly")
+
+        self.assertNotIn(segmentation["anchors"][-1]["date"], drawn)
+        self.assertFalse(pivot_drawn)
+        self.assertEqual(axis.levels, [])
+        self.assertTrue(axis.markers)
+
+    def test_the_level_is_drawn_once_when_the_pivot_is_on_the_chart(self) -> None:
+        frame, _ = base_series(start="2026-01-05", breakout=False)
+        segmentation = canonical_chain(frame)
+        axis = RecordingAxis()
+
+        _, pivot_drawn = _draw_anchors(axis, frame, segmentation, "daily")
+
+        self.assertTrue(pivot_drawn)
+        self.assertEqual(axis.levels, [float(segmentation["anchors"][-1]["price"])])
 
 
 if __name__ == "__main__":

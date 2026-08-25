@@ -179,16 +179,15 @@ def two_bases_series(
     )
 
 
-def bases_under_an_older_high_series(
-    *, start: str = "2026-01-02", realistic_breakout: bool = False
-) -> tuple[pd.DataFrame, list[str], list[str]]:
+def bases_under_an_older_high_series(*, start: str = "2026-01-02") -> tuple[pd.DataFrame, list[str], list[str]]:
     """Two bases where the breakout between them never took out the older high.
 
     `two_bases_series` puts the second rim above everything before it, which happens to satisfy
     the rim rule by accident. A deep correction, a partial recovery, and a breakout out of that
     recovery's own pivot is the shape that does not: the old peak still towers over the base
-    being built, so a rim taken as "the highest high before the pivot" reaches back over a
-    completed structure and reports a forty percent correction for an eleven percent base.
+    being built, so the chain covers both structures. That is the answer -- the contraction gate
+    is what rejects it, and a detector that trimmed to the newer half would be deleting the
+    evidence that gate reads.
     """
 
     closes = _leg(55.0, 100.0, 50)
@@ -219,14 +218,6 @@ def bases_under_an_older_high_series(
         label = index[anchor.position]
         frame.loc[label, "High" if anchor.kind == "high" else "Low"] = frame.loc[label, "Close"]
     frame["Volume"] = [1_000_000.0] * len(closes)
-    if realistic_breakout:
-        # A breakout session opens under the level it clears and travels through it. Legs built
-        # from evenly spaced closes never do, which flatters any rule that reads the crossing
-        # bar's own low.
-        pivot = first[-1].price
-        crossing = next(label for label in index if float(frame.loc[label, "Close"]) > pivot and label > index[first[-1].position])
-        frame.loc[crossing, "Open"] = pivot * 0.985
-        frame.loc[crossing, "Low"] = pivot * 0.98
     return (
         frame[["Open", "High", "Low", "Close", "Volume"]],
         [index[anchor.position].date().isoformat() for anchor in first],

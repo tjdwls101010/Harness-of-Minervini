@@ -140,8 +140,8 @@ class CanonicalChainTests(unittest.TestCase):
             index=index,
         )
 
-        finer = base_chain(segment(frame, retracement_pct=0.5)["anchors"], frame["Close"], frame["Low"])
-        primary = base_chain(segment(frame, retracement_pct=1.0)["anchors"], frame["Close"], frame["Low"])
+        finer = base_chain(segment(frame, retracement_pct=0.5)["anchors"])
+        primary = base_chain(segment(frame, retracement_pct=1.0)["anchors"])
         self.assertGreater(len(finer), len(primary))
 
         chain = canonical_chain(frame)
@@ -186,50 +186,23 @@ class OneBaseAtATimeTests(unittest.TestCase):
 
         self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
 
-    def test_a_breakout_that_stayed_under_an_older_peak_still_ends_the_base_it_left(self) -> None:
-        """The rim rule alone only works when the newer rim happens to top everything before it.
+    def test_two_structures_under_one_peak_come_back_whole_rather_than_tidied(self) -> None:
+        """The flattering half is not the honest answer, and cutting to it is the forgery.
 
-        A deep correction, a partial recovery, and a breakout out of that recovery leaves the old
-        peak still towering over the base being built. Taking the highest high before the pivot
-        then reaches back across a completed structure and reports a forty percent correction for
-        an eleven percent base.
+        A trim that cut the older structure away was written for exactly this shape. What it
+        actually removed were the anchors carrying the contraction that widened, so the chain
+        came back clean and the detector vouched for its own edit. Left whole the chain says
+        what the history is, and the contraction gate is what rejects it.
         """
 
         frame, left_behind, current = bases_under_an_older_high_series()
 
         chain = canonical_chain(frame)
-
-        self.assertEqual([item["date"] for item in chain["anchors"]], current)
-        self.assertFalse(set(left_behind) & {item["date"] for item in chain["anchors"]})
-
-    def test_a_breakout_bar_that_opened_under_the_level_still_left_it_behind(self) -> None:
-        """Holding starts the session after the one that cleared it.
-
-        A breakout opens under the level and travels through it, so reading the crossing bar's
-        own low as a failure to hold made every realistic breakout fail the test -- and, because
-        the neighbouring parameters disagreed about it, took the whole segmentation to unstable.
-        """
-
-        frame, left_behind, current = bases_under_an_older_high_series(realistic_breakout=True)
-
-        chain = canonical_chain(frame)
+        dates = [item["date"] for item in chain["anchors"]]
 
         self.assertEqual(chain["state"], "resolved")
-        self.assertEqual([item["date"] for item in chain["anchors"]], current)
-
-    def test_a_poke_above_the_pivot_that_gave_it_all_back_did_not_end_the_base(self) -> None:
-        """Clearing a level and holding it is leaving; clearing it and falling back is failing.
-
-        Trimming on the close alone would cut a failed breakout out of its own base and hand
-        back the rebuild as a fresh structure, which is the opposite of what the source says a
-        pivot failure is.
-        """
-
-        frame, first, _ = two_bases_series(second_high=99.7)
-
-        chain = canonical_chain(frame)
-
-        self.assertTrue(set(first) <= {item["date"] for item in chain["anchors"]})
+        self.assertTrue(set(left_behind) <= set(dates))
+        self.assertTrue(set(current) <= set(dates))
 
 
 class UnusableHistoryTests(unittest.TestCase):
