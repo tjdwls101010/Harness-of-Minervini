@@ -80,8 +80,11 @@ class DoctrineRegistryTests(unittest.TestCase):
                 "excessive_dilution",
             ],
         )
+        # "in less than eight weeks", the source's own words. The condition used to paraphrase
+        # them as "under eight weeks" while the threshold beside it compiled to `<=`, so exactly
+        # eight weeks passed a criterion the sentence excludes.
         self.assertIn(
-            "advance is at least 100 percent in under eight weeks",
+            "advance is at least 100 percent in less than eight weeks",
             result["claim"]["rule"]["conditions"],
         )
 

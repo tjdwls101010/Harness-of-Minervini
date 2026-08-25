@@ -596,8 +596,8 @@
       "rule": {
         "summary": "A qualifying Power Play may proceed despite weak or unavailable verified growth data only when technical eligibility, VCP quality, market alignment, and risk controls remain intact.",
         "conditions": [
-          "advance is at least 100 percent in under eight weeks",
-          "flag lasts three to six weeks and at least twelve trading days",
+          "advance is at least 100 percent in less than eight weeks",
+          "flag lasts at most six weeks and at least twelve trading days",
           "flag declines no more than 20 to 25 percent",
           "flag is no more than 10 percent tight or has clear VCP characteristics"
         ],
@@ -665,6 +665,22 @@
           "comparator": "<=",
           "exact": false,
           "quote_index": 2
+        },
+        "flag_maximum_weeks": {
+          "role": "gate",
+          "value": 6,
+          "unit": "weeks",
+          "comparator": "<=",
+          "exact": false,
+          "quote_index": 2
+        },
+        "flag_maximum_decline_gate_pct": {
+          "role": "gate",
+          "value": 25,
+          "unit": "percent",
+          "comparator": "<=",
+          "exact": false,
+          "quote_index": 2
         }
       },
       "failure": {
@@ -710,7 +726,7 @@
             "supports": "the Power Play fundamentals waiver is scoped: entered as the sole no-fundamentals situation, but still requires VCP characteristics and proper supply/demand digestion"
           }
         ],
-        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound; advance_maximum_weeks was compiled with <= against a quotation that says \"in less than eight weeks\", so exactly eight weeks passed a criterion the source excludes"
+        "resolution": "re-sourced to Minervini.db row 3; fundamentals.power_play_fundamentals_waiver is folded in here as an additional quotation rather than emitted separately; flag_maximum_decline_pct is kept as the book's stated 20-25 percent range — the prior registry version silently took only the 25 percent upper bound; advance_maximum_weeks was compiled with <= against a quotation that says \"in less than eight weeks\", so exactly eight weeks passed a criterion the source excludes; the two ranges the quotation states inside \"the following criteria must be met\" now carry their loose end as a gate beside the band that reports position -- six weeks and 25 percent. Without them a ten-week flag and a forty percent correction met every registered limit; without the bands a 20 percent correction and a 25 percent one read identically. The band's report about a short flag is not a verdict about it either: the source's own \"some can emerge after only 12 days\" is what flag_minimum_sessions carries"
       },
       "quarantine": {
         "is_quarantined": false,
