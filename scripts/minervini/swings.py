@@ -219,7 +219,11 @@ def _volume_expanded(volumes: pd.Series, stamp: pd.Timestamp) -> bool:
     """
     sessions = int(doctrine.parameter(_CONVENTION, "breakout_volume_reference_sessions"))
     prior = volumes.loc[:stamp].iloc[-(sessions + 1) : -1]
-    return bool(len(prior)) and float(volumes.at[stamp]) > float(prior.mean())
+    # The whole window, not whatever part of it exists. Comparing against two sessions is not the
+    # observation the source describes, and on a short history it let one busy day cut a base.
+    if len(prior) < sessions:
+        return False
+    return float(volumes.at[stamp]) > float(prior.mean())
 
 
 def _pivot_index(confirmed: list[dict[str, Any]], highs: list[int]) -> int | None:
@@ -285,7 +289,9 @@ def canonical_chain(history: Any) -> dict[str, Any]:
     closes = None if bars is None else bars["Close"]
     lows = None if bars is None else bars["Low"]
     volumes = None if bars is None else bars["Volume"]
-    if not 0 < multiple * typical < 100:
+    # Every multiple the sweep will run at, not only the middle one: the upper neighbour reaches
+    # past the segmenter's domain first, and it was still being handed to it.
+    if not all(0 < (multiple + offset) * typical < 100 for offset in [0.0, *offsets]):
         # A history whose ordinary session spans a large fraction of its own close gives a scale
         # the segmenter has no domain for. That is a fact about the data, so it leaves as typed
         # unavailability rather than as an exception out of a boundary.

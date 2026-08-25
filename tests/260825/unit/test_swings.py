@@ -18,7 +18,7 @@ import unittest
 import pandas as pd
 
 from scripts.minervini.setup_structure import bars_fingerprint
-from scripts.minervini.swings import base_chain, canonical_chain, segment
+from scripts.minervini.swings import _volume_expanded, base_chain, canonical_chain, segment
 from tests.series import anchor_dates, base_series, bases_under_an_older_high_series, from_legs, turn_between_neighbours_series, two_bases_series, unstable_series
 
 
@@ -314,6 +314,31 @@ class UnusableHistoryTests(unittest.TestCase):
         broken.iloc[5, broken.columns.get_loc("Open")] = float(broken["Low"].iloc[5]) * 0.5
 
         self.assertEqual(canonical_chain(broken)["rejection"], "history_contains_invalid_bar_ranges")
+
+    def test_a_breakout_needs_the_whole_window_behind_it(self) -> None:
+        """Two sessions is not "its own fifty-day average", however busy the third one is.
+
+        The guard was written, then lost when the window moved into the registry, and reported
+        as done without reading the line back.
+        """
+
+        index = pd.bdate_range("2026-01-02", periods=3)
+
+        self.assertFalse(_volume_expanded(pd.Series([100.0, 100.0, 201.0], index=index), index[2]))
+
+    def test_the_neighbouring_multiples_have_to_land_in_the_domain_too(self) -> None:
+        """The sweep runs at three multiples, and the upper one leaves the domain first."""
+
+        index = pd.bdate_range("2026-01-02", periods=8)
+        frame = pd.DataFrame(
+            {"Open": [1.3] * 8, "High": [1.5] * 8, "Low": [1.0] * 8, "Close": [1.2] * 8, "Volume": [1e6] * 8},
+            index=index,
+        )
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unavailable")
+        self.assertEqual(chain["rejection"], "typical_daily_range_leaves_no_usable_retracement")
 
     def test_a_range_too_wide_to_scale_from_leaves_as_unavailable(self) -> None:
         """A derived retracement outside the segmenter's domain is data, not an exception."""
