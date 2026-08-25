@@ -67,6 +67,10 @@ def render_chart_artifacts(
         artifacts.append({
             "timeframe": timeframe, "path": str(path), "bars": len(bars),
             "anchors_drawn": drawn, "pivot_drawn": pivot_drawn,
+            # A week read before it ends aggregates the sessions it has. Its volume bar is
+            # short for that reason and not because the stock went quiet, which is exactly the
+            # thing a reader is looking for on this picture.
+            "last_bar_partial": timeframe == "weekly" and _week_in_progress(daily, as_of_date),
         })
 
     manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_manifest.json"
@@ -134,6 +138,14 @@ def _weekly_bars(daily: pd.DataFrame, as_of: date) -> pd.DataFrame:
     if weekly.empty:
         raise ValueError("daily_ohlcv contains no completed weekly bars as_of")
     return weekly
+
+
+def _week_in_progress(daily: pd.DataFrame, as_of: date) -> bool:
+    """Whether the last weekly bucket is still collecting sessions."""
+
+    last = daily.index[-1]
+    friday = last + pd.Timedelta(days=(4 - last.weekday()) % 7)
+    return bool(friday.date() > as_of)
 
 
 def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None) -> tuple[list[str], bool]:

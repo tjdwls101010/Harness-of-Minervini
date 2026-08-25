@@ -272,6 +272,26 @@ class OneIdeaOfAUsableBarTests(unittest.TestCase):
                     rendered = False
                 self.assertEqual(accepted, rendered)
 
+    def test_a_week_still_collecting_sessions_says_so(self) -> None:
+        """Its volume bar is short because the week is short, not because the stock went quiet.
+
+        Volume drying up is one of the things a reader is looking for on this picture, so the
+        one bar that is guaranteed to look dry for an unrelated reason has to be labelled.
+        """
+
+        for start, partial in (("2026-01-06", False), ("2026-01-05", True)):
+            with self.subTest(start=start):
+                frame, _ = base_series(start=start, breakout=False)
+                with tempfile.TemporaryDirectory() as directory:
+                    manifest = render_chart_artifacts(
+                        frame, ticker="TEST", as_of=frame.index[-1].date(), output_dir=directory
+                    )
+                weekly = next(item for item in manifest["artifacts"] if item["timeframe"] == "weekly")
+                self.assertEqual(weekly["last_bar_partial"], partial)
+                self.assertFalse(
+                    next(item for item in manifest["artifacts"] if item["timeframe"] == "daily")["last_bar_partial"]
+                )
+
     def test_a_doji_stays_a_doji_at_any_price(self) -> None:
         """A body floor in dollars is a different floor on every stock.
 
