@@ -195,6 +195,14 @@ def build_parser() -> JsonArgumentParser:
 
     power_play = _capability_parser(ticker_sub, "power-play", "ticker.power-play")
     power_play.add_argument("ticker", help=_input_help("ticker.power-play", "ticker"))
+    power_play.add_argument(
+        "--chart-reading",
+        dest="chart_readings",
+        action="append",
+        default=[],
+        metavar="KEY=observed|absent",
+        help=_input_help("ticker.power-play", "chart_readings"),
+    )
     _common(power_play, "ticker.power-play")
 
     fundamentals = _capability_parser(ticker_sub, "fundamentals", "ticker.fundamentals")

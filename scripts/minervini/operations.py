@@ -11,6 +11,7 @@ from datetime import date
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Callable, Mapping
 
 import pandas as pd
@@ -33,7 +34,7 @@ from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, i
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
-from .power_play_evidence import build_power_play_evidence
+from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -524,9 +525,48 @@ _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
+_CHART_READING_CONVENTION = "convention.power_play_chart_reading"
+
+
+def _chart_readings(request: Mapping[str, Any]) -> dict[str, str]:
+    """What no amount of price history could make valid, checked before any is fetched.
+
+    Written KEY=word rather than as an object, and parsed here rather than in the command line,
+    so the shape a programmatic caller is held to is the shape the flag spells. The key itself is
+    not checked here: only a run that has measured the bars knows which questions are open.
+    """
+
+    declarations = request.get("chart_readings")
+    if declarations is None:
+        return {}
+    if isinstance(declarations, str) or not isinstance(declarations, Sequence):
+        raise RequestError("chart_readings is a list of KEY=observed|absent readings", "chart_readings")
+    readings: dict[str, str] = {}
+    for declaration in declarations:
+        key, separator, word = str(declaration).partition("=")
+        key, word = key.strip(), word.strip().lower()
+        if not separator or not key or not word:
+            raise RequestError(
+                "a chart reading is written KEY=observed|absent, using a key from chart_questions",
+                "chart_readings",
+            )
+        if word not in CHART_READING_WORDS:
+            raise RequestError(
+                f"{key} needs one of {', '.join(CHART_READING_WORDS)} after the equals sign",
+                "chart_readings",
+            )
+        # Two answers to one question is a contradiction, not a correction. Silently keeping the
+        # last one picks a winner the caller never chose.
+        if key in readings:
+            raise RequestError(f"{key} was answered twice; a question takes one reading", "chart_readings")
+        readings[key] = word
+    return readings
+
+
 def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
+    readings = _chart_readings(request)
     try:
         prices = _cached_provider(
             runtime,
@@ -558,7 +598,19 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing=[stale_price],
             sources=[_source(prices.meta)],
         )
-    verdict = evaluate_power_play(build_power_play_evidence(prices.data))
+    evidence = build_power_play_evidence(prices.data, chart_readings=readings)
+    # Refused rather than dropped, and before the verdict is assembled. The ordinary way an
+    # approval stops matching is a session closing between the chart and the request; a caller
+    # told nothing would read the unchanged answer as the harness ignoring them.
+    stale = evidence["unmatched_chart_readings"]
+    if stale:
+        raise RequestError(
+            "no question here is named by "
+            + ", ".join(stale)
+            + " -- read chart_questions from this capability and answer a key it issued",
+            "chart_readings",
+        )
+    verdict = evaluate_power_play(evidence)
     rejection = verdict["structure"].get("rejection")
     if rejection is not None:
         return envelope(
@@ -599,6 +651,13 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         or verdict["distribution_evidence"] != "present"
     )
 
+    # Which criteria this run actually asked a reader about. A gap reported as waiting on a chart
+    # with no key anywhere in the envelope to answer it is a contradiction one line apart.
+    awaited = {
+        f"fundamentals.power_play_exception.{question['condition']}"
+        for question in verdict["chart_questions"]
+    }
+
     def _reason(item: str) -> str:
         if item in reasons:
             return reasons[item]
@@ -621,6 +680,11 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # waived by a reading of the volume.
         if item == FLAG_STILL_FORMING:
             return "flag_still_forming"
+        # A criterion still open on a structure the bars settled. No key was issued for it and
+        # none could be, so telling the reader a chart is what it waits on sends them to draw a
+        # picture that has nothing left to decide.
+        if item not in awaited:
+            return "rejected_before_a_chart_was_needed"
         return "chart_reading_required"
 
     missing = [{"id": item, "reason": _reason(item), "required": True} for item in verdict["missing"]]
@@ -633,7 +697,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         "ticker.power-play",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
-        status="ok" if verdict["power_play_state"] == "not_qualified" else "partial",
+        # The status is whether the evidence contract was satisfied; the state is the verdict.
+        # A qualified Power Play has no gap left in it, so reporting it as `partial` would send
+        # the reader looking for a missing piece that does not exist.
+        status="partial" if verdict["power_play_state"] == "incomplete" else "ok",
         data={"ticker": ticker, **verdict},
         signals=verdict["signals"],
         missing=missing,
@@ -648,6 +715,10 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             # The candidates are the turning points that convention cuts, so the rule deciding
             # which highs count as tops is cited beside the one deciding how far down they argue.
             "setup.swing_segmentation_convention",
+            # What a reading of the chart is bound to, and what it can never close. Cited on every
+            # answer here, because a reader auditing a qualified verdict has to be able to reach
+            # the rule that let a human sentence become a machine pass.
+            _CHART_READING_CONVENTION,
             "scope.data_integrity",
         ],
         next_capabilities=["ticker.chart"] if awaits_a_chart else [],

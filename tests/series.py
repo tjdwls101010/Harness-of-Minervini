@@ -883,3 +883,31 @@ def a_payout_decided_criterion_under_a_lower_top_series(
     paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
     frame.iloc[70:, paid] -= payout
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def two_tops_that_both_await_the_chart_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """Two candidate tops that agree on every measurable criterion and both ask about volume.
+
+    A pullback inside the advance leaves a confirmed turning point a few percent under the peak,
+    close enough to contest it. Every deterministic gate reads the same from both, so the only
+    thing separating them is the question the bars decline to answer -- which is what makes this
+    the fixture for what a reading of one top's chart does to the other's.
+    """
+
+    dormant, mid, dip, peak, flag_low, flag_end = 50.0, 103.0, 96.0, 108.0, 100.0, 105.0
+    closes = (
+        [dormant] * 60
+        + [dormant + (mid - dormant) * (step + 1) / 16 for step in range(16)]
+        + [mid - (mid - dip) * (step + 1) / 4 for step in range(4)]
+        + [dip + (peak - dip) * (step + 1) / 4 for step in range(4)]
+        + [peak - (peak - flag_low) * (step + 1) / 10 for step in range(10)]
+        + [flag_low + (flag_end - flag_low) * (step + 1) / 10 for step in range(10)]
+    )
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 24 + [800_000.0] * 20
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

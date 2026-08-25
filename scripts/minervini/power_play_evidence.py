@@ -66,7 +66,9 @@ def _summary(claim_id: str) -> str:
     return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
 
 
-def _observation(condition: str, state: str, measured: Any, required: str) -> dict[str, Any]:
+def _observation(
+    condition: str, state: str, measured: Any, required: str, *, read_from_chart: bool = False
+) -> dict[str, Any]:
     """One criterion the source states without a magnitude, reported under its own name.
 
     The id carries the condition and the doctrine_id carries the claim, because four separate
@@ -82,6 +84,10 @@ def _observation(condition: str, state: str, measured: Any, required: str) -> di
         "state": state,
         "measured": measured,
         "required": required,
+        # A verdict a person supplied must never read like one the numbers reached. This is the
+        # only channel in the capability through which a human sentence becomes a machine `pass`,
+        # so an auditor of a qualified Power Play has to be able to see it on the signal itself.
+        "read_from_chart": read_from_chart,
     }
 
 
@@ -262,6 +268,46 @@ def power_play_fingerprint(history: Any) -> str | None:
     return hashlib.sha256(events.encode("utf-8")).hexdigest()
 
 
+# The two criteria the source states without a magnitude, and the measurement each one turns on.
+# The measurement is in the key because it is what the reader was looking at: a chart approved at
+# a nine percent flag is not an approval of the same flag re-measured at eleven.
+_CHART_CONDITIONS = {
+    "launch_volume_character": "advance_peak_volume_ratio",
+    "flag_tightness_or_vcp": "flag_depth_pct",
+}
+# Two words, not three. "I looked and could not tell" leaves the criterion exactly where a reader
+# who never looked leaves it, so a third word would buy a different gap reason and nothing else;
+# a reader who cannot tell supplies no approval and the envelope goes on asking.
+_CHART_ANSWERS = {"observed": "pass", "absent": "fail"}
+# The vocabulary itself, for the request boundary. Read from the same dict the answers are
+# applied from, so the words a caller may spell cannot drift from the words that do anything.
+CHART_READING_WORDS = tuple(_CHART_ANSWERS)
+_CHART_READING = "convention.power_play_chart_reading"
+_CHART_KEY_LENGTH = 16
+
+
+def _chart_key(fingerprint: str, condition: str, reading: Mapping[str, Any]) -> str:
+    """The name of one question, which is everything answering it would have to be about.
+
+    A key is issued rather than assembled by the caller, so an approval cannot be partly right.
+    Echoing four fields lets a caller match the ones they kept and miss the one that moved; a
+    digest either is the question that was asked or is not.
+    """
+    payload = json.dumps(
+        {
+            "measured_bars": fingerprint,
+            "condition": condition,
+            "boundaries": {name: reading[name] for name in _BOUNDARIES},
+            "measured": reading[_CHART_CONDITIONS[condition]],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:_CHART_KEY_LENGTH]
+
+
 def _turning_points(history: Any) -> frozenset[str] | None:
     """The highs the segmentation this harness already owns calls turning points.
 
@@ -342,7 +388,7 @@ def _walk_the_tops(
     }
 
 
-def build_power_play_evidence(history: Any) -> dict[str, Any]:
+def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
     The structure is found rather than declared, so the same bars are read from every top the
@@ -408,7 +454,67 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         }
         for reading, decided in zip(readings, every_payout_sensitive)
     ]
+
+    # Then the two questions the bars decline to answer, offered to a reader and taken back.
+    #
+    # Per reading, because both questions are asked about a span the top decides: for a lower top
+    # the advance starts elsewhere and the flag is longer, so it is a different chart and gets its
+    # own key. A caller who wants a criterion settled has to answer every top that may contest it,
+    # which is the honest cost of two candidate structures rather than a gap in the seam.
+    #
+    # No key at all where the reading is not the stock's own. While a split stands in the span the
+    # measurements are arithmetic about the action, and while the tops read the dividend's
+    # ordering the search found the wrong top -- asking a reader to corroborate either is asking
+    # them to confirm something that never happened.
+    # Both surfaces read the same sentence: the question offered to a reader and the requirement
+    # reported beside the answer have to be the criterion, not two paraphrases of it.
+    asks = {
+        "launch_volume_character": "the advance commences on huge volume",
+        "flag_tightness_or_vcp": (
+            f"the flag corrects no more than {tight_limit} percent, or shows VCP characteristics"
+        ),
+    }
+    given = dict(chart_readings or {})
+    fingerprint = power_play_fingerprint(history)
+    chart_questions: list[dict[str, Any]] = []
+    answered: list[dict[str, str]] = [{} for _ in readings]
+    for index, (criteria, reading) in enumerate(zip(every_criteria, readings)):
+        if fingerprint is None or reordered or not _unmoved(reading):
+            continue
+        # Nor for a reading the bars already threw out. A visual opinion never overturns a
+        # deterministic failure, so a key here would send a reader to draw a picture, come back
+        # with an answer, and find the verdict exactly where they left it.
+        if reading_rejects(criteria, corporate_action_unmoved=True):
+            continue
+        for condition, measured in _CHART_CONDITIONS.items():
+            if criteria[condition] != "needs_chart":
+                continue
+            key = _chart_key(fingerprint, condition, reading)
+            answer = given.get(key)
+            chart_questions.append(
+                {
+                    "key": key,
+                    "condition": condition,
+                    "reading": index,
+                    "measured_bars": fingerprint,
+                    "peak_date": reading["peak_date"],
+                    "advance_anchor_date": reading["advance_anchor_date"],
+                    "flag_low_date": reading["flag_low_date"],
+                    "measured": {measured: reading[measured]},
+                    "asks": asks[condition],
+                    "answered": answer,
+                }
+            )
+            if answer is not None:
+                criteria[condition] = _CHART_ANSWERS[answer]
+                answered[index][condition] = criteria[condition]
+    # Refused rather than dropped. The ordinary way an approval goes stale is a session closing
+    # between the chart and the request, and a caller told nothing would read the unchanged
+    # `incomplete` as the harness ignoring them rather than as their answer not applying.
+    unmatched = sorted(set(given) - {question["key"] for question in chart_questions})
+
     primary_criteria = every_criteria[0] if readings else _criteria(measurements, tight_limit)
+    primary_answered = answered[0] if readings else {}
     # A reading whose answer the payout decided abstains rather than dissents. It has not disputed
     # the top reading's answer; it has declined to give one, and counting that as disagreement
     # sends the reader to the chart to settle a top when the dividend calendar is what moved.
@@ -483,26 +589,34 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         doctrine.evaluate_band(_CLAIM, "flag_maximum_decline_pct", measurements["flag_depth_pct"]),
         _observation(
             "launch_volume_character",
-            _volume_state(measurements["advance_peak_volume_ratio"]),
+            primary_answered.get("launch_volume_character", _volume_state(measurements["advance_peak_volume_ratio"])),
             {
                 "advance_peak_volume_ratio": measurements["advance_peak_volume_ratio"],
                 "advance_peak_volume_date": measurements["advance_peak_volume_date"],
                 "launch_volume_ratio": measurements["launch_volume_ratio"],
                 "advance_volume_ratio": measurements["advance_volume_ratio"],
             },
-            "the advance commences on huge volume",
+            asks["launch_volume_character"],
+            read_from_chart="launch_volume_character" in primary_answered,
         ),
         _observation(
             "flag_tightness_or_vcp",
-            _tightness_state(measurements["flag_depth_pct"], tight_limit),
+            primary_answered.get("flag_tightness_or_vcp", _tightness_state(measurements["flag_depth_pct"], tight_limit)),
             {"flag_depth_pct": measurements["flag_depth_pct"], "tight_action_maximum_pct": tight_limit},
-            f"the flag corrects no more than {tight_limit} percent, or shows VCP characteristics",
+            asks["flag_tightness_or_vcp"],
+            read_from_chart="flag_tightness_or_vcp" in primary_answered,
         ),
     ]
     return {
         # The name of the input this verdict was reached on, prices and events together, so an
         # approval can be bound to it and a later reader can tell a rule change from a data one.
-        "measured_bars": power_play_fingerprint(history),
+        "measured_bars": fingerprint,
+        # What this run is still asking a reader, and what the reader would be answering about.
+        # Issued rather than assembled: a key names one criterion under one reading of the tops,
+        # measured off one set of bars, at one value -- and stops naming it the moment any of
+        # those move.
+        "chart_questions": chart_questions,
+        "unmatched_chart_readings": unmatched,
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
@@ -537,4 +651,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     }
 
 
-__all__ = ["build_power_play_evidence", "compile_power_play_spec"]
+__all__ = [
+    "CHART_READING_WORDS",
+    "build_power_play_evidence",
+    "compile_power_play_spec",
+    "power_play_fingerprint",
+]
