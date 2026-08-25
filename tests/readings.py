@@ -7,6 +7,8 @@ broke every file at once; collecting it here means a test names only the reading
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from collections.abc import Sequence
 
 import pandas as pd
@@ -40,3 +42,53 @@ def full(frame: pd.DataFrame, chain: Sequence[str], **overrides):
     }
     readings.update(overrides)
     return readings
+
+
+def power_play_answers(history, chart_readings):
+    """The arguments an answered Power Play reading now takes.
+
+    The digest travels with every answer, so a test that skips it is testing a call the request
+    boundary refuses. Kept in one place because five modules make the same call.
+    """
+    from scripts.minervini.setup_structure import bars_fingerprint, read_bars
+
+    return {"chart_readings": chart_readings, "drawn_bars": bars_fingerprint(read_bars(history)[0])}
+
+
+@contextmanager
+def reregistered(claim_id, field, name, value):
+    """Move one registered value for the duration of a reading, then put it back.
+
+    Tests that couple a measurement to the registry have to move the registry, not the function
+    that reads it: a patched-out lookup passes just as happily against a value hardcoded in the
+    module under test.
+    """
+    from scripts.minervini import doctrine
+
+    record = next(claim for claim in doctrine._load_registry()["claims"] if claim["id"] == claim_id)
+    slot = record[field][name]
+    before = slot["value"]
+    slot["value"] = value
+    try:
+        yield
+    finally:
+        slot["value"] = before
+
+
+@contextmanager
+def restated(claim_id, field, value):
+    """Replace one whole field of a registered claim for the duration of a reading.
+
+    `reregistered` moves a number inside a thresholds or parameters table. This moves what the
+    claim *says* -- its rule, what its failure means, what its absence means -- which is the half
+    a digest of numbers alone cannot see change.
+    """
+    from scripts.minervini import doctrine
+
+    record = next(claim for claim in doctrine._load_registry()["claims"] if claim["id"] == claim_id)
+    before = record[field]
+    record[field] = value
+    try:
+        yield
+    finally:
+        record[field] = before

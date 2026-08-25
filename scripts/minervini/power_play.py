@@ -50,10 +50,17 @@ def _dated_events(bars: pd.DataFrame, column: str, start: int, end: int) -> list
     return [stamp.date().isoformat() for stamp in span.index[span[column] > 0]]
 
 
-def _empty(reason: str | None) -> dict[str, Any]:
+def _empty(reason: str | None, *, peak_date: str | None = None, peak_high: float | None = None) -> dict[str, Any]:
+    """A reading that produced no structure, carrying whatever it did establish.
+
+    The top it found before it ran out of sessions is the one thing worth keeping. Nothing can be
+    measured from that top, but how far below the highest it stands is what decides whether it was
+    ever a competing reading of this structure -- and thrown away here, that distance is
+    unknowable and every unread top has to be treated as one.
+    """
     return {
-        "peak_date": None,
-        "peak_high": None,
+        "peak_date": peak_date,
+        "peak_high": peak_high,
         "peak_close": None,
         "advance_low": None,
         "advance_low_date": None,
@@ -93,7 +100,14 @@ def _label(bars: Any, position: int) -> str | None:
     return str(bars.index[position].date())
 
 
-def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | None = None, before: str | None = None) -> dict[str, Any]:
+def measure_power_play(
+    history: Any,
+    spec: Mapping[str, Any],
+    *,
+    below: float | None = None,
+    before: str | None = None,
+    excluding: frozenset[str] | None = None,
+) -> dict[str, Any]:
     """Reduce a history to the numbers the Power Play criteria are read against.
 
     ``below`` and ``before`` cap the peak search, which is how the same bars are read a second time
@@ -101,6 +115,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     lower top *inside* the flag is later than the peak the flag hangs from and cannot be an
     alternative reading of it -- it is the same structure with most of itself cut off. Nothing
     else about the measurement changes; it is the same arithmetic asked about another candidate.
+
+    ``excluding`` names sessions the caller has already looked at and declined, by date. Price
+    alone cannot advance a cursor past them: two sessions can print the same high, and lowering
+    the bound below one of them deletes the other. A caller walking a chain of candidate tops
+    passes the dates it has finished with; nothing else about the measurement changes.
     """
 
     bars, rejection = read_bars(history)
@@ -130,6 +149,8 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
         window = window.loc[window["High"] < below]
     if before is not None:
         window = window.loc[window.index < pd.Timestamp(before)]
+    if excluding:
+        window = window.loc[[str(stamp.date()) not in excluding for stamp in window.index]]
     if not len(window):
         return _empty("history_has_no_earlier_top_to_read_from")
     peak_high = float(window["High"].max())
@@ -149,7 +170,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     flag = bars.iloc[peak + 1:]
 
     if not len(before):
-        return _empty("history_has_no_sessions_before_the_peak")
+        return _empty(
+            "history_has_no_sessions_before_the_peak",
+            peak_date=str(peak_label.date()),
+            peak_high=peak_high,
+        )
 
     # The extremes reading, reported and never gating. A bar that wicked to forty-nine three days
     # after a launch from fifty is the lowest low of the window without being where anything
@@ -408,6 +433,21 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # contest, is not agreement that this is not a Power Play.
     every_top_rejects = bool(evidence.get("every_top_rejects"))
     contested = set(evidence.get("contested_criteria") or ())
+    # A criterion the highest top answered and a top that may contest it has not. It blocks like a
+    # dispute and closes like a chart gap, so it is carried separately all the way to the reason a
+    # reader acts on.
+    awaiting_elsewhere = set(evidence.get("awaiting_chart_under_another_top") or ())
+    # And the same shape for the dividend: a top that may contest this criterion had its answer
+    # decided by a payout, so it never gave one. Carried separately from the highest top's own
+    # payout gap because the reader is owed which reading the calendar moved.
+    payout_elsewhere = set(evidence.get("payout_decided_under_another_top") or ())
+    # And a top the corporate action left unreadable. It gave no answer to anything, so it
+    # consents to nothing -- and unlike the chart gaps beside it, no key exists that would let a
+    # reader close it.
+    action_elsewhere = set(evidence.get("corporate_action_under_another_top") or ())
+    # And a top whose own reading the bars already rejected. No key was issued for it either, so
+    # what holds the criterion is a reading of these bars saying this is not a Power Play.
+    rejected_elsewhere = set(evidence.get("rejected_under_another_top") or ())
     # A payout inside the span is the third way a criterion can stop being the stock's own.
     payout_sensitive = set(evidence.get("payout_sensitive_criteria") or ())
     # Only the tops speak to this. A payout withholds the criterion it decided and says so under
@@ -432,7 +472,14 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         signal = signals.get(claim_id)
         state = None if signal is None else str(signal.get("state"))
         condition = claim_id[len(_CLAIM) + 1:]
-        agreed = condition not in contested and condition not in payout_sensitive
+        agreed = (
+            condition not in contested
+            and condition not in payout_sensitive
+            and condition not in awaiting_elsewhere
+            and condition not in payout_elsewhere
+            and condition not in action_elsewhere
+            and condition not in rejected_elsewhere
+        )
         trusted = agreed and unmoved
         if state == "pass" and trusted:
             continue
@@ -457,6 +504,20 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         missing.append(_DISTRIBUTIONS)
     if not settled:
         missing.append("peak_identity")
+    # A top the loaded history ends before is a top nobody read. The chain already refuses to
+    # reject while one of these stands -- silence is not consent to a rejection -- and it is not
+    # consent to a qualification either. Nothing else here would stop one: `every_top_rejects`
+    # already excludes this case, so a structure whose highest top passes everything and whose
+    # next candidate could not be measured would otherwise come back clear on a chain that stopped
+    # short. Only more history closes it.
+    if ran_out_of_history and evidence.get("unread_top_may_contest"):
+        missing.append("lower_top_left_unread")
+    # And the same asymmetry for the top the segmentation never confirmed. The bars are read from
+    # it because the measurement found it rather than the descent did, and a failure it measures
+    # stands -- what it cannot do is carry a qualification, because a structure hanging from a bar
+    # no registered retracement confirms is not a structure this harness has identified a top for.
+    if not evidence.get("peak_is_a_confirmed_turning_point", True):
+        missing.append("peak_confirmation")
 
     # Whatever the reducer declined, the machine channel declines too -- each under the cause that
     # actually withdrew it, because a reader who fixes the wrong thing has not fixed anything.
@@ -480,6 +541,25 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         _decline({str(signal["id"]) for signal in signals.values()} | set(_BANDS_BESIDE.values()), cause)
     _decline({f"{_CLAIM}.{condition}" for condition in payout_sensitive}, "distribution_inside_the_measured_span")
     _decline({f"{_CLAIM}.{condition}" for condition in contested}, "peak_identity_disputed")
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in awaiting_elsewhere},
+        "chart_unread_under_another_top",
+    )
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in payout_elsewhere},
+        "distribution_under_another_top",
+    )
+    # The two silences that consent to nothing decline the machine channel too. Left out, the
+    # verdict said `incomplete` and the signal beside it still read `pass` or `fail` -- a consumer
+    # reading signals alone would take arithmetic about a split for a finding about the stock.
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in action_elsewhere},
+        "corporate_action_under_another_top",
+    )
+    _decline(
+        {f"{_CLAIM}.{condition}" for condition in rejected_elsewhere},
+        "structure_rejected_under_another_top",
+    )
     _decline(set(held_by_short_history), "history_ends_before_lower_top")
     _decline(set(held_by_another_top), "structure_stands_under_another_top")
     reported = [
@@ -491,7 +571,11 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # route. The second leaves nothing trustworthy to name -- reporting the highest top's list
     # would name limits the others say were never exceeded -- but no top the chain took reads
     # these bars as a Power Play, and that is a finished answer.
-    if failed or rejected_under_every_top_read:
+    # Every top read reached a rejection, whether they agreed on which limit did it or not. The
+    # `failed` list is the agreed half and `rejected_under_every_top_read` explains the other, but
+    # neither is the rejection -- reading the state off `failed` alone lost a rejection nobody
+    # disputed the moment two tops reached it by different routes.
+    if every_top_rejects:
         state = "not_qualified"
     elif missing:
         state = "incomplete"
@@ -499,18 +583,37 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         state = "qualified"
     return {
         "power_play_state": state,
+        "measured_bars": evidence.get("measured_bars"),
+        "measured_from": evidence.get("measured_from"),
+        "readings_cover_other_bars": bool(evidence.get("readings_cover_other_bars")),
+        # A finished verdict asks nothing more. The answers it rests on stay, because they are the
+        # evidence behind it, but a question still open on a structure nothing can move is an
+        # envelope contradicting itself: `qualified` and `not_qualified` both mean nothing is
+        # outstanding, and a key printed underneath says otherwise.
+        "chart_questions": [
+            question
+            for question in (evidence.get("chart_questions") or [])
+            if state == "incomplete" or question["answered"] is not None
+        ],
         "required_evidence": list(_REQUIRED),
         "failed": failed,
         "missing": missing,
         "structure": evidence.get("structure") or {},
         "measurements": evidence.get("measurements") or {},
         "peak_identity": evidence.get("peak_identity"),
+        "peak_is_a_confirmed_turning_point": evidence.get("peak_is_a_confirmed_turning_point"),
         "contested_criteria": sorted(contested),
+        "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
+        "payout_decided_under_another_top": sorted(payout_elsewhere),
+        "corporate_action_under_another_top": sorted(action_elsewhere),
+        "rejected_under_another_top": sorted(rejected_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         "readings": evidence.get("readings"),
         "surviving_readings": evidence.get("surviving_readings"),
         "unreadable_readings": evidence.get("unreadable_readings"),
         "readings_ran_out_of_history": evidence.get("readings_ran_out_of_history"),
+        "unread_top_may_contest": evidence.get("unread_top_may_contest"),
+        "unread_top": evidence.get("unread_top"),
         "first_non_contesting_reading": evidence.get("first_non_contesting_reading"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,

@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
 
@@ -814,32 +815,6 @@ def anchor_moving_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
-def lower_top_reshuffling_payout_series(*, start: str = "2026-01-02") -> pd.DataFrame:
-    """A payout that leaves the highest top alone and reorders the ones under it.
-
-    The peak prints last and is untouched by the ex-date, so its date, its anchor and its flag are
-    the same on either scale. Two lower tops sit on opposite sides of the distribution and are
-    within a dollar of each other, so which of them the chain reaches second is the payout's
-    answer rather than the stock's.
-    """
-
-    index = pd.bdate_range(start=start, periods=121)
-    closes = [50.0] * 40 + [78.0] * 10 + [50.0] * 20 + [79.0] * 10 + [50.0] * 20 + [100.0] + [96.0] * 20
-    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
-    frame["High"] = frame["Close"] * 1.002
-    frame["Low"] = frame["Close"] * 0.998
-    frame.iloc[100, frame.columns.get_loc("High")] = 100.0
-    frame["Volume"] = [400_000.0] * 100 + [2_400_000.0] + [800_000.0] * 20
-    frame["Stock Splits"] = [0.0] * len(closes)
-    frame["Dividends"] = [0.0] * len(closes)
-    # Between the two lower tops. On the tape the later one prints lower than the earlier; with
-    # every print on one scale it prints higher.
-    frame.iloc[60, frame.columns.get_loc("Dividends")] = 2.0
-    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
-    frame.iloc[60:, paid] -= 2.0
-    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
-
-
 def payout_that_only_moves_a_gate_series(
     *, payout: float = 0.30, start: str = "2026-01-02"
 ) -> pd.DataFrame:
@@ -875,3 +850,286 @@ def payout_that_only_moves_a_gate_series(
     paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
     frame.iloc[70:, paid] -= payout
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_payout_decided_criterion_under_a_lower_top_series(
+    *, payout: float = 0.30, start: str = "2026-01-02"
+) -> pd.DataFrame:
+    """The gate the payout decided, with a genuine earlier top that rejects on that same gate.
+
+    Built as the gate fixture with a pullback inside the advance, so the search has a second
+    turning point to land on. Read from that top the advance is only eighty-odd percent and fails
+    outright; read from the peak it lands either side of the limit depending on which scale the
+    prints are on. The chain is therefore loud with a rejection on a criterion that has no
+    trustworthy answer, which is exactly the combination a verdict must not resolve by counting
+    votes.
+    """
+
+    dormant, mid, dip, peak, flag = 50.0, 95.0, 90.0, 99.9, 94.0
+    closes = (
+        [dormant] * 60
+        + [dormant + (mid - dormant) * (step + 1) / 18 for step in range(18)]
+        + [mid - (mid - dip) * (step + 1) / 4 for step in range(4)]
+        + [dip + (peak - dip) * (step + 1) / 4 for step in range(4)]
+        + [flag] * 30
+    )
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 26 + [800_000.0] * 30
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    frame.iloc[70, frame.columns.get_loc("Dividends")] = payout
+    paid = [frame.columns.get_loc(name) for name in ("Open", "High", "Low", "Close")]
+    frame.iloc[70:, paid] -= payout
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def two_tops_that_both_await_the_chart_series(
+    *, flag_low: float = 100.0, start: str = "2026-01-02"
+) -> pd.DataFrame:
+    """Two candidate tops that agree on every measurable criterion and both ask about volume.
+
+    A pullback inside the advance leaves a confirmed turning point a few percent under the peak,
+    close enough to contest it. Every deterministic gate reads the same from both, so the only
+    thing separating them is the question the bars decline to answer -- which is what makes this
+    the fixture for what a reading of one top's chart does to the other's.
+    """
+
+    dormant, mid, dip, peak, flag_end = 50.0, 103.0, 96.0, 108.0, 105.0
+    closes = (
+        [dormant] * 60
+        + [dormant + (mid - dormant) * (step + 1) / 16 for step in range(16)]
+        + [mid - (mid - dip) * (step + 1) / 4 for step in range(4)]
+        + [dip + (peak - dip) * (step + 1) / 4 for step in range(4)]
+        + [peak - (peak - flag_low) * (step + 1) / 10 for step in range(10)]
+        + [flag_low + (flag_end - flag_low) * (step + 1) / 10 for step in range(10)]
+    )
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 24 + [800_000.0] * 20
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_top_the_history_ends_before_series(
+    *,
+    flag_depth_pct: float = 12.0,
+    unread_top_price: float = 20.1,
+    advance_pct: float = 110.0,
+    start: str = "2026-01-02",
+) -> pd.DataFrame:
+    """A clean structure whose next candidate top sits behind the first loaded bar.
+
+    The frame opens on a confirmed high under the peak and there is no history behind it to
+    measure a structure from, so the walk stops there rather than reading it. Whether the reading
+    it never made would have had a vote is what ``unread_top_price`` sets: the default stands a
+    few percent under the peak, inside the distance a top may contest from, and a lower value puts
+    it far enough below to be a structure the stock has since overtaken.
+
+    ``advance_pct`` moves the peak, which is only ever worth doing to land the pair of prices on a
+    distance the float grid can represent exactly: at the default peak of 21.0 no price stands
+    exactly ten percent below it, and a boundary that cannot be reached cannot be tested.
+    """
+
+    frame = power_play_series(
+        dormancy_sessions=41,
+        advance_sessions=1,
+        flag_sessions=12,
+        flag_depth_pct=flag_depth_pct,
+        advance_pct=advance_pct,
+        start=start,
+    )
+    columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
+    frame.iloc[0, columns] = [
+        unread_top_price * 0.995,
+        unread_top_price,
+        unread_top_price * 0.99,
+        unread_top_price * 0.995,
+    ]
+    return frame
+
+
+def a_top_only_a_neighbour_confirms_series(*, dip_pct: float = 0.30, flag_sessions: int = 26, start: str = "2026-01-02") -> pd.DataFrame:
+    """A candidate top the middle retracement misses and a neighbouring one confirms.
+
+    The pullback inside the advance is sized to land between the retracements the segmentation
+    convention's own sensitivity offsets produce: deep enough for the looser neighbour to confirm
+    a turning point there, shallow enough for the middle reading to walk past it. Read from that
+    top the flag runs past six weeks and the structure is out; read from the peak above it,
+    nothing measurable fails.
+
+    Which is the whole of the case. One reading of the same chart says this is not a Power Play,
+    and a verdict taken off the middle reading alone never hears it.
+    """
+
+    dormant, lower_top, peak, flag_low, flag_end = 50.0, 103.0, 108.0, 100.0, 105.0
+    sink = flag_sessions // 2
+    closes = [dormant] * 60
+    closes += [dormant + (lower_top - dormant) * (step + 1) / 16 for step in range(16)]
+    closes += [lower_top * (1 - dip_pct / 100)]
+    closes += [lower_top + (peak - lower_top) * (step + 1) / 4 for step in range(4)]
+    closes += [peak - (peak - flag_low) * (step + 1) / sink for step in range(sink)]
+    closes += [
+        flag_low + (flag_end - flag_low) * (step + 1) / (flag_sessions - sink)
+        for step in range(flag_sessions - sink)
+    ]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 21 + [800_000.0] * flag_sessions
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_top_hidden_by_an_ambiguous_session_series(*, flag_sessions: int = 26, start: str = "2026-01-02") -> pd.DataFrame:
+    """A top the segmenter had to choose against, because one bar reads two ways.
+
+    The session after the lower top both prints a new high and retraces far enough to end the
+    swing, and a daily bar does not say which happened first. The segmenter records the ambiguity
+    and resolves it one way, which leaves no anchor at the top before it. Under the other order
+    that top is confirmed -- and read from there the flag runs past six weeks and the structure is
+    out.
+
+    Same geometry as the neighbour-only fixture beside it, with the shallow pullback replaced by
+    the ambiguous bar, so the two differ only in *why* the top goes missing.
+    """
+
+    dormant, lower_top, peak, flag_low, flag_end = 50.0, 103.0, 108.0, 100.0, 105.0
+    ambiguous_low = 102.30
+    sink = flag_sessions // 2
+    closes = [dormant] * 60
+    closes += [dormant + (lower_top - dormant) * (step + 1) / 16 for step in range(16)]
+    closes += [ambiguous_low]
+    closes += [lower_top + (peak - lower_top) * (step + 1) / 4 for step in range(4)]
+    closes += [peak - (peak - flag_low) * (step + 1) / sink for step in range(sink)]
+    closes += [
+        flag_low + (flag_end - flag_low) * (step + 1) / (flag_sessions - sink)
+        for step in range(flag_sessions - sink)
+    ]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame.iloc[76, frame.columns.get_loc("High")] = 103.30
+    frame.iloc[76, frame.columns.get_loc("Low")] = ambiguous_low * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 21 + [800_000.0] * flag_sessions
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_range_too_wide_to_segment_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """Bars whose ordinary session spans so much of its own close that the upper neighbour
+    retracement leaves the segmenter's domain.
+
+    Valid OHLCV throughout. The middle reading still runs; the neighbour the convention also
+    registers does not, and running only the ones that happen to fit is reading a measurement
+    nobody could take.
+    """
+
+    closes = [100.0 + (step % 7) for step in range(90)]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = [close * 1.2 for close in closes]
+    frame["Low"] = [close * 0.81 for close in closes]
+    frame["Volume"] = [1_000_000.0] * len(closes)
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_flag_tighter_than_one_days_range_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A structure whose flag corrects less than an ordinary session spans.
+
+    Nothing here is malformed: the advance is real, the flag is the tightest one this exception
+    describes, and every criterion the bars can settle is satisfied. What the segmentation cannot
+    do is confirm the peak as a turning point, because no retracement it registers is smaller than
+    a single day's range on these bars -- so the structure hangs from a high the harness has not
+    identified as a top.
+    """
+
+    frame = power_play_series(flag_depth_pct=0.1, start=start)
+    frame["High"] = frame["Close"] * 1.02
+    frame["Low"] = frame["Close"] * 0.98
+    return frame
+
+
+def two_orders_that_confirm_different_tops_series(*, start: str = "2026-05-19") -> pd.DataFrame:
+    """One session that both extends the leg and ends it, followed by enough bars for the two
+    readings to diverge.
+
+    Whichever way the segmenter resolves that bar, it goes on running under that resolution and
+    confirms turns the other one never reaches. Here each order confirms a high the other does
+    not, which is the whole reason the candidate set has to come from running the segmenter twice
+    rather than from patching the two bars either side of the ambiguity.
+    """
+
+    rows = [
+        (100.0, 99.0, 99.5),
+        (100.0, 99.5, 99.8),
+        (106.0, 95.0, 100.0),
+        (105.0, 100.0, 104.0),
+        (104.5, 104.0, 104.2),
+        (112.0, 104.0, 111.0),
+    ]
+    index = pd.bdate_range(start=start, periods=len(rows))
+    frame = pd.DataFrame(
+        {"High": [row[0] for row in rows], "Low": [row[1] for row in rows], "Close": [row[2] for row in rows]},
+        index=index,
+    )
+    frame["Open"] = frame["Close"]
+    frame["Volume"] = 1_000_000.0
+    frame["Stock Splits"] = 0.0
+    frame["Dividends"] = 0.0
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
+
+
+def a_payout_that_confirms_the_peak_series(*, flag_depth_pct: float = 10.1, start: str = "2026-01-02") -> pd.DataFrame:
+    """A structure whose peak is a confirmed turning point only because of the ex-date drop.
+
+    The cash comes out of the print on the ex-date, and that drop is a retracement the stock never
+    made. Read on the tape the segmentation confirms the top; read with every print on one scale
+    it confirms nothing, so the withheld qualification is withheld on arithmetic about the
+    dividend rather than on anything the stock did.
+    """
+
+    frame = power_play_series(flag_depth_pct=flag_depth_pct, start=start)
+    frame["High"] = frame["Close"] * 1.03
+    frame["Low"] = frame["Close"] * 0.97
+    peak = int(frame["High"].to_numpy().argmax())
+    ex_date = peak + 5
+    frame.iloc[ex_date, frame.columns.get_loc("Dividends")] = 1.1
+    columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
+    frame.iloc[ex_date:, columns] -= 1.1
+    return frame
+
+
+def a_top_behind_a_taller_bar_series(*, start: str = "2026-01-02") -> pd.DataFrame:
+    """A confirmed top the descent reaches only if a bar it walked past leaves the window alone.
+
+    The frame opens on a long slide from a high nothing confirms, so the search meets that taller
+    bar before it meets the confirmed top in April. That bar is walked past -- it is not a reading
+    of the structure -- and if walking past it also moves the *date* the next search must precede,
+    the April top is behind it forever, though it is lower and the union confirms it.
+
+    Read from that top the flag runs thirty-one sessions, past the six-week limit.
+    """
+
+    frame = a_top_only_a_neighbour_confirms_series(start=start)
+    slide = np.r_[np.linspace(110.0, 104.2, 36), np.linspace(104.1, 50.1, 23), [50.0]]
+    for position, close in enumerate(slide):
+        for column, value in (
+            ("Open", close),
+            ("Close", close),
+            ("High", close * 1.001),
+            ("Low", close * 0.999),
+        ):
+            frame.iloc[position, frame.columns.get_loc(column)] = value
+    return frame

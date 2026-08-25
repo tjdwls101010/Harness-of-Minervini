@@ -12,17 +12,29 @@ weeks to double reports whatever it managed in eight and fails on that number.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import hashlib
+import json
+from collections.abc import Mapping, Sequence
 from typing import Any
 
+import pandas as pd
+
 from . import doctrine
-from .setup_structure import _DISTRIBUTION_COLUMN, read_bars
+from .setup_structure import (
+    _CORPORATE_ACTION_COLUMN,
+    _DISTRIBUTION_COLUMN,
+    bars_fingerprint,
+    read_bars,
+)
 from .power_play import FLAG_STILL_FORMING, measure_power_play, reading_rejects
+from .swings import _typical_range_pct, segment
 
 
 _CLAIM = "fundamentals.power_play_exception"
 _WEEK = "convention.trading_week"
 _TOPS = "convention.power_play_top_candidates"
+_SEGMENTATION = "setup.swing_segmentation_convention"
+_READING = "convention.power_play_chart_reading"
 # A runaway guard, not a doctrine limit: the longest chain any cached history produced was
 # nineteen tops. Hitting it is reported, never silently truncated into an agreement.
 _MOST_TOPS_READ = 200
@@ -57,7 +69,9 @@ def _summary(claim_id: str) -> str:
     return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
 
 
-def _observation(condition: str, state: str, measured: Any, required: str) -> dict[str, Any]:
+def _observation(
+    condition: str, state: str, measured: Any, required: str, *, read_from_chart: bool = False
+) -> dict[str, Any]:
     """One criterion the source states without a magnitude, reported under its own name.
 
     The id carries the condition and the doctrine_id carries the claim, because four separate
@@ -73,6 +87,10 @@ def _observation(condition: str, state: str, measured: Any, required: str) -> di
         "state": state,
         "measured": measured,
         "required": required,
+        # A verdict a person supplied must never read like one the numbers reached. This is the
+        # only channel in the capability through which a human sentence becomes a machine `pass`,
+        # so an auditor of a qualified Power Play has to be able to see it on the signal itself.
+        "read_from_chart": read_from_chart,
     }
 
 
@@ -100,6 +118,68 @@ def _tightness_state(depth: float | None, limit: float) -> str:
     if depth is None:
         return "unavailable"
     return "pass" if depth <= limit else "needs_chart"
+
+
+# What a reading says when it has declined to answer rather than disagreed. Two readings of the
+# same bars can only dispute a criterion by both answering it: a payout that decided one of them
+# withdrew that answer, and a chart nobody has read never gave one.
+_ABSTAINS = ("unavailable", "needs_chart")
+# What a contesting reading did instead of agreeing, strongest first. The order is the precedence:
+# a reading that gave a different answer has disputed the criterion whatever the others did, and
+# only where nobody disputed it does the question become which kind of silence is holding it.
+# Among the silences, the chart is last because it is the only one a reader can act on -- reported
+# ahead of a silence nothing they supply can close, it sends them to draw a picture that will not
+# close the criterion when they bring it back.
+_DISAGREEMENTS = ("dissent", "rejected", "payout", "action", "chart")
+
+
+def _how_the_tops_disagree(
+    primary: Mapping[str, str], contesting: Sequence[tuple[Mapping[str, str], bool, set[str]]]
+) -> dict[str, str]:
+    """Per criterion, whether a top that may contest it failed to agree, and why.
+
+    Qualification is every contesting reading affirmatively agreeing, never an absence of
+    objections -- the same rule the required-evidence lists are built on. Read as "nobody
+    objected", a reading that abstained counts as agreement, and the criterion closes on the
+    strength of a top whose answer the dividend withdrew or whose chart nobody opened.
+
+    So the three ways of not agreeing are separated rather than pooled, because each closes on a
+    different action: another reading of the tops, the dividend calendar, or a chart.
+    """
+    disagreement: dict[str, str] = {}
+    for condition, answer in primary.items():
+        # The primary's own gap already blocks this criterion under its own name, and comparing
+        # an abstention with anything says nothing about the tops.
+        if answer in _ABSTAINS:
+            continue
+        causes = set()
+        for criteria, readable, asked in contesting:
+            # A reading nobody could read agrees with nothing, including by coincidence. Its
+            # criteria are arithmetic about a split rather than about the stock, so matching the
+            # primary's answer is not consent to it.
+            if not readable:
+                causes.add("action")
+                continue
+            state = criteria[condition]
+            if state == answer:
+                continue
+            if state == "unavailable":
+                causes.add("payout")
+            elif state != "needs_chart":
+                causes.add("dissent")
+            # `needs_chart` says the numbers declined, not that anybody was asked. A reading the
+            # bars already threw out is issued no key, so calling this a chart nobody has opened
+            # names a picture that would close nothing and points the reader at a capability whose
+            # answer this one would refuse.
+            elif condition in asked:
+                causes.add("chart")
+            else:
+                causes.add("rejected")
+        for cause in _DISAGREEMENTS:
+            if cause in causes:
+                disagreement[condition] = cause
+                break
+    return disagreement
 
 
 def _criteria(measurements: Mapping[str, Any], tight_limit: float) -> dict[str, str]:
@@ -146,6 +226,11 @@ def _signature(walk: Mapping[str, Any]) -> tuple[Any, ...]:
         tuple(_boundaries(reading) for reading in walk["readings"]),
         walk["may_contest"],
         walk["ran_out_of_history"],
+        # Whether the segmentation confirms the top this hangs from is part of the structure, not
+        # part of the answers. A payout can create the confirmation: the ex-date drop is a
+        # retracement the stock never made, so the raw prints confirm a turning point the one
+        # scale does not, and read off the raw prints alone the withheld qualification came back.
+        walk["peak_confirmed"],
     )
 
 
@@ -213,7 +298,180 @@ def _unmoved(measurements: Mapping[str, Any]) -> bool:
     )
 
 
-def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, Any]) -> dict[str, Any]:
+def power_play_fingerprint(history: Any) -> str | None:
+    """One digest of the bars *and* the events this capability reads.
+
+    The shared bars fingerprint covers the five price columns, which is right for the surfaces
+    that share a chain: they measure price. This one also measures events -- a split inside the
+    span leaves it deciding nothing, a payout inside it withholds the criteria it decided -- so
+    two histories with identical prices and different events are different inputs here and must
+    not digest the same. An approval bound to a digest that cannot see the split would not be
+    bound to the evidence the verdict turned on.
+
+    Returns None where the event columns are absent, because a history that never said whether a
+    split occurred is not a history that said none did. Digesting the absence as zeroes is the
+    substitution the reducer already refuses to make when it decides.
+    """
+
+    bars, _ = read_bars(history)
+    if bars is None or bars.empty:
+        return None
+    if not {_CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN}.issubset(bars.columns):
+        return None
+    events = json.dumps(
+        {
+            "bars": bars_fingerprint(bars),
+            "events": [
+                {
+                    "date": stamp.date().isoformat(),
+                    _CORPORATE_ACTION_COLUMN: float(row[_CORPORATE_ACTION_COLUMN]),
+                    _DISTRIBUTION_COLUMN: float(row[_DISTRIBUTION_COLUMN]),
+                }
+                for stamp, row in bars.iterrows()
+                if float(row[_CORPORATE_ACTION_COLUMN]) or float(row[_DISTRIBUTION_COLUMN])
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+        allow_nan=False,
+    )
+    return hashlib.sha256(events.encode("utf-8")).hexdigest()
+
+
+# The two criteria the source states without a magnitude, and the measurement each one turns on.
+# The measurement is in the key because it is what the reader was looking at: a chart approved at
+# a nine percent flag is not an approval of the same flag re-measured at eleven.
+_CHART_CONDITIONS = {
+    "launch_volume_character": "advance_peak_volume_ratio",
+    "flag_tightness_or_vcp": "flag_depth_pct",
+}
+# Two words, not three. "I looked and could not tell" leaves the criterion exactly where a reader
+# who never looked leaves it, so a third word would buy a different gap reason and nothing else;
+# a reader who cannot tell supplies no approval and the envelope goes on asking.
+_CHART_ANSWERS = {"observed": "pass", "absent": "fail"}
+# The vocabulary itself, for the request boundary. Read from the same dict the answers are
+# applied from, so the words a caller may spell cannot drift from the words that do anything.
+CHART_READING_WORDS = tuple(_CHART_ANSWERS)
+# Long enough that "a key names one question" is a fact rather than a probability. The key is
+# copied, never typed, so the extra characters cost a caller nothing.
+_CHART_KEY_LENGTH = 32
+
+
+# Every registered value the reading depends on, in one digest. The registry is editable and the
+# capability is not versioned against it, so an answer outlives the question unless the question
+# carries what it was asked under: re-register the tight limit at eleven percent and the sentence
+# offered to a reader changes while a key built from bars and boundaries alone does not, which
+# lets an answer given to the ten percent question satisfy the eleven percent one.
+# `_WEEK` is belt and braces: a different trading week gives different search windows, so the
+# reading's own boundary sessions move and the key moves with them either way. It is listed
+# because the digest is meant to be everything the question was asked under, not everything that
+# happens to be load-bearing today. `_READING` is the convention that decides what an answer *is*
+# -- which words are admissible, what one settles and how far -- and it was the one missing: it
+# registers no threshold and no parameter, so a digest of numbers alone could not see it change.
+_ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION, _READING)
+
+
+def _registry_digest() -> str:
+    """Every claim the question was asked under, whole.
+
+    Numbers were not enough. A claim states its rule, what its failure means and what its absence
+    means, and all three can change while every threshold stays put -- re-register the reading
+    convention to say an answer needs two independent readers and the old single-reader answer
+    still satisfied it, because the digest was looking at an empty threshold table.
+
+    Whole claims bind more than strictly decides a reading: a wording fix retires outstanding
+    keys. That is the right side to be wrong on here, and it costs a re-read rather than a
+    verdict -- re-reading the chart reissues the keys.
+    """
+
+    payload = json.dumps(
+        {claim_id: doctrine.get_claim(claim_id)["claim"] for claim_id in _ASKED_UNDER},
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _chart_key(fingerprint: str, condition: str, reading: Mapping[str, Any], asked: str) -> str:
+    """The name of one question, which is everything answering it would have to be about.
+
+    A key is issued rather than assembled by the caller, so an approval cannot be partly right.
+    Echoing four fields lets a caller match the ones they kept and miss the one that moved; a
+    digest either is the question that was asked or is not.
+
+    The sentence and the registry it was written from are in the key beside the measurement,
+    because the criterion is not a constant. Strengthen the wording, or re-register the limit it
+    quotes, and a key built from the bars alone still matches -- so an answer given to a weaker
+    question satisfies a stronger one that was never put to anybody.
+    """
+    payload = json.dumps(
+        {
+            "measured_bars": fingerprint,
+            "condition": condition,
+            "asked": asked,
+            "doctrine": _registry_digest(),
+            "boundaries": {name: reading[name] for name in _BOUNDARIES},
+            "measured": reading[_CHART_CONDITIONS[condition]],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+        default=str,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:_CHART_KEY_LENGTH]
+
+
+def _turning_points(history: Any) -> frozenset[str] | None:
+    """The highs the segmentation this harness already owns calls turning points.
+
+    A candidate top is a high price has since fallen away from, which is what the detector
+    confirms and what a reader would draw on the chart. Every descending high is a weaker thing
+    entirely: inside a flag it includes the bar that printed a hundredth of a percent above the
+    last one, and reading the structure from there is reading a bar rather than a top.
+
+    Every reading of the same chart, on two axes. The retracement is derived the way ticker.swings
+    derives it, from the same registered convention, and taken at every value that convention
+    registers -- the middle one and both neighbours; and each of those is run under both readings
+    of a session that extends the leg and ends it at once, because a daily bar does not say which
+    came first and the segmenter has to pick one. Both instabilities cut the same way here: a top
+    some reading confirms and the chosen one walks past never contests a criterion, so its known
+    failure is a finding the verdict is never told about. Measured, a six-week violation under a
+    neighbour-only top came back qualified, and so did one under a top only the other intraday
+    order confirms.
+
+    The union rather than the refusal beside it in ticker.swings. That capability corroborates a
+    chain a caller declared, so an unstable segmentation leaves it with nothing to vouch for;
+    here the tops are found rather than declared, and a stock whose segmentation is unstable still
+    has tops. Every high any reading confirms is a candidate, which is conservative on the side
+    that matters -- more tops may contest a qualification, and a rejection still needs all of them
+    to agree. Measured across the tickers this repository has provider history for it costs
+    nothing: the same twenty-three reject and the same sixteen read a settled top.
+    """
+
+    bars, _ = read_bars(history)
+    typical = _typical_range_pct(bars)
+    if typical is None:
+        return None
+    multiple = float(doctrine.parameter(_SEGMENTATION, "retracement_range_multiple"))
+    offsets = [0.0, *(float(value) for value in doctrine.parameter(_SEGMENTATION, "sensitivity_offsets"))]
+    # No fixture stands on the upper edge, and none can: `2.6 * typical` steps from
+    # 99.99999999999999 to 100.00000000000001 across the whole float grid of OHLC shapes, so a
+    # test of `< 100` against `<= 100` has no history to run on.
+    if not all(0 < (multiple + offset) * typical < 100 for offset in offsets):
+        return None
+    found: set[str] = set()
+    for offset in offsets:
+        for order in ("extension", "reversal"):
+            run = segment(bars, retracement_pct=(multiple + offset) * typical, ambiguous_order=order)
+            found |= {str(anchor["date"]) for anchor in run["anchors"] if anchor["kind"] == "high"}
+    return frozenset(found)
+
+
+def _walk_the_tops(
+    history: Any, spec: Mapping[str, Any], first: Mapping[str, Any], turning_points: frozenset[str] | None = None
+) -> dict[str, Any]:
     readings: list[dict[str, Any]] = []
     below, before = None, None
     top = first["peak_high"]
@@ -228,13 +486,33 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
     # date in hand decides against evidence already in the envelope: one cent on a later high used
     # to delete a hundred-and-eight percent advance in five weeks from consideration entirely.
     #
-    # The count bound is a runaway guard. Reaching it is reported rather than passed over.
+    # The count bound is a runaway guard, and unreachable by construction: the measured span runs
+    # eight weeks of advance plus six of flag, so the descent has at most seventy sessions to find
+    # tops in. It guards a bug in the descent, not a history.
     bound = spec["candidate_top_maximum_distance_pct"]
     first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
+    unread_may_contest = False
+    unread_top: dict[str, Any] | None = None
     may_contest = 0
-    while len(readings) < _MOST_TOPS_READ:
-        reading = first if not readings else measure_power_play(history, spec, below=below, before=before)
+    steps = 0
+    walked_past: set[str] = set()
+    # Whether the segmentation confirms the top the whole structure hangs from. The span's highest
+    # bar is read whatever the answer -- it is found by the measurement rather than by descending,
+    # so the question the filter below asks ("is this descending high a top, or a bar inside the
+    # flag?") does not arise for it, and refusing to read it costs two of the twenty-three
+    # rejections this repository can currently reach and leaves nothing read in their place.
+    # Reading it and calling its top *settled* is the part that was false: a flag tighter than one
+    # day's ordinary range confirms no turning point at all, and answering a chart there qualified
+    # a structure hanging from a bar nothing confirmed.
+    peak_confirmed = turning_points is not None and str(first["peak_date"]) in turning_points
+    while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
+        steps += 1
+        reading = (
+            first
+            if not readings
+            else measure_power_play(history, spec, below=below, before=before, excluding=walked_past)
+        )
         if reading["rejection"] is not None:
             # One refusal means the opposite of the others. `_NO_MORE_TOPS` is the chain ending;
             # anything else is a top that exists with too little history behind it to measure --
@@ -242,7 +520,33 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
             # the tops above it decided. That is the shape a recently listed stock arrives in.
             if reading["rejection"] != _NO_MORE_TOPS:
                 ran_out_of_history = True
+                # How far below the highest that unread top stands, when the measurement got far
+                # enough to find it. Objecting to a rejection survives the distance -- a structure
+                # nobody read is still one nobody read -- so `ran_out_of_history` alone withholds
+                # a rejection whatever the distance is. Contesting does not survive it, so this is
+                # what decides whether the same top can withhold a qualification. Unknown counts
+                # as close: a top whose price the measurement never established could be anywhere.
+                unread = reading["peak_high"]
+                distance = None if top is None or unread is None else (top - unread) / top * 100
+                unread_may_contest = distance is None or distance <= bound
+                # Reported with its distance, the same way the first top past the bound is. A
+                # boundary a verdict was decided next to is one a reader has to be able to audit,
+                # and this one decides whether an unread top withholds the qualification.
+                unread_top = {
+                    "peak_date": reading["peak_date"],
+                    "peak_high": unread,
+                    "distance_pct": None if distance is None else round(distance, 4),
+                }
             break
+        # Walked past rather than read, and named by date rather than by price. A bar this chain
+        # declined is not a reading of the structure, so it must not decide which readings exist:
+        # moving the date bound past it strands every confirmed top later than it, and lowering
+        # the price bound below it deletes any confirmed top that printed the same high. Both were
+        # reproduced as `qualified` over a top failing the six-week limit. Excluding the session
+        # itself advances the search and takes nothing else with it.
+        if readings and turning_points is not None and str(reading["peak_date"]) not in turning_points:
+            walked_past |= {str(reading["peak_date"])}
+            continue
         distance = None if top is None else (top - reading["peak_high"]) / top * 100
         if distance is not None and distance > bound:
             if first_non_contesting is None:
@@ -250,32 +554,44 @@ def _walk_the_tops(history: Any, spec: Mapping[str, Any], first: Mapping[str, An
         else:
             may_contest = len(readings) + 1
         readings.append(reading)
+        # A reading does move both. A confirmed top lower than this one and later than it sits
+        # inside this reading's own flag: it is part of the structure hanging from this top rather
+        # than a competing anchor for it. Measured, reading those too leaves the same twenty-three
+        # rejections and takes settled tops from sixteen to nine -- all dispute, no decision.
         below, before = reading["peak_high"], reading["peak_date"]
     return {
         "readings": readings,
         "first_non_contesting": first_non_contesting,
         "ran_out_of_history": ran_out_of_history,
+        "unread_top_may_contest": unread_may_contest,
+        "unread_top": unread_top,
         "may_contest": may_contest,
+        "peak_confirmed": peak_confirmed,
     }
 
 
-def build_power_play_evidence(history: Any) -> dict[str, Any]:
+def build_power_play_evidence(
+    history: Any, chart_readings: Mapping[str, str] | None = None, drawn_bars: str | None = None
+) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
     The structure is found rather than declared, so the same bars are read from every top the
-    search could have landed on: the highest of the span, then the highest below that, and down
-    until a top stands further below the highest than the registered candidate distance. The
-    source names no size below which a new high stops counting -- a hundredth of a percent above
-    the last high restarts the flag and turns thirty sessions into four -- so a criterion decides
-    only where every top read answers it the same way, and a rejection stands only where every
-    one of them reaches one.
+    search could have landed on: the highest of the span, then the highest below that, down to the
+    end of the span. A top is a confirmed turning point, at any retracement the segmentation
+    convention registers. The source names no size below which a new high stops counting -- a
+    hundredth of a percent above the last high restarts the flag and turns thirty sessions into
+    four -- so a criterion decides only where every top read answers it the same way, and a
+    rejection stands only where every one of them reaches one.
 
     Two readings were not enough, and the shortfall was not theoretical: two ticks a hundredth of
     a percent apart inside one flag hand the search three tops, and both of the first two reject
-    while the structure they sit inside has nothing decisive against it. Nor is the chain left
-    open: unbounded it runs to nineteen tops across the cached histories and walks an ordinary
-    advance one bar at a time, and twenty-two of twenty-three tickers still reject on an agreed
-    criterion; bounded it runs to fifteen and all twenty-three do.
+    while the structure they sit inside has nothing decisive against it. The registered candidate
+    distance does not end the chain -- it decides only which of those tops may *contest* a
+    criterion, because contesting is a claim about one structure and a top the stock overtook long
+    ago is a different one. Measured through the capability on 2026-08-24 across the twenty-four
+    in-scope tickers this repository has history for, the chain runs one to five tops either way
+    and twenty-three reject either way; what the distance changes is how often the top is settled,
+    sixteen against ten.
     """
 
     spec = compile_power_play_spec()
@@ -283,9 +599,10 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     measurements = measure_power_play(history, spec)
     actions = measurements["corporate_action_sessions"]
 
-    walk = _walk_the_tops(history, spec, measurements)
+    walk = _walk_the_tops(history, spec, measurements, _turning_points(history))
     readings, first_non_contesting = walk["readings"], walk["first_non_contesting"]
     ran_out_of_history, may_contest = walk["ran_out_of_history"], walk["may_contest"]
+    unread_top_may_contest = walk["unread_top_may_contest"]
     exhausted = len(readings) >= _MOST_TOPS_READ
 
     # The ordering first. If the tops keep their places once every print is on one scale, the
@@ -300,7 +617,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     adjusted: dict[str, Any] | None = None
     reordered = False
     if on_one_scale is not None and measurements["peak_date"] is not None:
-        adjusted = _walk_the_tops(on_one_scale, spec, measure_power_play(on_one_scale, spec))
+        adjusted = _walk_the_tops(
+            on_one_scale, spec, measure_power_play(on_one_scale, spec), _turning_points(on_one_scale)
+        )
         reordered = _signature(walk) != _signature(adjusted)
 
     # Then which criteria the payout decided, paired reading by reading against that same scale.
@@ -323,20 +642,118 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         }
         for reading, decided in zip(readings, every_payout_sensitive)
     ]
+
+    # Then the two questions the bars decline to answer, offered to a reader and taken back.
+    #
+    # Per reading, because both questions are asked about a span the top decides: for a lower top
+    # the advance starts elsewhere and the flag is longer, so it is a different chart and gets its
+    # own key. A caller who wants a criterion settled has to answer every top that may contest it,
+    # which is the honest cost of two candidate structures rather than a gap in the seam.
+    #
+    # No key at all where the reading is not the stock's own. While a split stands in the span the
+    # measurements are arithmetic about the action, and while the tops read the dividend's
+    # ordering the search found the wrong top -- asking a reader to corroborate either is asking
+    # them to confirm something that never happened.
+    # Both surfaces read the same sentence: the question offered to a reader and the requirement
+    # reported beside the answer have to be the criterion, not two paraphrases of it.
+    asks = {
+        "launch_volume_character": "the advance commences on huge volume",
+        "flag_tightness_or_vcp": (
+            f"the flag corrects no more than {tight_limit} percent, or shows VCP characteristics"
+        ),
+    }
+    given = dict(chart_readings or {})
+    fingerprint = power_play_fingerprint(history)
+    # Which picture the reader looked at, in the form ticker.chart prints it. The key already
+    # binds an answer to the bars this verdict is measured on; what it cannot do is attest that
+    # the chart came from those bars, and the two capabilities reach the provider through their
+    # own cache entry, so one can be drawn from a vintage the other never measured. Answered
+    # anyway, the eyes corroborated one series and the machine qualified another.
+    #
+    # A mismatch withholds rather than refuses. The caller answered honestly about a picture that
+    # existed; it is the wrong picture for this reading, which is a gap and not a bad request --
+    # the same call a setup approval of another vintage gets.
+    measured_from = bars_fingerprint(read_bars(history)[0])
+    covers_other_bars = bool(given) and drawn_bars != measured_from
+    if covers_other_bars:
+        given = {}
+    chart_questions: list[dict[str, Any]] = []
+    answered: list[dict[str, str]] = [{} for _ in readings]
+    # Which conditions each reading was actually asked about. A gap that names the chart has to
+    # correspond to a key somebody can answer, and the several reasons a reading is never asked --
+    # a split in its span, a rejection the bars already reached, a structure the payout reordered
+    # -- are all invisible in the criteria themselves, which go on reading `needs_chart`.
+    issued: list[set[str]] = [set() for _ in readings]
+    for index, (criteria, reading) in enumerate(zip(every_criteria, readings)):
+        if fingerprint is None or reordered or not _unmoved(reading):
+            continue
+        # Nor for a reading the bars already threw out. A visual opinion never overturns a
+        # deterministic failure, so a key here would send a reader to draw a picture, come back
+        # with an answer, and find the verdict exactly where they left it.
+        if reading_rejects(criteria, corporate_action_unmoved=True):
+            continue
+        for condition, measured in _CHART_CONDITIONS.items():
+            if criteria[condition] != "needs_chart":
+                continue
+            key = _chart_key(fingerprint, condition, reading, asks[condition])
+            issued[index].add(condition)
+            answer = given.get(key)
+            chart_questions.append(
+                {
+                    "key": key,
+                    "condition": condition,
+                    "reading": index,
+                    "measured_bars": fingerprint,
+                    # The digest to compare against the chart's manifest, so a reader can see in
+                    # one string whether the picture in front of them is this reading's.
+                    "drawn_bars": measured_from,
+                    "peak_date": reading["peak_date"],
+                    "advance_anchor_date": reading["advance_anchor_date"],
+                    "flag_low_date": reading["flag_low_date"],
+                    "measured": {measured: reading[measured]},
+                    "asks": asks[condition],
+                    "answered": answer,
+                }
+            )
+            if answer is not None:
+                criteria[condition] = _CHART_ANSWERS[answer]
+                answered[index][condition] = criteria[condition]
+    # Refused rather than dropped. The ordinary way an approval goes stale is a session closing
+    # between the chart and the request, and a caller told nothing would read the unchanged
+    # `incomplete` as the harness ignoring them rather than as their answer not applying.
+    # Read off what was actually applied, so an answer withheld for coming from another vintage is
+    # not also refused for naming a key this run never issued. The vintage is the deeper problem
+    # and re-reading the right picture reissues the keys, so one answer is enough to act on.
+    unmatched = sorted(set(given) - {question["key"] for question in chart_questions})
+
     primary_criteria = every_criteria[0] if readings else _criteria(measurements, tight_limit)
+    primary_answered = answered[0] if readings else {}
     # A reading whose answer the payout decided abstains rather than dissents. It has not disputed
     # the top reading's answer; it has declined to give one, and counting that as disagreement
     # sends the reader to the chart to settle a top when the dividend calendar is what moved.
-    contested = {
-        condition
-        for condition in primary_criteria
-        if any(
-            criteria[condition] not in ("unavailable", primary_criteria[condition])
-            for criteria in every_criteria[:may_contest]
-        )
-    }
+    # Three buckets rather than one, because a criterion the highest top answered can be held open
+    # by a top that disputed it, by a top whose answer the dividend decided, or by a top whose
+    # chart nobody has read -- and a reader sent to settle the wrong one has not settled anything.
+    disagreement = _how_the_tops_disagree(
+        primary_criteria,
+        [
+            (criteria, _unmoved(reading), asked)
+            for criteria, reading, asked in zip(
+                every_criteria[1:may_contest], readings[1:may_contest], issued[1:may_contest]
+            )
+        ],
+    )
+    contested = {condition for condition, cause in disagreement.items() if cause == "dissent"}
+    payout_elsewhere = {condition for condition, cause in disagreement.items() if cause == "payout"}
+    action_elsewhere = {condition for condition, cause in disagreement.items() if cause == "action"}
+    rejected_elsewhere = {condition for condition, cause in disagreement.items() if cause == "rejected"}
+    awaiting_elsewhere = {condition for condition, cause in disagreement.items() if cause == "chart"}
     if reordered:
         contested = set(primary_criteria)
+        payout_elsewhere = set()
+        action_elsewhere = set()
+        rejected_elsewhere = set()
+        awaiting_elsewhere = set()
     # Three states, because a reading nobody could read is not a reading that came through. A
     # span holding a corporate action was not measured on one coordinate system, so it rejects
     # nothing -- and folding it into the survivors reports the structure as intact under every
@@ -382,7 +799,20 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         # A lower top the loaded history cannot reach behind is still a top nobody read.
         and not ran_out_of_history
     )
-    rejected_under_every_top_read = every_top_rejects and bool(contested)
+    # Every top rejected and no one criterion carries it, so there is nothing trustworthy to name:
+    # reporting the highest top's list would name limits the others say were never exceeded. This
+    # explains a rejection rather than reaching one -- `every_top_rejects` is the rejection, and a
+    # criterion every reading failed is named through the reducer's own `failed` list.
+    #
+    # It used to be `every_top_rejects and bool(contested)`, which read "the tops disagree about
+    # which limit did it" off the contested set. That proxy broke the moment an unanswered chart
+    # stopped counting as disagreement: two tops that each reject on their own `absent` reading
+    # agree about nothing and contest nothing, and the composite rejection vanished.
+    rejected_under_every_top_read = every_top_rejects and not any(
+        all(criteria[condition] == "fail" for criteria in every_criteria)
+        for condition in primary_criteria
+        if f"{_CLAIM}.{condition}" != FLAG_STILL_FORMING
+    )
 
     signals = [
         # The close-to-close reading, because the criterion is about the stock's price rather
@@ -398,23 +828,38 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         doctrine.evaluate_band(_CLAIM, "flag_maximum_decline_pct", measurements["flag_depth_pct"]),
         _observation(
             "launch_volume_character",
-            _volume_state(measurements["advance_peak_volume_ratio"]),
+            primary_answered.get("launch_volume_character", _volume_state(measurements["advance_peak_volume_ratio"])),
             {
                 "advance_peak_volume_ratio": measurements["advance_peak_volume_ratio"],
                 "advance_peak_volume_date": measurements["advance_peak_volume_date"],
                 "launch_volume_ratio": measurements["launch_volume_ratio"],
                 "advance_volume_ratio": measurements["advance_volume_ratio"],
             },
-            "the advance commences on huge volume",
+            asks["launch_volume_character"],
+            read_from_chart="launch_volume_character" in primary_answered,
         ),
         _observation(
             "flag_tightness_or_vcp",
-            _tightness_state(measurements["flag_depth_pct"], tight_limit),
+            primary_answered.get("flag_tightness_or_vcp", _tightness_state(measurements["flag_depth_pct"], tight_limit)),
             {"flag_depth_pct": measurements["flag_depth_pct"], "tight_action_maximum_pct": tight_limit},
-            f"the flag corrects no more than {tight_limit} percent, or shows VCP characteristics",
+            asks["flag_tightness_or_vcp"],
+            read_from_chart="flag_tightness_or_vcp" in primary_answered,
         ),
     ]
     return {
+        # The name of the input this verdict was reached on, prices and events together, so an
+        # approval can be bound to it and a later reader can tell a rule change from a data one.
+        "measured_bars": fingerprint,
+        # The price digest of the same bars, in the form ticker.chart prints it, so the picture a
+        # reader looked at and the bars this verdict was measured on can be compared in one string.
+        "measured_from": measured_from,
+        "readings_cover_other_bars": covers_other_bars,
+        # What this run is still asking a reader, and what the reader would be answering about.
+        # Issued rather than assembled: a key names one criterion under one reading of the tops,
+        # measured off one set of bars, at one value -- and stops naming it the moment any of
+        # those move.
+        "chart_questions": chart_questions,
+        "unmatched_chart_readings": unmatched,
         "structure": {
             "state": "unavailable" if measurements["rejection"] else "measured",
             "rejection": measurements["rejection"],
@@ -426,6 +871,13 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
         "readings_ran_out_of_history": ran_out_of_history,
+        "unread_top_may_contest": unread_top_may_contest,
+        "unread_top": walk["unread_top"],
+        # Whether the segmentation confirms the top the structure hangs from. False is not a
+        # rejection -- the bars still measure and a failure among them still stands -- but it is
+        # not a top this harness can name either, so it withholds a qualification the way a top
+        # nobody read does.
+        "peak_is_a_confirmed_turning_point": walk["peak_confirmed"],
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,
@@ -434,6 +886,16 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
         # readings can both reject and still disagree about which limit did it, and reporting the
         # primary reading's version of that as a confident failure is a finding about the search.
         "contested_criteria": sorted(contested),
+        # Separate from the contested set because each closes on a different action.
+        "awaiting_chart_under_another_top": sorted(awaiting_elsewhere),
+        "payout_decided_under_another_top": sorted(payout_elsewhere),
+        # And a top whose own span holds a corporate action, which is neither a dispute nor
+        # something a reader closes. No key was issued for that reading, so reporting it as a
+        # chart nobody has opened asks for an answer this capability would refuse.
+        "corporate_action_under_another_top": sorted(action_elsewhere),
+        # And a top whose own reading the bars already rejected. It was never asked either, and
+        # what holds the criterion is that a reading of these bars says this is not a Power Play.
+        "rejected_under_another_top": sorted(rejected_elsewhere),
         "payout_sensitive_criteria": sorted(payout_sensitive),
         # Separate from the signals because it is a fact about the input rather than about the
         # stock: a history that does not carry the event column has not reported "no split".
@@ -449,4 +911,9 @@ def build_power_play_evidence(history: Any) -> dict[str, Any]:
     }
 
 
-__all__ = ["build_power_play_evidence", "compile_power_play_spec"]
+__all__ = [
+    "CHART_READING_WORDS",
+    "build_power_play_evidence",
+    "compile_power_play_spec",
+    "power_play_fingerprint",
+]

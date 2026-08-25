@@ -33,7 +33,7 @@ _CONVENTION = "setup.swing_segmentation_convention"
 _TRIGGER = "setup.structural_pivot_and_trigger"
 
 
-def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
+def segment(history: Any, *, retracement_pct: float, ambiguous_order: str = "extension") -> dict[str, Any]:
     """A base's confirmed turning points, the leg price is in now, and what was ambiguous.
 
     Confirming an extreme means watching price fall away from it by the retracement, so the
@@ -41,9 +41,20 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
     about: a breakout in progress is an unconfirmed advance, and folding it into the base's
     chain would move the pivot onto the breakout bar.
 
+    A session that both extends the leg and retraces far enough to end it is two readings of one
+    bar, and a daily bar does not say which came first. ``ambiguous_order`` names which reading to
+    take: ``extension`` changes nothing about what has been confirmed so far and is the default
+    every caller wanting one chain should keep. ``reversal`` is for a caller that has to see the
+    chain the other reading would have produced -- the two confirm different turning points, and
+    approximating the difference from the anchors of one run cannot recover the turns the other
+    order goes on to confirm after the ambiguous bar.
+
     Raises:
-        ValueError: If ``retracement_pct`` is not a percentage strictly between zero and 100.
+        ValueError: If ``retracement_pct`` is not a percentage strictly between zero and 100, or
+            ``ambiguous_order`` is not one of the two readings.
     """
+    if ambiguous_order not in ("extension", "reversal"):
+        raise ValueError("ambiguous_order must be 'extension' or 'reversal'")
     if isinstance(retracement_pct, bool) or not isinstance(retracement_pct, (int, float)):
         raise ValueError("retracement_pct must be a percentage greater than zero and less than 100")
     if not 0 < float(retracement_pct) < 100:
@@ -74,9 +85,12 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
         if rising:
             extends, reverses = high > extreme, low <= extreme * (1 - fraction)
             if extends and reverses:
-                # The bar did both and a daily bar cannot say in which order. Extending is the
-                # reading that changes nothing about what has been confirmed so far.
+                # The bar did both and a daily bar cannot say in which order.
                 ambiguous.append(_iso(label))
+                if ambiguous_order == "reversal" and label > extreme_label:
+                    swings.append({"date": _iso(extreme_label), "kind": "high", "price": extreme})
+                    rising, extreme_label, extreme = False, label, low
+                    continue
                 extreme_label, extreme = label, high
             elif extends:
                 extreme_label, extreme = label, high
@@ -87,6 +101,10 @@ def segment(history: Any, *, retracement_pct: float) -> dict[str, Any]:
             extends, reverses = low < extreme, high >= extreme * (1 + fraction)
             if extends and reverses:
                 ambiguous.append(_iso(label))
+                if ambiguous_order == "reversal" and label > extreme_label:
+                    swings.append({"date": _iso(extreme_label), "kind": "low", "price": extreme})
+                    rising, extreme_label, extreme = True, label, high
+                    continue
                 extreme_label, extreme = label, low
             elif extends:
                 extreme_label, extreme = label, low
