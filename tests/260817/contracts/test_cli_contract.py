@@ -35,6 +35,7 @@ EXPECTED_CAPABILITIES = {
     "market.snapshot",
     "market.candidates",
     "ticker.qualify",
+    "ticker.swings",
     "ticker.setup",
     "ticker.fundamentals",
     "ticker.peers",
@@ -46,6 +47,9 @@ EXPECTED_CAPABILITIES = {
     "watchlist.annotate",
     "watchlist.export",
 }
+# Every capability needs a path here, or the parity sweeps below silently skip it: ticker.swings
+# was in EXPECTED_CAPABILITIES and not here, so its help and its parser were never checked. The
+# first test in the class below is what makes that a failure rather than a quiet omission.
 COMMAND_PATHS = {
     "capabilities": ("capabilities",),
     "describe": ("describe",),
@@ -55,6 +59,7 @@ COMMAND_PATHS = {
     "market.snapshot": ("market", "snapshot"),
     "market.candidates": ("market", "candidates"),
     "ticker.qualify": ("ticker", "qualify"),
+    "ticker.swings": ("ticker", "swings"),
     "ticker.setup": ("ticker", "setup"),
     "ticker.fundamentals": ("ticker", "fundamentals"),
     "ticker.peers": ("ticker", "peers"),
@@ -87,6 +92,16 @@ def command_parser(*tokens: str) -> argparse.ArgumentParser:
 
 
 class PublicCliContractTests(unittest.TestCase):
+    def test_every_capability_has_a_command_path_so_none_can_skip_the_sweeps(self) -> None:
+        """The sweeps below iterate COMMAND_PATHS, so anything missing from it is not checked.
+
+        ticker.swings was added to the capability set and not here, and every contract test kept
+        passing while its help and its parser went unexamined.
+        """
+
+        self.assertEqual(set(COMMAND_PATHS), EXPECTED_CAPABILITIES)
+        self.assertEqual(set(COMMAND_PATHS), set(CAPABILITIES))
+
     def test_every_leaf_help_is_a_complete_just_in_time_contract(self) -> None:
         for capability, path in COMMAND_PATHS.items():
             with self.subTest(capability=capability):

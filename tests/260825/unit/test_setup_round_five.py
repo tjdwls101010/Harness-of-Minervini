@@ -19,18 +19,26 @@ from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.setup import evaluate_setup
 from scripts.minervini.setup_evidence import build_setup_evidence
-from tests.series import anchor_dates, base_series
+from scripts.minervini.setup_structure import bars_fingerprint
+from scripts.minervini.swings import canonical_chain
+from tests.readings import detected
+from tests.series import anchor_dates, base_series, borrowed_contraction_series, hidden_turn_series
 
 
 READ = {"right_side_development": "constructive", "entry_proximity": "at_pivot"}
 def vouched(frame, chain, **overrides):
-    """A chain the detector would have produced, plus an entry at the pivot."""
+    """Every reading satisfied, over the bars named. The detector runs on those same bars.
+
+    `frame` is the frame the evidence is built over, not the one the base was drawn from: a
+    reading names the picture it was read from, so a test that adds sessions re-reads here the
+    way an analyst re-reads a chart.
+    """
 
     pivot = float(frame.loc[chain[-1], "High"])
     return {
         "right_side_development": "constructive",
         "chain_completeness": "complete",
-        "detected_chain": chain,
+        "approved_bars": bars_fingerprint(frame),
         "entry_proximity": "at_pivot",
         "entry_price": pivot * 1.001,
         **overrides,
@@ -70,8 +78,8 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 runtime=runtime,
             )
 
-    def test_completeness_alone_is_what_stands_between_a_read_setup_and_ready(self) -> None:
-        """Every other reading satisfied, so the ceiling is this one and not a second gap."""
+    def test_a_fully_read_setup_over_a_segmentation_the_harness_produced_is_ready(self) -> None:
+        """The lock slice two left, opened by the detector rather than by a caller's word."""
 
         frame, anchors = base_series()
         runtime = Runtime(price_history=lambda ticker, requested: _snapshot(frame))
@@ -84,6 +92,7 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
                 "swing": anchor_dates(frame, anchors),
                 "right_side_development": "constructive",
                 "chain_completeness": "complete",
+                "approved_bars": bars_fingerprint(frame),
                 "entry_proximity": "at_pivot",
                 "entry_price": float(frame["Close"].iloc[-1]),
                 "no_cache": True,
@@ -91,8 +100,8 @@ class CompletenessSourceIsNotACallerStringTests(unittest.TestCase):
             runtime=runtime,
         )
 
-        self.assertEqual(payload["data"]["setup_state"], "incomplete")
-        self.assertEqual(payload["data"]["missing"], ["setup.declared_chain_completeness"])
+        self.assertEqual(payload["data"]["setup_state"], "ready")
+        self.assertEqual(payload["data"]["missing"], [])
 
 
 class ChaseIsAJudgementWithItsNumbersPrintedTests(unittest.TestCase):
@@ -163,7 +172,7 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         collapsed = tail(frame, 2, close=float(frame.loc[chain[5], "Low"]) * 0.7, volume=2_000_000.0)
         recovered = tail(collapsed, 1, close=pivot * 1.02, volume=3_000_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset")))
 
         self.assertTrue(result["measurements"]["base_failed_after_pivot"])
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
@@ -176,14 +185,19 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         slipped = tail(frame, 3, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(slipped, 2, close=pivot * 1.03, volume=1_800_000.0)
         available = float(recovered["Close"].iloc[-1])
+        # The base, not the detector's chain over the extended frame: appending five flat
+        # sessions at one price makes turns of its own at a scale finer than these bars, and the
+        # subject here is which kind of failure a slip below the pivot is.
+        chain = anchor_dates(frame, anchors)
 
         result = evaluate_setup(
-            build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset", entry_price=available))
+            build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset", entry_price=available))
         )
 
         self.assertFalse(result["measurements"]["base_failed_after_pivot"])
         self.assertEqual(result["measurements"]["sessions_below_pivot_after_breakout"], 3)
-        self.assertEqual(result["setup_state"], "ready")
+        self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "pass")
+        self.assertNotIn("setup.failure_reset_types", result["failed"])
 
     def test_how_long_the_stock_spent_below_the_pivot_travels_with_the_verdict(self) -> None:
         """"Within a small number of days" has no number, so the count is what gets printed."""
@@ -194,7 +208,7 @@ class BaseFailureIsNotAPivotFailureTests(unittest.TestCase):
         long_slip = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(long_slip, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="prompt_reset")))
 
         self.assertEqual(signal(result, "setup.failure_reset_types")["measured"]["sessions_below_pivot_after_breakout"], 60)
 
@@ -227,7 +241,7 @@ class LongResetNeedsJudgingTests(unittest.TestCase):
         under = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(under, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain)))
 
         reset = signal(result, "setup.failure_reset_types")
         self.assertEqual(reset["state"], "needs_chart")
@@ -241,7 +255,7 @@ class LongResetNeedsJudgingTests(unittest.TestCase):
         under = tail(frame, 60, close=pivot * 0.97, volume=600_000.0)
         recovered = tail(under, 2, close=pivot * 1.03, volume=1_800_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain, pivot_reset="stale_reset")))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain, pivot_reset="stale_reset")))
 
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
 
@@ -263,7 +277,7 @@ class DeadBaseHasNoLiveTriggerTests(unittest.TestCase):
         collapsed = tail(frame, 2, close=float(frame.loc[chain[5], "Low"]) * 0.7, volume=2_000_000.0)
         recovered = tail(collapsed, 1, close=pivot * 1.02, volume=3_000_000.0)
 
-        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(recovered, chain, **vouched(recovered, chain)))
 
         self.assertEqual(signal(result, "setup.structural_pivot_and_trigger")["state"], "fail")
         self.assertEqual(signal(result, "setup.failure_reset_types")["state"], "fail")
@@ -278,7 +292,7 @@ class SkippedChainAgainstADetectorTests(unittest.TestCase):
         skipped = [detected[index] for index in (0, 1, 2, 5, 6, 7, 8)]
 
         result = evaluate_setup(
-            build_setup_evidence(frame, skipped, **vouched(frame, skipped, detected_chain=detected))
+            build_setup_evidence(frame, skipped, **vouched(frame, skipped))
         )
 
         completeness = signal(result, "setup.declared_chain_completeness")
@@ -298,17 +312,22 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
     segmentation can vouch for the segmentation it produced and no other.
     """
 
-    def test_a_finer_chain_between_the_same_endpoints_is_not_the_chain_that_was_vouched_for(self) -> None:
-        frame, anchors = base_series(depths=(25.0, 10.0, 5.0))
-        chain = anchor_dates(frame, anchors)
+    def test_a_chain_the_detector_did_not_produce_is_not_the_chain_that_was_vouched_for(self) -> None:
+        """Any difference, in either direction: an omitted turn hides a contraction and an
+        added one splits it, and both leave the sequence that gets judged unlike the one the
+        segmentation vouched for."""
 
-        result = evaluate_setup(
-            build_setup_evidence(frame, chain, **vouched(frame, chain, detected_chain=[chain[0], chain[3], chain[-1]]))
-        )
+        frame, chain, finer = hidden_turn_series()
+        # The chain has to survive the structure resolver to reach the comparison at all. An
+        # earlier version inserted an out-of-order date, so the resolver rejected it first and
+        # the test passed without the equality rule existing.
+        self.assertEqual(detected(frame), chain)
+
+        result = evaluate_setup(build_setup_evidence(frame, finer, **vouched(frame, finer)))
 
         completeness = signal(result, "setup.declared_chain_completeness")
         self.assertEqual(completeness["state"], "fail")
-        self.assertTrue(completeness["measured"]["differs"]["declared_only"])
+        self.assertEqual(completeness["measured"]["differs"]["declared_only"], finer[1:3])
         self.assertNotEqual(result["setup_state"], "ready")
 
     def test_the_chain_the_detector_produced_is_the_one_that_passes(self) -> None:
@@ -319,6 +338,51 @@ class OnlyTheSegmentationThatVouchedIsMeasuredTests(unittest.TestCase):
 
         self.assertEqual(signal(result, "setup.declared_chain_completeness")["state"], "pass")
         self.assertEqual(result["setup_state"], "ready")
+
+
+class WhereTheBaseBeginsIsNotSettledByTheBarsTests(unittest.TestCase):
+    """The one judgment in the segmentation that no rule got right, and what follows from it.
+
+    Read on price, this history is a forty percent base whose depths contract the whole way.
+    Read with the source's own breakout observation -- a close above eighty on expanding volume,
+    held ever since -- what is above eighty is a different structure with one contraction and no
+    sequence to judge. Both readings are defensible and they disagree, so the detector vouches
+    for neither: every rule that picked one deleted or borrowed a contraction, and each of those
+    reached `ready` on a chain the engine had edited.
+    """
+
+    def test_a_disputed_left_edge_is_vouched_for_neither_way(self) -> None:
+        frame, left_behind, current = borrowed_contraction_series()
+
+        chain = canonical_chain(frame)
+
+        self.assertEqual(chain["state"], "unstable")
+        self.assertTrue(chain["left_edge_disputed"])
+        self.assertEqual(chain["anchors"], [])
+        # Every reading travels, so a person can see what the disagreement was about.
+        self.assertIn([*left_behind, *current], chain["left_edge_readings"])
+        self.assertIn(current, chain["left_edge_readings"])
+
+    def test_the_same_price_path_without_the_volume_is_not_disputed_at_all(self) -> None:
+        """Price alone reads the two identically, which is why the dispute is about volume.
+
+        Drifting above a prior high on quiet volume is the stock still inside its correction, so
+        there is only one reading and the detector vouches for it.
+        """
+
+        quiet, left_behind, current = borrowed_contraction_series(breakout_volume=False)
+        loud, _, _ = borrowed_contraction_series()
+
+        self.assertTrue(quiet["Close"].equals(loud["Close"]))
+        chain = canonical_chain(quiet)
+        self.assertEqual(chain["state"], "resolved")
+        self.assertFalse(chain["left_edge_disputed"])
+        self.assertEqual([item["date"] for item in chain["anchors"]], [*left_behind, *current])
+
+    def test_nothing_downstream_measures_a_chain_the_edge_was_disputed_on(self) -> None:
+        frame, _, _ = borrowed_contraction_series()
+
+        self.assertEqual(detected(frame), [])
 
 
 class ChaseAfterAGapBreakoutTests(unittest.TestCase):
@@ -341,7 +405,7 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
         eased, chain = self._gapped_then_eased()
         frame, anchors = base_series(breakout=False)
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain)))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertGreater(chase["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
@@ -351,7 +415,7 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
         eased, chain = self._gapped_then_eased()
         frame, anchors = base_series(breakout=False)
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain, entry_proximity="chased")))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain, entry_proximity="chased")))
 
         self.assertEqual(signal(result, "setup.chase_limit_above_pivot")["state"], "fail")
         self.assertNotEqual(result["setup_state"], "ready")
@@ -359,10 +423,10 @@ class ChaseAfterAGapBreakoutTests(unittest.TestCase):
     def test_and_calling_it_at_the_pivot_is_a_reader_declaring_against_a_printed_number(self) -> None:
         """The accepted trust boundary, pinned so a change to it is a change to this test."""
 
-        eased, chain = self._gapped_then_eased()
-        frame, anchors = base_series(breakout=False)
+        eased, _ = self._gapped_then_eased()
+        chain = detected(eased)
 
-        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(eased, chain, **vouched(eased, chain)))
 
         self.assertEqual(result["setup_state"], "ready")
         self.assertGreater(signal(result, "setup.chase_limit_above_pivot")["measured"]["latest_close_extension_above_pivot_pct"], 18.0)
@@ -383,7 +447,7 @@ class ProximityReadsWherePriceIsNowTests(unittest.TestCase):
         pivot = float(frame.loc[chain[-1], "High"])
         back_under = tail(frame, 2, close=pivot * 0.99, volume=700_000.0)
 
-        result = evaluate_setup(build_setup_evidence(back_under, chain, **vouched(frame, chain, pivot_reset="prompt_reset")))
+        result = evaluate_setup(build_setup_evidence(back_under, chain, **vouched(back_under, chain, pivot_reset="prompt_reset")))
 
         chase = signal(result, "setup.chase_limit_above_pivot")
         self.assertLess(chase["measured"]["latest_close_extension_above_pivot_pct"], 0)

@@ -70,7 +70,7 @@ class CompletenessCannotBeSelfCertifiedTests(unittest.TestCase):
         frame, anchors = base_series()
 
         result = evaluate_setup(
-            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors), detected_chain=None))
+            build_setup_evidence(frame, anchor_dates(frame, anchors), **readings(frame, anchor_dates(frame, anchors), chain_completeness=None))
         )
 
         self.assertEqual(result["setup_state"], "incomplete")
@@ -194,7 +194,7 @@ class AdversarialDirectionTests(unittest.TestCase):
         dates = anchor_dates(frame, anchors)
         skipped = [dates[index] for index in (0, 1, 2, 5, 6, 7, 8)]
 
-        result = evaluate_setup(build_setup_evidence(frame, skipped, **readings(frame, skipped, detected_chain=dates)))
+        result = evaluate_setup(build_setup_evidence(frame, skipped, **readings(frame, skipped)))
 
         self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("setup.declared_chain_completeness", result["unsatisfied"])
@@ -232,7 +232,6 @@ class AdversarialDirectionTests(unittest.TestCase):
                 pd.concat([older, frame]),
                 anchor_dates(frame, anchors),
                 chain_completeness="complete",
-                detected_chain=anchor_dates(frame, anchors),
                 right_side_development="constructive",
                 entry_proximity="at_pivot",
             )

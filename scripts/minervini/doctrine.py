@@ -31,7 +31,7 @@ _CLAIM_FIELDS = (
     "consumers",
 )
 # Present only where they mean something, and dropped from the runtime claim when absent.
-_OPTIONAL_CLAIM_FIELDS = ("attributed_to", "out_of_scope", "unquantified", "disagrees_with")
+_OPTIONAL_CLAIM_FIELDS = ("attributed_to", "out_of_scope", "unquantified", "disagrees_with", "parameters")
 _REQUIRED_FIELDS = frozenset((*_CLAIM_FIELDS, "provenance", "tests"))
 _VALID_COMPUTABILITY = frozenset({"deterministic", "chart_assisted", "judgment_only"})
 _VALID_OUT_OF_SCOPE = frozenset({"position_sizing"})
@@ -157,6 +157,26 @@ def threshold(claim_id: str, name: str) -> Any:
     if role == "gate" and not _binds(claim):
         raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
     return specification["value"]
+
+
+def parameter(claim_id: str, name: str) -> Any:
+    """Return one registered algorithm parameter.
+
+    A parameter is not a threshold and this seam is not `threshold()`. A threshold is compared
+    with a measurement; a parameter chooses which measurement exists before any comparison
+    happens, so none of the four roles fits it and pretending one did would have made the
+    registry describe it wrongly. Keeping the two seams apart means neither can answer for the
+    other by accident.
+
+    Raises:
+        KeyError: If ``claim_id`` is unknown or does not register ``name`` as a parameter.
+    """
+    claim = get_claim(claim_id)["claim"]
+    _readable(claim, claim_id)
+    parameters = claim.get("parameters") or {}
+    if name not in parameters:
+        raise KeyError(f"{claim_id} registers no parameter named {name}")
+    return parameters[name]["value"]
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
@@ -393,6 +413,28 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             words = re.sub(r"[^A-Za-z0-9]", "", text) if isinstance(text, str) else ""
             if len(words) < _MINIMUM_QUOTATION_LENGTH:
                 errors.append(f"{label}.provenance.quotations[{position}].text must quote the source")
+        parameters = record.get("parameters") or {}
+        if not isinstance(parameters, Mapping):
+            errors.append(f"{label}.parameters must be an object")
+            parameters = {}
+        for name, specification in parameters.items():
+            if not isinstance(specification, Mapping):
+                errors.append(f"{label}.parameters.{name} must be an object")
+                continue
+            value = specification.get("value")
+            numeric = _is_number(value) or (
+                isinstance(value, builtins.list) and value and all(_is_number(item) for item in value)
+            )
+            if not numeric:
+                errors.append(f"{label}.parameters.{name} must carry a number or a list of numbers")
+            if not isinstance(specification.get("unit"), str):
+                errors.append(f"{label}.parameters.{name} must name its unit")
+            if not isinstance(specification.get("affects_verdict"), bool):
+                errors.append(f"{label}.parameters.{name} must say whether it affects the verdict")
+            elif specification.get("affects_verdict") and not _binds(record):
+                # A parameter that changes what the engine measures changes what it concludes,
+                # so it cannot sit on a claim this harness reads for contrast.
+                errors.append(f"{label}.parameters.{name} affects the verdict and cannot sit on a claim this harness does not apply")
         thresholds = record["thresholds"]
         if not isinstance(thresholds, Mapping):
             errors.append(f"{label}.thresholds must be an object")
@@ -509,4 +551,4 @@ def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-__all__ = ["binds", "evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "threshold", "validate"]
+__all__ = ["binds", "evaluate_band", "evaluate_gate", "evaluate_marker", "get_claim", "list", "parameter", "threshold", "validate"]

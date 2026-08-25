@@ -35,11 +35,22 @@ class JsonArgumentParser(argparse.ArgumentParser):
 _COMPACT_OMIT_KEYS = frozenset({"basis", "source_basis", "source_row", "quarterly", "annual_growth", "discrepancies", "measurements", "anchors", "contractions"})
 
 
-def _compact_data(value: Any) -> Any:
+def _compact_data(value: Any, keep: frozenset[str] = frozenset(), path: str = "") -> Any:
+    """Drop the verbose basis, keeping the places a capability declared are its answer.
+
+    Places, not key names: `anchors` is the whole output of ticker.swings and is also the
+    detail inside each chain that disagreed with it, and a name-only exception kept both.
+    """
     if isinstance(value, dict):
-        return {key: _compact_data(item) for key, item in value.items() if key not in _COMPACT_OMIT_KEYS}
+        result = {}
+        for key, item in value.items():
+            here = f"{path}.{key}" if path else key
+            if key in _COMPACT_OMIT_KEYS and here not in keep:
+                continue
+            result[key] = _compact_data(item, keep, here)
+        return result
     if isinstance(value, list):
-        return [_compact_data(item) for item in value]
+        return [_compact_data(item, keep, path) for item in value]
     return value
 
 
@@ -52,7 +63,8 @@ def format_payload(payload: dict[str, Any], mode: str) -> dict[str, Any]:
     if mode == "full":
         return formatted
     if "data" in formatted:
-        formatted["data"] = _compact_data(formatted["data"])
+        contract = CAPABILITIES.get(str(formatted.get("operation")))
+        formatted["data"] = _compact_data(formatted["data"], contract.compact_keeps if contract else frozenset())
     if isinstance(formatted.get("sources"), list):
         formatted["sources"] = [
             {key: source.get(key) for key in ("provider", "as_of", "stale")}
@@ -141,11 +153,15 @@ def build_parser() -> JsonArgumentParser:
     qualify.add_argument("--primary-base-long-correction", choices=("confirmed", "not_confirmed", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_long_correction"))
     _common(qualify, "ticker.qualify")
 
+    swings = _capability_parser(ticker_sub, "swings", "ticker.swings")
+    swings.add_argument("ticker", help=_input_help("ticker.swings", "ticker"))
+    _common(swings, "ticker.swings")
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
     setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
     setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
+    setup.add_argument("--approved-bars", help=_input_help("ticker.setup", "approved_bars"))
     setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
     setup.add_argument("--pivot-reset", choices=("prompt_reset", "stale_reset", "needs_judgment"), help=_input_help("ticker.setup", "pivot_reset"))
     setup.add_argument("--entry-proximity", choices=("at_pivot", "chased", "needs_judgment"), help=_input_help("ticker.setup", "entry_proximity"))

@@ -10047,20 +10047,22 @@
       ],
       "required_inputs": [
         "swing_chain",
-        "chart_review"
+        "completed_daily_bars",
+        "detected_swing_chain",
+        "approved_bars_fingerprint"
       ],
       "thresholds": {},
       "rule": {
-        "summary": "Every anchor in a declared chain is checked against the bars, but whether the chain describes the base's whole structure is not something completed bars can settle, so it is read from the chart and declared."
+        "summary": "Every anchor in a declared chain is checked against the bars, and the chain itself is checked against the segmentation this harness produces over the same bars: the reading counts only when the declared chain is the one the detector produced and the approval names the bars it was read from."
       },
       "computability": "chart_assisted",
       "failure": {
         "effect": "needs_review",
-        "meaning": "A chain declared as partial describes something other than the base being judged, so the setup cannot be ready on it; the reading is the caller's and the engine reports which one it got."
+        "meaning": "The chain is not vouched for: it was declared partial, or it is not the chain the detector produced over these bars, so the setup cannot be ready on it. The engine reports which of the two it was and, for a mismatch, which dates each side has that the other does not."
       },
       "missing": {
         "effect": "incomplete",
-        "meaning": "Without the reading, a chain that skipped or merged contractions is indistinguishable from one that did not, and the engine cannot tell the difference by measurement."
+        "meaning": "Nobody has said the chain describes the base's whole structure, or the detector will not vouch for any chain over these bars, or the approval was of a different vintage of them. A chain that skipped or merged contractions has every anchor sitting at its own span's extreme, so the comparison is what separates it from an honest one."
       },
       "precedence": {
         "tier": "scope_safety_data_integrity",
@@ -10083,7 +10085,82 @@
         "tests/260825/unit/test_setup_round_three.py"
       ],
       "provenance": {
-        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement separates it from an honest one. An independent segmentation would, and building one is a later slice; until then the gap is declared rather than stepped over."
+        "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement of the chain alone separates it from an honest one. A second segmentation does, so the detector runs inside the setup, over the same bars, at parameters no request reaches. Two earlier versions trusted something the caller could write instead -- the name of an independent supplier, then the other segmentation handed in as an argument -- and neither is provenance."
+      }
+    },
+    {
+      "id": "setup.swing_segmentation_convention",
+      "title": "The harness's own swing segmentation, and the parameters that decide it",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup"
+      ],
+      "required_inputs": [
+        "completed_daily_bars"
+      ],
+      "thresholds": {},
+      "parameters": {
+        "retracement_range_multiple": {
+          "value": 2.5,
+          "unit": "multiple_of_typical_daily_range",
+          "affects_verdict": true,
+          "note": "A move is treated as turned once price gives back this many typical daily ranges of it, the typical range being the median of (high - low) / close over the completed history. The source names no number for either, and describes swing reading as chart work; this is the harness's own rule. It is a multiple rather than a percentage because whether a given give-back is noise is a fact about the stock: a fixed one percent read a quiet name's real contractions and a volatile name's intraday chop as the same event, and on real bars the second produced chains of a dozen contractions where the source's own range is two to six."
+        },
+        "sensitivity_offsets": {
+          "value": [
+            -0.1,
+            0.1
+          ],
+          "unit": "multiple_of_typical_daily_range",
+          "affects_verdict": true,
+          "note": "Neighbouring multiples the segmentation is re-run at. A chain that changes when the multiple moves this little is not a chain anything should be checked against, and the detector declines to vouch rather than reporting the instability and passing one reading. The size has no source behind it and no derivation worth claiming -- an earlier note justified it by the multiple's written precision, which is circular, since the same value written 2.50 would imply a different radius. It is a chosen number, small against the multiple, registered here so that what it is and what it costs are both visible: on real histories most names come back unsettled at this radius, because real price structure has no single canonical scale, and an unsettled segmentation is the honest answer for those rather than a defect to tune away. Agreement at three points does not prove stability across the interval between them."
+        },
+        "breakout_volume_reference_sessions": {
+          "value": 50,
+          "unit": "sessions",
+          "affects_verdict": true,
+          "note": "The span the breakout session's volume is compared against when deciding that price left a structure. Minervini names this window when he says he likes to see volume eclipse its own fifty-day average; his figure is registered as a marker, so what it lends here is the window to average over and never the amount to clear. The comparison itself is the number-free half of 'moves above the pivot point on expanding volume'. The whole window is required: comparing against whatever part of it exists is not the observation the source describes, and on a short history it let one busy session cut a base."
+        }
+      },
+      "rule": {
+        "summary": "Swing segmentation is chart work the source never quantified, so the harness's own detector supplies a candidate chain at a retracement scaled to the stock's own typical daily range, reads the base's left edge three defensible ways and proposes a base only where all three agree, refuses to vouch for a chain that neighbouring multiples disagree with, and never lets the caller choose the multiple, the starting anchor, or the pivot."
+      },
+      "computability": "deterministic",
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A segmentation the detector will not vouch for leaves the caller's chain uncorroborated, which is missing evidence rather than a fault in the stock."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without completed bars there is nothing to segment."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "qualification_and_risk_hard_gates",
+          "verified_exceptions",
+          "execution_defaults",
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup",
+        "ticker.swings"
+      ],
+      "tests": [
+        "tests/260825/unit/test_swings.py",
+        "tests/260825/doctrine/test_parameters.py"
+      ],
+      "provenance": {
+        "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition. The one part of it that is not the harness's own is the base's left boundary: three price-only rules for it failed, because on price alone a rally above an earlier rally top inside a correction and a fresh consolidation under an old peak are the same picture at different magnitudes, and the source supplies no magnitude. It supplies the other half of the observation instead -- the buy point is price moving above the pivot on expanding volume -- so leaving a structure is read as a breakout out of it, per setup.structural_pivot_and_trigger. Which of those breakouts ended a structure is still a reading rather than a measurement -- holding either admits a pivot failure that reset or it does not, and the source says such a failure can recover -- so the edge is read every way and vouched for only where the readings agree. Every rule that picked one of them reached ready on a chain the detector had edited: bounding at an interior high deleted the contraction that widened, and not bounding at all let a structure the stock had left lend a contraction to the one above it."
       }
     }
   ]

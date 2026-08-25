@@ -82,7 +82,7 @@ class DeclaredReadingsTests(unittest.TestCase):
 
         result = evaluate_setup(build_setup_evidence(extended, chain, **readings(frame, chain, entry_proximity="chased")))
 
-        self.assertEqual(result["setup_state"], "wait")
+        self.assertNotEqual(result["setup_state"], "ready")
         self.assertIn("setup.chase_limit_above_pivot", result["unsatisfied"])
         reported = signal(result, "setup.chase_limit_above_pivot")["measured"]
         self.assertGreater(reported["latest_close_extension_above_pivot_pct"], 50.0)

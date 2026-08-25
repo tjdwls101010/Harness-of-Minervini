@@ -34,6 +34,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
+from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
 from .technical import build_eligibility_evidence
 
@@ -517,9 +518,90 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     )
 
 
+_SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
+_CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
+
+
+def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    try:
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.swings",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
+    except ProviderUnavailable as error:
+        return envelope(
+            "ticker.swings",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "state": "unavailable", "anchors": []},
+            missing=[_missing_provider(error)],
+        )
+    stale_price = _stale_price_gap(prices.meta)
+    if stale_price is not None:
+        return envelope(
+            "ticker.swings",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="partial",
+            data={"ticker": ticker, "state": "unavailable", "anchors": []},
+            missing=[stale_price],
+            sources=[_source(prices.meta)],
+        )
+    chain = canonical_chain(prices.data)
+    resolved = chain["state"] == "resolved"
+    return envelope(
+        "ticker.swings",
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        # Not needs_input: the parameters are deliberately out of the caller's reach, so there
+        # is no argument that turns an unstable segmentation into a stable one. What is absent
+        # is the evidence this capability exists to produce.
+        status="ok" if resolved else "unavailable",
+        data={"ticker": ticker, **chain},
+        missing=[] if resolved else [{"id": "stable_segmentation", "reason": _segmentation_reason(chain), "required": True}],
+        sources=[_source(prices.meta)],
+        # The convention is the harness's; the boundary it bounds the base at is the source's.
+        doctrine_ids=[_SEGMENTATION_CONVENTION, "setup.structural_pivot_and_trigger"],
+        # A proposal is not an approval, and the chart is where a person turns one into the
+        # other. With nothing proposed the chart draws no anchors, so pointing at it would send
+        # a reader to a picture that cannot answer what they came for.
+        next_capabilities=["ticker.chart"] if resolved else [],
+    )
+
+
+def _segmentation_reason(chain: Mapping[str, Any]) -> str:
+    """Which of the ways a segmentation can fail this one failed.
+
+    A chain that moves with the parameter and a chain with a session no daily bar can order
+    are different problems, and a single reason word would hide which one a reader is looking
+    at.
+    """
+    if chain.get("rejection"):
+        return str(chain["rejection"])
+    if chain.get("left_edge_disputed"):
+        return "base_left_edge_ambiguous"
+    if chain.get("ambiguous_sessions_in_base"):
+        return "ambiguous_session_inside_the_base"
+    if chain.get("sensitivity"):
+        return "neighbouring_parameters_disagree"
+    return "history_segments_into_no_base"
+
+
 def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
+    # Before the provider, not after: a malformed request that reaches the network comes back as
+    # a provider outage when the fault was the caller's, and pays for a fetch nobody can use.
+    _refuse_unusable_setup_request(request)
     try:
         prices = _cached_provider(
             runtime,
@@ -552,16 +634,7 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             sources=[_source(prices.meta)],
         )
     swings = request.get("swing")
-    if swings is not None and not isinstance(swings, list):
-        raise RequestError("swing must be a list of completed session dates", "swing")
     entry = request.get("entry")
-    if entry is not None and not isinstance(entry, Mapping):
-        raise RequestError("entry must be an object", "entry")
-    for reserved in ("completeness_source", "detected_chain"):
-        if request.get(reserved) is not None:
-            # Naming a supplier is not being one, and neither is handing in a segmentation and
-            # calling it independent. The seam exists for one this harness produced.
-            raise RequestError(f"{reserved} cannot be supplied by the caller", reserved)
     evidence = build_setup_evidence(
         prices.data,
         swings or [],
@@ -570,13 +643,54 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         entry=entry,
         right_side_development=request.get("right_side_development"),
         chain_completeness=request.get("chain_completeness"),
+        approved_bars=request.get("approved_bars"),
         entry_price=request.get("entry_price"),
         pivot_reset=request.get("pivot_reset"),
         entry_proximity=request.get("entry_proximity"),
     )
     result = evaluate_setup(evidence)
-    missing = [{"id": item, "reason": "evidence_required", "required": True} for item in result["missing"]]
-    status = "needs_input" if result["setup_state"] == "incomplete" else "ok"
+    # Two different questions, and they were being answered by one flag. Whether the verdict is
+    # corroborated turns on the chain everything was measured off: a declared chain the detector
+    # did not produce measures some other span, and one such chain reported an up/down volume
+    # ratio of 0.08 where the base's own was 3.65, published as AVOID. Whether the caller can act
+    # turns on something else entirely -- they can declare the detector's chain, and they cannot
+    # make an unstable segmentation stable.
+    corroborated = evidence["chain_corroborated"]
+    unvouched = evidence["segmentation"].get("state") != "resolved"
+    if not corroborated:
+        # Every measurement was read off the declared chain, so a segmentation nothing vouched
+        # for disqualifies what was measured from it -- a hard gate's failure included. Leaving
+        # the reducer's AVOID in the payload while the envelope said unavailable published a
+        # finding about the stock that rested on a data-integrity gap.
+        # The reason travels with the state. Completeness failing lands in `unsatisfied` rather
+        # than `missing`, so overriding the verdict without moving it left an incomplete answer
+        # with nothing in it naming what was incomplete.
+        missing_ids = [item for item in result["missing"] if item != _CHAIN_COMPLETENESS]
+        result = {
+            **result,
+            "setup_state": "incomplete",
+            "uncorroborated_verdict": result["setup_state"],
+            "missing": [*missing_ids, _CHAIN_COMPLETENESS],
+            "unsatisfied": [item for item in result["unsatisfied"] if item != _CHAIN_COMPLETENESS],
+        }
+    # A reading nobody declared and a reading nothing will corroborate are different absences.
+    # The first is fixed by declaring one; the second is fixed by nothing the caller can type,
+    # and reporting both as "evidence required" sends a reader looking for an argument.
+    missing = [{"id": item, "reason": _missing_reason(item, evidence), "required": True} for item in result["missing"]]
+    if unvouched:
+        # The same gap ticker.swings calls unavailable, and for the same reason: the parameters
+        # are out of the caller's reach and the chart draws no anchors for a chain the detector
+        # refuses, so needs_input named nothing they could supply and the chart was a dead end.
+        #
+        # Ahead of the reducer's own state, not only when it came back incomplete. A hard gate
+        # failing on an uncorroborated chain is still a verdict read off a segmentation nothing
+        # vouched for, and letting it through returned ok, AVOID, and a pointer at ticker.risk
+        # over a data-integrity gap the engine already knew about.
+        status = "unavailable"
+    elif result["setup_state"] != "incomplete":
+        status = "ok"
+    else:
+        status = "needs_input"
     return envelope(
         "ticker.setup",
         request=_clean_request({**request, "ticker": ticker}),
@@ -586,12 +700,75 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # scanning signal states would read another practitioner's disagreement as this
         # harness's own missing evidence.
         data={"ticker": ticker, **result, "contrast": evidence["contrast"]},
-        signals=result["signals"],
+        # `signals` is the machine channel: what the verdict was built from. Measurements taken
+        # off a chain nothing vouched for were not built into a verdict, and a caller or a later
+        # reducer scanning states would read a hard gate's failure there as this harness's
+        # finding about the stock. They stay in the payload, where a person reads them beside the
+        # reason nothing counted. This is the rule contrast evidence already follows, for the
+        # same reason.
+        signals=result["signals"] if corroborated else [
+            item for item in result["signals"] if item.get("id") == _CHAIN_COMPLETENESS
+        ],
         missing=missing,
         sources=[_source(prices.meta)],
-        doctrine_ids=sorted({str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}),
-        next_capabilities=["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
+        # The detector's own convention decided the chain every measurement was read off, so it
+        # is cited alongside the claims the signals name. Deriving the list from signals alone
+        # left the one rule that is the harness's rather than the source's out of the answer.
+        doctrine_ids=sorted(
+            {str(item["doctrine_id"]) for item in result["signals"] if item.get("doctrine_id")}
+            | {_SEGMENTATION_CONVENTION}
+        ),
+        next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
+
+
+def _refuse_unusable_setup_request(request: Mapping[str, Any]) -> None:
+    """What no amount of price history could make valid."""
+
+    swings = request.get("swing")
+    if swings is not None and not isinstance(swings, list):
+        raise RequestError("swing must be a list of completed session dates", "swing")
+    entry = request.get("entry")
+    if entry is not None and not isinstance(entry, Mapping):
+        raise RequestError("entry must be an object", "entry")
+    for reserved in ("completeness_source", "detected_chain", "segmentation"):
+        if request.get(reserved) is not None:
+            # Naming a supplier is not being one, and neither is handing in a segmentation and
+            # calling it independent. The seam exists for one this harness produced.
+            raise RequestError(f"{reserved} cannot be supplied by the caller", reserved)
+    # A chart reading with no picture named is a reading of nothing in particular. The value is
+    # printed by both ticker.swings and ticker.chart, so carrying it costs a copy and buys the
+    # one thing the date comparison cannot see: that the approval was of these bars. Only for
+    # `complete`, which is the reading it gates -- a caller admitting a gap is telling the truth
+    # whichever vintage they read it from, and charging them for the receipt would be the
+    # opposite of costing them nothing.
+    if request.get("chain_completeness") == "complete" and request.get("approved_bars") is None:
+        raise RequestError(
+            "approved_bars is required with chain_completeness complete: name the bars the chain was approved from, as ticker.swings and ticker.chart report them",
+            "approved_bars",
+        )
+
+
+def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:
+    """Which absence this is, because they are not fixed by the same thing.
+
+    A reading nobody declared is fixed by declaring one. A reading the detector will not
+    corroborate is fixed by nothing the caller can type. An approval of other bars is fixed by
+    looking at the current chart again. Reporting all three as "evidence required" sends a
+    reader looking for an argument in two of the three cases.
+    """
+    if item != _CHAIN_COMPLETENESS:
+        return "evidence_required"
+    segmentation = evidence["segmentation"]
+    if segmentation.get("state") != "resolved":
+        return "segmentation_unstable"
+    if not evidence["chain_corroborated"]:
+        return "declared_chain_is_not_the_detected_one"
+    signal = next((item for item in evidence["signals"] if item.get("id") == _CHAIN_COMPLETENESS), {})
+    measured = signal.get("measured") or {}
+    if "approved_bars" in measured:
+        return "approval_covers_different_bars"
+    return "evidence_required"
 
 
 def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -1401,12 +1578,38 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
-    result = render_chart_artifacts(
-        prices.data,
+    from .chart import UnrenderableHistory
+
+    try:
+        result = _render(prices.data, ticker, clock, destination)
+    except UnrenderableHistory as error:
+        # The renderer refuses unusable history by raising, and an unhandled raise becomes an
+        # internal_error envelope with the request and the explicit as_of stripped off it. The
+        # reason it named is the whole point of naming one.
+        return envelope(
+            "ticker.chart",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[{"id": "renderable_price_history", "reason": str(error), "required": True}],
+            sources=[_source(prices.meta)],
+        )
+    return _chart_envelope(result, request, ticker, clock, prices)
+
+
+def _render(data: Any, ticker: str, clock: AnalysisClock, destination: Path) -> dict[str, Any]:
+    from .chart import render_chart_artifacts
+
+    return render_chart_artifacts(
+        data,
         ticker=ticker,
         as_of=clock.date.isoformat(),
         output_dir=destination,
     )
+
+
+def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticker: str, clock: AnalysisClock, prices: Any) -> dict[str, Any]:
     side_effects = [
         {
             "type": "chart_artifact",
@@ -1520,6 +1723,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _doctrine_show(request)
     if operation == "ticker.qualify":
         return _qualify(request, runtime)
+    if operation == "ticker.swings":
+        return _swings(request, runtime)
     if operation == "ticker.setup":
         return _setup(request, runtime)
     if operation == "ticker.fundamentals":

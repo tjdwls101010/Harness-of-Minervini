@@ -197,7 +197,7 @@ class NormalisationTests(unittest.TestCase):
         chain = anchor_dates(frame, anchors)
         as_text = frame.astype(str)
 
-        result = evaluate_setup(build_setup_evidence(as_text, chain, **readings(frame, chain)))
+        result = evaluate_setup(build_setup_evidence(as_text, chain, **readings(as_text, chain)))
 
         self.assertEqual(result["setup_state"], "ready")
 
