@@ -139,6 +139,7 @@
     "limitations": [
       "Swing segmentation is the caller's chart reading; what the bars can check is that each declared date exists, that the chain alternates and ends on a high, and that each bar really is the extreme of its span.",
       "Ready requires every item of a route's declared evidence, so a base nobody described is incomplete rather than unobjectionable.",
+      "Three of those items are chart readings rather than measurements, because completed bars cannot settle a V-shaped right side, whether a chain describes the base's whole structure, or how far above the pivot stops being close to it. Each one is refused where the bars can see the reading is wrong, all three are listed back in declared_readings, and everything else in the verdict is measured and cannot be declared away.",
       "Contrast evidence from other practitioners is reported beside the verdict and never enters it.",
       "The breakout is the first completed close above the pivot after it, and a later close back under the pivot fails the trigger rather than being re-dated: a pivot failure can reset, but the reset is a new structure somebody has to declare, not a rename of the old one.",
       "A chain declared from a late high is not a misread swing and is not refused; what it leaves above the entry is measured instead and reported as overhead supply.",
@@ -146,7 +147,7 @@
       "A cheat entry is not measurable yet: it is entered inside the base rather than at its pivot, so it returns incomplete naming the cheat geometry it needs rather than borrowing the pivot breakout's evidence.",
       "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken. Its named tactics are not measured yet, so it returns incomplete naming the trigger it needs."
     ],
-    "output": "READY, WAIT, AVOID, or INCOMPLETE setup state, the measurements behind it, the evidence the route required, and contrast evidence reported separately.",
+    "output": "READY, WAIT, AVOID, or INCOMPLETE setup state, the measurements behind it, the evidence the route required, the chart readings the caller declared, and contrast evidence reported separately.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {

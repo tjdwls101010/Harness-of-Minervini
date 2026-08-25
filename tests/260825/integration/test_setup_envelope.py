@@ -114,5 +114,39 @@ class EnvelopeTests(unittest.TestCase):
             )
 
 
+
+
+class DeclaredReadingsAreVisibleTests(unittest.TestCase):
+    def test_the_envelope_says_which_evidence_came_from_a_person_rather_than_the_bars(self) -> None:
+        """Three of the required conditions are readings, and a reader should see that.
+
+        Everything else in the verdict is measured and cannot be declared away. These three
+        cover only what completed bars genuinely cannot settle, so the honest thing is to
+        name them rather than let them blend into the measurements beside them.
+        """
+
+        payload = run()
+
+        declared = payload["data"]["declared_readings"]
+        self.assertEqual(
+            declared,
+            {"right_side_development": "constructive", "chain_completeness": "complete", "entry_proximity": "at_pivot"},
+        )
+
+    def test_a_setup_with_no_readings_names_the_three_it_is_waiting_on(self) -> None:
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        payload = execute(
+            "ticker.setup",
+            {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain, "no_cache": True},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["declared_readings"], {})
+        missing = {item["id"] for item in payload["missing"]}
+        self.assertTrue({"setup.time_compression_hazard", "setup.declared_chain_completeness", "setup.chase_limit_above_pivot"}.issubset(missing))
+
+
 if __name__ == "__main__":
     unittest.main()

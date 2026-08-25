@@ -297,6 +297,18 @@ def build_setup_evidence(
     return {
         "structure": structure,
         "measurements": measurements,
+        # Named separately from the measurements so a reader can see at a glance how much of
+        # this verdict came from a person. Everything else is measured and cannot be declared
+        # away; these three cover only what completed bars cannot settle.
+        "declared_readings": {
+            name: value
+            for name, value in (
+                ("right_side_development", right_side_development),
+                ("chain_completeness", chain_completeness),
+                ("entry_proximity", entry_proximity),
+            )
+            if value is not None
+        },
         "signals": signals,
         "contrast": contrast,
         "entry": {"kind": entry_kind, "opt_in": tactic_opt_in is True, **(dict(entry) if isinstance(entry, Mapping) else {})},

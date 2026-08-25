@@ -166,6 +166,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
 
     payload = _mapping(evidence)
     structure = payload.get("structure") if isinstance(payload.get("structure"), Mapping) else {}
+    declared = payload.get("declared_readings") if isinstance(payload.get("declared_readings"), Mapping) else {}
     measurements = payload.get("measurements") if isinstance(payload.get("measurements"), Mapping) else {}
     signals = [item for item in (payload.get("signals") or []) if isinstance(item, Mapping)]
     # Only binding evidence can answer a required condition, and two answers to the same
@@ -231,6 +232,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "entry": entry,
         "structure": structure,
         "measurements": measurements,
+        "declared_readings": dict(declared),
         "signals": signals,
         "required_evidence": list(required),
         "failed": failed,
