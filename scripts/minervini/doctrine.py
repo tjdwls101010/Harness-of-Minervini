@@ -295,12 +295,35 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     return signal
 
 
-def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
-    """Place a measurement inside a range the source gave as a range.
+def _band_position(value: float) -> float:
+    """Round the position for a reader without rounding it onto an edge it is not on.
 
-    ``band_position`` exists because 26 and 34.9 are not the same picture even though
-    both sit inside 25-35, and a bare pass/fail throws that difference away. The
-    quotation travels with the signal so the response can cite what it is reading.
+    Four places is the right resolution for a person reading where a base sat in its range,
+    and it is the wrong resolution at the very edges: a measurement 0.0000014 of a span above
+    the high edge is genuinely above it and rounds to exactly 1.0, so the position and the
+    state end up saying different things about the same number. Widening the field to ten
+    places everywhere would only move that collision inward. Instead the position keeps
+    whichever side of the range it is on, spending extra places only where four would erase
+    the distinction -- which is at the edges and nowhere else.
+    """
+    for places in range(4, _REPORTED_PRECISION + 1):
+        rounded = round(value, places)
+        if (rounded < 0) == (value < 0) and (rounded > 1) == (value > 1):
+            return rounded
+    return value
+
+
+def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
+    """Say where a measurement sat against a range the source gave as a range.
+
+    Where it sat, not whether it belongs: the state is positional and ``direction`` is what
+    names the good edge, because a base shallower than its depth range is outside it and
+    better for being outside while a company growing slower than its growth range is outside
+    it and worse. ``band_position`` exists because 26 and 34.9 are not the same picture even
+    though both sit inside 25-35, and a bare pass/fail throws that difference away. Everything
+    the signal says about position is computed from the value it publishes rather than the one
+    it was handed, so a reader holding only the envelope can check it. The quotation travels
+    with the signal so the response can cite what it is reading.
     """
     specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
@@ -308,8 +331,9 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
         "role": "band",
-        # Rounded for the reader, exactly as a gate reports; every comparison below
-        # still uses the measurement it was handed.
+        # Rounded for the reader, exactly as a gate reports -- and every comparison below
+        # reads this rounded value rather than the raw one, so the number the envelope shows
+        # and the state beside it can never disagree.
         "measured": round(measured, _REPORTED_PRECISION) if isinstance(measured, float) else measured,
         "unit": specification["unit"],
         "source_range": [low, high],
@@ -327,7 +351,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     # no way to tell that is arithmetic rather than a mistake. Ten decimal places is far below
     # any precision price data carries, so agreeing with the print costs nothing real.
     reported = signal["measured"]
-    signal["band_position"] = round((reported - low) / span, 4) if span else 0.0
+    signal["band_position"] = _band_position((reported - low) / span) if span else 0.0
     # The state says where the number sat and nothing else. Which edge is the good one is
     # what ``direction`` is for -- a base shallower than its depth range is outside it and
     # better for being outside; a company growing slower than its growth range is outside it
