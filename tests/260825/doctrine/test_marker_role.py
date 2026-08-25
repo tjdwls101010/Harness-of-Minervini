@@ -31,7 +31,6 @@ def threshold_replaced(claim_id: str, name: str, specification: dict):
     record["thresholds"][name] = specification
     loader = doctrine._load_registry
     doctrine._load_registry = lambda: edited
-    doctrine.get_claim.cache_clear() if hasattr(doctrine.get_claim, "cache_clear") else None
     try:
         yield
     finally:
