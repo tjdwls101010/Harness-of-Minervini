@@ -122,6 +122,7 @@
       "Contrast evidence from other practitioners is reported beside the verdict and never enters it.",
       "The breakout is dated at the start of the run price is currently in, not at the first close above the pivot ever, and earlier attempts at the pivot are counted beside it.",
       "A chain declared from a late high is not a misread swing and is not refused; what it leaves above the entry is measured instead and reported as overhead supply.",
+      "The correction the depth limit reads runs from the highest high in the price history the provider returned to the lowest low after it, not from the base the caller declared, and both dates travel with it so a reader can see whether the peak belongs to this base or an older one.",
       "A cheat entry is not measurable yet: it is entered inside the base rather than at its pivot, so it returns incomplete naming the cheat geometry it needs rather than borrowing the pivot breakout's evidence.",
       "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken. Its named tactics are not measured yet, so it returns incomplete naming the trigger it needs."
     ],
