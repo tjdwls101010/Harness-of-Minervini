@@ -518,6 +518,15 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                     errors.append(f"{label}.thresholds.{name} is a band and needs a two-number range")
                 elif span[0] > span[1]:
                     errors.append(f"{label}.thresholds.{name} range is inverted")
+                elif span[0] == span[1]:
+                    # A range whose edges meet is one value the source named, which the role
+                    # taxonomy already has a word for. Left as a band it has no span to divide
+                    # by, so band_position is pinned at 0.0 however far outside the
+                    # measurement is, and the position ends up on the far side of the state.
+                    errors.append(
+                        f"{label}.thresholds.{name} is a band whose range has no width; "
+                        "a single value the source named is a marker"
+                    )
                 if specification.get("direction") not in _VALID_DIRECTIONS:
                     errors.append(f"{label}.thresholds.{name} is a band and must say which direction is better")
             else:

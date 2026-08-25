@@ -14,10 +14,14 @@ outside is the favourable outcome here.
 
 from __future__ import annotations
 
+import json
 import math
+import pathlib
 import unittest
 
 from scripts.minervini import doctrine
+
+REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 
 DEPTH = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct")
 GROWTH = ("fundamentals.minimum_quarterly_earnings_growth", "minimum_yoy_earnings_growth_percent")
@@ -262,6 +266,54 @@ class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
 
                 self.assertEqual(signal["measured"], measured)
                 self.assertEqual(signal["state"], "below_source_range")
+
+
+class ARangeWithNoWidthIsNotARange(unittest.TestCase):
+    """A band whose edges are equal is a single value the source named, which is a marker.
+
+    The role taxonomy already separates the two: a band is a range the source gave as a range
+    and reports where a measurement sat in it, and a marker is one value it named while
+    declining to bound it. Registered as a band, a point has no span to divide by, so
+    `band_position` is pinned at 0.0 whatever the measurement is -- and a measurement above
+    the point then publishes `above_source_range` beside a position of 0.0, which is the
+    position sitting on the far side of the state. Nothing registered is shaped this way; the
+    validator is what has to keep it that way, because the alternative is `evaluate_band`
+    inventing a position for a range that cannot have one."""
+
+    @staticmethod
+    def _registry_with_a_point_band() -> dict:
+        registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+        record = next(
+            item for item in registry["claims"]
+            if any(spec.get("role") == "band" for spec in (item.get("thresholds") or {}).values())
+        )
+        name, specification = next(
+            (name, spec) for name, spec in record["thresholds"].items() if spec.get("role") == "band"
+        )
+        low, _ = specification["range"]
+        specification["range"] = [low, low]
+        # The validator labels by position in the file rather than by claim id, so the
+        # threshold's own name is what identifies the error it raises.
+        return registry, name
+
+    def test_the_registry_as_it_stands_has_no_point_band(self) -> None:
+        for record in doctrine.list():
+            for name, specification in (record["claim"].get("thresholds") or {}).items():
+                if isinstance(specification, dict) and specification.get("role") == "band":
+                    low, high = specification["range"]
+                    with self.subTest(band=f"{record['claim']['id']}.{name}"):
+                        self.assertGreater(high, low)
+
+    def test_validate_refuses_a_band_whose_range_has_no_width(self) -> None:
+        registry, label = self._registry_with_a_point_band()
+
+        result = doctrine.validate(registry)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(label in error and "width" in error for error in result["errors"]),
+            result["errors"],
+        )
 
 
 if __name__ == "__main__":
