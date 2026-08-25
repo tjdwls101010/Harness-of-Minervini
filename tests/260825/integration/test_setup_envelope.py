@@ -148,6 +148,15 @@ class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
         self.assertEqual(reasons.get("setup.declared_chain_completeness"), "declared_chain_is_not_the_detected_one")
         # The caller can act on this one -- declare the chain ticker.swings proposed.
         self.assertEqual(misdeclared["status"], "needs_input")
+        # And the machine channel carries nothing a reducer could read as a finding: the gate
+        # that failed was measured off the wrong span, so only the signal explaining why
+        # anything counts is published there. The evidence itself stays in the payload.
+        published = {item["id"] for item in misdeclared["signals"]}
+        self.assertEqual(published, {"setup.declared_chain_completeness"})
+        self.assertIn(
+            "setup.demand_supply_volume_asymmetry",
+            {item["id"] for item in misdeclared["data"]["signals"]},
+        )
 
 
 class AnUnfixableGapIsNotAskedAboutTests(unittest.TestCase):

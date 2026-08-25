@@ -700,7 +700,15 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # scanning signal states would read another practitioner's disagreement as this
         # harness's own missing evidence.
         data={"ticker": ticker, **result, "contrast": evidence["contrast"]},
-        signals=result["signals"],
+        # `signals` is the machine channel: what the verdict was built from. Measurements taken
+        # off a chain nothing vouched for were not built into a verdict, and a caller or a later
+        # reducer scanning states would read a hard gate's failure there as this harness's
+        # finding about the stock. They stay in the payload, where a person reads them beside the
+        # reason nothing counted. This is the rule contrast evidence already follows, for the
+        # same reason.
+        signals=result["signals"] if corroborated else [
+            item for item in result["signals"] if item.get("id") == _CHAIN_COMPLETENESS
+        ],
         missing=missing,
         sources=[_source(prices.meta)],
         # The detector's own convention decided the chain every measurement was read off, so it
