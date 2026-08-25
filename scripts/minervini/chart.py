@@ -123,7 +123,11 @@ def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
         raise UnrenderableHistory("daily_ohlcv must be a DataFrame")
     missing = [column for column in _REQUIRED_COLUMNS if column not in daily_ohlcv.columns]
     if missing:
-        raise UnrenderableHistory(f"daily_ohlcv is missing required columns: {', '.join(missing)}")
+        # The shared vocabulary, with the columns named after it: the contract says both surfaces
+        # refuse in the same words, and one of them was using its own for this case.
+        raise UnrenderableHistory(
+            f"daily_ohlcv is not usable price history: history_missing_required_columns ({', '.join(missing)})"
+        )
     if daily_ohlcv.empty:
         raise UnrenderableHistory("daily_ohlcv contains no completed bars")
 
