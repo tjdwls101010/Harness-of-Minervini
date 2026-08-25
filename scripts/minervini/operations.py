@@ -576,6 +576,15 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "as ticker.chart reports them and every chart question carries them",
             "drawn_bars",
         )
+    # And it has to be a digest rather than any non-empty string. Taken as written, a typo was a
+    # picture this run had not measured -- so a malformed value came back as an honest reading of
+    # another vintage, which is a finding about the stock rather than about the request.
+    if drawn_bars is not None and not re.fullmatch(r"[0-9a-f]{64}", str(drawn_bars).strip()):
+        raise RequestError(
+            "drawn_bars is a bars_fingerprint: sixty-four lowercase hex characters, as "
+            "ticker.chart reports it in input_sha256",
+            "drawn_bars",
+        )
     try:
         prices = _cached_provider(
             runtime,

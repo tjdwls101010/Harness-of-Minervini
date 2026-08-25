@@ -92,6 +92,11 @@ class TheAnswerNamesThePictureItCameFrom(unittest.TestCase):
         reasons = {item["reason"] for item in payload["missing"]}
         self.assertEqual(reasons, {"approval_covers_different_bars"})
         self.assertEqual(payload["data"]["measured_from"], bars_fingerprint(self.frame))
+        # The questions stay, unanswered. Removed, the reader is told their picture was the wrong
+        # series and left with nothing naming what to read from the right one.
+        self.assertEqual(
+            [q["answered"] for q in payload["data"]["chart_questions"]], [None, None]
+        )
 
 
 class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
@@ -136,6 +141,37 @@ class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ADigestIsWhatIsAskedFor(unittest.TestCase):
+    """Any non-empty string used to count, so a typo arrived as a reading of another vintage.
+
+    Which is the wrong kind of answer entirely: a malformed value is a bad request, and reporting
+    it as a finding about the stock sends the reader to redraw a chart that was never the problem.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.runtime = Runtime(price_history=lambda ticker, requested: snapshot(self.frame))
+        self.request = {
+            "ticker": "TEST",
+            "as_of": self.frame.index[-1].date().isoformat(),
+            "no_cache": True,
+        }
+
+    def test_a_value_that_is_not_a_fingerprint_is_refused(self) -> None:
+        for value in ("not-a-sha256", "abc", bars_fingerprint(self.frame)[:32], bars_fingerprint(self.frame).upper()):
+            with self.subTest(value=value), self.assertRaises(RequestError):
+                execute(
+                    "ticker.power-play",
+                    {**self.request, "chart_readings": ["a=observed"], "drawn_bars": value},
+                    runtime=self.runtime,
+                )
+
+    def test_it_is_checked_even_with_nothing_to_apply_it_to(self) -> None:
+        """A caller who names a picture is making a claim about it whether or not they answered."""
+        with self.assertRaises(RequestError):
+            execute("ticker.power-play", {**self.request, "drawn_bars": "nope"}, runtime=self.runtime)
 
 
 class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):

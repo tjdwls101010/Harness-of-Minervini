@@ -114,6 +114,12 @@ class TheGapsUnderOneUnreadTopEachNameTheirOwnCause(unittest.TestCase):
         )
         self.assertEqual(reasons["lower_top_left_unread"], "history_ends_before_lower_top")
         self.assertEqual(payload["next_capabilities"], [])
+        # And the two criteria whose own reading is out owe nobody anything: no key exists for
+        # them and none can, so marking them required tells the reader to close what they cannot.
+        owed = {item["id"].split(".")[-1]: item["required"] for item in payload["missing"]}
+        self.assertFalse(owed["launch_volume_character"])
+        self.assertFalse(owed["flag_tightness_or_vcp"])
+        self.assertTrue(owed["lower_top_left_unread"])
 
 
 class TheGapDoesClose(unittest.TestCase):
@@ -197,6 +203,20 @@ class HowFarBelowTheUnreadTopStandsDecidesWhetherItBlocks(unittest.TestCase):
         self.assertIsNotNone(unread["rejection"])
         self.assertIsNotNone(unread["peak_high"])
         self.assertLess(unread["peak_high"], peak["peak_high"])
+
+    def test_the_top_it_could_not_read_is_reported_with_its_distance(self) -> None:
+        """A boundary a verdict was decided next to has to be one a reader can audit.
+
+        The first top past the candidate distance is reported that way already. This one decides
+        whether an unread top withholds the qualification, so it is owed the same.
+        """
+        near = build_power_play_evidence(a_top_the_history_ends_before_series())
+        far = build_power_play_evidence(a_top_the_history_ends_before_series(unread_top_price=15.0))
+
+        self.assertAlmostEqual(near["unread_top"]["distance_pct"], 4.2857, places=3)
+        self.assertTrue(near["unread_top_may_contest"])
+        self.assertAlmostEqual(far["unread_top"]["distance_pct"], 28.5714, places=3)
+        self.assertFalse(far["unread_top_may_contest"])
 
     def test_a_top_too_far_below_to_contest_does_not_block(self) -> None:
         history = a_top_the_history_ends_before_series(unread_top_price=15.0)

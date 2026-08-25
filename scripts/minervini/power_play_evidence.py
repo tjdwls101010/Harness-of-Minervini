@@ -359,10 +359,20 @@ def _turning_points(history: Any) -> frozenset[str] | None:
     last one, and reading the structure from there is reading a bar rather than a top.
 
     The retracement is derived the way ticker.swings derives it, from the same registered
-    convention, so both capabilities cut the same bars at the same places. What is not borrowed is
-    that capability's refusal to vouch when a neighbouring parameter would move an anchor: it
-    exists to corroborate a chain a caller declared, and here the disagreement is reported as a
-    disputed top rather than as no reading at all.
+    convention, and at every value that convention registers -- the middle one and both
+    neighbours. Taking the middle reading alone was one reading of an unstable measurement, and
+    the instability cuts one way here: a top the middle retracement walks past never contests a
+    criterion, so its known failure is a finding the verdict is never told about. Measured, a
+    structure with a six-week violation under a neighbour-only top came back qualified.
+
+    The union rather than the refusal beside it in ticker.swings. That capability corroborates a
+    chain a caller declared, so an unstable segmentation leaves it with nothing to vouch for;
+    here the tops are found rather than declared, and a stock whose segmentation is unstable still
+    has tops. Every high any registered reading confirms is a candidate, which is conservative on
+    the side that matters -- more tops may contest a qualification, and a rejection still needs
+    all of them to agree. Measured across the tickers this repository has provider history for it
+    costs nothing: the same twenty-three reject and the same fifteen read a settled top, on chains
+    that run one to five tops instead of one to four.
     """
 
     bars, _ = read_bars(history)
@@ -370,8 +380,18 @@ def _turning_points(history: Any) -> frozenset[str] | None:
     if typical is None:
         return None
     multiple = float(doctrine.parameter(_SEGMENTATION, "retracement_range_multiple"))
-    anchors = segment(bars, retracement_pct=multiple * typical)["anchors"]
-    return frozenset(str(anchor["date"]) for anchor in anchors if anchor["kind"] == "high")
+    offsets = [0.0, *(float(value) for value in doctrine.parameter(_SEGMENTATION, "sensitivity_offsets"))]
+    found: set[str] = set()
+    for offset in offsets:
+        retracement = (multiple + offset) * typical
+        if retracement <= 0:
+            continue
+        found |= {
+            str(anchor["date"])
+            for anchor in segment(bars, retracement_pct=retracement)["anchors"]
+            if anchor["kind"] == "high"
+        }
+    return frozenset(found)
 
 
 def _walk_the_tops(
@@ -396,6 +416,7 @@ def _walk_the_tops(
     first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
     unread_may_contest = False
+    unread_top: dict[str, Any] | None = None
     may_contest = 0
     steps = 0
     while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
@@ -415,9 +436,16 @@ def _walk_the_tops(
                 # what decides whether the same top can withhold a qualification. Unknown counts
                 # as close: a top whose price the measurement never established could be anywhere.
                 unread = reading["peak_high"]
-                unread_may_contest = (
-                    top is None or unread is None or (top - unread) / top * 100 <= bound
-                )
+                distance = None if top is None or unread is None else (top - unread) / top * 100
+                unread_may_contest = distance is None or distance <= bound
+                # Reported with its distance, the same way the first top past the bound is. A
+                # boundary a verdict was decided next to is one a reader has to be able to audit,
+                # and this one decides whether an unread top withholds the qualification.
+                unread_top = {
+                    "peak_date": reading["peak_date"],
+                    "peak_high": unread,
+                    "distance_pct": None if distance is None else round(distance, 4),
+                }
             break
         # Walked past rather than read. The bar is still where the next search starts from -- the
         # tops below it are found by descending -- but it is not a reading of the structure, so it
@@ -438,6 +466,7 @@ def _walk_the_tops(
         "first_non_contesting": first_non_contesting,
         "ran_out_of_history": ran_out_of_history,
         "unread_top_may_contest": unread_may_contest,
+        "unread_top": unread_top,
         "may_contest": may_contest,
     }
 
@@ -723,6 +752,7 @@ def build_power_play_evidence(
         "unreadable_readings": unreadable,
         "readings_ran_out_of_history": ran_out_of_history,
         "unread_top_may_contest": unread_top_may_contest,
+        "unread_top": walk["unread_top"],
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,

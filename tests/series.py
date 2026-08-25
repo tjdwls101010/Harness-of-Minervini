@@ -942,3 +942,37 @@ def a_top_the_history_ends_before_series(
         unread_top_price * 0.995,
     ]
     return frame
+
+
+def a_top_only_a_neighbour_confirms_series(*, dip_pct: float = 0.30, flag_sessions: int = 26, start: str = "2026-01-02") -> pd.DataFrame:
+    """A candidate top the middle retracement misses and a neighbouring one confirms.
+
+    The pullback inside the advance is sized to land between the retracements the segmentation
+    convention's own sensitivity offsets produce: deep enough for the looser neighbour to confirm
+    a turning point there, shallow enough for the middle reading to walk past it. Read from that
+    top the flag runs past six weeks and the structure is out; read from the peak above it,
+    nothing measurable fails.
+
+    Which is the whole of the case. One reading of the same chart says this is not a Power Play,
+    and a verdict taken off the middle reading alone never hears it.
+    """
+
+    dormant, lower_top, peak, flag_low, flag_end = 50.0, 103.0, 108.0, 100.0, 105.0
+    sink = flag_sessions // 2
+    closes = [dormant] * 60
+    closes += [dormant + (lower_top - dormant) * (step + 1) / 16 for step in range(16)]
+    closes += [lower_top * (1 - dip_pct / 100)]
+    closes += [lower_top + (peak - lower_top) * (step + 1) / 4 for step in range(4)]
+    closes += [peak - (peak - flag_low) * (step + 1) / sink for step in range(sink)]
+    closes += [
+        flag_low + (flag_end - flag_low) * (step + 1) / (flag_sessions - sink)
+        for step in range(flag_sessions - sink)
+    ]
+    index = pd.bdate_range(start=start, periods=len(closes))
+    frame = pd.DataFrame({"Open": closes, "Close": closes}, index=index)
+    frame["High"] = frame["Close"] * 1.001
+    frame["Low"] = frame["Close"] * 0.999
+    frame["Volume"] = [400_000.0] * 60 + [2_400_000.0] * 21 + [800_000.0] * flag_sessions
+    frame["Stock Splits"] = [0.0] * len(closes)
+    frame["Dividends"] = [0.0] * len(closes)
+    return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]

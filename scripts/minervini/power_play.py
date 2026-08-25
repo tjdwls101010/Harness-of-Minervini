@@ -570,6 +570,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "unreadable_readings": evidence.get("unreadable_readings"),
         "readings_ran_out_of_history": evidence.get("readings_ran_out_of_history"),
         "unread_top_may_contest": evidence.get("unread_top_may_contest"),
+        "unread_top": evidence.get("unread_top"),
         "first_non_contesting_reading": evidence.get("first_non_contesting_reading"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,

@@ -157,5 +157,93 @@ class AGapOnARejectedStructureIsNotAnInstruction(unittest.TestCase):
         self.assertEqual(payload["next_capabilities"], [])
 
 
+class AFinishedAnswerCarriesItsEvidenceAndAsksNothing(unittest.TestCase):
+    """Both halves, because dropping either one is a different lie.
+
+    Kept whole, a terminal envelope prints a key nobody can act on under a status that says
+    nothing is outstanding. Emptied, the reader cannot see which answers the verdict rests on --
+    and one of the two criteria here was settled by a person, which is the thing an auditor of a
+    Power Play most needs to find.
+    """
+
+    def _rejected(self):
+        frame = power_play_series()
+        volume = next(
+            q for q in run(frame)["data"]["chart_questions"]
+            if q["condition"] == "launch_volume_character"
+        )
+        return run(frame, chart_readings=[f'{volume["key"]}=absent'])
+
+    def test_the_answer_it_rests_on_is_still_there(self) -> None:
+        payload = self._rejected()
+
+        answered = [q for q in payload["data"]["chart_questions"] if q["answered"] is not None]
+        self.assertEqual([q["condition"] for q in answered], ["launch_volume_character"])
+        self.assertEqual(answered[0]["answered"], "absent")
+
+    def test_and_nothing_it_no_longer_wants(self) -> None:
+        payload = self._rejected()
+
+        self.assertEqual(payload["data"]["power_play_state"], "not_qualified")
+        self.assertEqual([q for q in payload["data"]["chart_questions"] if q["answered"] is None], [])
+
+    def test_a_question_answered_under_one_top_does_not_answer_for_another(self) -> None:
+        """`awaited` counts unanswered questions, and both tops ask this criterion separately.
+
+        Counted by condition alone it goes quiet as soon as any top is answered; counted by
+        answer alone it never goes quiet at all. The envelope has to keep asking until the top
+        that may contest it has been read, and stop the moment it has.
+        """
+        frame = two_tops_that_both_await_the_chart_series()
+        questions = run(frame)["data"]["chart_questions"]
+        self.assertEqual(len(questions), 2)
+
+        half = run(frame, chart_readings=[f'{questions[0]["key"]}=observed'])
+        self.assertEqual(
+            {item["reason"] for item in half["missing"]}, {"chart_unread_under_another_top"}
+        )
+        self.assertIn("ticker.chart", half["next_capabilities"])
+
+        whole = run(frame, chart_readings=[f'{q["key"]}=observed' for q in questions])
+        self.assertEqual(whole["missing"], [])
+        self.assertEqual(whole["next_capabilities"], [])
+
+
+class AChartAlreadyReadIsNotAChartStillWaited0n(unittest.TestCase):
+    """The gap where an answered question and no question at all look identical.
+
+    The highest top is out on the depth gate, so it was issued no key. The top beneath it survives
+    and asks both questions, and once those are answered nothing anywhere is still waiting on a
+    reader -- but the highest top's own criteria are still unsatisfied, because its reading is the
+    one the verdict is reported from.
+
+    Counting a question that has been answered as one still outstanding tells the reader to go and
+    read a chart they have already read, and the envelope says it again on the next run.
+    """
+
+    def _payload(self, answers=()):
+        frame = two_tops_that_both_await_the_chart_series(flag_low=79.0)
+        questions = run(frame)["data"]["chart_questions"]
+        self.assertEqual({q["reading"] for q in questions}, {1})
+        chosen = [f'{q["key"]}=observed' for q in questions if q["condition"] in answers]
+        return run(frame, chart_readings=chosen) if chosen else run(frame)
+
+    def test_while_the_lower_top_is_unread_the_chart_is_what_it_waits_on(self) -> None:
+        payload = self._payload()
+
+        reasons = {item["id"].split(".")[-1]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons["launch_volume_character"], "chart_reading_required")
+        self.assertIn("ticker.chart", payload["next_capabilities"])
+
+    def test_once_it_is_read_the_gap_stops_naming_a_chart(self) -> None:
+        payload = self._payload(("launch_volume_character", "flag_tightness_or_vcp"))
+
+        reasons = {item["id"].split(".")[-1]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(
+            reasons["launch_volume_character"], "reading_rejected_before_a_chart_was_needed"
+        )
+        self.assertEqual(payload["next_capabilities"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
