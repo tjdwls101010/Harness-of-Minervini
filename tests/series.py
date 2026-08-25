@@ -913,13 +913,16 @@ def two_tops_that_both_await_the_chart_series(*, start: str = "2026-01-02") -> p
     return frame[["Open", "High", "Low", "Close", "Volume", "Stock Splits", "Dividends"]]
 
 
-def a_top_the_history_ends_before_series(*, flag_depth_pct: float = 12.0, start: str = "2026-01-02") -> pd.DataFrame:
+def a_top_the_history_ends_before_series(
+    *, flag_depth_pct: float = 12.0, unread_top_price: float = 20.1, start: str = "2026-01-02"
+) -> pd.DataFrame:
     """A clean structure whose next candidate top sits behind the first loaded bar.
 
-    The frame opens on a confirmed high a few percent under the peak -- close enough to contest
-    every criterion -- and there is no history behind it to measure a structure from. So the walk
-    stops there rather than reading it, and the reading it never made is the one that would have
-    had a vote.
+    The frame opens on a confirmed high under the peak and there is no history behind it to
+    measure a structure from, so the walk stops there rather than reading it. Whether the reading
+    it never made would have had a vote is what ``unread_top_price`` sets: the default stands a
+    few percent under the peak, inside the distance a top may contest from, and a lower value puts
+    it far enough below to be a structure the stock has since overtaken.
     """
 
     frame = power_play_series(
@@ -930,5 +933,10 @@ def a_top_the_history_ends_before_series(*, flag_depth_pct: float = 12.0, start:
         start=start,
     )
     columns = frame.columns.get_indexer(["Open", "High", "Low", "Close"])
-    frame.iloc[0, columns] = [20.0, 20.1, 19.9, 20.0]
+    frame.iloc[0, columns] = [
+        unread_top_price * 0.995,
+        unread_top_price,
+        unread_top_price * 0.99,
+        unread_top_price * 0.995,
+    ]
     return frame

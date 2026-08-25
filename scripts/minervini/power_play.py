@@ -50,10 +50,17 @@ def _dated_events(bars: pd.DataFrame, column: str, start: int, end: int) -> list
     return [stamp.date().isoformat() for stamp in span.index[span[column] > 0]]
 
 
-def _empty(reason: str | None) -> dict[str, Any]:
+def _empty(reason: str | None, *, peak_date: str | None = None, peak_high: float | None = None) -> dict[str, Any]:
+    """A reading that produced no structure, carrying whatever it did establish.
+
+    The top it found before it ran out of sessions is the one thing worth keeping. Nothing can be
+    measured from that top, but how far below the highest it stands is what decides whether it was
+    ever a competing reading of this structure -- and thrown away here, that distance is
+    unknowable and every unread top has to be treated as one.
+    """
     return {
-        "peak_date": None,
-        "peak_high": None,
+        "peak_date": peak_date,
+        "peak_high": peak_high,
         "peak_close": None,
         "advance_low": None,
         "advance_low_date": None,
@@ -149,7 +156,11 @@ def measure_power_play(history: Any, spec: Mapping[str, Any], *, below: float | 
     flag = bars.iloc[peak + 1:]
 
     if not len(before):
-        return _empty("history_has_no_sessions_before_the_peak")
+        return _empty(
+            "history_has_no_sessions_before_the_peak",
+            peak_date=str(peak_label.date()),
+            peak_high=peak_high,
+        )
 
     # The extremes reading, reported and never gating. A bar that wicked to forty-nine three days
     # after a launch from fifty is the lowest low of the window without being where anything
@@ -471,7 +482,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
     # already excludes this case, so a structure whose highest top passes everything and whose
     # next candidate could not be measured would otherwise come back clear on a chain that stopped
     # short. Only more history closes it.
-    if ran_out_of_history:
+    if ran_out_of_history and evidence.get("unread_top_may_contest"):
         missing.append("lower_top_left_unread")
 
     # Whatever the reducer declined, the machine channel declines too -- each under the cause that
@@ -534,6 +545,7 @@ def evaluate_power_play(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "surviving_readings": evidence.get("surviving_readings"),
         "unreadable_readings": evidence.get("unreadable_readings"),
         "readings_ran_out_of_history": evidence.get("readings_ran_out_of_history"),
+        "unread_top_may_contest": evidence.get("unread_top_may_contest"),
         "first_non_contesting_reading": evidence.get("first_non_contesting_reading"),
         "reading_rejections": evidence.get("reading_rejections"),
         "rejected_under_every_top_read": rejected_under_every_top_read,

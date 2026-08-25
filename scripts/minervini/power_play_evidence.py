@@ -360,6 +360,7 @@ def _walk_the_tops(
     bound = spec["candidate_top_maximum_distance_pct"]
     first_non_contesting: dict[str, Any] | None = None
     ran_out_of_history = False
+    unread_may_contest = False
     may_contest = 0
     steps = 0
     while len(readings) < _MOST_TOPS_READ and steps < _MOST_TOPS_READ:
@@ -372,6 +373,16 @@ def _walk_the_tops(
             # the tops above it decided. That is the shape a recently listed stock arrives in.
             if reading["rejection"] != _NO_MORE_TOPS:
                 ran_out_of_history = True
+                # How far below the highest that unread top stands, when the measurement got far
+                # enough to find it. Objecting to a rejection survives the distance -- a structure
+                # nobody read is still one nobody read -- so `ran_out_of_history` alone withholds
+                # a rejection whatever the distance is. Contesting does not survive it, so this is
+                # what decides whether the same top can withhold a qualification. Unknown counts
+                # as close: a top whose price the measurement never established could be anywhere.
+                unread = reading["peak_high"]
+                unread_may_contest = (
+                    top is None or unread is None or (top - unread) / top * 100 <= bound
+                )
             break
         # Walked past rather than read. The bar is still where the next search starts from -- the
         # tops below it are found by descending -- but it is not a reading of the structure, so it
@@ -391,6 +402,7 @@ def _walk_the_tops(
         "readings": readings,
         "first_non_contesting": first_non_contesting,
         "ran_out_of_history": ran_out_of_history,
+        "unread_top_may_contest": unread_may_contest,
         "may_contest": may_contest,
     }
 
@@ -422,6 +434,7 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
     walk = _walk_the_tops(history, spec, measurements, _turning_points(history))
     readings, first_non_contesting = walk["readings"], walk["first_non_contesting"]
     ran_out_of_history, may_contest = walk["ran_out_of_history"], walk["may_contest"]
+    unread_top_may_contest = walk["unread_top_may_contest"]
     exhausted = len(readings) >= _MOST_TOPS_READ
 
     # The ordering first. If the tops keep their places once every print is on one scale, the
@@ -647,6 +660,7 @@ def build_power_play_evidence(history: Any, chart_readings: Mapping[str, str] | 
         "surviving_readings": surviving,
         "unreadable_readings": unreadable,
         "readings_ran_out_of_history": ran_out_of_history,
+        "unread_top_may_contest": unread_top_may_contest,
         "reading_rejections": reading_rejections,
         "rejected_under_every_top_read": rejected_under_every_top_read,
         "every_top_rejects": every_top_rejects,
