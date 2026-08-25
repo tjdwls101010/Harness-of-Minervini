@@ -62,9 +62,13 @@
         "choices": [
           "completed_pivot",
           "vcp_cheat",
-          "tl_early"
+          "key_support_level_reclaim",
+          "consolidation_pivot_breakout",
+          "key_moving_average_pullback",
+          "oops_reversal",
+          "key_support_level_pullback"
         ],
-        "description": "Entry structure; TL early is advanced and opt-in.",
+        "description": "Which entry this is. The five named tactics are TraderLion's early entries, taken before the traditional pivot; each is advanced, opt-in, and holds the caller to its own trigger and invalidation.",
         "required": false,
         "type": "enum"
       },
@@ -144,6 +148,11 @@
         "required": false,
         "type": "string[]"
       },
+      "tactic_evidence": {
+        "description": "Repeatable condition=observed|absent|unclear:what you read, one per condition the declared tactic requires. Observed satisfies it, absent counts against the tactic, unclear leaves it owed; the tactic's registered claim names the conditions and a name it does not have is refused.",
+        "required": false,
+        "type": "string[]"
+      },
       "tactic_opt_in": {
         "default": false,
         "description": "Explicitly authorize the [TL-EARLY] tactic.",
@@ -168,7 +177,7 @@
       "A chain declared from a late high is not a misread swing and is not refused; what it leaves above the entry is measured instead and reported as overhead supply.",
       "The correction the depth limit reads runs from the highest high in the price history the provider returned to the lowest low after it, not from the base the caller declared, and both dates travel with it so a reader can see whether the peak belongs to this base or an older one.",
       "A cheat entry is not measurable yet: it is entered inside the base rather than at its pivot, so it returns incomplete naming the cheat geometry it needs rather than borrowing the pivot breakout's evidence.",
-      "TL early requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken. Its named tactics are not measured yet, so it returns incomplete naming the trigger it needs."
+      "An early entry requires opt-in, explicit confirmation debt, a later pivot, and precise invalidation, and it does not waive the supply gates, which are about the base rather than about when the trade is taken. It also requires a name. The source says every entry tactic is two things -- a pivot that triggers the entry and a level it is abandoned at -- and defines five of them on the daily timeframe: the key support level reclaim, the consolidation pivot breakout, the key moving average pullback, the oops reversal, and the key support level pullback. Each holds the caller to its own conditions, read from its registered claim rather than restated here, and no amount of one tactic's evidence answers another's. What is not offered is anything the source names without defining. Upside reversals, range breakouts and inside days appear throughout it -- as labels on annotated charts, and in one trade post-mortem an upside reversal is even entered on the next day's push over the prior high -- but none of the three is given the contract the five have: a stated trigger and a risk-management level that make it that tactic rather than a description of what the chart did. A worked example is not a rule, and registering one as a tactic would put a trigger in the source's mouth. The source's other three tactics, the opening range breakout, the intraday base and the high-volume-close pivot, are intraday and outside this harness's scope. The five that are offered are declared rather than measured: the caller reads the chart and says what they saw, and the envelope returns incomplete naming each condition still owed."
     ],
     "output": "READY, WAIT, AVOID, or INCOMPLETE setup state, the measurements behind it, the evidence the route required, the chart readings the caller declared, and contrast evidence reported separately.",
     "prerequisites": [],

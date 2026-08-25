@@ -176,7 +176,7 @@ class EarlyEntryTests(unittest.TestCase):
         return build_setup_evidence(
             frame,
             anchor_dates(frame, anchors),
-            entry_kind="tl_early",
+            entry_kind="oops_reversal",
             entry=declaration,
             **{**readings(frame, anchor_dates(frame, anchors)), **overrides},
         )
@@ -185,7 +185,7 @@ class EarlyEntryTests(unittest.TestCase):
         result = evaluate_setup(self._evidence(tactic_opt_in=True))
 
         self.assertEqual(result["setup_state"], "incomplete")
-        self.assertIn("early_trigger", result["missing"])
+        self.assertIn("tactic.oops_reversal.prior_day_low", result["missing"])
         self.assertEqual(result["entry"]["tactic"], "[TL-EARLY]")
         self.assertEqual(result["entry"]["confirmation_debt"], ["completed Minervini pivot breakout"])
         self.assertEqual(result["entry"]["minervini_later_pivot"]["price"], 104.5)

@@ -14,6 +14,8 @@ turn somebody else's disagreement into this harness's incompleteness.
 
 from __future__ import annotations
 
+import math
+
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
@@ -28,10 +30,13 @@ _MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"
 # Reported evidence carries no verdict by design: a band says where a measurement sat, a
 # marker says how far it is from a value the source declined to bound.
 _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of_source_range"}
+# Distinguishes "no state key" from "a state key holding nothing", which None cannot.
+_UNSTATED = object()
 
 # What each route must positively have before it can be called ready. Every entry names a
 # claim, so the reason a setup is not ready is always a sentence from the source.
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
+_EARLY_ENTRY_CONTRACT = "tactic.early_entry_confirmation_debt"
 _BASE_EVIDENCE = (
     "setup.demand_supply_volume_asymmetry",
     "setup.pivot_volume_contraction",
@@ -52,13 +57,107 @@ _BASE_EVIDENCE = (
 _ROUTES = {
     "completed_pivot": (*_BASE_EVIDENCE, "setup.structural_pivot_and_trigger"),
 }
-# Two routes still need their own trigger measured. A cheat is entered inside the base rather
-# than at its pivot, so it needs the pause's location and recovery fraction. An early entry
-# is taken on a named tactic -- an upside reversal, an oops, a key-level reclaim -- and
-# dropping the pivot from its list without measuring one of those left "taken before the
-# pivot" indistinguishable from "taken for no stated reason". Borrowing the pivot route's
-# evidence would call either one ready on evidence about a different entry.
-_UNMEASURED_ROUTES = {"vcp_cheat": "cheat_geometry", "tl_early": "early_trigger"}
+# A cheat is entered inside the base rather than at its pivot, so it still needs the pause's
+# location and recovery fraction measured before it can be a route of its own.
+_UNMEASURED_ROUTES = {"vcp_cheat": "cheat_geometry"}
+
+# The early-entry tactics the source defines, each by the two components it says every entry
+# tactic has: a pivot that triggers the entry and a level it is abandoned at. Naming them
+# separately is the whole point -- one generic early route accepted a promise and asked nothing
+# about what the entry was, so "taken before the pivot" and "taken for no stated reason" arrived
+# identically. The three names the source only ever printed as chart captions are absent for the
+# same reason, and so are its three intraday tactics, which are outside this harness's scope.
+_TACTICS = (
+    "key_support_level_reclaim",
+    "consolidation_pivot_breakout",
+    "key_moving_average_pullback",
+    "oops_reversal",
+    "key_support_level_pullback",
+)
+# What every early entry owes whatever tactic it is taken on. Held here rather than in each
+# tactic's list so that what remains in the registry entry is only what makes that tactic itself.
+_SHARED_TACTIC_INPUTS = frozenset(
+    {"technical_eligibility", "entry_trigger", "invalidation", "confirmation_debt", "tactic_opt_in"}
+)
+
+
+def _tactic_declarations(
+    tactic: str, entry: Mapping[str, Any]
+) -> tuple[list[str], list[str], dict[str, Any]]:
+    """This tactic's conditions, sorted into answered, denied, and still owed.
+
+    The bars do not measure these, so what the caller says is what there is, and it is listed back
+    so the share of the verdict that came from a person stays visible -- the rule every other
+    declared reading in this reducer already follows. What it is not is a rubber stamp: an answer
+    saying the condition did not happen is evidence against the tactic, and counting any non-empty
+    value as satisfaction would make "the stock never gapped below yesterday's low" and "it gapped
+    below and reclaimed it" the same input. A denial goes to unsatisfied rather than failed,
+    because TraderLion is read for contrast here and a contradicted practice claim is a matter for
+    review rather than a rejection this harness issues.
+    """
+
+    owed: list[str] = []
+    denied: list[str] = []
+    declared: dict[str, Any] = {}
+    for condition in _tactic_conditions(tactic):
+        answer = entry.get(condition.rsplit(".", 1)[1])
+        if answer in (None, "", {}, []):
+            owed.append(condition)
+            continue
+        declared[condition] = answer
+        if isinstance(answer, Mapping):
+            # Absent and null are different answers. A mapping that never mentions a state is the
+            # caller describing what they read, and it stands; one that carries the key with
+            # nothing in it is an answer nobody filled in, and defaulting that to satisfaction is
+            # the same mistake as defaulting an unreadable word to it.
+            stated = answer.get("state", answer.get("status", _UNSTATED))
+            if stated is _UNSTATED:
+                continue
+        elif isinstance(answer, (bool, str)):
+            stated = answer
+        else:
+            # A number, a list, anything else -- there is no reading in it to take at face value.
+            owed.append(condition)
+            continue
+        # A stated verdict goes by that word and by nothing else. Reading an ungradeable one as
+        # the good outcome is what let "state: not observed" arrive as a pass.
+        state = _state(stated, default="")
+        if state in _FAIL or state in _WAIT:
+            denied.append(condition)
+        elif state not in _PASS:
+            owed.append(condition)
+    return owed, denied, declared
+
+
+def tactic_conditions(tactic: Any) -> frozenset[str] | None:
+    """The condition names this tactic requires, or None if the value names no tactic.
+
+    Public because the request boundary needs them: a caller declaring evidence for a condition
+    the tactic does not have has made a typo, and the only place that can say so is the place that
+    knows the names.
+    """
+
+    canonical = _canonical_kind(tactic)
+    if canonical not in _TACTICS:
+        return None
+    return frozenset(name.rsplit(".", 1)[1] for name in _tactic_conditions(canonical))
+
+
+def _tactic_conditions(tactic: str) -> tuple[str, ...]:
+    """The evidence this tactic and no other tactic needs, read off its registered claim.
+
+    Read rather than restated: a list written here would be a second copy of the required_inputs
+    the registry already carries, and the copy is the one that goes stale. It is also what keeps
+    the tactics from sharing a bucket -- an oops reversal needs yesterday's low and a gap below
+    it, and no amount of that evidence is a moving average the stock has respected.
+    """
+
+    claim = doctrine.get_claim(f"tactic.{tactic}")["claim"]
+    return tuple(
+        f"tactic.{tactic}.{name}"
+        for name in claim["required_inputs"]
+        if name not in _SHARED_TACTIC_INPUTS
+    )
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -90,7 +189,17 @@ def _precise_level(value: Any) -> dict[str, Any] | None:
     item = _mapping(value)
     price = item.get("price")
     condition = item.get("condition")
-    if isinstance(price, (int, float)) and price > 0 and isinstance(condition, str) and condition.strip():
+    # Not bool, which is a subclass of int and walked through as a stop at one dollar, and not
+    # infinity or NaN, which pass a greater-than-zero test and name no level anybody can be
+    # stopped out at.
+    if (
+        isinstance(price, (int, float))
+        and not isinstance(price, bool)
+        and math.isfinite(price)
+        and price > 0
+        and isinstance(condition, str)
+        and condition.strip()
+    ):
         return item
     return None
 
@@ -103,6 +212,7 @@ def _canonical_kind(value: Any) -> str:
         "cheat": "vcp_cheat",
         "3c_cheat": "vcp_cheat",
         "early": "tl_early",
+        "tl-early": "tl_early",
     }.get(kind, kind)
 
 
@@ -131,9 +241,14 @@ def _rejects(identifier: str) -> bool:
     return claim_id is not None and doctrine.get_claim(claim_id)["claim"]["kind"] == "hard_gate"
 
 
-def _early_entry_debt(entry: Mapping[str, Any], price: float | None) -> tuple[dict[str, Any], list[str]]:
+def _early_entry_debt(
+    entry: Mapping[str, Any], price: float | None, tactic: str | None
+) -> tuple[dict[str, Any], list[str]]:
     debt = entry.get("confirmation_debt")
-    items = [str(item) for item in debt if str(item).strip()] if isinstance(debt, list) else []
+    # Words, not whatever coerces into them. The debt is the one part of an early entry that is
+    # prose by nature and cannot be graded, so the shape is the only check there is -- coerced,
+    # a list of numbers stood in for the disclosure this route exists to require.
+    items = [item for item in debt if isinstance(item, str) and item.strip()] if isinstance(debt, list) else []
     later_pivot = _precise_level(entry.get("minervini_later_pivot"))
     invalidation = _precise_level(entry.get("invalidation"))
     # A level is only the level it is named after if it sits where that name requires. A
@@ -145,13 +260,18 @@ def _early_entry_debt(entry: Mapping[str, Any], price: float | None) -> tuple[di
         invalidation = None
     resolved = {
         **entry,
-        "kind": "tl_early",
+        "kind": tactic or "tl_early",
         "tactic": "[TL-EARLY]",
+        "tactic_name": tactic,
         "confirmation_debt": items,
         "minervini_later_pivot": later_pivot,
         "invalidation": invalidation,
     }
     missing = []
+    # The word "early" is not a tactic. The source names five and defines each by a pivot and a
+    # level; a declaration that picks none of them has said when it entered and not what it took.
+    if tactic is None:
+        missing.append("named_entry_tactic")
     if entry.get("opt_in") is not True:
         missing.append("tl_early_opt_in")
     if not items:
@@ -190,13 +310,36 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     kind = _canonical_kind(entry.get("kind")) or "completed_pivot"
     entry["kind"] = kind
     entry_missing: list[str] = []
-    if kind == "tl_early":
+    entry_unsatisfied: list[str] = []
+    entry_required: tuple[str, ...] = ()
+    tactic = kind if kind in _TACTICS else None
+    if tactic is not None or kind == "tl_early":
         price = measurements.get("last_close")
-        entry, entry_missing = _early_entry_debt(entry, float(price) if isinstance(price, (int, float)) else None)
-    required = _ROUTES.get(kind)
+        entry, entry_missing = _early_entry_debt(
+            entry, float(price) if isinstance(price, (int, float)) else None, tactic
+        )
+    required: tuple[str, ...] | None = _ROUTES.get(kind)
     if required is None:
-        required = _BASE_EVIDENCE if kind in _UNMEASURED_ROUTES else ()
-        entry_missing = [*entry_missing, _UNMEASURED_ROUTES.get(kind, "entry_trigger")]
+        required = _BASE_EVIDENCE if kind in _UNMEASURED_ROUTES or tactic is not None or kind == "tl_early" else ()
+        if kind in _UNMEASURED_ROUTES:
+            entry_missing = [*entry_missing, _UNMEASURED_ROUTES[kind]]
+        elif tactic is not None:
+            # Each tactic's own conditions, and only its own. Declared rather than measured: the
+            # source states them as things a trader reads off the chart, and a caller who has read
+            # them says so here. Left unanswerable, five named dead ends would only be a better
+            # spelling of the one this route replaced.
+            owed, denied, declared_here = _tactic_declarations(tactic, entry)
+            entry_missing = [*entry_missing, *owed]
+            entry_unsatisfied = denied
+            declared = {**declared, **declared_here}
+            # Listed as part of what the route requires, not only as what it is still owed.
+            # Carried as gaps alone they vanished the moment they were paid, so the one field
+            # that answers "what was this route held to" answered for the base by itself. Kept
+            # out of the signal loop below, which reads claims the bars measured -- these were
+            # settled by the caller's declaration and answering them twice would owe them twice.
+            entry_required = _tactic_conditions(tactic)
+        elif kind != "tl_early":
+            entry_missing = [*entry_missing, "entry_trigger"]
 
     failed: list[str] = []
     missing: list[str] = []
@@ -219,6 +362,7 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
     if str(structure.get("state")) != "resolved":
         missing.append("base_structure")
     missing.extend(entry_missing)
+    unsatisfied.extend(entry_unsatisfied)
 
     if failed:
         setup_state = "avoid"
@@ -237,11 +381,18 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "measurements": measurements,
         "declared_readings": dict(declared),
         "signals": signals,
-        "required_evidence": list(required),
+        "required_evidence": [*required, *entry_required],
+        # The claims this verdict was reached under, so the tactic the caller declared travels
+        # with the answer instead of only its conditions' names.
+        "doctrine_ids": sorted(
+            {str(item["doctrine_id"]) for item in signals if item.get("doctrine_id")}
+            | ({f"tactic.{tactic}", _EARLY_ENTRY_CONTRACT} if tactic is not None else set())
+            | ({_EARLY_ENTRY_CONTRACT} if kind == "tl_early" else set())
+        ),
         "failed": failed,
         "unsatisfied": unsatisfied,
         "missing": missing,
     }
 
 
-__all__ = ["evaluate_setup"]
+__all__ = ["evaluate_setup", "tactic_conditions"]

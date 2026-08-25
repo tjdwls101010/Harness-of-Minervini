@@ -10,6 +10,7 @@ from typing import Any
 from .capabilities import CAPABILITIES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
+from .setup import tactic_conditions
 from .providers import redact
 
 
@@ -159,7 +160,21 @@ def build_parser() -> JsonArgumentParser:
     setup = _capability_parser(ticker_sub, "setup", "ticker.setup")
     setup.add_argument("ticker", help=_input_help("ticker.setup", "ticker"))
     setup.add_argument("--swing", action="append", default=[], metavar="YYYY-MM-DD", help=_input_help("ticker.setup", "swing"))
-    setup.add_argument("--entry-kind", choices=("completed_pivot", "vcp_cheat", "tl_early"), help=_input_help("ticker.setup", "entry_kind"))
+    # The five the source defines, spelled out rather than hidden behind one word for "early".
+    # An argument that only takes these names says what the tactics are wherever it is read.
+    setup.add_argument(
+        "--entry-kind",
+        choices=(
+            "completed_pivot",
+            "vcp_cheat",
+            "key_support_level_reclaim",
+            "consolidation_pivot_breakout",
+            "key_moving_average_pullback",
+            "oops_reversal",
+            "key_support_level_pullback",
+        ),
+        help=_input_help("ticker.setup", "entry_kind"),
+    )
     setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
     setup.add_argument("--approved-bars", help=_input_help("ticker.setup", "approved_bars"))
     setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
@@ -170,6 +185,10 @@ def build_parser() -> JsonArgumentParser:
     setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
     setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))
     setup.add_argument("--confirmation-debt", action="append", default=[], metavar="TEXT", help=_input_help("ticker.setup", "confirmation_debt"))
+    # One repeatable flag rather than one per condition: the eleven conditions belong to five
+    # different tactics and only one tactic is in play at a time, so a flag per condition would
+    # advertise ten that the declared tactic has no use for.
+    setup.add_argument("--tactic-evidence", action="append", default=[], metavar="CONDITION=TEXT", help=_input_help("ticker.setup", "tactic_evidence"))
     setup.add_argument("--later-pivot-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "later_pivot_price"))
     setup.add_argument("--later-pivot-condition", metavar="TEXT", help=_input_help("ticker.setup", "later_pivot_condition"))
     _common(setup, "ticker.setup")
@@ -233,6 +252,13 @@ def build_parser() -> JsonArgumentParser:
     return parser
 
 
+# What a person can honestly say about a condition they went to the chart to read: they saw it,
+# they saw it was not there, or they could not tell. Three words rather than free text, because
+# the difference between the first two is the whole of what the reducer needs and prose cannot
+# carry it.
+_TACTIC_READINGS = {"observed": "pass", "absent": "fail", "unclear": "needs_chart"}
+
+
 def _operation(args: argparse.Namespace) -> str:
     if args.command in {"doctrine", "market", "ticker", "watchlist"}:
         return f"{args.command}.{getattr(args, args.command + '_command')}"
@@ -249,11 +275,46 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
         invalidation_price = request.pop("invalidation_price", None)
         invalidation_condition = request.pop("invalidation_condition", None)
         confirmation_debt = request.pop("confirmation_debt", [])
+        tactic_evidence = request.pop("tactic_evidence", [])
         later_pivot_price = request.pop("later_pivot_price", None)
         later_pivot_condition = request.pop("later_pivot_condition", None)
         entry: dict[str, Any] = {}
         if confirmation_debt:
             entry["confirmation_debt"] = confirmation_debt
+        conditions = tactic_conditions(request.get("entry_kind"))
+        for declaration in tactic_evidence:
+            name, separator, rest = str(declaration).partition("=")
+            verdict, colon, reading = rest.partition(":")
+            name, verdict, reading = name.strip(), verdict.strip().lower(), reading.strip()
+            if not separator or not colon or not name or not reading:
+                raise RequestError(
+                    "tactic evidence is written condition=observed|absent|unclear:what you read",
+                    "tactic_evidence",
+                )
+            # Dropped silently, a misspelled condition leaves the caller looking at a gap they
+            # believe they filled. The declared tactic's claim knows its own names, so say them.
+            if conditions is not None and name not in conditions:
+                raise RequestError(
+                    f"{name} is not a condition of this tactic; it requires {', '.join(sorted(conditions))}",
+                    "tactic_evidence",
+                )
+            # Two answers to one condition is a contradiction, not a correction. Silently keeping
+            # the last one picks a winner the caller never chose.
+            if name in entry:
+                raise RequestError(
+                    f"{name} was declared twice; a condition takes one reading",
+                    "tactic_evidence",
+                )
+            # The grade is asked for rather than inferred. Stamping every line as observed made
+            # "the stock did not gap below it" arrive as evidence that it did, and no amount of
+            # reading the prose afterwards recovers what the caller meant.
+            state = _TACTIC_READINGS.get(verdict)
+            if state is None:
+                raise RequestError(
+                    f"{name} needs one of observed, absent or unclear before the colon",
+                    "tactic_evidence",
+                )
+            entry[name] = {"state": state, "condition": reading}
         if later_pivot_price is not None or later_pivot_condition is not None:
             entry["minervini_later_pivot"] = {"price": later_pivot_price, "condition": later_pivot_condition}
         if invalidation_price is not None or invalidation_condition is not None:

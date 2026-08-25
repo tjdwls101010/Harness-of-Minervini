@@ -62,7 +62,7 @@ Candidate pagination bounds both eligible rows and diagnostic bulk. Exclusion ev
 
 ## Doctrine and decision architecture
 
-The normalized doctrine registry is the executable source of hard gates and precedence. It currently contains the standard Stage 2 and eight-of-eight Trend Template route, the bounded recent-IPO Primary Base route, VCP supply and setup claims, the narrow Power Play fundamentals exception, `[TL-EARLY]` confirmation debt, risk asymmetry and hard-stop claims, and quarantined non-executable material.
+The normalized doctrine registry is the executable source of hard gates and precedence. It currently contains the standard Stage 2 and eight-of-eight Trend Template route, the bounded recent-IPO Primary Base route, VCP supply and setup claims, the narrow Power Play fundamentals exception, `[TL-EARLY]` confirmation debt and the five named early-entry tactics the practice layer defines, risk asymmetry and hard-stop claims, and quarantined non-executable material.
 
 Precedence is scope, safety, and data integrity; Minervini eligibility and risk hard gates; verified explicit exceptions; tagged TraderLion practice-layer defaults; then current narrative context. TraderLion is integrated only where it fills a genuine execution gap without changing a Minervini gate. Conflicting tactics remain tagged and opt-in.
 

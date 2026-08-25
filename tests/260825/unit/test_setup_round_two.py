@@ -112,7 +112,7 @@ class EarlyEntryHasNoTriggerYetTests(unittest.TestCase):
             build_setup_evidence(
                 frame,
                 anchor_dates(frame, anchors),
-                entry_kind="tl_early",
+                entry_kind="oops_reversal",
                 tactic_opt_in=True,
                 entry={
                     "confirmation_debt": ["completed pivot breakout"],
@@ -123,7 +123,7 @@ class EarlyEntryHasNoTriggerYetTests(unittest.TestCase):
         )
 
         self.assertEqual(result["setup_state"], "incomplete")
-        self.assertIn("early_trigger", result["missing"])
+        self.assertIn("tactic.oops_reversal.gap_below_prior_low", result["missing"])
 
 
 class RightSideJudgementTests(unittest.TestCase):

@@ -10298,6 +10298,494 @@
         "summary": "A top standing further than the registered distance below the highest top of the search span is a different structure, not another reading of this one.",
         "conditions": []
       }
+    },
+    {
+      "id": "tactic.key_support_level_reclaim",
+      "title": "Key support level reclaim",
+      "kind": "tactic",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "early_entry"
+      ],
+      "required_inputs": [
+        "technical_eligibility",
+        "entry_trigger",
+        "invalidation",
+        "confirmation_debt",
+        "tactic_opt_in",
+        "undercut_support_level",
+        "prior_basing_weeks"
+      ],
+      "thresholds": {
+        "tactic_stop_distance_pct": {
+          "range": [
+            3.0,
+            5.0
+          ],
+          "unit": "percent",
+          "role": "band",
+          "direction": "lower_is_better",
+          "exact": true,
+          "quote_index": 6,
+          "note": "The source states this as a range with its good edge named -- under five percent, ideally under three -- and states it as what they look to keep rather than as a filter that rejects. It reports where a declared invalidation sits inside that range and never carries a verdict. TraderLion is read for contrast here: the ceiling that binds is the canonical Minervini stop, and this is tighter than it."
+        }
+      },
+      "rule": {
+        "summary": "After a stock that has been basing undercuts a prior support level, the pivot is that level itself and the entry is its reclaim; the tactic fails the moment the level is lost again."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "TraderLion defines this tactic; it is not the standard this harness rejects by. Evidence that contradicts the declared tactic is a disagreement between the declaration and the bars, and it goes to review rather than deciding the setup. A reclaim that loses the level again has failed by the source's own sentence, and the entry is over."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the undercut level, the reclaim, and a stop at a named technical area, there is no tactic to read."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "An entry tactic has two main components. First is a well-defined level that becomes the pivot point, or the price that triggers the entry. The second component is the risk management level, where you are managing your risk against, exiting if the entry tactic fails.",
+            "supports": "every tactic below declares both components, because the source says a tactic is both"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Entry tactics are short-term processes and patterns that we use to build a position as a larger setup is being completed.",
+            "supports": "the confirmation debt every one of these carries: the larger setup is not finished when the entry is taken"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "A key support level reclaim occurs when a stock has undercut a prior level of support such as a base low or 50-day moving average, and then surges back up through that level.",
+            "supports": "the trigger: an undercut of a named support level, then a surge back up through it"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "This entry tactic occurs in stocks that have already been basing and consolidating for a few weeks.",
+            "supports": "the precondition, which is about the stock's prior state rather than the day's bar"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "For this entry tactic the pivot point is the key level, and you want to use a relevant higher low or other key technical area as your stop loss point.",
+            "supports": "both components named for this tactic in one sentence"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Once a stock has reclaimed the key level, this entry tactic fails if it loses that level.",
+            "supports": "the invalidation, stated by the source as a failure rather than inferred"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Typically, we look to keep our stop losses for this tactic at less than 5% and ideally less than 3% on the position.",
+            "supports": "the band this tactic's risk level is read against, stated as a range with its good edge named"
+          }
+        ],
+        "resolution": "TraderLion row 8 defines this tactic by its two components; the opt-in and the disclosure framing around it are this harness's own, registered separately as tactic.early_entry_confirmation_debt"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260826/doctrine/test_tl_entry_tactics.py",
+        "tests/260826/unit/test_entry_tactics.py"
+      ],
+      "computability": "chart_assisted"
+    },
+    {
+      "id": "tactic.consolidation_pivot_breakout",
+      "title": "Consolidation pivot breakout",
+      "kind": "tactic",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "early_entry"
+      ],
+      "required_inputs": [
+        "technical_eligibility",
+        "entry_trigger",
+        "invalidation",
+        "confirmation_debt",
+        "tactic_opt_in",
+        "consolidation_pivot_level",
+        "traditional_base_pivot"
+      ],
+      "thresholds": {
+        "tactic_stop_distance_pct": {
+          "range": [
+            3.0,
+            5.0
+          ],
+          "unit": "percent",
+          "role": "band",
+          "direction": "lower_is_better",
+          "exact": true,
+          "quote_index": 5,
+          "note": "The source states this as a range with its good edge named -- under five percent, ideally under three -- and states it as what they look to keep rather than as a filter that rejects. It reports where a declared invalidation sits inside that range and never carries a verdict. TraderLion is read for contrast here: the ceiling that binds is the canonical Minervini stop, and this is tighter than it."
+        }
+      },
+      "rule": {
+        "summary": "Inside a consolidation, a defined shorter-term resistance area or swing high becomes a pivot, and the entry is its breakout ahead of the traditional base pivot; risk is the nearest higher low or a moving average the stock has already respected."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "TraderLion defines this tactic; it is not the standard this harness rejects by. Evidence that contradicts the declared tactic is a disagreement between the declaration and the bars, and it goes to review rather than deciding the setup. An entry below the pivot, or with risk managed against a moving average the stock has not respected, is not this tactic."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a defined pivot level and the nearest technical area behind it, the entry has no trigger and no stop."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "An entry tactic has two main components. First is a well-defined level that becomes the pivot point, or the price that triggers the entry. The second component is the risk management level, where you are managing your risk against, exiting if the entry tactic fails.",
+            "supports": "every tactic below declares both components, because the source says a tactic is both"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Entry tactics are short-term processes and patterns that we use to build a position as a larger setup is being completed.",
+            "supports": "the confirmation debt every one of these carries: the larger setup is not finished when the entry is taken"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "He identified early entries where the stock would tighten and form pivots before the traditional breakout from a base. These consolidation pivot breakouts often present strong risk/reward opportunities and allow you to build a position up the right-hand side of a consolidation.",
+            "supports": "the confirmation debt: the entry is taken before the traditional breakout, which is what is still unconfirmed"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "To identify these consolidation pivots, you want to look for defined shorter-term resistance areas and swing highs. These become your pivot points.",
+            "supports": "the trigger level, and that it must be a defined area rather than any tick"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "To manage risk, we look for the nearest relevant technical area. Most commonly, we use the nearest higher low or key moving average.",
+            "supports": "the risk-management level"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "respected that moving average while in an uptrend. Like with the key level reclaim, we are looking to keep our stop losses for this tactic at less than 5% and ideally less than 3% on the position. The idea here is to build a full position and have a profit cushion before a stock breaches the traditional base pivot.",
+            "supports": "the condition on using a moving average as the risk level, and the same stop band"
+          }
+        ],
+        "resolution": "TraderLion row 8 defines this tactic by its two components; the opt-in and the disclosure framing around it are this harness's own, registered separately as tactic.early_entry_confirmation_debt"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260826/doctrine/test_tl_entry_tactics.py",
+        "tests/260826/unit/test_entry_tactics.py"
+      ],
+      "computability": "chart_assisted"
+    },
+    {
+      "id": "tactic.key_moving_average_pullback",
+      "title": "Key moving average pullback",
+      "kind": "tactic",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "early_entry"
+      ],
+      "required_inputs": [
+        "technical_eligibility",
+        "entry_trigger",
+        "invalidation",
+        "confirmation_debt",
+        "tactic_opt_in",
+        "respected_moving_average",
+        "pullback_volume",
+        "relative_strength"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "The pivot is a moving average the stock has previously respected; the entry is a gradual, quiet pullback into it that closes strong, and risk sits just below the average and the higher low forming there."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "TraderLion defines this tactic; it is not the standard this harness rejects by. Evidence that contradicts the declared tactic is a disagreement between the declaration and the bars, and it goes to review rather than deciding the setup. A pullback that undercuts the average and turns down rather than closing strong off it has not produced this entry."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without a previously respected average, the volume the pullback arrived on, and evidence of relative strength, the tactic is unread."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "An entry tactic has two main components. First is a well-defined level that becomes the pivot point, or the price that triggers the entry. The second component is the risk management level, where you are managing your risk against, exiting if the entry tactic fails.",
+            "supports": "every tactic below declares both components, because the source says a tactic is both"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Entry tactics are short-term processes and patterns that we use to build a position as a larger setup is being completed.",
+            "supports": "the confirmation debt every one of these carries: the larger setup is not finished when the entry is taken"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "With a key moving average pullback the pivot is the moving average that the stock has respected previously.",
+            "supports": "the trigger level, and that the average has to have been respected before it counts"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Ideally the pullback occurs gradually on below-average volume, and we always want to see signs of Relative Strength before entering.",
+            "supports": "the preconditions: how the pullback has to arrive, and that strength is required rather than preferred"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "slightly or even for a day or two, but we want to see demand come in and push the stock back higher. Similarly, during the base-building process, there may be a sudden gap down to the moving average. If the stock responds to the level and closes strong off the moving average, that is often an excellent entry point.",
+            "supports": "an undercut of the average does not by itself end the tactic; the close does"
+          }
+        ],
+        "resolution": "TraderLion row 8 defines this tactic by its two components; the opt-in and the disclosure framing around it are this harness's own, registered separately as tactic.early_entry_confirmation_debt"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260826/doctrine/test_tl_entry_tactics.py",
+        "tests/260826/unit/test_entry_tactics.py"
+      ],
+      "computability": "chart_assisted",
+      "note": "The source gives no stop band for this tactic in its own sentence, unlike the reclaim and the consolidation pivot. Its risk level is stated qualitatively -- just below the moving average and the higher low -- and this registry does not lend it the other tactics' numbers."
+    },
+    {
+      "id": "tactic.oops_reversal",
+      "title": "Oops reversal",
+      "kind": "tactic",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "early_entry"
+      ],
+      "required_inputs": [
+        "technical_eligibility",
+        "entry_trigger",
+        "invalidation",
+        "confirmation_debt",
+        "tactic_opt_in",
+        "prior_day_low",
+        "gap_below_prior_low"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "After a gap down below the prior day's low, the pivot is that prior low and the entry is the push back up through it; risk is the low of the day or a key support level nearby."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "TraderLion defines this tactic; it is not the standard this harness rejects by. Evidence that contradicts the declared tactic is a disagreement between the declaration and the bars, and it goes to review rather than deciding the setup. A gap down that does not push back up through the prior day's low has not produced this entry at all."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the prior day's low, the gap below it, and a stop at the day's low or nearby support, the tactic is unread."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "An entry tactic has two main components. First is a well-defined level that becomes the pivot point, or the price that triggers the entry. The second component is the risk management level, where you are managing your risk against, exiting if the entry tactic fails.",
+            "supports": "every tactic below declares both components, because the source says a tactic is both"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Entry tactics are short-term processes and patterns that we use to build a position as a larger setup is being completed.",
+            "supports": "the confirmation debt every one of these carries: the larger setup is not finished when the entry is taken"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "It was developed by Larry Williams and occurs when a stock gaps down below the prior day’s low and then pushes back up through that low.",
+            "supports": "the trigger, stated exactly: a gap below the prior day's low, then a push back through it"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "The pivot for the oops reversal is the low of the prior day, and the risk management level is often the low of the day or a key support level if that is nearby.",
+            "supports": "both components named for this tactic in one sentence"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "The strongest oops reversals immediately rebound and often finish with high daily closing ranges and ideally with an outside day.",
+            "supports": "what the source says separates a strong one, offered as character rather than as a filter"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "the gap down is right into a potential area of support, such as a moving average or consolidation pivot. The strongest oops reversals immediately rebound and often finish with high daily closing ranges and ideally with an outside day.",
+            "supports": "the preferred context: the gap lands into support rather than into open air"
+          }
+        ],
+        "resolution": "TraderLion row 8 defines this tactic by its two components; the opt-in and the disclosure framing around it are this harness's own, registered separately as tactic.early_entry_confirmation_debt"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260826/doctrine/test_tl_entry_tactics.py",
+        "tests/260826/unit/test_entry_tactics.py"
+      ],
+      "computability": "chart_assisted",
+      "note": "The source calls this a very short-term pattern that can sit inside the other tactics, and states no failure sentence of its own the way the reclaim does. Its invalidation here is the risk level the source names, not an inferred rule."
+    },
+    {
+      "id": "tactic.key_support_level_pullback",
+      "title": "Key support level pullback",
+      "kind": "tactic",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "prospective_entry",
+        "setup",
+        "early_entry"
+      ],
+      "required_inputs": [
+        "technical_eligibility",
+        "entry_trigger",
+        "invalidation",
+        "confirmation_debt",
+        "tactic_opt_in",
+        "prior_pivot_level",
+        "pullback_volume"
+      ],
+      "thresholds": {},
+      "rule": {
+        "summary": "The same shape as the moving average pullback with a prior consolidation pivot or base pivot as the level: the entry is the rebound showing respect for it, and risk sits just below that pivot and the higher low forming."
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "TraderLion defines this tactic; it is not the standard this harness rejects by. Evidence that contradicts the declared tactic is a disagreement between the declaration and the bars, and it goes to review rather than deciding the setup. A pullback that breaks the pivot rather than rebounding from it has not produced this entry."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the prior pivot level and the volume the pullback arrived on, the tactic is unread."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "An entry tactic has two main components. First is a well-defined level that becomes the pivot point, or the price that triggers the entry. The second component is the risk management level, where you are managing your risk against, exiting if the entry tactic fails.",
+            "supports": "every tactic below declares both components, because the source says a tactic is both"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "Entry tactics are short-term processes and patterns that we use to build a position as a larger setup is being completed.",
+            "supports": "the confirmation debt every one of these carries: the larger setup is not finished when the entry is taken"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "This is the same idea as the moving average pullback entry tactic, except the key level and pivot are the prior consolidation pivot or a base pivot.",
+            "supports": "the trigger level, and that the source defines this tactic by reference to the other one"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "We are looking to enter as the stock rebounds from and shows respect for that level. Ideally the pullback to the pivot is gradual and on lower than average volume.",
+            "supports": "the entry and the precondition on how the pullback arrives"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 8,
+            "text": "The risk management level is just below the pivot and higher low that is forming.",
+            "supports": "the risk-management level"
+          }
+        ],
+        "resolution": "TraderLion row 8 defines this tactic by its two components; the opt-in and the disclosure framing around it are this harness's own, registered separately as tactic.early_entry_confirmation_debt"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.setup"
+      ],
+      "tests": [
+        "tests/260826/doctrine/test_tl_entry_tactics.py",
+        "tests/260826/unit/test_entry_tactics.py"
+      ],
+      "computability": "chart_assisted"
     }
   ]
 }
