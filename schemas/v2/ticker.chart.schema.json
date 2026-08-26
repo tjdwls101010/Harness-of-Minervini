@@ -77,7 +77,7 @@
       "Writes deterministic PNG artifacts and a manifest to the requested directory; the default directory is git-ignored."
     ],
     "status_meanings": {
-      "needs_input": "The destination path or ticker is invalid.",
+      "needs_input": "The destination path or ticker is invalid, or that directory already holds a different render under the name this one would take -- two inputs whose truncated digests met, which a different --output-dir settles.",
       "ok": "Both chart artifacts and the manifest were written.",
       "partial": "Completed price history stops before the requested session, so no artifact is written.",
       "unavailable": "Completed price history is unavailable, or the history the provider returned is not renderable -- the reason names which, in the same vocabulary ticker.swings uses, because a caller told only that something failed cannot tell a data problem from a bug."

@@ -27,7 +27,13 @@ from typing import Any
 
 import pandas as pd
 
-from scripts.minervini.chart import _draw_power_play, _power_play_spans, render_chart_artifacts
+from scripts.minervini import chart as chart_module
+from scripts.minervini.chart import (
+    ArtifactNameTaken,
+    _draw_power_play,
+    _power_play_spans,
+    render_chart_artifacts,
+)
 from scripts.minervini.power_play import measure_power_play
 from scripts.minervini.power_play_evidence import (
     build_power_play_evidence,
@@ -289,10 +295,72 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
             collided["power_play"]["measured_bars"] = "f" * 64
             written.write_text(json.dumps(collided), encoding="utf-8")
 
-            with self.assertRaises(ValueError) as caught:
+            with self.assertRaises(ArtifactNameTaken) as caught:
                 _rendered(self.frame, directory)
 
         self.assertIn(manifest["power_play"]["measured_bars"], str(caught.exception))
+
+    def test_the_name_is_claimed_before_anything_is_drawn(self) -> None:
+        """Asking first and writing after leaves a window three files wide.
+
+        Two colliding renders both passed a check, then interleaved: the surviving manifest
+        named a span while the surviving pictures had none, and the mismatch was answered as
+        qualified. The claim is the manifest, so a second render meets it wherever in the
+        first one's work it arrives -- here, before the first has written a single picture.
+        """
+        # A real collision, built rather than searched for: the same first eight characters the
+        # name is cut to, and a different digest behind them.
+        collided = power_play_fingerprint(self.frame)[:8] + "0" * 56
+        self.assertNotEqual(collided, power_play_fingerprint(self.frame))
+        drawn: list[str] = []
+        real = chart_module._render_png
+
+        def draw_the_second_render_first(bars, path, *args, **kwargs):
+            if not drawn:
+                drawn.append(str(path))
+                with unittest.mock.patch.object(
+                    chart_module, "power_play_fingerprint", return_value=collided
+                ):
+                    with self.assertRaises(ArtifactNameTaken):
+                        _rendered(self.split, path.parent)
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", draw_the_second_render_first
+            ):
+                manifest = _rendered(self.frame, directory)
+
+            self.assertTrue(drawn)
+            written = json.loads(Path(manifest["manifest_path"]).read_text(encoding="utf-8"))
+
+        # The bundle the first render drew, whole: the interleaving left a manifest naming a
+        # span with pictures that had none.
+        self.assertEqual(written["power_play"]["measured_bars"], manifest["power_play"]["measured_bars"])
+        self.assertTrue(written["artifacts"])
+
+    def test_a_failed_render_does_not_leave_a_name_nobody_can_use(self) -> None:
+        """The claim is this render's to take back."""
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", side_effect=RuntimeError("the plotting stack fell over")
+            ):
+                with self.assertRaises(RuntimeError):
+                    _rendered(self.frame, directory)
+
+            self.assertEqual(list(Path(directory).iterdir()), [])
+            manifest = _rendered(self.frame, directory)
+
+        self.assertTrue(manifest["artifacts"])
+
+    def test_valid_json_that_is_not_a_manifest_is_still_not_this_render(self) -> None:
+        """Reaching into a list for a digest raised an AttributeError nobody could act on."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+            Path(manifest["manifest_path"]).write_text("[]", encoding="utf-8")
+
+            with self.assertRaises(ArtifactNameTaken):
+                _rendered(self.frame, directory)
 
     def test_rendering_the_same_input_twice_still_writes_over_itself(self) -> None:
         """The check is about two inputs, not two runs."""
@@ -316,6 +384,65 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
             second = _rendered(bare, directory)
 
         self.assertEqual(first["manifest_path"], second["manifest_path"])
+
+    def _execute_a_render(self, frame, directory):
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        snapshot = ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        return execute(
+            "ticker.chart",
+            {
+                "ticker": "TEST",
+                "as_of": frame.index[-1].date().isoformat(),
+                "output_dir": directory,
+                "no_cache": True,
+            },
+            runtime=Runtime(price_history=lambda ticker, requested: snapshot),
+        )
+
+    def test_a_taken_name_reaches_the_caller_as_a_directory_they_can_move(self) -> None:
+        """Unhandled, it became an internal_error with the request and the explicit as_of
+        stripped off -- a name the caller could have changed, reported as a defect."""
+        from scripts.minervini.contracts import RequestError
+
+        collided = power_play_fingerprint(self.frame)[:8] + "0" * 56
+        with tempfile.TemporaryDirectory() as directory:
+            self._execute_a_render(self.frame, directory)
+
+            with unittest.mock.patch.object(
+                chart_module, "power_play_fingerprint", return_value=collided
+            ):
+                with self.assertRaises(RequestError) as caught:
+                    self._execute_a_render(self.split, directory)
+
+        self.assertEqual(caught.exception.args[1], "output_dir")
+
+    def test_a_chart_that_drew_a_span_points_back_at_what_asked_for_it(self) -> None:
+        """ticker.power-play sends a reader here; without the return leg an orchestrator that
+        follows these lists draws the picture and has nowhere to carry the answer."""
+        with tempfile.TemporaryDirectory() as directory:
+            payload = self._execute_a_render(self.frame, directory)
+
+        self.assertTrue(payload["data"]["power_play"]["spans"])
+        self.assertIn("ticker.power-play", payload["next_capabilities"])
+
+    def test_and_one_that_drew_none_does_not(self) -> None:
+        """Nothing was asked, so there is nothing to go back and answer."""
+        plain, _ = base_series()
+        with tempfile.TemporaryDirectory() as directory:
+            payload = self._execute_a_render(plain, directory)
+
+        self.assertEqual(payload["data"]["power_play"]["spans"], [])
+        self.assertNotIn("ticker.power-play", payload["next_capabilities"])
 
     def test_a_history_that_never_said_whether_a_split_occurred_names_nothing(self) -> None:
         """The same abstention the capability makes: absence is not a report of none."""

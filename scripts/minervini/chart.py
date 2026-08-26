@@ -29,6 +29,14 @@ from .swings import canonical_chain
 
 # 1.1.0 draws the detector's turning points and pivot, and records per timeframe which
 # of them the picture actually contains.
+class ArtifactNameTaken(ValueError):
+    """This directory already holds a different render under the name this one would use.
+
+    Its own type for the reason UnrenderableHistory has one: a caller told only that a
+    ValueError escaped cannot tell a name they can move from a defect they cannot.
+    """
+
+
 class UnrenderableHistory(ValueError):
     """Price history this boundary will not draw, named so a caller can tell it from a bug.
 
@@ -92,9 +100,41 @@ def render_chart_artifacts(
     # share. Thirty-two bits of the overlay half were reached in under four seconds by varying
     # split multiples until two histories agreed -- one with a span, one without -- and the
     # second render replaced the first's pictures under the first's manifest. Widening the name
-    # only moves the number; what makes it exact is asking the directory. A re-render of the
-    # same input is the same content, so it overwrites itself as before.
-    _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
+    # only moves the number; what makes it exact is asking the directory.
+    #
+    # Claimed before anything is drawn rather than merely checked, because three files are
+    # written one at a time and asking first leaves a window: two colliding renders both passed
+    # the check, then interleaved, and the surviving manifest named a span while the surviving
+    # pictures had none -- the mismatch answered as `qualified`. The claim is the manifest
+    # itself, so a second render meets it wherever in the first one's work it arrives. A
+    # re-render of the same input meets its own digests and goes on to overwrite itself, which
+    # is the same content either way.
+    reserved = _reserve_the_name(manifest_path, input_sha256, power_play["measured_bars"])
+    try:
+        return _draw_the_bundle(
+            manifest_path, directory, symbol, stamp, as_of_date,
+            daily, weekly, input_sha256, segmentation, power_play,
+        )
+    except BaseException:
+        if reserved:
+            manifest_path.unlink(missing_ok=True)
+        raise
+
+
+def _draw_the_bundle(
+    manifest_path: Path,
+    directory: Path,
+    symbol: str,
+    stamp: str,
+    as_of_date: date,
+    daily: pd.DataFrame,
+    weekly: pd.DataFrame,
+    input_sha256: str,
+    segmentation: dict[str, Any] | None,
+    power_play: dict[str, Any],
+) -> dict[str, Any]:
+    """Draw both pictures and write the manifest over the claim that reserved its name."""
+
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
@@ -135,6 +175,34 @@ def render_chart_artifacts(
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
+def _reserve_the_name(manifest_path: Path, input_sha256: str, measured_bars: str | None) -> bool:
+    """Claim the manifest before drawing, or refuse if another pair of inputs holds it.
+
+    Says whether this call created the claim, so a render that fails partway can take its own
+    reservation back rather than leaving a name nobody can use.
+    """
+
+    claim = json.dumps(
+        {
+            "input_sha256": input_sha256,
+            "power_play": {"measured_bars": measured_bars},
+            # A manifest with no pictures under it is a render that did not finish, and saying
+            # so is cheaper than leaving a reader to work it out from the missing keys.
+            "reserved": True,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    try:
+        handle = os.open(manifest_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        _refuse_a_taken_name(manifest_path, input_sha256, measured_bars)
+        return False
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(claim)
+    return True
+
+
 def _refuse_a_taken_name(manifest_path: Path, input_sha256: str, measured_bars: str | None) -> None:
     """Stop before writing over a manifest that names a different pair of inputs.
 
@@ -144,16 +212,20 @@ def _refuse_a_taken_name(manifest_path: Path, input_sha256: str, measured_bars: 
     either -- so the two agree and the newer picture, drawn from the same bars, replaces it.
     """
 
-    if not manifest_path.exists():
-        return
     try:
         taken = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return
-    held = (taken.get("input_sha256"), (taken.get("power_play") or {}).get("measured_bars"))
+        taken = None
+    # Valid JSON that is not an object is still not a manifest, and reaching into it for a
+    # digest raised an AttributeError a caller could do nothing with.
+    held = (
+        (taken.get("input_sha256"), (taken.get("power_play") or {}).get("measured_bars"))
+        if isinstance(taken, Mapping)
+        else (None, None)
+    )
     if held == (input_sha256, measured_bars):
         return
-    raise ValueError(
+    raise ArtifactNameTaken(
         f"{manifest_path.name} already names bars {held[0]} and an overlay from {held[1]}; "
         f"this render is {input_sha256} and {measured_bars}. Two inputs reached one name, and "
         "writing would leave the older manifest's digests beside a picture they never named. "

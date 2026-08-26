@@ -592,16 +592,23 @@ def _walk_the_tops(
     }
 
 
-# Not None, because None is a value this argument takes and means something: a history that
-# never said whether a split occurred has no overlay digest, and the chart prints null for it.
-_UNSTATED = object()
+class _Unstated:
+    """The absence of an answer about the overlay's input, which is not the same as None.
+
+    None is a value this argument takes and means something -- a history that never said
+    whether a split occurred has no overlay digest, and the chart prints null for it. A named
+    type rather than a bare sentinel so the signature can say what the argument really accepts.
+    """
+
+
+_UNSTATED = _Unstated()
 
 
 def build_power_play_evidence(
     history: Any,
     chart_readings: Mapping[str, str] | None = None,
     drawn_bars: str | None = None,
-    measured_bars: Any = _UNSTATED,
+    measured_bars: str | None | _Unstated = _UNSTATED,
 ) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 

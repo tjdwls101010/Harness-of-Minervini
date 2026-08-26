@@ -1925,10 +1925,16 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
-    from .chart import UnrenderableHistory
+    from .chart import ArtifactNameTaken, UnrenderableHistory
 
     try:
         result = _render(prices.data, ticker, clock, destination)
+    except ArtifactNameTaken as error:
+        # A directory that already holds a different render under this name is something the
+        # caller can move, and an internal_error envelope -- which is what an unhandled raise
+        # becomes, with the request and the explicit as_of stripped off -- tells them nothing
+        # they could act on.
+        raise RequestError(str(error), "output_dir") from error
     except UnrenderableHistory as error:
         # The renderer refuses unusable history by raising, and an unhandled raise becomes an
         # internal_error envelope with the request and the explicit as_of stripped off it. The
@@ -1982,7 +1988,13 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
         as_of=_as_of(clock),
         data=result,
         sources=[_source(prices.meta)],
-        next_capabilities=["ticker.qualify", "ticker.setup"],
+        # And back where the overlay came from, when there is one. ticker.power-play sends a
+        # reader here to look at a span; without the return leg an orchestrator that follows
+        # these lists draws the picture and has nowhere to carry the answer.
+        next_capabilities=(
+            ["ticker.qualify", "ticker.setup"]
+            + (["ticker.power-play"] if (result.get("power_play") or {}).get("spans") else [])
+        ),
         side_effects=side_effects,
     )
 
