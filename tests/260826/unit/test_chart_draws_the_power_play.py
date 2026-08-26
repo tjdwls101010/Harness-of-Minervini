@@ -1212,6 +1212,25 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
                 )
                 self.assertGreater(reached, 0.05)
 
+    def test_a_hollow_landmark_is_the_stroke_it_is_drawn_with(self) -> None:
+        """Colour was checked and geometry was not, and a hollow marker is all geometry. Set the
+        edge width to zero and the peak star and the flag cross vanish -- there is no face to
+        fall back on -- while `power_play_drawn` goes on reporting both. And the face has to stay
+        empty for the reason it was made empty: a Power Play peak is often a detected swing high
+        on the same bar at the same price, and a filled marker drawn afterwards covered the blue
+        one completely with the manifest still reporting the anchor as drawn.
+        """
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, self.span, "daily")
+
+        hollow = [drawn for drawn in price.drawn if "markerfacecolor" in drawn]
+        self.assertTrue(hollow)
+        for drawn in hollow:
+            with self.subTest(label=drawn.get("label")):
+                self.assertEqual(drawn["markerfacecolor"], "none")
+                self.assertGreater(drawn.get("markeredgewidth", 0), 0.5)
+
     def test_nothing_is_drawn_at_a_size_nobody_can_see(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
 
