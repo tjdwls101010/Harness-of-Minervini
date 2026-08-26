@@ -907,8 +907,13 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
                 # Above nothing is not the bar. A rule a millionth of a point wide and a shade
                 # at a millionth of an alpha are both "greater than zero" and neither is on the
                 # picture, so the floors are sizes a person can actually see.
+                #
+                # The marker floor sits just under the smallest size this module deliberately
+                # draws, which is as much as a floor can honestly assert: nothing shrinks below
+                # what we chose on purpose. A size between the floor and the chosen one is not
+                # something this test can object to -- that judgment is made by looking.
                 if "markersize" in drawn:
-                    self.assertGreater(drawn["markersize"], 4)
+                    self.assertGreaterEqual(drawn["markersize"], 6)
                 if "linewidth" in drawn:
                     self.assertGreater(drawn["linewidth"], 0.5)
                 if "alpha" in drawn:
