@@ -705,19 +705,26 @@ class RecordingAxis:
         self.spans: list[tuple] = []
         self.rules: list[Any] = []
         self.points: list[tuple] = []
+        # How each thing was drawn, not only that it was. A reviewer set every marker to size
+        # zero and every rule to width zero and the whole suite passed: the drawing calls all
+        # happened, and nothing on the picture could be seen.
+        self.drawn: list[dict[str, Any]] = []
 
     def plot(self, x, y, **kwargs) -> None:
         self.points.append((x[0], float(y[0])))
+        self.drawn.append(kwargs)
         if kwargs.get("label"):
             self.labels.append(str(kwargs["label"]))
 
     def axvline(self, position, **kwargs) -> None:
         self.rules.append(position)
+        self.drawn.append(kwargs)
         if kwargs.get("label"):
             self.labels.append(str(kwargs["label"]))
 
     def axvspan(self, start, end, **kwargs) -> None:
         self.spans.append((start, end))
+        self.drawn.append(kwargs)
         if kwargs.get("label"):
             self.labels.append(str(kwargs["label"]))
 
@@ -778,6 +785,48 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
         _draw_power_play(price, volume, self.frame, self.span, "daily")
 
         self.assertEqual(len(price.rules), 1)
+
+
+class WhatIsDrawnHasToBeVisible(unittest.TestCase):
+    """Every test here asked whether a drawing call happened, and none asked how.
+
+    Set every marker to size zero and every rule to width zero and the suite went on passing --
+    a picture with nothing on it, reported as a picture with everything on it. And the figure
+    itself: shrunk to two inches square, Matplotlib warned that the axes had collapsed and the
+    tests still agreed the chart was fine.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.span = _power_play_spans(self.frame, "digest")
+
+    def test_nothing_is_drawn_at_a_size_nobody_can_see(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, self.span, "daily")
+
+        self.assertTrue(price.drawn and volume.drawn)
+        for drawn in price.drawn + volume.drawn:
+            with self.subTest(label=drawn.get("label")):
+                if "markersize" in drawn:
+                    self.assertGreater(drawn["markersize"], 4)
+                if "linewidth" in drawn:
+                    self.assertGreater(drawn["linewidth"], 0)
+                if "alpha" in drawn:
+                    self.assertGreater(drawn["alpha"], 0)
+
+    def test_the_pictures_are_a_size_a_person_can_read(self) -> None:
+        """Read off the file, because the figure is the deliverable and its dimensions are the
+        one thing about a rendered picture a test can check without eyes."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+            for timeframe, path in manifest["paths"].items():
+                header = Path(path).read_bytes()[16:24]
+                width = int.from_bytes(header[:4], "big")
+                height = int.from_bytes(header[4:], "big")
+                with self.subTest(timeframe=timeframe):
+                    self.assertGreaterEqual(width, 1000)
+                    self.assertGreaterEqual(height, 600)
 
 
 class AStockNobodyIsAskingAbout(unittest.TestCase):
