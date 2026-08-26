@@ -40,7 +40,13 @@ _UNUSABLE = (
 
 
 class ArtifactNameTaken(ValueError):
-    """This directory already holds a different render under the name this one would use.
+    """Something else holds the name this render would use, so it did not draw.
+
+    Two somethings, and the recovery differs. A finished bundle from a different input or
+    renderer met this one on a shareable truncated name, and another --output-dir settles it
+    for good. Or a render is inside the name right now -- which is refused whoever it is, this
+    same input included, since the name holds one render at a time -- and a retry settles that
+    one once it ends.
 
     Its own type for the reason UnrenderableHistory has one: a caller told only that a
     ValueError escaped cannot tell a name they can move from a defect they cannot.
@@ -253,8 +259,61 @@ def _draw_the_bundle(
         "power_play": power_play,
         "artifacts": artifacts,
     }
+    _leave_only_this_render_under_the_name(manifest_path, artifacts)
     _atomic_json(manifest_path, manifest)
     return {**manifest, "manifest_path": str(manifest_path)}
+
+
+def _leave_only_this_render_under_the_name(
+    manifest_path: Path, artifacts: list[dict[str, Any]]
+) -> None:
+    """Clear strangers from the name, then refuse unless every picture the manifest names is there.
+
+    A picture can outlive the render that drew it: killed before its manifest, and its claim
+    deleted by hand the way the refusal says to. The name it leaves behind is shareable, so the
+    render that next takes it can be one whose overlay draws a different set of panels -- and
+    then two paths are published while a stranded third sits beside them under the same digests,
+    reported by nothing. Clearing is safe here for the same reason rollback's sweep is: the
+    claim is exclusive, so no other render is inside this name, and a finished manifest at it
+    would have refused this render unless it named the same identity -- whose pictures carry
+    exactly these names and are being replaced rather than swept.
+
+    Then the paths are asked for, because a manifest is read by somebody who opens what it
+    names. Every write here resolves the destination by name rather than by a handle held open,
+    so a directory renamed mid-render leaves the earlier pictures in the old one and the later
+    ones in whatever now answers to the path -- and the manifest, written last, named all three.
+    An exclusive claim cannot prevent that; it is a claim on a name, not on an inode. What it
+    can do is not publish the claim.
+    """
+
+    kept = {Path(artifact["path"]).name for artifact in artifacts}
+    stem = manifest_path.name.removesuffix("_manifest.json")
+    try:
+        beside = sorted(manifest_path.parent.glob(f"{stem}_*.png"))
+    except OSError:
+        beside = []
+    for path in beside:
+        if path.name in kept:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            # Publishing is the thing worth protecting, and it is protected below. A stranger
+            # this render could not remove is one the check either tolerates or catches.
+            pass
+
+    absent = [artifact["path"] for artifact in artifacts if not Path(artifact["path"]).exists()]
+    if absent:
+        raise UnusableOutputDirectory(
+            _UNUSABLE.format(
+                directory=manifest_path.parent,
+                error=(
+                    f"{', '.join(Path(path).name for path in absent)} stopped being there "
+                    "between being written and being published, which is the destination "
+                    "having moved under this render"
+                ),
+            )
+        )
 
 
 # Where a legend may go, in the order they are tried. Matplotlib's own "best" is not on the
@@ -447,11 +506,12 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
     except FileExistsError as clash:
         raise ArtifactNameTaken(
             f"{reserving.name} says another render holds {reserving.name.removesuffix('.reserving')} "
-            "right now, and nothing under that name is finished yet. Retry once it ends: it "
-            "leaves a manifest there if it succeeded -- this render's own if it was drawn from "
-            "the same bars, overlay and renderer, and otherwise a refusal naming whose it is, "
-            "which another --output-dir settles -- and nothing at all if it failed. Delete this "
-            "claim only when no render is running, which is a killed one having left it behind."
+            "right now. Retry once it ends: a manifest stands there if it succeeded -- this "
+            "render's own if it was drawn from the same bars, overlay and renderer, and "
+            "otherwise a refusal naming whose it is, which another --output-dir settles -- and "
+            "if it failed, whatever stood under the name before it is what is left. Delete this "
+            ".reserving claim only when no render is running, which is a killed render having "
+            "left it behind. The manifest beside it is never this render's to remove."
         ) from clash
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write(claim)
@@ -501,15 +561,26 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
     )
     if held == (input_sha256, measured_bars, RENDERER_VERSION):
         return
+    if held == (None, None, None):
+        # Unreadable, or readable and not a manifest. Naming digests here would report a
+        # collision nothing established: every identity this render has of it is None.
+        standing = (
+            f"{manifest_path.name} is held by something this render cannot read as a manifest, "
+            "so it cannot be shown to name the same bars, overlay and renderer as this one. A "
+            "holder that cannot be identified is a name this render cannot prove is its own."
+        )
+    else:
+        standing = (
+            f"{manifest_path.name} already names bars {held[0]}, an overlay from {held[1]} and "
+            f"renderer {held[2]}; this render is {input_sha256}, {measured_bars} and "
+            f"{RENDERER_VERSION}. Two inputs reached one name, and writing would leave the "
+            "older manifest's digests beside a picture they never named."
+        )
     raise ArtifactNameTaken(
-        f"{manifest_path.name} already names bars {held[0]}, an overlay from {held[1]} and "
-        f"renderer {held[2]}; this render is {input_sha256}, {measured_bars} and "
-        f"{RENDERER_VERSION}. Two inputs reached one name, and "
-        "writing would leave the older manifest's digests beside a picture they never named. "
-        "Render to another directory. Nothing under this name is this render's to clear: a "
-        "claim is the .reserving file beside it, so what stands here is a finished bundle's "
-        "manifest, or something else that took the name, and taking it away would strip the "
-        "pictures under those digests of the only record of what drew them."
+        standing + " Render to another directory. Nothing under this name is this render's to "
+        "clear: a claim is the .reserving file beside it, so what stands here is a finished "
+        "bundle's manifest, or something else that took the name, and taking it away would "
+        "strip the pictures under those digests of the only record of what drew them."
     )
 
 

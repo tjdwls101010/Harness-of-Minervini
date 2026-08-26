@@ -1979,6 +1979,62 @@ def artifact_end(artifact, daily):
     return _panel_index(artifact, daily)[-1]
 
 
+class AManifestNeverNamesAPictureThatIsNotThere(unittest.TestCase):
+    """Published last and read first, so what it names has to be there when it is written.
+
+    Two ways it was not. A picture can outlive the render that drew it -- killed before its
+    manifest, its claim then deleted by hand as the refusal says to -- and the name it leaves
+    behind is shareable, so the render that next takes it can draw a different set of panels and
+    publish two paths with a stranded third beside them. And every write here resolves the
+    destination by name, so a directory renamed mid-render splits the bundle across two
+    directories while the manifest, written last, names all of it.
+    """
+
+    def test_a_picture_left_by_an_earlier_render_is_cleared_before_publishing(self) -> None:
+        frame, _ = base_series()
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(frame, directory)
+            self.assertEqual(sorted(first["paths"]), ["daily", "weekly"])
+            standing = Path(first["manifest_path"])
+            stem = standing.name.removesuffix("_manifest.json")
+            # What a killed render of a colliding vintage leaves: a panel this input does not
+            # draw, under this input's name, with nothing left to report it.
+            stranded = standing.parent / f"{stem}_power_play.png"
+            stranded.write_bytes(b"not really a picture")
+            standing.unlink()
+
+            second = _rendered(frame, directory)
+
+            self.assertFalse(stranded.exists())
+            self.assertEqual(sorted(second["paths"]), ["daily", "weekly"])
+            self.assertTrue(all(Path(path).exists() for path in second["paths"].values()))
+
+    def test_a_picture_that_stopped_being_there_refuses_instead_of_publishing(self) -> None:
+        frame = power_play_series()
+        real = chart_module._render_png
+
+        def draw_then_lose_the_weekly(bars, path, symbol, timeframe, *args, **kwargs):
+            drawn = real(bars, path, symbol, timeframe, *args, **kwargs)
+            if timeframe == "power_play":
+                # The destination moved: the weekly went to the directory that used to answer
+                # to this path, and the later panels to whatever answers to it now.
+                next(path.parent.glob("*_weekly.png")).unlink()
+            return drawn
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", draw_then_lose_the_weekly
+            ):
+                with self.assertRaises(chart_module.UnusableOutputDirectory) as refusal:
+                    _rendered(frame, directory)
+
+            left = sorted(path.name for path in Path(directory).iterdir())
+
+        self.assertIn("_weekly.png", str(refusal.exception))
+        self.assertIn(directory, str(refusal.exception))
+        self.assertEqual(left, [])
+
+
 class WhatARefusalTellsTheCallerToDo(unittest.TestCase):
     """A refusal is read by somebody who has to do something next, so the recovery it names is
     as much a published thing as the digests are -- and it survives review only because prose is
@@ -2025,13 +2081,46 @@ class WhatARefusalTellsTheCallerToDo(unittest.TestCase):
 
         self.assertEqual(len(refused), 1)
         message = str(refused[0])
-        # The one instruction true however the held render ends. A manifest appears only if it
-        # succeeds, and is this caller's only if it was drawing the same thing.
-        self.assertIn("retry", message.lower())
-        for sentence in self._advice_to_remove_something(message):
+        sentences = message.replace("\n", " ").split(". ")
+        # Retrying is the one instruction true however the held render ends -- but only once it
+        # has ended. Told to retry now, an automated caller spins against a live claim.
+        retries = [sentence for sentence in sentences if "retry" in sentence.lower()]
+        self.assertTrue(retries, message)
+        for sentence in retries:
             with self.subTest(sentence=sentence):
-                # A live render's claim is the thing standing between two writers in one name.
+                self.assertIn("once it ends", sentence)
+        # A live render's claim is the thing standing between two writers in one name, and the
+        # manifest beside it is a finished bundle nobody here may offer up.
+        for sentence in sentences:
+            if "delete" not in sentence.lower():
+                continue
+            with self.subTest(sentence=sentence):
+                self.assertIn(".reserving", sentence)
                 self.assertIn("no render is running", sentence)
+        self.assertTrue(
+            any(
+                "manifest" in sentence and "never" in sentence and "remove" in sentence
+                for sentence in sentences
+            ),
+            message,
+        )
+
+    def test_a_holder_it_could_not_read_is_not_reported_as_a_collision(self) -> None:
+        """The message named three digests and asserted two inputs had met. It had read none of
+        them: every identity it printed was `None`, because what stood at the name was not a
+        manifest at all. A reader who trusts that goes looking for the other input."""
+        with tempfile.TemporaryDirectory() as directory:
+            finished = _rendered(self.frame, directory)
+            Path(finished["manifest_path"]).write_text("[]", encoding="utf-8")
+
+            with self.assertRaises(ArtifactNameTaken) as refusal:
+                _rendered(self.frame, directory)
+
+        message = str(refusal.exception)
+        self.assertNotIn("None", message)
+        self.assertIn("cannot read", message)
+        self.assertIn(Path(finished["manifest_path"]).name, message)
+        self.assertIn("another directory", message)
 
     def test_a_finished_bundle_in_the_way_is_never_offered_up_for_deletion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
