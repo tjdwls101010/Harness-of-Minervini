@@ -487,6 +487,24 @@ class EveryTopTheCapabilityIsAskingAbout(unittest.TestCase):
             with self.subTest(timeframe=artifact["timeframe"]):
                 self.assertTrue(asked.issubset(set(artifact["power_play_drawn"]["peak_date"])))
 
+    def test_two_tops_each_carry_their_own_date_on_the_picture(self) -> None:
+        """The threshold case, and the ordinary one: a chain usually reads two tops.
+
+        A rule that only names dates from three marks up leaves exactly this shape with two
+        identical stars and two identical legend entries -- the commonest chain there is, and
+        the one where a reader most needs to know which of the two they are answering about.
+        """
+        span = _power_play_spans(self.frame, "digest")
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, span, "daily")
+
+        peaks = [label for label in price.labels if label.startswith("advance peak")]
+        self.assertEqual(len(peaks), 2)
+        for question in self.questions:
+            with self.subTest(top=question["peak_date"]):
+                self.assertIn(f"advance peak ({question['peak_date']})", peaks)
+
     def test_a_top_asked_two_things_is_still_drawn_once(self) -> None:
         """The volume clause and the flag's tightness are two questions about one picture, and
         drawing it twice stacks the markers and doubles the legend without adding a landmark."""
@@ -663,6 +681,18 @@ class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
         expected = pd.Timestamp(self.span["advance_peak_volume_date"])
         self.assertEqual([point[0] for point in volume.points], [expected])
         self.assertEqual(volume.points[0][1], float(self.frame.loc[expected, "Volume"]))
+
+    def test_the_volume_marker_is_the_heaviest_session_of_the_advance(self) -> None:
+        """Read off the bars here rather than off the span, because the chart and the question
+        come from one builder: if that builder named the wrong session, every test comparing
+        the two agrees with it. The clause is about the heaviest session between where the
+        advance began and the top it ended on, and that is a fact about the frame."""
+        window = self.frame.loc[
+            self.span["advance_anchor_date"] : self.span["peak_date"], "Volume"
+        ]
+        heaviest = window.idxmax()
+
+        self.assertEqual(pd.Timestamp(self.span["advance_peak_volume_date"]), heaviest)
 
     def test_the_peak_and_the_flag_low_sit_on_their_own_bars_at_their_own_prices(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()

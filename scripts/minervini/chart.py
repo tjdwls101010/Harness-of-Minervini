@@ -491,10 +491,10 @@ def _marks(
     entry. The peaks are what differ, and only then is a date after the label doing any work.
 
     Deduping those by the date alone and mapping onto a bar afterwards is what drew five stars
-    at three positions on a weekly panel while the legend listed five. That legend is the only
-    thing binding a mark to the question key it answers, so a reader counting stars against it
-    was back to guessing which top they were looking at. A bar is what a reader can point at,
-    so a bar is what a mark and its entry are counted in.
+    at three positions on a weekly panel while the legend listed five. The key is not on the
+    picture and never will be, so that legend is all a reader has to tell one mark from another
+    -- and at that point it told them nothing. A bar is what a reader can point at, so a bar is
+    what a mark and its entry are counted in.
     """
     marks: dict[Any, tuple[list[str], list[dict[str, Any]]]] = {}
     for span in spans:
