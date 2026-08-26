@@ -1031,6 +1031,27 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertEqual(len(claims), 1)
 
+    def test_tidying_up_the_staging_file_never_fails_the_claim(self) -> None:
+        """The claim is made by linking a file that already has its contents, so by the time the
+        staging name is removed both names point at one inode and the claim is already good.
+        Failing there failed the whole render over the one file nobody reads."""
+        frame = power_play_series()
+        real = chart_module.os.unlink
+
+        def refuse_the_staging_file(path, *args, **kwargs):
+            if ".staging-" in str(path):
+                raise PermissionError("the staging file cannot be removed")
+            return real(path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(chart_module.os, "unlink", refuse_the_staging_file):
+                manifest = _rendered(frame, directory)
+
+            written = sorted(path.name for path in Path(directory).glob("*.png"))
+
+        self.assertEqual(len(written), 3)
+        self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
+
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but
         refuses hard links is answered by choosing a different directory, not by reporting that
@@ -1708,6 +1729,29 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                         sorted(artifact["power_play_drawn"][landmark]), sorted(named)
                     )
             self.assertTrue(len(covered) > 0)
+
+    def test_each_published_path_names_the_panel_it_belongs_to(self) -> None:
+        """Completeness says the three pictures are all reported; it does not say which is
+        which. Swapping the weekly and daily paths left both in the manifest and both on disk,
+        and pointed the reader at the wrong picture for every landmark on it."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        held = {
+            "weekly": len(chart_module._weekly_bars(self.frame, self.frame.index[-1].date())),
+            "daily": len(self.frame),
+            "power_play": len(
+                chart_module._span_window(self.frame, self.span["spans"])
+            ),
+        }
+        for artifact in manifest["artifacts"]:
+            timeframe = artifact["timeframe"]
+            with self.subTest(timeframe=timeframe):
+                self.assertTrue(Path(artifact["path"]).name.endswith(f"_{timeframe}.png"))
+                self.assertEqual(
+                    Path(manifest["paths"][timeframe]).name, Path(artifact["path"]).name
+                )
+                self.assertEqual(artifact["bars"], held[timeframe])
 
     def test_the_panel_says_what_each_of_its_axes_holds(self) -> None:
         """The title and the two axis labels are the whole of what a picture says about itself.

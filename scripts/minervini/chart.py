@@ -402,7 +402,13 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
             stream.write(claim)
         os.link(staged, ours)
     finally:
-        os.unlink(staged)
+        try:
+            os.unlink(staged)
+        except OSError:
+            # The claim is already made -- both names point at one inode by this line, and the
+            # staging name is the one nobody reads. Failing here would fail a render over
+            # tidying up, and would do it after the thing being tidied had already worked.
+            pass
     try:
         for other in sorted(reserving.parent.glob(f"{reserving.name}-*")):
             if other != ours:
