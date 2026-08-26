@@ -680,6 +680,23 @@ class ThePanelTheFlagCanBeMeasuredOn(unittest.TestCase):
     a third one, and it is the span.
     """
 
+    def test_the_lead_in_is_what_the_history_has_to_give(self) -> None:
+        """Up to five sessions, and a history beginning inside its own baseline has none to
+        give. The panel starts where the history does; the promise that the window's left edge
+        is visible as an edge rather than as the side of the page is the one thing this case
+        cannot keep, and the capability says so rather than claiming a week it never drew."""
+        frame = power_play_series(dormancy_sessions=41)
+        spans = _power_play_spans(frame, "digest")["spans"]
+        self.assertTrue(spans)
+
+        window = chart_module._span_window(frame, spans)
+
+        self.assertIsNotNone(window)
+        self.assertEqual(window.index[0], frame.index[0])
+        self.assertEqual(
+            pd.Timestamp(spans[0]["baseline_first_session"]), frame.index[0]
+        )
+
     def setUp(self) -> None:
         self.frame = power_play_series(dormancy_sessions=400)
         self.questions = [
@@ -1468,13 +1485,27 @@ class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
         """Read off the bars here rather than off the span, because the chart and the question
         come from one builder: if that builder named the wrong session, every test comparing
         the two agrees with it. The clause is about the heaviest session between where the
-        advance began and the top it ended on, and that is a fact about the frame."""
-        window = self.frame.loc[
-            self.span["advance_anchor_date"] : self.span["peak_date"], "Volume"
-        ]
-        heaviest = window.idxmax()
+        advance began and the top it ended on, and that is a fact about the frame.
 
-        self.assertEqual(pd.Timestamp(self.span["advance_peak_volume_date"]), heaviest)
+        Where it began is the session *after* the anchor -- the anchor is the last dormant one,
+        which is what the picture's own rule label says. Read from the anchor instead, this
+        window agreed with a reading that reached one bar back into dormancy, because on a
+        fixture whose dormancy is flat the extra bar can never win. So the anchor is made the
+        heaviest bar in the whole frame and the reading still has to skip it.
+        """
+        frame = self.frame.copy()
+        anchor = pd.Timestamp(self.span["advance_anchor_date"])
+        frame.loc[anchor, "Volume"] = float(frame["Volume"].max()) * 20
+        spans = _power_play_spans(frame, "digest")["spans"]
+        self.assertTrue(spans)
+        span = spans[0]
+        self.assertEqual(span["advance_anchor_date"], self.span["advance_anchor_date"])
+
+        after_the_anchor = frame.loc[anchor : span["peak_date"], "Volume"].iloc[1:]
+        heaviest = after_the_anchor.idxmax()
+
+        self.assertNotEqual(heaviest, anchor)
+        self.assertEqual(pd.Timestamp(span["advance_peak_volume_date"]), heaviest)
 
     def test_the_peak_and_the_flag_low_sit_on_their_own_bars_at_their_own_prices(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
