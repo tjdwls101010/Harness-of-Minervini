@@ -1573,6 +1573,78 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
         self.assertNotIn("(1.0x", printed[0])
         self.assertIn(f"({ratio:.2f}x", printed[0])
 
+    def test_the_legend_does_not_sit_on_the_bar_it_asks_about(self) -> None:
+        """Pinned to the upper left, the volume legend covered the tallest bar of the baseline
+        window on a real name -- which is exactly the bar the reader is being asked to compare
+        the marked session against, and the legend is what carries that mark back to its
+        question. Covering the picture it explains costs both.
+
+        What it may not cover is what it names: the landmarks, and the tallest bar of the
+        window the multiple is divided against. On a panel of seven hundred candles a legend
+        sits over some of them wherever it goes, and that is not the complaint."""
+        import matplotlib.pyplot as plt
+
+        # The enormous day at the window's own left edge, which is where the span panel puts
+        # it -- five sessions in, under whatever a corner-pinned legend would occupy.
+        loud = self.frame.copy()
+        opening = pd.Timestamp(self.span["spans"][0]["baseline_first_session"])
+        loud.loc[opening, "Volume"] = float(loud["Volume"].max()) * 3
+
+        real_subplots = plt.subplots
+        real_figure = chart_module._atomic_figure
+        collisions: list[str] = []
+        panels: list[Any] = []
+
+        def keep(*args, **kwargs):
+            figure, (price_axis, volume_axis) = real_subplots(*args, **kwargs)
+            panels.append((price_axis, volume_axis))
+            return figure, (price_axis, volume_axis)
+
+        def measure(figure, path):
+            figure.canvas.draw()
+            for axis in figure.axes:
+                legend = axis.get_legend()
+                if legend is None:
+                    continue
+                box = legend.get_window_extent()
+                for line in axis.lines:
+                    if line.get_marker() in (None, "None", "none", ""):
+                        continue
+                    if box.overlaps(line.get_window_extent()):
+                        collisions.append(line.get_label())
+                heights = [patch.get_height() for patch in axis.patches if patch.get_height()]
+                if heights:
+                    tallest = max(axis.patches, key=lambda patch: patch.get_height() or 0)
+                    if box.overlaps(tallest.get_window_extent()):
+                        collisions.append(f"tallest bar {tallest.get_height()}")
+            return real_figure(figure, path)
+
+        chart_module.plt.subplots = keep
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                _rendered(loud, directory)
+        finally:
+            chart_module.plt.subplots = real_subplots
+            chart_module._atomic_figure = real_figure
+
+        self.assertTrue(panels, "the render has to have drawn something")
+        self.assertEqual(collisions, [])
+
+    def test_the_boundary_is_never_printed_from_either_side(self) -> None:
+        """Falling short of the baseline reads the same way from the other side: 0.999 printed
+        as `1.00x` claims a session matched a baseline it did not. Below one is the reading that
+        rejects the criterion, so the picture must not round it up to the line."""
+        printed = {ratio: chart_module._multiple(ratio) for ratio in (0.96, 0.999, 0.9999, 1.001, 1.04, 6.0, 10.493)}
+
+        for ratio, text in printed.items():
+            with self.subTest(ratio=ratio):
+                self.assertNotEqual(float(text), 1.0)
+                self.assertEqual(float(text) > 1.0, ratio > 1.0)
+        self.assertEqual(printed[6.0], "6.0")
+        self.assertEqual(printed[10.493], "10.5")
+        self.assertEqual(chart_module._multiple(1.0), "1.0")
+
     def test_the_weekly_panel_draws_no_divisor(self) -> None:
         """It is a session median, and a weekly bar is five sessions added together -- a line at
         that level sits on the floor of a panel it was never measured on."""

@@ -790,14 +790,22 @@ def _multiple(ratio: float) -> str:
     One decimal is the right precision for judging whether volume expanded, and everywhere but
     one place it is harmless. That place is 1.0: a published 1.04 printed as `1.0x` says the
     advance's heaviest session merely matched its baseline, and exceeding the baseline is the
-    exact condition that makes this question exist. So the boundary case gets another digit
-    rather than a rounding that argues against the number it came from.
+    exact condition that makes this question exist. Falling short of it reads the same way from
+    the other side -- 0.999 printed as `1.00x` claims a session matched a baseline it did not.
+    So the printed value takes as many digits as it needs to stay on the side of one the
+    measurement is actually on, rather than a rounding that argues against the number it came
+    from.
     """
 
-    rounded = round(ratio, 1)
-    if rounded == 1.0 and ratio != 1.0:
-        return f"{ratio:.2f}"
-    return f"{rounded:.1f}"
+    if ratio == 1.0:
+        return "1.0"
+    for places in range(1, 7):
+        printed = f"{ratio:.{places}f}"
+        if float(printed) != 1.0:
+            return printed
+    # Closer to one than six decimals can separate. Saying so is the honest reading; a seventh
+    # digit would be arithmetic about a difference nobody can act on.
+    return "about 1.0"
 
 
 def _marks(
