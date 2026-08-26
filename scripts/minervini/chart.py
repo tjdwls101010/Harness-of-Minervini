@@ -425,6 +425,12 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
     A claim outliving its render blocks the name until it is deleted, which is safe to do by
     hand once nothing is running -- and it is a claim on this name only, so any other ticker,
     date, input, or renderer is unaffected.
+
+    Which is also all the refusal can promise. The render being waited on may be this same
+    input, and then its manifest is the one the caller wanted; it may be a colliding vintage,
+    and then the caller is refused again and wants another directory; and it may fail, and then
+    nothing appears under the name at all. "Wait and read its manifest" was true in only the
+    first of the three and left the other two waiting for a file nobody was going to write.
     """
 
     claim = json.dumps(
@@ -441,8 +447,11 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
     except FileExistsError as clash:
         raise ArtifactNameTaken(
             f"{reserving.name} says another render holds {reserving.name.removesuffix('.reserving')} "
-            "right now. Wait for it and read its manifest, or -- if nothing is running -- delete "
-            "that claim, which a killed render leaves behind."
+            "right now, and nothing under that name is finished yet. Retry once it ends: it "
+            "leaves a manifest there if it succeeded -- this render's own if it was drawn from "
+            "the same bars, overlay and renderer, and otherwise a refusal naming whose it is, "
+            "which another --output-dir settles -- and nothing at all if it failed. Delete this "
+            "claim only when no render is running, which is a killed one having left it behind."
         ) from clash
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write(claim)
@@ -497,8 +506,10 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
         f"renderer {held[2]}; this render is {input_sha256}, {measured_bars} and "
         f"{RENDERER_VERSION}. Two inputs reached one name, and "
         "writing would leave the older manifest's digests beside a picture they never named. "
-        "Render to another directory, or remove that file if it is a claim left behind by a "
-        "render that was killed."
+        "Render to another directory. Nothing under this name is this render's to clear: a "
+        "claim is the .reserving file beside it, so what stands here is a finished bundle's "
+        "manifest, or something else that took the name, and taking it away would strip the "
+        "pictures under those digests of the only record of what drew them."
     )
 
 

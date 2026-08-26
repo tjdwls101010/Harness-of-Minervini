@@ -1979,6 +1979,80 @@ def artifact_end(artifact, daily):
     return _panel_index(artifact, daily)[-1]
 
 
+class WhatARefusalTellsTheCallerToDo(unittest.TestCase):
+    """A refusal is read by somebody who has to do something next, so the recovery it names is
+    as much a published thing as the digests are -- and it survives review only because prose is
+    the one part of this module a mutant can rewrite without a test noticing.
+
+    Both messages had said something the round-14 rule made false. The claim refusal told a
+    caller to wait and read the manifest, which is the right advice for exactly one of the three
+    ways the render being waited on can end. The collision refusal offered to let the caller
+    remove the file standing in the way as "a claim left behind" -- but claims are the .reserving
+    file now, so the file it was pointing at is a finished bundle's manifest, and following it
+    strips the pictures beside it of the only record of what drew them.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+
+    @staticmethod
+    def _advice_to_remove_something(message: str) -> list[str]:
+        return [
+            sentence for sentence in message.replace("\n", " ").split(". ")
+            if "delet" in sentence.lower() or "remove" in sentence.lower()
+        ]
+
+    def test_the_held_name_sends_the_caller_back_rather_than_promising_a_manifest(self) -> None:
+        real = chart_module._render_png
+        refused: list[ArtifactNameTaken] = []
+        overtaking = False
+
+        def render_the_same_input_again(bars, path, *args, **kwargs):
+            nonlocal overtaking
+            if not overtaking:
+                overtaking = True
+                try:
+                    _rendered(self.frame, path.parent)
+                except ArtifactNameTaken as caught:
+                    refused.append(caught)
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", render_the_same_input_again
+            ):
+                _rendered(self.frame, directory)
+
+        self.assertEqual(len(refused), 1)
+        message = str(refused[0])
+        # The one instruction true however the held render ends. A manifest appears only if it
+        # succeeds, and is this caller's only if it was drawing the same thing.
+        self.assertIn("retry", message.lower())
+        for sentence in self._advice_to_remove_something(message):
+            with self.subTest(sentence=sentence):
+                # A live render's claim is the thing standing between two writers in one name.
+                self.assertIn("no render is running", sentence)
+
+    def test_a_finished_bundle_in_the_way_is_never_offered_up_for_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            finished = _rendered(self.frame, directory)
+            standing = Path(finished["manifest_path"])
+            payload = json.loads(standing.read_text(encoding="utf-8"))
+            payload["input_sha256"] = "b" * 64
+            standing.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaises(ArtifactNameTaken) as refusal:
+                _rendered(self.frame, directory)
+
+            # What is actually standing there, so the message is measured against a real bundle
+            # rather than against the word "manifest".
+            self.assertTrue(all(Path(path).exists() for path in finished["paths"].values()))
+
+        message = str(refusal.exception)
+        self.assertIn("another directory", message)
+        self.assertEqual(self._advice_to_remove_something(message), [])
+
+
 class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):
     """The digests name what went in; this name is claimed for what comes out.
 
