@@ -412,6 +412,59 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
             self.assertTrue(Path(finished[0]["manifest_path"]).exists())
             self.assertEqual([], list(Path(directory).glob("*.reserving")))
 
+    def test_a_claim_belongs_to_the_render_that_made_it(self) -> None:
+        """Shared, it belonged to neither of two renders drawing the same input at once.
+
+        Whichever of them ended first took the only reservation away, and a third render from a
+        colliding vintage walked into the gap while the other was still drawing -- it reserved,
+        finished, returned its path, and then the render still in flight wrote its own manifest
+        over it.
+        """
+        collided = power_play_fingerprint(self.frame)[:8] + "0" * 56
+        real = chart_module._render_png
+        overtaking = False
+        refused: list[bool] = []
+
+        def let_a_colliding_vintage_in(bars, path, *args, **kwargs):
+            nonlocal overtaking
+            if not overtaking:
+                overtaking = True
+                # A second render of the same input, which owns a claim of its own, then this
+                # one falls over and takes its claim back.
+                with unittest.mock.patch.object(chart_module, "_render_png", real):
+                    _rendered(self.frame, path.parent)
+                with unittest.mock.patch.object(
+                    chart_module, "power_play_fingerprint", return_value=collided
+                ):
+                    try:
+                        _rendered(self.split, path.parent)
+                        refused.append(False)
+                    except ArtifactNameTaken:
+                        refused.append(True)
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", let_a_colliding_vintage_in
+            ):
+                _rendered(self.frame, directory)
+
+        self.assertEqual(refused, [True])
+
+    def test_a_symlink_pointing_at_nothing_is_still_a_name_this_render_does_not_hold(self) -> None:
+        """`exists` calls it absent, so the claim read as free and the write followed the link."""
+        collided = power_play_fingerprint(self.frame)[:8] + "0" * 56
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(_rendered(self.frame, directory)["manifest_path"])
+            manifest.unlink()
+            manifest.symlink_to(Path(directory) / "a-file-that-was-never-written.json")
+
+            with unittest.mock.patch.object(
+                chart_module, "power_play_fingerprint", return_value=collided
+            ):
+                with self.assertRaises(ArtifactNameTaken):
+                    _rendered(self.split, directory)
+
     def test_a_failed_render_does_not_leave_a_name_nobody_can_use(self) -> None:
         """The claim is this render's to take back."""
         with tempfile.TemporaryDirectory() as directory:

@@ -114,17 +114,24 @@ def render_chart_artifacts(
     # which anything watching the directory reads and fails on -- and worse, a render that
     # failed after another had finished took the *finished* manifest away with it, because the
     # name it thought it owned was the same name. Nothing here ever deletes a manifest.
-    reserving = manifest_path.parent / f"{manifest_path.name}.reserving"
+    #
+    # And one claim per render rather than one per name, because two renders of the same input
+    # are allowed to run at once and a shared claim has no owner: whichever of them failed
+    # removed the only reservation, and a third render from a colliding vintage walked into the
+    # gap while the first two were still drawing.
     _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
-    reserved = _reserve_the_name(reserving, input_sha256, power_play["measured_bars"])
+    reserved = _reserve_the_name(
+        manifest_path.parent / f"{manifest_path.name}.reserving",
+        input_sha256,
+        power_play["measured_bars"],
+    )
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
             daily, weekly, input_sha256, segmentation, power_play,
         )
     finally:
-        if reserved:
-            reserving.unlink(missing_ok=True)
+        reserved.unlink(missing_ok=True)
 
 
 def _draw_the_bundle(
@@ -181,15 +188,21 @@ def _draw_the_bundle(
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
-def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> bool:
-    """Claim this name for the length of the render, or refuse if other inputs are drawing it.
+def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> Path:
+    """Post this render's claim on the name, and refuse if another vintage is already drawing it.
 
-    Says whether this call created the claim, so only the render that took it takes it back.
+    Returns the claim this call made, which is the only one it may ever remove. Each render
+    gets its own file: two renders of the same input are allowed to draw at once, and a claim
+    they shared belonged to neither, so whichever finished or failed first took it away and
+    left the name open while the other was still working.
 
-    Created with its contents already in it, by linking a file that is complete before it has
-    a name. `O_EXCL` and then a write is two steps, and in between the claim is an empty file
-    -- which reads as no digests at all, so a second render of the *same* input met it and was
-    refused for a collision that was really its own reservation half-written.
+    Posted before it is read rather than after, so two colliding renders cannot both look, both
+    see nothing, and both proceed. Racing that way they now both see each other and both refuse,
+    which is a retry rather than a picture under the wrong digests.
+
+    Each claim is written complete and then given its name, by linking a file that already has
+    its contents. Created empty and filled a moment later, a claim is briefly a file with no
+    digests in it, and a reader arriving in that moment cannot tell it from another vintage.
     """
 
     claim = json.dumps(
@@ -197,18 +210,22 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
         separators=(",", ":"),
         sort_keys=True,
     )
-    handle, staged = tempfile.mkstemp(dir=reserving.parent, prefix=".reserving-")
+    handle, staged = tempfile.mkstemp(dir=reserving.parent, prefix=".staging-")
+    ours = reserving.parent / f"{reserving.name}-{os.urandom(8).hex()}"
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
             stream.write(claim)
-        try:
-            os.link(staged, reserving)
-        except FileExistsError:
-            _refuse_a_taken_name(reserving, input_sha256, measured_bars)
-            return False
+        os.link(staged, ours)
     finally:
         os.unlink(staged)
-    return True
+    try:
+        for other in sorted(reserving.parent.glob(f"{reserving.name}-*")):
+            if other != ours:
+                _refuse_a_taken_name(other, input_sha256, measured_bars)
+    except BaseException:
+        ours.unlink(missing_ok=True)
+        raise
+    return ours
 
 
 def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | None) -> None:
@@ -224,7 +241,11 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
     cannot prove is its own.
     """
 
-    if not held_by.exists():
+    # `lexists`, because a symlink pointing at nothing is a name this render does not hold and
+    # `exists` calls it absent -- so the claim read as free, the render went ahead, and the
+    # write followed the link. Anything that is there and cannot be read as these two digests
+    # is refused below.
+    if not os.path.lexists(held_by):
         return
     manifest_path = held_by
     try:
@@ -244,7 +265,8 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
         f"{manifest_path.name} already names bars {held[0]} and an overlay from {held[1]}; "
         f"this render is {input_sha256} and {measured_bars}. Two inputs reached one name, and "
         "writing would leave the older manifest's digests beside a picture they never named. "
-        "Render to another directory."
+        "Render to another directory, or remove that file if it is a claim left behind by a "
+        "render that was killed."
     )
 
 
