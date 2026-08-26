@@ -1313,6 +1313,38 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
             sorted(artifact["path"] for artifact in manifest["artifacts"]),
         )
 
+    def test_the_mark_on_top_of_the_tallest_bar_is_inside_the_frame(self) -> None:
+        """Matplotlib stops the volume axis five percent above its tallest bar, and at that
+        height the triangle on top of that bar is cut flat by the border -- looked at on a real
+        ABCL render, where the cut lands on exactly the session the panel is asking about, since
+        the heaviest advance session is the tallest bar whenever the baseline was quiet.
+
+        So the floor is a ceiling higher than the one autoscale picks. Where between the two a
+        mark stops being clipped is a judgment made by looking, and was: five percent clips and
+        twelve does not.
+        """
+        real = chart_module._atomic_figure
+        ceilings: list[tuple[float, float]] = []
+
+        def measure(figure, path):
+            for axis in figure.axes:
+                heights = [patch.get_height() for patch in axis.patches if patch.get_height()]
+                if heights:
+                    ceilings.append((float(axis.get_ylim()[1]), float(max(heights))))
+            return real(figure, path)
+
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                _rendered(self.frame, directory)
+        finally:
+            chart_module._atomic_figure = real
+
+        self.assertTrue(ceilings)
+        for ceiling, tallest in ceilings:
+            with self.subTest(tallest=tallest):
+                self.assertGreaterEqual(ceiling, tallest * 1.10)
+
     def test_the_shade_covers_the_window_it_names(self) -> None:
         """A rectangle of zero width is a window the manifest reports and the picture does not
         show, and the ratio beside it is divided by sessions the reader cannot see."""
