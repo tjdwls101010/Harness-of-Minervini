@@ -974,7 +974,20 @@ def _draw_power_play(
         # measurement reads the advance from the session *after* this one -- the anchor is by
         # construction the last quiet bar -- so a rule labelled "advance begins" put the start
         # of the move one session early, on exactly the judgment the reader is here to make.
-        price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label=f"advance begins after this session{_names(marks, days)}")
+        #
+        # And "this session" only where the bars are sessions. A weekly bar is five of them, so
+        # the rule stands on the week that holds the anchor rather than on the anchor: on a real
+        # EDRY render the anchor was 2026-07-01 and the rule sat on the bar labelled 2026-07-03,
+        # telling a reader the move commenced two sessions after it did. The ratio already
+        # declines to state a multiple here for the same reason; the label had not caught up.
+        price_axis.axvline(
+            stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8,
+            label=(
+                f"advance begins after this session{_names(marks, days)}"
+                if timeframe in _BY_SESSION
+                else f"advance begins after {', '.join(days)}, inside this week"
+            ),
+        )
         drawn["advance_anchor_date"].extend(days)
 
     # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
@@ -1131,9 +1144,24 @@ def _shade_baselines(
     edge = pd.Timedelta(days=_bar_width(timeframe) / 2)
     for (start, end), held in windows.items():
         suffix = f" ({held[0][1]})" if len(windows) > 1 else ""
+        # The same on the weekly, and here the shade cannot even be made to fit: a boundary
+        # session's week is one bar, so the rectangle covers every session in it including the
+        # ones the window ended before. Naming the weeks rather than the window is what keeps
+        # the picture from claiming those sessions were measured.
+        # The span the rectangle actually covers, which is not the same as the dates behind it:
+        # two windows a week apart are one rectangle here, and joining all four boundary dates
+        # produced "the weeks holding 2026-01-29 to 2026-03-25 to 2026-01-30 to 2026-03-24".
+        reached = (
+            min(day for name, day in held if name == "baseline_first_session"),
+            max(day for name, day in held if name == "baseline_last_session"),
+        )
         volume_axis.axvspan(
             start - edge, end + edge, color="#7a5af5", alpha=0.12,
-            label=f"baseline volume{suffix}",
+            label=(
+                f"baseline volume{suffix}"
+                if timeframe in _BY_SESSION
+                else f"baseline volume -- the weeks holding {reached[0]} to {reached[1]}"
+            ),
         )
         # The divisor drawn across the window it was taken over, because it is the one number on
         # this panel a reader cannot point at. Every ratio is a division by the window's median,

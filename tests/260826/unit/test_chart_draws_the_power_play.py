@@ -1108,6 +1108,45 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
         self.assertIn("week of the heaviest advance session", volume.labels)
         self.assertFalse([label for label in volume.labels if "x baseline" in label])
 
+    def test_no_weekly_label_calls_its_bar_a_session(self) -> None:
+        """The multiple was the only place this rule had reached. On a real EDRY render the
+        anchor was 2026-07-01 and the weekly rule sat on the bar labelled 2026-07-03 still
+        saying "advance begins after this session", which puts the commencement two sessions
+        after it happened -- on exactly the judgment the reader opened the picture to make. The
+        baseline shade is worse: a boundary session's week is one bar, so the rectangle covers
+        sessions the window ended before, and only the label can say so.
+        """
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        labels = price.labels + volume.labels
+        self.assertTrue(labels)
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertNotIn("this session", label)
+        # Naming the week is not enough on its own -- the reader needs the session it holds,
+        # since that is what the question and the daily panel are keyed on.
+        anchored = [label for label in price.labels if label.startswith("advance begins")]
+        self.assertEqual(len(anchored), 1)
+        self.assertIn(str(self.span["spans"][0]["advance_anchor_date"]), anchored[0])
+        shaded = [label for label in volume.labels if label.startswith("baseline volume")]
+        self.assertEqual(len(shaded), 1)
+        for edge in ("baseline_first_session", "baseline_last_session"):
+            self.assertIn(str(self.span["spans"][0][edge]), shaded[0])
+
+    def test_the_session_panels_still_say_this_session(self) -> None:
+        """The qualification belongs to the weekly alone: on a session panel the bar under the
+        rule is the session, and spelling the date out there is noise the daily does not need."""
+        price, _volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, RecordingAxis(), self.frame, self.span, "daily")
+
+        self.assertIn(
+            "advance begins after this session",
+            [label for label in price.labels if label.startswith("advance begins")],
+        )
+
     def test_both_panels_name_each_landmark_rather_than_the_structure(self) -> None:
         """One shared "power play" entry leaves a reader looking at a star and a cross with
         nothing saying which is the top of the advance and which is the bottom of the flag."""
@@ -1452,8 +1491,14 @@ class TopsThatShareOneBar(unittest.TestCase):
         _draw_power_play(price, volume, self.weekly, {"spans": spans}, "weekly")
 
         self.assertEqual(len(volume.spans), 1)
-        self.assertEqual([label for label in volume.labels if label.startswith("baseline")],
-                         ["baseline volume"])
+        # One rectangle, one entry, and the entry names what the rectangle covers -- the
+        # earliest first session and the latest last, not the four boundary dates behind it.
+        # Joining all four read "the weeks holding 2026-01-29 to 2026-03-25 to 2026-01-30 to
+        # 2026-03-24", which describes no window at all.
+        self.assertEqual(
+            [label for label in volume.labels if label.startswith("baseline")],
+            ["baseline volume -- the weeks holding 2026-01-29 to 2026-03-25"],
+        )
 
     def test_the_daily_picture_keeps_one_mark_per_session(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
