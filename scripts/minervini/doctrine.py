@@ -39,6 +39,8 @@ _VALID_DIRECTIONS = frozenset({"lower_is_better", "higher_is_better", "inside_is
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
 _REPORTED_PRECISION = 10
+# Fractional places in the widest decimal expansion a binary64 has: the smallest subnormal's.
+_WIDEST_DECIMAL_EXPANSION = 1074
 # Every threshold a reducer reads by name. A registry that no longer supplies one of
 # these validates cleanly today and raises KeyError mid-verdict tomorrow, so the
 # dependency is declared here where validation can see it.
@@ -295,25 +297,7 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     return signal
 
 
-def _where_in_the_span(position: float) -> int:
-    """Which of the five things a position can be, ordered low to high.
-
-    Below the range, on its low edge, strictly inside, on its high edge, above it. The edges
-    are their own answers rather than the ends of the interior, because "sat exactly on the
-    limit" and "sat just past it" are different sentences and only one of them is true.
-    """
-    if position < 0:
-        return -2
-    if position == 0:
-        return -1
-    if position < 1:
-        return 0
-    if position == 1:
-        return 1
-    return 2
-
-
-def _band_position(value: float, span: float) -> float:
+def _band_position(value: float) -> float:
     """Round the position for a reader without moving it somewhere it is not.
 
     Four places is the right resolution for a person reading where a base sat in its range,
@@ -325,16 +309,24 @@ def _band_position(value: float, span: float) -> float:
     places everywhere would only move the collision inward, so the position instead keeps
     where it actually is and spends extra places only where four would erase the distinction.
 
-    It can need more places than the measurement itself. A position is a distance divided by
-    the span, so a range five wide pushes the last meaningful digit one place further out
-    than ``_REPORTED_PRECISION``; the ceiling follows the span rather than guessing at it.
+    Rounding cannot carry a value across an edge -- rounding a negative never yields a
+    positive -- so landing on one is the only way to lose where the value was, and that is
+    the whole condition.
+
+    A position that is on an edge is answered before the loop rather than inside it, so every
+    value the loop sees is one that some number of places reports off the edges -- every
+    finite float has a finite decimal expansion, and the widest a double can have is the
+    smallest subnormal's. Bounding the search there rather than looping until convinced costs
+    one line and means a later edit to the condition cannot turn this into a hang. Ordinary
+    positions pay for one rounding and stop.
     """
-    finest = _REPORTED_PRECISION + max(0, math.ceil(math.log10(span)))
-    for places in range(4, finest + 1):
+    if value in (0.0, 1.0):
+        return value
+    for places in range(4, _WIDEST_DECIMAL_EXPANSION + 1):
         rounded = round(value, places)
-        if _where_in_the_span(rounded) == _where_in_the_span(value):
+        if rounded not in (0.0, 1.0):
             return rounded
-    return value
+    return value  # unreachable for a finite value, and still the honest answer if reached
 
 
 def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -351,11 +343,14 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     """
     specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
-    if high == low:
-        # validate() refuses this at registration, so reaching it means a registry nobody ran
-        # the validator over. Say which band and why rather than dying inside the arithmetic.
+    if high <= low:
+        # validate() refuses both of these at registration, so reaching one means a registry
+        # nobody ran the validator over. A range with no width has no position to divide into
+        # and an inverted one has a negative span, which would silently mirror every reading.
+        # Say which band and why rather than letting the arithmetic fail anonymously.
+        shape = "has no width" if high == low else "is inverted"
         raise ValueError(
-            f"{claim_id}.{name} is a band whose range has no width; a position in it is undefined"
+            f"{claim_id}.{name} is a band whose range {shape}; a position in it is undefined"
         )
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
@@ -381,7 +376,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     # no way to tell that is arithmetic rather than a mistake. Ten decimal places is far below
     # any precision price data carries, so agreeing with the print costs nothing real.
     reported = signal["measured"]
-    signal["band_position"] = _band_position((reported - low) / span, span)
+    signal["band_position"] = _band_position((reported - low) / span)
     # The state says where the number sat and nothing else. Which edge is the good one is
     # what ``direction`` is for -- a base shallower than its depth range is outside it and
     # better for being outside; a company growing slower than its growth range is outside it

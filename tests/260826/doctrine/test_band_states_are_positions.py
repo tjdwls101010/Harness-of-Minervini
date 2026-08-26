@@ -236,8 +236,12 @@ class TheStateAgreesWithThePrintedNumber(unittest.TestCase):
                     self.assertGreater(math.copysign(1.0, position), 0)
 
     def test_an_ordinary_reading_still_comes_back_at_a_readable_resolution(self) -> None:
-        """The edge rule must not turn every position into a wall of digits."""
-        for measured, expected in ((22.5, 0.5), (19.99, -0.002), (26.0, 1.2)):
+        """The edge rule must not turn every position into a wall of digits.
+
+        AVGO's real 27.9939408736% decline sits at 1.59878817472 of the [20, 25] span, which
+        is the case that pins the resolution rather than merely surviving it: four places say
+        1.5988, three round the difference away and six spend digits on nothing."""
+        for measured, expected in ((22.5, 0.5), (19.99, -0.002), (26.0, 1.2), (27.9939408736, 1.5988)):
             with self.subTest(measured=measured):
                 self.assertEqual(doctrine.evaluate_band(*DEPTH_LIKE, measured)["band_position"], expected)
 
@@ -299,6 +303,14 @@ class TheEdgesAreNotAPlaceToRoundTo(unittest.TestCase):
         self.assertEqual(doctrine.evaluate_band(*STOP, 6.0)["band_position"], 0.0)
         self.assertEqual(doctrine.evaluate_band(*STOP, 7.0)["band_position"], 1.0)
 
+    def test_the_rule_ends_even_on_a_value_nothing_could_measure(self) -> None:
+        """Termination is a property of the rule, not of the spans that happen to be
+        registered. The smallest positive double is strictly inside [0, 1] and takes hundreds
+        of places to say so; the loop still has to arrive there rather than run forever or
+        hand back an edge."""
+        self.assertEqual(doctrine._band_position(5e-324), 5e-324)
+        self.assertEqual(doctrine._band_position(1.0 + 2.220446049250313e-16), 1.0000000000000002)
+
     def test_no_position_comes_back_as_a_binary_artefact(self) -> None:
         """Running out of places and handing over the raw double is the readability failure
         the rule exists to avoid. 25.0000000001 against [20, 25] needs eleven places, because
@@ -357,6 +369,21 @@ class ARangeWithNoWidthIsNotARange(unittest.TestCase):
                 doctrine.evaluate_band(record["id"], name, 19.0)
 
         self.assertIn("no width", str(caught.exception))
+        self.assertIn(name, str(caught.exception))
+
+    def test_an_inverted_range_is_named_the_same_way(self) -> None:
+        """The validator already refuses an inverted range, so this is the same defence for
+        the same reason: a negative span mirrors every reading rather than failing loudly."""
+        registry, name = self._registry_with_a_point_band()
+        record = next(item for item in registry["claims"] if name in (item.get("thresholds") or {}))
+        low, _ = record["thresholds"][name]["range"]
+        record["thresholds"][name]["range"] = [low, low - 1]
+
+        with unittest.mock.patch.object(doctrine, "_load_registry", return_value=registry):
+            with self.assertRaises(ValueError) as caught:
+                doctrine.evaluate_band(record["id"], name, float(low))
+
+        self.assertIn("inverted", str(caught.exception))
         self.assertIn(name, str(caught.exception))
 
     def test_validate_refuses_a_band_whose_range_has_no_width(self) -> None:
