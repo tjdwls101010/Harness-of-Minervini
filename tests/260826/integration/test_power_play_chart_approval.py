@@ -13,6 +13,7 @@ import unittest
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.power_play_evidence import power_play_fingerprint
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import power_play_series, two_tops_that_both_await_the_chart_series
 
@@ -20,6 +21,7 @@ from tests.series import power_play_series, two_tops_that_both_await_the_chart_s
 def run(frame, **overrides) -> dict:
     if "chart_readings" in overrides and "drawn_bars" not in overrides:
         overrides["drawn_bars"] = bars_fingerprint(frame)
+        overrides["measured_bars"] = power_play_fingerprint(frame)
     prices = ProviderSnapshot(
         frame,
         SnapshotMeta(

@@ -86,6 +86,7 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
 
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+        from scripts.minervini.power_play_evidence import power_play_fingerprint
         from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = two_tops_that_both_await_the_chart_series()
@@ -106,7 +107,8 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
         ]
         payload = execute(
             "ticker.power-play",
-            {**request, "chart_readings": one, "drawn_bars": bars_fingerprint(frame)},
+            {**request, "chart_readings": one, "drawn_bars": bars_fingerprint(frame),
+             "measured_bars": power_play_fingerprint(frame)},
             runtime=runtime,
         )
 

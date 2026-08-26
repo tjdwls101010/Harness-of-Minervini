@@ -18,6 +18,7 @@ import unittest
 
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.power_play_evidence import power_play_fingerprint
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import a_top_only_a_neighbour_confirms_series
 
@@ -55,6 +56,7 @@ class ATopTheBarsAlreadyThrewOut(unittest.TestCase):
                     f'{question["key"]}=observed' for question in first["data"]["chart_questions"]
                 ],
                 "drawn_bars": bars_fingerprint(self.frame),
+                "measured_bars": power_play_fingerprint(self.frame),
             },
             runtime=runtime,
         )

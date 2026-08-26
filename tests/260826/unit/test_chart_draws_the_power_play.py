@@ -27,7 +27,12 @@ import pandas as pd
 
 from scripts.minervini.chart import _draw_power_play, _power_play_spans, render_chart_artifacts
 from scripts.minervini.power_play import measure_power_play
-from scripts.minervini.power_play_evidence import build_power_play_evidence, compile_power_play_spec
+from scripts.minervini.power_play_evidence import (
+    build_power_play_evidence,
+    compile_power_play_spec,
+    power_play_fingerprint,
+)
+from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import base_series, power_play_series, two_tops_that_both_await_the_chart_series
 
 
@@ -69,8 +74,8 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             manifest = _rendered(self.frame, directory)
 
-        self.assertEqual(manifest["power_play"]["bars_fingerprint"], manifest["input_sha256"])
-        self.assertEqual(manifest["power_play"]["bars_fingerprint"], self.questions[0]["drawn_bars"])
+        self.assertEqual(manifest["power_play"]["drawn_bars"], manifest["input_sha256"])
+        self.assertEqual(manifest["power_play"]["drawn_bars"], self.questions[0]["drawn_bars"])
 
     def test_each_picture_reports_which_landmarks_it_actually_shows(self) -> None:
         """The same contract the anchors already keep: what the picture contains, not what was
@@ -101,6 +106,65 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
             written = json.loads(Path(manifest["manifest_path"]).read_text(encoding="utf-8"))
 
         self.assertEqual(written["power_play"], manifest["power_play"])
+
+
+class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
+    """The price-only digest cannot see the input this overlay turns on.
+
+    `input_sha256` covers the five price columns, which is the right identity for candles and
+    swing anchors. The Power Play span is not read from prices alone: a split inside it leaves
+    the structure deciding nothing and a payout withholds the criteria it decided, so two
+    histories with identical prices and different events produce different questions -- and
+    produced, on one reproduction, two questions from the capability and no span at all on a
+    chart whose digest matched. The reader answered about a blank picture and the answer was
+    accepted.
+
+    So the overlay names its own input, in the same word and the same form the question does.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.split = self.frame.copy()
+        self.split.loc[self.split.index[-30], "Stock Splits"] = 2.0
+
+    def _manifest(self, frame):
+        with tempfile.TemporaryDirectory() as directory:
+            return _rendered(frame, directory)
+
+    def test_the_two_frames_are_the_same_bars_and_not_the_same_input(self) -> None:
+        self.assertEqual(bars_fingerprint(self.frame), bars_fingerprint(self.split))
+        self.assertNotEqual(
+            power_play_fingerprint(self.frame), power_play_fingerprint(self.split)
+        )
+
+    def test_the_block_names_both_digests_under_the_words_the_question_uses(self) -> None:
+        manifest = self._manifest(self.frame)
+        question = next(
+            q for q in build_power_play_evidence(self.frame)["chart_questions"]
+            if q.get("answered") is None
+        )
+
+        self.assertEqual(manifest["power_play"]["drawn_bars"], question["drawn_bars"])
+        self.assertEqual(manifest["power_play"]["measured_bars"], question["measured_bars"])
+
+    def test_the_split_moves_the_overlay_digest_where_it_cannot_move_the_other(self) -> None:
+        """The whole failure in one assertion: same picture identity, different overlay."""
+        plain, split = self._manifest(self.frame), self._manifest(self.split)
+
+        self.assertEqual(plain["input_sha256"], split["input_sha256"])
+        self.assertEqual(plain["power_play"]["drawn_bars"], split["power_play"]["drawn_bars"])
+        self.assertNotEqual(
+            plain["power_play"]["measured_bars"], split["power_play"]["measured_bars"]
+        )
+
+    def test_a_history_that_never_said_whether_a_split_occurred_names_nothing(self) -> None:
+        """The same abstention the capability makes: absence is not a report of none."""
+        bare = self.frame.drop(columns=["Stock Splits", "Dividends"])
+
+        manifest = self._manifest(bare)
+
+        self.assertIsNone(manifest["power_play"]["measured_bars"])
+        self.assertEqual(manifest["power_play"]["spans"], [])
 
 
 class RecordingAxis:
@@ -267,6 +331,80 @@ class EveryTopTheCapabilityIsAskingAbout(unittest.TestCase):
         spans = _power_play_spans(self.frame, "digest")["spans"]
 
         self.assertEqual(len(spans), len({span["peak_date"] for span in spans}))
+
+
+class TopsThatShareOneBar(unittest.TestCase):
+    """Five tops in three weeks, and a weekly picture that can only show three.
+
+    Landmarks were deduped by their raw date and only then mapped onto a bar, so five stars were
+    drawn at three positions with five legend entries standing behind them. The legend is the
+    only thing binding a mark to the question key it answers, and at that point it cannot: a
+    reader counting stars against it is back to guessing which top they are looking at, which is
+    the wrong-top approval the span was drawn to prevent -- on the surface that gets read first.
+
+    One visible mark, one entry, and the entry names every reading that landed on it. The daily
+    is unaffected, because a session there is its own bar.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.weekly = (
+            self.frame.resample("W-FRI")
+            .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
+            .dropna()
+        )
+        base = _power_play_spans(self.frame, "digest")["spans"][0]
+        # Three weeks: 04-17 alone, then 04-21 with 04-23, then 04-27 with 04-29.
+        self.tops = ("2026-04-17", "2026-04-21", "2026-04-23", "2026-04-27", "2026-04-29")
+        self.highs = (20.1, 20.2, 20.9, 20.4, 20.3)
+        self.span = {"spans": [
+            {**base, "reading": index, "peak_date": day, "peak_high": high}
+            for index, (day, high) in enumerate(zip(self.tops, self.highs))
+        ]}
+
+    def test_the_weekly_picture_marks_each_bar_once(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        peaks = [label for label in price.labels if label.startswith("advance peak")]
+        self.assertEqual(len(peaks), 3)
+        self.assertEqual(len([point for point in price.points if point[1] > 19]), 3)
+
+    def test_and_names_every_reading_that_landed_on_it(self) -> None:
+        """A star a reader cannot name is a star they cannot answer from."""
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        named = " ".join(price.labels)
+        for day in self.tops:
+            with self.subTest(top=day):
+                self.assertIn(day, named)
+
+    def test_the_merged_mark_sits_at_the_highest_top_it_stands_for(self) -> None:
+        """It is one bar's mark, so it goes where that bar's readings reached."""
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        self.assertIn(20.9, [point[1] for point in price.points])
+        self.assertNotIn(20.2, [point[1] for point in price.points])
+
+    def test_the_manifest_still_reports_all_five_because_all_five_are_named(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        drawn, _ = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        self.assertTrue(set(self.tops).issubset(set(drawn)))
+
+    def test_the_daily_picture_keeps_one_mark_per_session(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, self.span, "daily")
+
+        peaks = [label for label in price.labels if label.startswith("advance peak")]
+        self.assertEqual(len(peaks), 5)
 
 
 class TheMarkerLandsOnTheBarItNames(unittest.TestCase):

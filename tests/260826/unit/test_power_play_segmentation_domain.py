@@ -72,14 +72,13 @@ class OneBarThatReadsTwoWays(unittest.TestCase):
         evidence = build_power_play_evidence(a_top_hidden_by_an_ambiguous_session_series())
 
         self.assertEqual(evidence["readings"], 2)
+        self.assertEqual(len(evidence["reading_rejections"]), 1)
+
+        rejection = evidence["reading_rejections"][0]
+
+        self.assertEqual(rejection["peak_date"], "2026-04-17")
         self.assertEqual(
-            evidence["reading_rejections"],
-            [
-                {
-                    "peak_date": "2026-04-17",
-                    "failed": ["fundamentals.power_play_exception.flag_maximum_weeks"],
-                }
-            ],
+            rejection["failed"], ["fundamentals.power_play_exception.flag_maximum_weeks"]
         )
 
     def test_answering_every_chart_it_asks_still_cannot_reach_qualified(self) -> None:

@@ -215,6 +215,28 @@ def _boundaries(measurements: Mapping[str, Any]) -> tuple[Any, ...]:
     return tuple(measurements[name] for name in _BOUNDARIES)
 
 
+# What it takes to see a reading rather than read about it: the advance's ends, the flag's low,
+# the quiet window a volume ratio was divided by, and the session that ratio belongs to. Carried
+# on the questions and on the rejections alike, because a rejection is the other thing a person
+# opens a chart to look at -- a fourteen-week flag that corrected sixty-seven percent is a real
+# advance that failed, not a base nobody should be shown.
+_SPAN = (
+    "advance_anchor_date",
+    "peak_date",
+    "flag_low_date",
+    "advance_peak_volume_date",
+    "baseline_first_session",
+    "baseline_last_session",
+    "peak_high",
+    "flag_low",
+    "advance_peak_volume_ratio",
+)
+
+
+def _span(reading: Mapping[str, Any]) -> dict[str, Any]:
+    return {name: reading[name] for name in _SPAN}
+
+
 def _signature(walk: Mapping[str, Any]) -> tuple[Any, ...]:
     """Everything about one walk of the tops that a distribution could have chosen.
 
@@ -571,7 +593,10 @@ def _walk_the_tops(
 
 
 def build_power_play_evidence(
-    history: Any, chart_readings: Mapping[str, str] | None = None, drawn_bars: str | None = None
+    history: Any,
+    chart_readings: Mapping[str, str] | None = None,
+    drawn_bars: str | None = None,
+    measured_bars: str | None = None,
 ) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
@@ -673,8 +698,18 @@ def build_power_play_evidence(
     # A mismatch withholds rather than refuses. The caller answered honestly about a picture that
     # existed; it is the wrong picture for this reading, which is a gap and not a bad request --
     # the same call a setup approval of another vintage gets.
+    #
+    # Two digests, because the picture and the span drawn on it do not have the same input.
+    # `drawn_bars` covers the five price columns, which is what identifies the candles. This
+    # capability reads events as well -- a split inside a span leaves it deciding nothing, a
+    # payout withholds the criteria it decided -- so a history with the same prices and a
+    # different corporate-action column issues different questions from the same `drawn_bars`.
+    # Reproduced: two questions here, no span at all on the chart, matching digests, and an
+    # answer read off the blank picture accepted through to `qualified`.
     measured_from = bars_fingerprint(read_bars(history)[0])
-    covers_other_bars = bool(given) and drawn_bars != measured_from
+    covers_other_bars = bool(given) and (
+        drawn_bars != measured_from or measured_bars != fingerprint
+    )
     if covers_other_bars:
         given = {}
     chart_questions: list[dict[str, Any]] = []
@@ -707,23 +742,13 @@ def build_power_play_evidence(
                     # The digest to compare against the chart's manifest, so a reader can see in
                     # one string whether the picture in front of them is this reading's.
                     "drawn_bars": measured_from,
-                    "peak_date": reading["peak_date"],
-                    "advance_anchor_date": reading["advance_anchor_date"],
-                    "flag_low_date": reading["flag_low_date"],
-                    # The rest of what it takes to see this reading rather than read about it.
-                    # The volume clause is asked about one session measured against one quiet
-                    # window, and a question that names neither sends the reader to a picture
-                    # that has to guess which top it is being asked about -- which is how a
-                    # chart came to draw the highest top while the question was about a lower
-                    # one, with the same digest on both so the mismatched answer was accepted.
-                    # None of this widens the key: `_chart_key` binds `_BOUNDARIES`, and the
-                    # baseline sessions are already in it.
-                    "baseline_first_session": reading["baseline_first_session"],
-                    "baseline_last_session": reading["baseline_last_session"],
-                    "advance_peak_volume_date": reading["advance_peak_volume_date"],
-                    "peak_high": reading["peak_high"],
-                    "flag_low": reading["flag_low"],
-                    "advance_peak_volume_ratio": reading["advance_peak_volume_ratio"],
+                    # The span this question is about, so the picture does not have to guess
+                    # which top it is being asked about -- which is how a chart came to draw
+                    # the highest top while the question was about a lower one, with the same
+                    # digest on both so the mismatched answer was accepted. None of this widens
+                    # the key: `_chart_key` binds `_BOUNDARIES`, and the baseline sessions are
+                    # already in it.
+                    **_span(reading),
                     "measured": {measured: reading[measured]},
                     "asks": asks[condition],
                     "answered": answer,
@@ -782,7 +807,7 @@ def build_power_play_evidence(
         elif reading_rejects(criteria, corporate_action_unmoved=True):
             reading_rejections.append(
                 {
-                    "peak_date": reading["peak_date"],
+                    **_span(reading),
                     # `failed` carries only the criteria every reading agreed on, so a rejection
                     # the readings reached by different routes would otherwise arrive as a verdict
                     # with nothing behind it -- a state no signal explains. The one criterion left

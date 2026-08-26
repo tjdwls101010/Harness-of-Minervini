@@ -563,33 +563,66 @@ def _chart_readings(request: Mapping[str, Any]) -> dict[str, str]:
     return readings
 
 
+def _chart_digest(
+    request: Mapping[str, Any], name: str, required: bool, prints: str, describes: str, kind: str
+) -> str | None:
+    """One of the digests an answer names the picture by, checked before anything is applied.
+
+    Required with an answer, the way approved_bars is required with a complete chain, and for the
+    same reason: a chart reading is a reading of one picture, and the harness never sees it.
+
+    And it has to be a digest rather than any non-empty string. Taken as written, a typo was a
+    picture this run had not measured -- so a malformed value came back as an honest reading of
+    another vintage, which is a finding about the stock rather than about the request.
+    """
+
+    value = request.get(name)
+    if required and not (isinstance(value, str) and value.strip()):
+        raise RequestError(
+            f"{name} is required with chart_readings: name the bars {describes}, as ticker.chart "
+            f"reports them in {prints} and every chart question carries them",
+            name,
+        )
+    if value is None:
+        return None
+    # Accepted on the stripped value, so it has to be *used* stripped too. A padded digest
+    # passing validation and then being compared raw is worse than a refusal: it reads as an
+    # honest chart of another vintage, and the padding is invisible in the reported reason.
+    value = str(value).strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise RequestError(
+            f"{name} is {kind}: sixty-four lowercase hex characters, as ticker.chart reports "
+            f"it in {prints}",
+            name,
+        )
+    return value
+
+
 def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     readings = _chart_readings(request)
-    drawn_bars = request.get("drawn_bars")
-    # Required with an answer, the way approved_bars is required with a complete chain, and for
-    # the same reason: a chart reading is a reading of one picture, and the harness never sees it.
-    if readings and not (isinstance(drawn_bars, str) and drawn_bars.strip()):
-        raise RequestError(
-            "drawn_bars is required with chart_readings: name the bars the chart was read from, "
-            "as ticker.chart reports them and every chart question carries them",
-            "drawn_bars",
-        )
-    # And it has to be a digest rather than any non-empty string. Taken as written, a typo was a
-    # picture this run had not measured -- so a malformed value came back as an honest reading of
-    # another vintage, which is a finding about the stock rather than about the request.
-    if drawn_bars is not None:
-        # Accepted on the stripped value, so it has to be *used* stripped too. A padded digest
-        # passing validation and then being compared raw is worse than a refusal: it reads as an
-        # honest chart of another vintage, and the padding is invisible in the reported reason.
-        drawn_bars = str(drawn_bars).strip()
-        if not re.fullmatch(r"[0-9a-f]{64}", drawn_bars):
-            raise RequestError(
-                "drawn_bars is a bars_fingerprint: sixty-four lowercase hex characters, as "
-                "ticker.chart reports it in input_sha256",
-                "drawn_bars",
-            )
+    # Two digests, because the picture and the overlay drawn on it have different inputs. The
+    # candles are the five price columns; the span is not, and a history with the same prices and
+    # a different corporate-action column asks different questions -- reproduced as two questions
+    # from here, no span at all on the chart, and `input_sha256` matching on both, which let an
+    # answer read off a blank picture through to `qualified`.
+    drawn_bars = _chart_digest(
+        request,
+        "drawn_bars",
+        bool(readings),
+        "input_sha256",
+        "the chart was read from",
+        "a bars_fingerprint",
+    )
+    measured_bars = _chart_digest(
+        request,
+        "measured_bars",
+        bool(readings),
+        "power_play.measured_bars",
+        "the overlay was drawn from",
+        "the digest the overlay was computed from",
+    )
     try:
         prices = _cached_provider(
             runtime,
@@ -621,7 +654,9 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing=[stale_price],
             sources=[_source(prices.meta)],
         )
-    evidence = build_power_play_evidence(prices.data, chart_readings=readings, drawn_bars=drawn_bars)
+    evidence = build_power_play_evidence(
+        prices.data, chart_readings=readings, drawn_bars=drawn_bars, measured_bars=measured_bars
+    )
     # Refused rather than dropped, and before the verdict is assembled. The ordinary way an
     # approval stops matching is a session closing between the chart and the request; a caller
     # told nothing would read the unchanged answer as the harness ignoring them.
