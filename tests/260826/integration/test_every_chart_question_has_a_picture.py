@@ -1,4 +1,4 @@
-"""Whenever the capability asks, the chart has to answer-able.
+"""Whenever the capability asks, the chart has to be answerable.
 
 The two sides of this were built separately and nothing made them agree. `ticker power-play`
 decides on its own evidence when the volume clause needs a person, and `ticker chart` decides
