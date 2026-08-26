@@ -186,7 +186,7 @@
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
       "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."
     ],
-    "output": "The sole final ticker verdict with component states, completed stop-path evidence, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context. Every limit comes from the doctrine registry: a gate decides pass or fail, while a band such as the ordinary loss target reports the measurement, the source's range, and where in that range it landed.",
+    "output": "The sole final ticker verdict with component states, completed stop-path evidence, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context. Every limit comes from the doctrine registry: a gate decides pass or fail, while a band such as the ordinary loss target reports the measurement, the source's range, where the measurement sat against that range, and which edge of it is the good one -- a stop tighter than the range is outside it on the favourable side.",
     "prerequisites": [
       "Prospective mode should consume market.snapshot, ticker.qualify, ticker.setup, and ticker.fundamentals verdicts."
     ],

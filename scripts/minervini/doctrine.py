@@ -39,6 +39,8 @@ _VALID_DIRECTIONS = frozenset({"lower_is_better", "higher_is_better", "inside_is
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
 _REPORTED_PRECISION = 10
+# Fractional places in the widest decimal expansion a binary64 has: the smallest subnormal's.
+_WIDEST_DECIMAL_EXPANSION = 1074
 # Every threshold a reducer reads by name. A registry that no longer supplies one of
 # these validates cleanly today and raises KeyError mid-verdict tomorrow, so the
 # dependency is declared here where validation can see it.
@@ -295,21 +297,68 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     return signal
 
 
-def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
-    """Place a measurement inside a range the source gave as a range.
+def _band_position(value: float) -> float:
+    """Round the position for a reader without moving it somewhere it is not.
 
-    ``band_position`` exists because 26 and 34.9 are not the same picture even though
-    both sit inside 25-35, and a bare pass/fail throws that difference away. The
-    quotation travels with the signal so the response can cite what it is reading.
+    Four places is the right resolution for a person reading where a base sat in its range,
+    and it is the wrong resolution near the edges, in both directions. A measurement a
+    millionth of a span above the high edge is genuinely above it and rounds to exactly 1.0;
+    a stop of 6.0000000001% is genuinely inside 6-7% and rounds to exactly 0.0. Either way
+    the position and the state end up saying different things about one number, and reporting
+    an edge is the specific claim that the measurement sat on it. Widening the field to ten
+    places everywhere would only move the collision inward, so the position instead keeps
+    where it actually is and spends extra places only where four would erase the distinction.
+
+    Rounding cannot carry a value across an edge -- rounding a negative never yields a
+    positive -- so landing on one is the only way to lose where the value was, and that is
+    the whole condition.
+
+    A position that is on an edge is answered before the loop rather than inside it, so every
+    value the loop sees is one that some number of places reports off the edges -- every
+    finite float has a finite decimal expansion, and the widest a double can have is the
+    smallest subnormal's. Bounding the search there rather than looping until convinced costs
+    one line and means a later edit to the condition cannot turn this into a hang. Ordinary
+    positions pay for one rounding and stop.
+    """
+    if value in (0.0, 1.0):
+        return value
+    for places in range(4, _WIDEST_DECIMAL_EXPANSION + 1):
+        rounded = round(value, places)
+        if rounded not in (0.0, 1.0):
+            return rounded
+    return value  # unreachable for a finite value, and still the honest answer if reached
+
+
+def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
+    """Say where a measurement sat against a range the source gave as a range.
+
+    Where it sat, not whether it belongs: the state is positional and ``direction`` is what
+    names the good edge, because a base shallower than its depth range is outside it and
+    better for being outside while a company growing slower than its growth range is outside
+    it and worse. ``band_position`` exists because 26 and 34.9 are not the same picture even
+    though both sit inside 25-35, and a bare pass/fail throws that difference away. Everything
+    the signal says about position is computed from the value it publishes rather than the one
+    it was handed, so a reader holding only the envelope can check it. The quotation travels
+    with the signal so the response can cite what it is reading.
     """
     specification, _, quotation = _specification(claim_id, name, "band")
     low, high = specification["range"]
+    if high <= low:
+        # validate() refuses both of these at registration, so reaching one means a registry
+        # nobody ran the validator over. A range with no width has no position to divide into
+        # and an inverted one has a negative span, which would silently mirror every reading.
+        # Say which band and why rather than letting the arithmetic fail anonymously.
+        shape = "has no width" if high == low else "is inverted"
+        raise ValueError(
+            f"{claim_id}.{name} is a band whose range {shape}; a position in it is undefined"
+        )
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
         "doctrine_id": claim_id,
         "role": "band",
-        # Rounded for the reader, exactly as a gate reports; every comparison below
-        # still uses the measurement it was handed.
+        # Rounded for the reader, exactly as a gate reports -- and every comparison below
+        # reads this rounded value rather than the raw one, so the number the envelope shows
+        # and the state beside it can never disagree.
         "measured": round(measured, _REPORTED_PRECISION) if isinstance(measured, float) else measured,
         "unit": specification["unit"],
         "source_range": [low, high],
@@ -320,15 +369,27 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
         signal["state"] = "unavailable"
         return signal
     span = high - low
-    signal["band_position"] = round((measured - low) / span, 4) if span else 0.0
-    # Which edge is the limit depends on what the range describes. A base shallower than
-    # its depth range is better; a company growing slower than its growth range is not.
-    direction = specification["direction"]
-    signal["direction"] = direction
-    if direction != "higher_is_better" and measured > high:
-        signal["state"] = "beyond_source_range"
-    elif direction != "lower_is_better" and measured < low:
-        signal["state"] = "short_of_source_range"
+    # Everything below reads the number the envelope prints, not the one this was handed.
+    # A 20% decline computed from 10.10 to 8.08 is 19.999999999999996, which prints as 20.0
+    # against a range starting at 20 -- comparing the raw value there emits a signal saying a
+    # measurement of 20.0 fell below 20, and a reader who can only see the printed number has
+    # no way to tell that is arithmetic rather than a mistake. Ten decimal places is far below
+    # any precision price data carries, so agreeing with the print costs nothing real.
+    reported = signal["measured"]
+    signal["band_position"] = _band_position((reported - low) / span)
+    # The state says where the number sat and nothing else. Which edge is the good one is
+    # what ``direction`` is for -- a base shallower than its depth range is outside it and
+    # better for being outside; a company growing slower than its growth range is outside it
+    # and worse. Folding that judgement into the state made the favourable side report
+    # ``within_source_range`` about a measurement that never entered the range, which is a
+    # sentence the response standard cannot be written from. The words are positional for the
+    # same reason: "short of" and "beyond" carry a higher-is-better frame, and half the
+    # registered bands point the other way.
+    signal["direction"] = specification["direction"]
+    if reported > high:
+        signal["state"] = "above_source_range"
+    elif reported < low:
+        signal["state"] = "below_source_range"
     else:
         signal["state"] = "within_source_range"
     return signal
@@ -482,6 +543,15 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                     errors.append(f"{label}.thresholds.{name} is a band and needs a two-number range")
                 elif span[0] > span[1]:
                     errors.append(f"{label}.thresholds.{name} range is inverted")
+                elif span[0] == span[1]:
+                    # A range whose edges meet is one value the source named, which the role
+                    # taxonomy already has a word for. Left as a band it has no span to divide
+                    # by, so band_position is pinned at 0.0 however far outside the
+                    # measurement is, and the position ends up on the far side of the state.
+                    errors.append(
+                        f"{label}.thresholds.{name} is a band whose range has no width; "
+                        "a single value the source named is a marker"
+                    )
                 if specification.get("direction") not in _VALID_DIRECTIONS:
                     errors.append(f"{label}.thresholds.{name} is a band and must say which direction is better")
             else:

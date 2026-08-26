@@ -57,7 +57,7 @@ class TheFlagIsBoundedTheWayTheSourceBoundedIt(unittest.TestCase):
         self.assertEqual(deep["measured"], 24.9)
 
     def test_the_twelve_day_exception_survives_the_duration_band(self):
-        """"some can emerge after only 12 days" -- 2.4 weeks is short of the range and still legal.
+        """"some can emerge after only 12 days" -- 2.4 weeks is below the range and still legal.
 
         The band's report about a short flag must not become a verdict about it; the sessions
         gate is what the source made binding at the low end.

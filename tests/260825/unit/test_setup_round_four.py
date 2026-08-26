@@ -218,7 +218,7 @@ class AdversarialDirectionTests(unittest.TestCase):
         self.assertGreater(chase["measured"]["latest_close_extension_above_pivot_pct"], 50.0)
         self.assertEqual(chase["measured"]["sessions_since_breakout"], 40)
         buffer_signal = next(item for item in evidence["signals"] if "minervini_5_to_20_cents" in item["id"])
-        self.assertEqual(buffer_signal["state"], "beyond_source_range")
+        self.assertEqual(buffer_signal["state"], "above_source_range")
 
     def test_a_base_that_more_than_halved_cannot_be_talked_into_ready_either(self) -> None:
         frame, anchors = base_series()

@@ -113,7 +113,7 @@ class OutOfScopeTests(unittest.TestCase):
 
 
 class BandDirectionTests(unittest.TestCase):
-    def test_a_measurement_short_of_a_growth_band_is_outside_it(self) -> None:
+    def test_a_measurement_under_a_growth_band_is_outside_it(self) -> None:
         growth = next(
             (claim_id, name)
             for claim_id in ("fundamentals.minimum_quarterly_earnings_growth",)
@@ -122,12 +122,16 @@ class BandDirectionTests(unittest.TestCase):
         )
 
         # 10% growth against a 20-25% band is not "within range" by any reading.
-        self.assertEqual(doctrine.evaluate_band(*growth, 10.0)["state"], "short_of_source_range")
+        self.assertEqual(doctrine.evaluate_band(*growth, 10.0)["state"], "below_source_range")
 
-    def test_a_depth_tighter_than_its_band_is_still_inside_it(self) -> None:
+    def test_a_depth_tighter_than_its_band_is_outside_it_on_the_good_side(self) -> None:
+        """12% against a 25-35% depth range is not inside that range, and saying so is not a
+        complaint about the base. `direction` is what says the outside it landed on is the
+        favourable one -- the state only reports where it sat."""
         signal = doctrine.evaluate_band("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct", 12.0)
 
-        self.assertEqual(signal["state"], "within_source_range")
+        self.assertEqual(signal["state"], "below_source_range")
+        self.assertEqual(signal["direction"], "lower_is_better")
 
     def test_every_band_declares_which_direction_is_better(self) -> None:
         undeclared = [

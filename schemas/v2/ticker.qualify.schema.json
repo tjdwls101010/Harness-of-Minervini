@@ -96,7 +96,7 @@
       "A chart judgment is required for ambiguous Primary Base quality.",
       "Primary Base depth bands are 25% at three weeks, 35% up to five weeks and beyond, and 50% only for a chart-confirmed year-long correction; a base that has not emerged yet is incomplete rather than rejected."
     ],
-    "output": "Eligibility route and state, exact Trend Template signals, completed-history depth, RS date/value, missing evidence, and next capabilities. Each criterion's limit and its required-value text are read from the doctrine registry, so the number a verdict used and the number it reports are the same one. `bands` carries any measurement the source stated as a range, with its measured value, the range, and where inside it the measurement landed.",
+    "output": "Eligibility route and state, exact Trend Template signals, completed-history depth, RS date/value, missing evidence, and next capabilities. Each criterion's limit and its required-value text are read from the doctrine registry, so the number a verdict used and the number it reports are the same one. `bands` carries any measurement the source stated as a range, with its measured value, the range, where the measurement sat against it, and which edge of it is the good one. Landing outside a range is not by itself a failure: a base shallower than a depth range is outside it on the favourable side, and `direction` beside `band_position` is what says so.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
