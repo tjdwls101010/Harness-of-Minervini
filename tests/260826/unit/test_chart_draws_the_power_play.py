@@ -22,6 +22,7 @@ import os
 import tempfile
 import unittest
 import unittest.mock
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -1957,7 +1958,10 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
         chart_module._atomic_figure = measure
         try:
             with tempfile.TemporaryDirectory() as directory:
-                _rendered(self.frame, directory)
+                # The oversized legend is the point, and matplotlib says so on every draw.
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=".*constrained_layout.*")
+                    _rendered(self.frame, directory)
         finally:
             chart_module._names = real_names
             chart_module._LEGEND_CORNERS = real_corners
