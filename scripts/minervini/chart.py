@@ -9,7 +9,7 @@ import re
 import tempfile
 from datetime import date
 from pathlib import Path
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import matplotlib
@@ -169,7 +169,7 @@ def render_chart_artifacts(
     try:
         _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
     except ArtifactNameTaken:
-        reserved.unlink(missing_ok=True)
+        _release(reserved)
         raise
     # What this render has actually put on disk, so a failure half-way through can take it back
     # off again. The pictures are committed one at a time, so a bundle that failed on its second
@@ -177,7 +177,7 @@ def render_chart_artifacts(
     # an envelope reporting no side effects at all, which is the reader's cue that nothing was
     # written. Every name here is this render's by the claim above, so removing them takes
     # nothing that belongs to anyone else.
-    committed: list[tuple[Path, tuple[int, int]]] = []
+    committed: list[tuple[Path, tuple[int, int], bool]] = []
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
@@ -195,7 +195,7 @@ def render_chart_artifacts(
         _take_back(committed)
         raise
     finally:
-        reserved.unlink(missing_ok=True)
+        _release(reserved)
 
 
 def _draw_the_bundle(
@@ -209,7 +209,7 @@ def _draw_the_bundle(
     input_sha256: str,
     segmentation: dict[str, Any] | None,
     power_play: dict[str, Any],
-    committed: list[tuple[Path, tuple[int, int]]],
+    committed: list[tuple[Path, tuple[int, int], bool]],
 ) -> dict[str, Any]:
     """Draw both pictures and write the manifest over the claim that reserved its name.
 
@@ -230,10 +230,11 @@ def _draw_the_bundle(
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_{timeframe}.png"
+        stood_there = path.exists()
         drawn, pivot_drawn, span_drawn = _render_png(
             bars, path, symbol, timeframe, as_of_date, segmentation, power_play
         )
-        committed.append((path, _identity(path)))
+        committed.append((path, _identity(path), stood_there))
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
         #
@@ -263,9 +264,60 @@ def _draw_the_bundle(
         "power_play": power_play,
         "artifacts": artifacts,
     }
+    stood_there = manifest_path.exists()
     _atomic_json(manifest_path, manifest)
-    committed.append((manifest_path, _identity(manifest_path)))
+    committed.append((manifest_path, _identity(manifest_path), stood_there))
     return {**manifest, "manifest_path": str(manifest_path)}
+
+
+# Where a legend may go, in the order they are tried. Matplotlib's own "best" is not on the
+# list: it minimises overlap with the *data*, which is a different question from the one that
+# matters here, and on a real name it chose a corner that covered all but the tip of the mark
+# it was explaining.
+_LEGEND_CORNERS = ("upper left", "upper right", "lower left", "lower right", "center right", "center left")
+
+
+def _place_clear_of_the_marks(axis: Any, *, also: Sequence[Any] = ()) -> None:
+    """Put the legend somewhere it does not cover the landmarks it names.
+
+    A legend is the only thing carrying a mark back to the question it belongs to, so one
+    sitting on the mark costs the reader both. Ordinary bars and candles are a different matter:
+    seven hundred of them fill the panel and a legend sits over some wherever it goes. `also` is
+    for the ones that are not marks and still may not be covered -- the tallest bar of the
+    volume panel, which is what the eye reaches for when checking a multiple.
+
+    Tried rather than computed, because where a legend fits depends on how large it is, and it
+    is not measurable until it has been drawn somewhere. Falling through every corner it goes
+    above the panel, which is always clear and costs only height.
+    """
+
+    marks = [line for line in axis.lines if line.get_marker() not in (None, "None", "none", "")]
+    marks.extend(also)
+    figure = axis.get_figure()
+    for corner in _LEGEND_CORNERS:
+        legend = axis.legend(loc=corner, fontsize=8, framealpha=0.85)
+        figure.canvas.draw()
+        box = legend.get_window_extent()
+        if not any(box.overlaps(mark.get_window_extent()) for mark in marks):
+            return
+    axis.legend(
+        loc="lower left", bbox_to_anchor=(0, 1.01), fontsize=8, framealpha=0.85, ncol=2
+    )
+
+
+def _release(reserved: Path) -> None:
+    """Give up this render's claim, and never let giving it up be what fails the render.
+
+    Unguarded, a destination that stopped taking changes between the last write and this line
+    turned a finished bundle into an exception: every disclosed artifact was on disk and the
+    caller got no result naming them. The claim left behind costs a colliding vintage a refusal
+    it can clear by hand, which is the cheaper of the two.
+    """
+
+    try:
+        reserved.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _identity(path: Path) -> tuple[int, int]:
@@ -275,20 +327,26 @@ def _identity(path: Path) -> tuple[int, int]:
     return (stat.st_dev, stat.st_ino)
 
 
-def _take_back(committed: list[tuple[Path, tuple[int, int]]]) -> None:
-    """Remove what an abandoned bundle wrote, and only if it is still what this render wrote.
+def _take_back(committed: list[tuple[Path, tuple[int, int], bool]]) -> None:
+    """Remove what an abandoned bundle *created*, and only if it is still what this render wrote.
 
-    Two renders of the same input are allowed to run at once and share a name -- the claim
-    permits it, because the digests and the renderer all agree. So an unconditional removal here
-    is the mistake the reservation already made once: whichever render failed took away the
-    files the other had just finished, and the paths it had already returned pointed at nothing.
-    A file replaced since is a different file by the only identity a filesystem offers, and this
-    render leaves it alone.
+    Two conditions, because a name here can be shared. Two renders of the same input are allowed
+    to run at once and both are entitled to it -- the digests and the renderer all agree -- so
+    an unconditional removal is the mistake the reservation already made once: whichever render
+    failed took away the files the other had just finished, and the paths it had already
+    returned pointed at nothing.
+
+    A file this render replaced rather than created is left standing for the same reason from
+    the other direction. Rendering twice into one directory and failing the second time on the
+    second picture, an ownership check alone still removed the first picture -- the one the
+    first render's manifest names -- because this render had genuinely written what was there.
+    What it replaced was a render of the same bars by the same renderer, which is what the
+    shared name asserts, so leaving it is leaving the earlier bundle whole.
     """
 
-    for path, identity in committed:
+    for path, identity, stood_there in committed:
         try:
-            if _identity(path) == identity:
+            if not stood_there and _identity(path) == identity:
                 path.unlink()
         except OSError:
             # The destination is already refusing this render; failing again while tidying up
@@ -630,11 +688,16 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
             volume_axis.set_ylim(0, top * 1.12)
         price_axis.grid(axis="y", alpha=0.25)
         volume_axis.grid(axis="y", alpha=0.25)
-        if price_axis.get_legend_handles_labels()[0]:
-            # Placed where it does not sit on the bars. Pinned to the upper left it covered
-            # historical candles on real names, and a legend is what carries a mark back to the
-            # question it belongs to -- overlapping the picture it explains, it costs both.
-            price_axis.legend(loc="best", fontsize=8, framealpha=0.85)
+        # Both legends here rather than where their marks are drawn, because placing one means
+        # measuring it against a figure that exists, and only this function has one.
+        tallest = max(
+            (patch for patch in volume_axis.patches if patch.get_height()),
+            key=lambda patch: patch.get_height(),
+            default=None,
+        )
+        for axis, also in ((price_axis, ()), (volume_axis, () if tallest is None else (tallest,))):
+            if axis.get_legend_handles_labels()[0]:
+                _place_clear_of_the_marks(axis, also=also)
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         figure.autofmt_xdate(rotation=30, ha="right")
         _atomic_figure(figure, path)
@@ -715,7 +778,12 @@ def _draw_power_play(
         # which is the one landmark "commences on huge volume" is a claim about. A rule down
         # the whole panel reads at any scale, and with the star at the other end the move is
         # bracketed rather than dotted.
-        price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label=f"advance begins{_names(marks, days)}")
+        #
+        # Named for what the anchor is rather than for what the rule looks like it means. The
+        # measurement reads the advance from the session *after* this one -- the anchor is by
+        # construction the last quiet bar -- so a rule labelled "advance begins" put the start
+        # of the move one session early, on exactly the judgment the reader is here to make.
+        price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label=f"advance begins after this session{_names(marks, days)}")
         drawn["advance_anchor_date"].extend(days)
 
     # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
@@ -740,7 +808,6 @@ def _draw_power_play(
             )
             drawn[date_field].extend(days)
 
-    marked = False
     marks = _marks(spans, bars, timeframe, "advance_peak_volume_date")
     for stamp, days, readings in marks:
         # The ratio and the window it was divided by, together. The multiple is a claim about a
@@ -775,12 +842,6 @@ def _draw_power_play(
             markersize=9, linestyle="none", label=f"{label}{_names(marks, days)}",
         )
         drawn["advance_peak_volume_date"].extend(days)
-        marked = True
-    if marked:
-        # Same reason as the price panel's: on a quiet window holding one enormous day, the
-        # upper left is exactly where that day's bar is, and the legend sat on top of the bar
-        # the reader is being asked to compare against.
-        volume_axis.legend(loc="best", fontsize=8, framealpha=0.85)
     return drawn
 
 

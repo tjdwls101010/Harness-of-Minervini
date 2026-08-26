@@ -138,6 +138,18 @@ class TheOverlayHasItsOwnInput(unittest.TestCase):
         self.assertEqual(bars_fingerprint(self.frame), bars_fingerprint(self.split))
         self.assertNotEqual(power_play_fingerprint(self.frame), power_play_fingerprint(self.split))
 
+    def test_a_payout_moves_the_digest_as_much_as_a_split_does(self) -> None:
+        """Both halves of the event history, not just the split. A dividend inside the span
+        withdraws the criteria it decided, so a payout-only history is a different input for
+        exactly the reason a split-only one is -- and covering only the split half left the
+        digest saying two such histories were the same evidence."""
+        paid = self.frame.copy()
+        paid.loc[paid.index[-30], "Dividends"] = 0.25
+
+        self.assertEqual(bars_fingerprint(self.frame), bars_fingerprint(paid))
+        self.assertNotEqual(power_play_fingerprint(self.frame), power_play_fingerprint(paid))
+        self.assertNotEqual(power_play_fingerprint(paid), power_play_fingerprint(self.split))
+
     def test_an_answer_that_names_no_overlay_is_refused(self) -> None:
         with self.assertRaises(RequestError) as caught:
             execute(

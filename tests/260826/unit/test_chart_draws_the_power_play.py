@@ -929,6 +929,67 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
 
         self.assertEqual(survived, standing)
 
+    def test_giving_up_the_claim_is_never_what_fails_a_finished_render(self) -> None:
+        """Every disclosed artifact is on disk and the caller gets an exception instead of the
+        paths naming them -- because the last thing the render does is remove its own claim, and
+        that can fail on a destination that has finished taking changes. The claim left behind
+        costs a colliding vintage a refusal it can clear by hand; the alternative costs the
+        caller a bundle it cannot find."""
+        frame = power_play_series()
+        real = Path.unlink
+
+        def refuse_the_claim(self, *args, **kwargs):
+            if ".reserving-" in self.name:
+                raise PermissionError("the claim cannot be removed")
+            return real(self, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(Path, "unlink", refuse_the_claim):
+                manifest = _rendered(frame, directory)
+
+            written = sorted(path.name for path in Path(directory).glob("*.png"))
+            claims = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
+
+        self.assertEqual(len(written), 3)
+        self.assertEqual(len(claims), 1)
+        self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
+
+    def test_a_second_render_that_fails_leaves_the_first_bundle_whole(self) -> None:
+        """Rendering twice into one directory and failing the second time, an ownership check
+        alone still took the first picture away -- this render had genuinely written what was
+        there, so the inode was its own -- and the first manifest was left naming a file that no
+        longer existed. What it replaced was a render of the same bars by the same renderer,
+        which is what sharing the name asserts, so it stays."""
+        frame = power_play_series()
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(frame, directory)
+
+            real = chart_module._render_png
+            calls = 0
+
+            def fail_the_second(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise OSError("the second picture failed")
+                return real(*args, **kwargs)
+
+            chart_module._render_png = fail_the_second
+            try:
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+            finally:
+                chart_module._render_png = real
+
+            missing = [
+                timeframe for timeframe, path in first["paths"].items()
+                if not Path(path).exists()
+            ]
+            standing = Path(first["manifest_path"]).exists()
+
+        self.assertEqual(missing, [])
+        self.assertTrue(standing)
+
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but
         refuses hard links is answered by choosing a different directory, not by reporting that
@@ -1056,7 +1117,10 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
 
         _draw_power_play(price, volume, self.frame, self.span, "daily")
 
-        self.assertEqual(price.labels, ["advance begins", "advance peak", "flag low"])
+        self.assertEqual(
+            price.labels,
+            ["advance begins after this session", "advance peak", "flag low"],
+        )
         self.assertIn("baseline volume", volume.labels)
 
     def test_the_advance_start_is_a_rule_down_the_panel_not_a_dot_at_a_price(self) -> None:
@@ -1431,6 +1495,16 @@ class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
         after_the_peak = self.frame.loc[self.span["peak_date"]:, "Low"]
         self.assertEqual(float(self.span["flag_low"]), float(after_the_peak.min()))
 
+    def test_the_anchor_is_the_session_after_the_quiet_window_ends(self) -> None:
+        """The two are adjacent by construction and nothing was checking it, so the anchor could
+        be published as the last baseline session -- one bar early, on the landmark that decides
+        where the move commenced. The rule's own label says the advance starts after this
+        session, and that sentence is only true of this bar."""
+        first = self.frame.index.get_loc(pd.Timestamp(self.span["baseline_last_session"]))
+        anchor = self.frame.index.get_loc(pd.Timestamp(self.span["advance_anchor_date"]))
+
+        self.assertEqual(anchor, first + 1)
+
     def test_the_span_says_which_reading_it_came_from(self) -> None:
         """The reading index is what carries a mark back to the question it belongs to, and a
         chain of tops issues several spans that differ in little else."""
@@ -1534,6 +1608,35 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                 self.assertEqual(end, pd.Timestamp(self.span["spans"][0]["baseline_last_session"]))
                 self.assertGreater(end - start, pd.Timedelta(days=1))
 
+    def test_the_panel_says_what_each_of_its_axes_holds(self) -> None:
+        """The title and the two axis labels are the whole of what a picture says about itself.
+        Nothing was reading them, so this panel could have called its volume axis Price while
+        the manifest called the artifact power_play."""
+        real = chart_module._atomic_figure
+        said: list[tuple[str, str, str]] = []
+
+        def measure(figure, path):
+            price_axis, volume_axis = figure.axes[0], figure.axes[1]
+            said.append((
+                price_axis.get_title(), price_axis.get_ylabel(), volume_axis.get_ylabel()
+            ))
+            return real(figure, path)
+
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                manifest = _rendered(self.frame, directory)
+        finally:
+            chart_module._atomic_figure = real
+
+        drawn = [artifact["timeframe"] for artifact in manifest["artifacts"]]
+        self.assertEqual(len(said), len(drawn))
+        for timeframe, (title, price_label, volume_label) in zip(drawn, said):
+            with self.subTest(timeframe=timeframe):
+                self.assertIn(chart_module._PANEL_TITLES[timeframe], title)
+                self.assertEqual(price_label, "Price")
+                self.assertEqual(volume_label, "Volume")
+
     def test_the_divisor_is_drawn_across_the_window_it_was_taken_over(self) -> None:
         """The median is the one number on this panel a reader cannot point at, and without it
         the eye checks the multiple against the tallest bar in the shade instead."""
@@ -1543,6 +1646,20 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
 
         divisor = self.span["spans"][0]["baseline_volume"]
         self.assertIsNotNone(divisor)
+        # Against the sessions, not just against the field it was published in. Doubling the
+        # published divisor draws a line that is not the median and labels a ratio computed
+        # from one that is -- and comparing the line with the field it came from calls that
+        # agreement.
+        self.assertEqual(
+            float(divisor),
+            float(
+                self.frame.loc[
+                    self.span["spans"][0]["baseline_first_session"]:
+                    self.span["spans"][0]["baseline_last_session"],
+                    "Volume",
+                ].median()
+            ),
+        )
         self.assertEqual(
             volume.levels,
             [(
@@ -1676,9 +1793,16 @@ class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):
             manifest = _rendered(self.frame, directory)
 
         tag = f"-r{chart_module.RENDERER_VERSION.replace('.', '-')}_"
-        for path in manifest["paths"].values():
+        named = list(manifest["paths"].values()) + [manifest["manifest_path"]]
+        # The manifest too, and by the same stamp. It is the durable claim on the name, so a
+        # version-stamped set of pictures beside an unstamped manifest is the one file in the
+        # bundle a second renderer could still replace.
+        self.assertEqual(len(named), 4)
+        for path in named:
             with self.subTest(path=path):
                 self.assertIn(tag, Path(path).name)
+        stamps = {Path(path).name.split("_")[2] for path in named}
+        self.assertEqual(len(stamps), 1)
 
     def test_a_bundle_from_another_version_is_refused_rather_than_replaced(self) -> None:
         """Reached by hand, because the name carries the version and the two cannot collide on
