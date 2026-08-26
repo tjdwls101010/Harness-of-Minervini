@@ -1791,6 +1791,48 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                 self.assertEqual(price_label, "Price")
                 self.assertEqual(volume_label, "Volume")
 
+    def test_the_divisor_is_the_median_of_exactly_the_sessions_the_bounds_name(self) -> None:
+        """The window is published as two dates and the divisor as one number, and a reader
+        checking the multiple has only those. Every dormant session in this fixture carries the
+        same volume, so a reading that lost the window's first session, or its last, or reached
+        one session forward into the anchor, returned the same median and agreed with bounds it
+        no longer matched. The advance-anchor version of that slip is not cosmetic: it moved the
+        ratio under the criterion's threshold, failed the volume clause, and withdrew the chart
+        question a person was supposed to answer.
+
+        So the sessions are made a ramp, and the anchor unlike any of them. Then the four
+        windows a one-session slip can land on are four different numbers, and this assertion
+        can disagree with the code.
+        """
+        published = self.span["spans"][0]
+        first = pd.Timestamp(published["baseline_first_session"])
+        last = pd.Timestamp(published["baseline_last_session"])
+        anchor = pd.Timestamp(published["advance_anchor_date"])
+
+        frame = self.frame.copy()
+        window = frame.loc[first:last].index
+        frame.loc[window, "Volume"] = [
+            100_000.0 + step * 10_000 for step in range(len(window))
+        ]
+        frame.loc[anchor, "Volume"] = 2_000_000.0
+
+        spans = _power_play_spans(frame, "digest")["spans"]
+        self.assertTrue(spans)
+        span = spans[0]
+        self.assertEqual(span["baseline_first_session"], published["baseline_first_session"])
+        self.assertEqual(span["baseline_last_session"], published["baseline_last_session"])
+
+        named = frame.loc[first:last, "Volume"]
+        taken = float(named.median())
+        self.assertEqual(float(span["baseline_volume"]), taken)
+        for slipped, what in (
+            (named.iloc[1:], "without its first session"),
+            (named.iloc[:-1], "without its last"),
+            (pd.concat([named, frame.loc[[anchor], "Volume"]]), "reaching into the anchor"),
+        ):
+            with self.subTest(window=what):
+                self.assertNotEqual(float(slipped.median()), taken)
+
     def test_the_divisor_is_drawn_across_the_window_it_was_taken_over(self) -> None:
         """The median is the one number on this panel a reader cannot point at, and without it
         the eye checks the multiple against the tallest bar in the shade instead."""
