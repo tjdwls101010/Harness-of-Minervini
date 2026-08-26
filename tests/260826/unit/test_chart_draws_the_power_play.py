@@ -52,6 +52,23 @@ def _rendered(frame, directory):
     )
 
 
+def _png_software(path) -> str | None:
+    """What the PNG itself says drew it, read out of its own tEXt chunks."""
+
+    raw = Path(path).read_bytes()
+    offset = 8
+    while offset + 8 <= len(raw):
+        length = int.from_bytes(raw[offset:offset + 4], "big")
+        kind = raw[offset + 4:offset + 8]
+        body = raw[offset + 8:offset + 8 + length]
+        if kind == b"tEXt":
+            keyword, _, value = body.partition(b"\x00")
+            if keyword == b"Software":
+                return value.decode("latin-1")
+        offset += 12 + length
+    return None
+
+
 class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
     def setUp(self) -> None:
         self.frame = power_play_series()
@@ -361,21 +378,24 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         self.assertTrue(seen)
         self.assertNotIn(Path(manifest["manifest_path"]).name, seen)
 
-    def test_a_second_render_of_the_same_input_is_not_refused_mid_flight(self) -> None:
-        """The claim used to be created empty and filled a moment later, and in between it read
-        as no digests at all -- so the same input met its own half-written reservation and was
-        told another vintage held the name."""
-        done: list[dict[str, Any]] = []
+    def test_a_second_render_of_the_same_name_is_refused_while_the_first_draws(self) -> None:
+        """One render inside a name at a time, decided by the filesystem rather than reasoned
+        about. Overlapping renders were permitted for a long time -- the digests and the
+        renderer agree, so nothing they wrote could disagree -- and every rule that tried to
+        make cleanup safe under that permission fell to some interleaving of the two. Refusing
+        costs the second caller a retry and buys the only thing those rules could not."""
+        refused: list[BaseException] = []
         real = chart_module._render_png
-        # Set before the inner render rather than after it, because that render draws through
-        # this same patch and would otherwise start a third, and a fourth.
         overtaking = False
 
         def render_the_same_input_again(bars, path, *args, **kwargs):
             nonlocal overtaking
             if not overtaking:
                 overtaking = True
-                done.append(_rendered(self.frame, path.parent))
+                try:
+                    _rendered(self.frame, path.parent)
+                except ArtifactNameTaken as caught:
+                    refused.append(caught)
             return real(bars, path, *args, **kwargs)
 
         with tempfile.TemporaryDirectory() as directory:
@@ -384,44 +404,47 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
             ):
                 manifest = _rendered(self.frame, directory)
 
-        self.assertTrue(done)
-        self.assertEqual(done[0]["manifest_path"], manifest["manifest_path"])
+            standing = sorted(path.name for path in Path(directory).glob("*.reserving*"))
+
+        self.assertEqual(len(refused), 1)
+        self.assertIn("right now", str(refused[0]))
+        self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
+        self.assertEqual(standing, [])
 
     def test_a_failing_render_never_takes_a_finished_manifest_with_it(self) -> None:
-        """The one that follows from owning the manifest's own name: a render that reserved it,
-        was overtaken by an identical one that finished, and then failed, deleted the manifest
-        the finished render had just returned to its caller."""
-        finished: list[dict[str, Any]] = []
-        real = chart_module._render_png
-        overtaking = False
-
-        def finish_the_other_render_then_fall_over(bars, path, *args, **kwargs):
-            nonlocal overtaking
-            if not overtaking:
-                overtaking = True
-                finished.append(_rendered(self.frame, path.parent))
-                raise RuntimeError("the plotting stack fell over")
-            return real(bars, path, *args, **kwargs)
-
+        """Nothing here deletes a manifest, and a bundle finished under this name is left whole
+        even by the render that finds it while cleaning up after itself."""
         with tempfile.TemporaryDirectory() as directory:
+            finished = _rendered(self.frame, directory)
+            Path(finished["paths"]["weekly"]).unlink()
+
+            real = chart_module._render_png
+            calls = 0
+
+            def fall_over_after_the_first(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise RuntimeError("the plotting stack fell over")
+                return real(*args, **kwargs)
+
             with unittest.mock.patch.object(
-                chart_module, "_render_png", finish_the_other_render_then_fall_over
+                chart_module, "_render_png", fall_over_after_the_first
             ):
                 with self.assertRaises(RuntimeError):
                     _rendered(self.frame, directory)
 
-            self.assertTrue(finished)
-            self.assertTrue(Path(finished[0]["manifest_path"]).exists())
-            self.assertEqual([], list(Path(directory).glob("*.reserving")))
+            standing = Path(finished["manifest_path"]).exists()
+            restored = Path(finished["paths"]["weekly"]).exists()
+            claims = list(Path(directory).glob("*.reserving*"))
 
-    def test_a_claim_belongs_to_the_render_that_made_it(self) -> None:
-        """Shared, it belonged to neither of two renders drawing the same input at once.
+        self.assertTrue(standing)
+        self.assertTrue(restored)
+        self.assertEqual(claims, [])
 
-        Whichever of them ended first took the only reservation away, and a third render from a
-        colliding vintage walked into the gap while the other was still drawing -- it reserved,
-        finished, returned its path, and then the render still in flight wrote its own manifest
-        over it.
-        """
+    def test_a_colliding_vintage_is_refused_while_the_name_is_held(self) -> None:
+        """The truncated halves of the stamp are shareable, so a different input can arrive at
+        this name. It meets the claim rather than the pictures."""
         collided = power_play_fingerprint(self.frame)[:8] + "0" * 56
         real = chart_module._render_png
         overtaking = False
@@ -431,10 +454,6 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
             nonlocal overtaking
             if not overtaking:
                 overtaking = True
-                # A second render of the same input, which owns a claim of its own, then this
-                # one falls over and takes its claim back.
-                with unittest.mock.patch.object(chart_module, "_render_png", real):
-                    _rendered(self.frame, path.parent)
                 with unittest.mock.patch.object(
                     chart_module, "power_play_fingerprint", return_value=collided
                 ):
@@ -895,132 +914,49 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
 
         self.assertEqual(left_behind, [blocked])
 
-    def test_a_failing_render_leaves_a_concurrent_one_alone(self) -> None:
-        """Both renders find the name free, so preexistence says nothing: the one that replaced
-        the other's picture and then failed deleted an inode that was genuinely its own, and the
-        survivor published a manifest naming a file that no longer existed. A claim standing
-        beside this render's own says someone else is drawing this name, and that is enough to
-        take nothing back."""
+    def test_giving_up_the_claim_is_never_what_fails_a_finished_render(self) -> None:
+        """Every disclosed artifact is on disk and the caller gets an exception instead of the
+        paths naming them -- because the last thing the render does is give up its own claim,
+        and that can fail on a destination that has finished taking changes. The claim left
+        behind costs the next render of this name a refusal it can clear by hand; the
+        alternative costs this caller a bundle it cannot find."""
         frame = power_play_series()
-        with tempfile.TemporaryDirectory() as directory:
-            real = chart_module._render_png
-            other_claim: list[Path] = []
-            calls = 0
+        real = Path.unlink
 
-            def fail_beside_another_claim(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                if calls == 2:
-                    # Before drawing, as a real failure inside the atomic write would be.
-                    raise OSError("the second picture failed")
-                drawn = real(*args, **kwargs)
-                if calls == 1:
-                    # The other render is still drawing: its claim is on the directory.
-                    manifest = next(Path(directory).glob("*_manifest.json.reserving-*"))
-                    beside = manifest.parent / f"{manifest.name.rsplit('-', 1)[0]}-{'f' * 16}"
-                    beside.write_text("{}", encoding="utf-8")
-                    other_claim.append(beside)
-                return drawn
-
-            chart_module._render_png = fail_beside_another_claim
-            try:
-                with self.assertRaises(chart_module.UnusableOutputDirectory):
-                    _rendered(frame, directory)
-            finally:
-                chart_module._render_png = real
-
-            kept = sorted(path.name for path in Path(directory).glob("*.png"))
-            claims = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
-
-        self.assertTrue(other_claim)
-        self.assertEqual(len(kept), 1)
-        self.assertEqual(len(claims), 1)
-
-    def test_tidying_up_the_staging_file_never_fails_the_claim(self) -> None:
-        """The claim is made by linking a file that already has its contents, so by the time the
-        staging name is removed both names point at one inode and the claim is already good.
-        Failing there failed the whole render over the one file nobody reads."""
-        frame = power_play_series()
-        real = chart_module.os.unlink
-
-        def refuse_the_staging_file(path, *args, **kwargs):
-            if ".staging-" in str(path):
-                raise PermissionError("the staging file cannot be removed")
-            return real(path, *args, **kwargs)
+        def refuse_the_claim(self, *args, **kwargs):
+            if ".reserving" in self.name:
+                raise PermissionError("the claim cannot be removed")
+            return real(self, *args, **kwargs)
 
         with tempfile.TemporaryDirectory() as directory:
-            with unittest.mock.patch.object(chart_module.os, "unlink", refuse_the_staging_file):
+            with unittest.mock.patch.object(Path, "unlink", refuse_the_claim):
                 manifest = _rendered(frame, directory)
 
             written = sorted(path.name for path in Path(directory).glob("*.png"))
+            claims = sorted(path.name for path in Path(directory).glob("*.reserving"))
 
         self.assertEqual(len(written), 3)
+        self.assertEqual(len(claims), 1)
         self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
 
-    def test_a_finished_manifest_protects_the_pictures_it_names(self) -> None:
-        """A claim standing beside this one is not the only way another bundle can be relied on.
-        A render that finished has already given its claim up, and its manifest is what remains
-        naming the pictures -- so a later render that finds one of those pictures gone, redraws
-        it, and then fails must not take it away again. Preexistence cannot answer this: the
-        file genuinely was not there when this render looked."""
+    def test_a_render_that_gave_up_leaves_the_name_clear(self) -> None:
+        """It holds the only claim while it draws, so with no finished manifest under this name
+        nothing here is anybody's -- pictures this render committed, and any an earlier one that
+        was killed left behind."""
         frame = power_play_series()
         with tempfile.TemporaryDirectory() as directory:
-            first = _rendered(frame, directory)
-            # The finished bundle loses a picture -- and nothing about the manifest changes.
-            Path(first["paths"]["weekly"]).unlink()
-
             real = chart_module._render_png
             calls = 0
 
-            def fail_the_second(*args, **kwargs):
+            def fail_after_the_first(*args, **kwargs):
                 nonlocal calls
                 calls += 1
                 if calls == 2:
-                    raise OSError("the second picture failed")
+                    raise OSError("the picture failed")
                 return real(*args, **kwargs)
 
-            chart_module._render_png = fail_the_second
+            chart_module._render_png = fail_after_the_first
             try:
-                with self.assertRaises(chart_module.UnusableOutputDirectory):
-                    _rendered(frame, directory)
-            finally:
-                chart_module._render_png = real
-
-            restored = Path(first["paths"]["weekly"]).exists()
-
-        self.assertTrue(restored)
-
-    def test_two_renders_failing_in_turn_leave_nothing_standing(self) -> None:
-        """Each defers to the other's claim while it stands, so the second one to fail is the
-        one that has to sweep -- and sweeping only its own files left the first's picture under
-        a digest-stamped name beside two envelopes both reporting nothing written."""
-        frame = power_play_series()
-        with tempfile.TemporaryDirectory() as directory:
-            real = chart_module._render_png
-            beside: list[Path] = []
-            calls = 0
-
-            def fail_beside_a_claim_then_alone(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                if calls in (2, 3):
-                    raise OSError("the picture failed")
-                drawn = real(*args, **kwargs)
-                if calls == 1:
-                    claim = next(Path(directory).glob("*_manifest.json.reserving-*"))
-                    other = claim.parent / f"{claim.name.rsplit('-', 1)[0]}-{'f' * 16}"
-                    other.write_text("{}", encoding="utf-8")
-                    beside.append(other)
-                return drawn
-
-            chart_module._render_png = fail_beside_a_claim_then_alone
-            try:
-                # The first render writes weekly, then fails while the other's claim stands.
-                with self.assertRaises(chart_module.UnusableOutputDirectory):
-                    _rendered(frame, directory)
-                self.assertEqual(len(list(Path(directory).glob("*.png"))), 1)
-                # The other render withdraws, and then fails too.
-                beside[0].unlink()
                 with self.assertRaises(chart_module.UnusableOutputDirectory):
                     _rendered(frame, directory)
             finally:
@@ -1048,10 +984,15 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
                 coverage={"completed_only": True},
             ),
         )
+        real_open = chart_module.os.open
+
+        def refuse_the_claim(path, *args, **kwargs):
+            if ".reserving" in str(path):
+                raise PermissionError("the claim cannot be created")
+            return real_open(path, *args, **kwargs)
+
         with tempfile.TemporaryDirectory() as directory:
-            with unittest.mock.patch.object(
-                chart_module.os, "link", side_effect=PermissionError("hard links disabled")
-            ):
+            with unittest.mock.patch.object(chart_module.os, "open", refuse_the_claim):
                 with self.assertRaises(RequestError) as caught:
                     execute(
                         "ticker.chart",
@@ -1602,6 +1543,27 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
             sorted(artifact["path"] for artifact in manifest["artifacts"]),
         )
 
+    def test_only_the_week_still_collecting_calls_its_last_bar_partial(self) -> None:
+        """`last_bar_partial` warns that a bar aggregates fewer sessions than it will end up
+        holding, so its volume is short for a reason that is not the stock going quiet. That is
+        a weekly bucket's problem. The daily and Power Play panels are drawn on completed
+        sessions, and a mid-week render marking their last bar partial tells a reader to
+        discount the very session the volume question is asked about.
+        """
+        frame = self.frame
+        if frame.index[-1].weekday() == 4:
+            frame = frame.iloc[:-1]
+        self.assertNotEqual(frame.index[-1].weekday(), 4, "the frame has to end mid-week")
+
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(frame, directory)
+
+        partial = {
+            artifact["timeframe"]: artifact["last_bar_partial"]
+            for artifact in manifest["artifacts"]
+        }
+        self.assertEqual(partial, {"weekly": True, "daily": False, "power_play": False})
+
     def test_the_mark_on_top_of_the_tallest_bar_is_inside_the_frame(self) -> None:
         """Matplotlib stops the volume axis five percent above its tallest bar, and at that
         height the triangle on top of that bar is cut flat by the border -- looked at on a real
@@ -2061,6 +2023,32 @@ class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):
         self.assertIn("9.9.9", str(refusal.exception))
         self.assertIn(chart_module.RENDERER_VERSION, str(refusal.exception))
 
+    def test_the_picture_says_the_version_its_name_and_manifest_claim(self) -> None:
+        """The name and the manifest are written by this module; the stamp inside the PNG is
+        written by the renderer that actually drew it. They are three claims about one thing,
+        and a reader holding a loose picture has only the third."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+            drawn_by = {
+                timeframe: _png_software(path)
+                for timeframe, path in manifest["paths"].items()
+            }
+
+        self.assertEqual(len(drawn_by), 3)
+        for timeframe, software in drawn_by.items():
+            with self.subTest(timeframe=timeframe):
+                self.assertIsNotNone(software, "the PNG carries no Software stamp at all")
+                vendor, _, version = software.partition("/")
+                self.assertEqual(vendor, "minervini-chart")
+                # Against the manifest and the name rather than the constant, because what is
+                # under test is that the three agree -- a stamp read from the same constant the
+                # name is built from would agree with it by construction.
+                self.assertEqual(version, manifest["renderer_version"])
+                self.assertIn(
+                    f"-r{version.replace('.', '-')}_",
+                    Path(manifest["paths"][timeframe]).name,
+                )
+
     def test_a_manifest_finished_after_the_first_look_is_not_overwritten(self) -> None:
         """The durable check runs before anything is claimed, so a render already drawing can
         finish in the gap. It is asked again once the claim is held."""
@@ -2091,7 +2079,7 @@ class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):
             finally:
                 chart_module._reserve_the_name = real
 
-            left_behind = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
+            left_behind = sorted(path.name for path in Path(directory).glob("*.reserving"))
 
         self.assertEqual(left_behind, [])
 

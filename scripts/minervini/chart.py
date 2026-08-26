@@ -143,10 +143,14 @@ def render_chart_artifacts(
     # failed after another had finished took the *finished* manifest away with it, because the
     # name it thought it owned was the same name. Nothing here ever deletes a manifest.
     #
-    # And one claim per render rather than one per name, because two renders of the same input
-    # are allowed to run at once and a shared claim has no owner: whichever of them failed
-    # removed the only reservation, and a third render from a colliding vintage walked into the
-    # gap while the first two were still drawing.
+    # One claim per name, and taken exclusively, so at most one render is ever inside a name.
+    # Letting two of the same input draw at once was the more generous rule and it is what made
+    # cleanup unanswerable: a render that failed had to decide which of the files under the name
+    # were its own, and every rule tried for that -- inode ownership, preexistence, deferring to
+    # a live claim -- fell to some interleaving, because a half-written picture and a finished
+    # one look alike on disk. Refusing the second render costs its caller a retry and buys the
+    # only cleanup rule that needs no such decision: with no claim standing and no manifest
+    # written, nothing under this name was ever finished, so the pictures go.
     _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
     try:
         reserved = _reserve_the_name(
@@ -182,10 +186,10 @@ def render_chart_artifacts(
         # check above -- the parent was writable and the manifest name was free -- and came
         # back as `internal_error`, which tells a reader the harness is broken when what is
         # broken is the path they handed it.
-        _take_back(manifest_path, reserved)
+        _take_back(manifest_path)
         raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
     except BaseException:
-        _take_back(manifest_path, reserved)
+        _take_back(manifest_path)
         raise
     finally:
         _release(reserved)
@@ -286,44 +290,67 @@ def _place_clear_of_the_marks(axis: Any, *, also: Sequence[Any] = ()) -> None:
         box = legend.get_window_extent()
         if not any(box.overlaps(mark.get_window_extent()) for mark in marks):
             return
+    # Anchored from the right, because the left is where the axis writes its own scale -- the
+    # `1e7` above a volume panel -- and a legend starting there covers the exponent that says
+    # what every bar under it is worth.
     for columns, size in ((2, 8), (1, 8), (1, 7)):
         legend = axis.legend(
-            loc="lower left", bbox_to_anchor=(0, 1.01), fontsize=size,
+            loc="lower right", bbox_to_anchor=(1, 1.01), fontsize=size,
             framealpha=0.85, ncol=columns,
         )
         figure.canvas.draw()
-        if _inside(legend.get_window_extent(), figure.bbox):
+        scale = axis.get_yaxis().get_offset_text()
+        clear_of_the_scale = not (
+            scale.get_text() and legend.get_window_extent().overlaps(scale.get_window_extent())
+        )
+        if _inside(legend.get_window_extent(), figure.bbox) and clear_of_the_scale:
             return
     # Nothing fits and something has to be drawn: a legend the reader must scroll past is worse
     # than one they must look around, so the last resort is back inside at the smallest size.
     axis.legend(loc="upper left", fontsize=7, framealpha=0.85)
 
 
-def _tallest_of_the_baselines(
+def _the_volume_being_judged(
     volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str, Any]]
 ) -> list[Any]:
-    """The bar in each quiet window that a covered legend would cost the reader most.
+    """The volume bars a covered legend would cost the reader an answer.
 
-    The multiple is a comparison against that window, so the window's own tallest bar is where
-    the eye goes to check it. The tallest bar of the whole panel is a different bar and usually
-    inside the advance: protecting that one and calling it done left the baseline's own tallest
-    under the legend whenever the advance ran heavier, which is nearly always.
+    Two regions, because two criteria are open on this picture. The multiple is a comparison
+    against the quiet window, so that window's own tallest bar is where the eye goes to check
+    it -- and the tallest bar of the whole panel is a different bar, usually inside the advance,
+    so protecting that one left the baseline's under the legend whenever the advance ran
+    heavier, which is nearly always. The flag is the other: whether volume dried up across it
+    is half of what the tightness criterion asks, and on a real name the legend sat over every
+    session of both flags at once.
     """
 
-    protected = []
+    protected: list[Any] = []
     for span in spans:
-        first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
-        if not (first and last):
-            continue
-        window = bars.loc[str(first):str(last)]
-        if window.empty:
-            continue
-        reached = float(window["Volume"].max())
-        found = [
-            patch for patch in volume_axis.patches
-            if patch.get_height() and abs(patch.get_height() - reached) < 1e-9
+        windows = [
+            (span.get("baseline_first_session"), span.get("baseline_last_session")),
         ]
-        protected.extend(found)
+        for first, last in windows:
+            if not (first and last):
+                continue
+            window = bars.loc[str(first):str(last)]
+            if window.empty:
+                continue
+            reached = float(window["Volume"].max())
+            protected.extend(
+                patch for patch in volume_axis.patches
+                if patch.get_height() and abs(patch.get_height() - reached) < 1e-9
+            )
+        # The flag runs from the peak to the end of what is drawn, and every session of it is
+        # evidence rather than only its tallest: a dry-up is read across the run.
+        peak = span.get("peak_date")
+        if peak is None:
+            continue
+        flag = bars.loc[str(peak):]
+        for reached in {float(value) for value in flag["Volume"] if value}:
+            protected.extend(
+                patch for patch in volume_axis.patches
+                if patch.get_height() and abs(patch.get_height() - reached) < 1e-9
+            )
     return protected
 
 
@@ -348,33 +375,22 @@ def _release(reserved: Path) -> None:
         pass
 
 
-def _take_back(manifest_path: Path, ours: Path) -> None:
-    """Clear this name of pictures, unless anyone else could still be relying on them.
+def _take_back(manifest_path: Path) -> None:
+    """Clear this name of pictures, unless a finished bundle stands under it.
 
     Clearing at all is worth doing because a bundle that stopped half-way leaves a picture under
-    a digest-stamped name beside an envelope reporting nothing written. Clearing carelessly is
-    worse, and the name here can be shared: two renders of the same input are entitled to it,
-    since the digests and the renderer all agree.
+    a digest-stamped name beside an envelope reporting nothing written.
 
-    So nothing goes while another claim stands on this name, or while a finished manifest does.
-    Both say a bundle other than this one is being relied on -- and the one this render is
-    inside cannot be either, because it never got as far as its manifest.
-
-    Past those two, the sweep is of the whole name rather than of the files this render happens
-    to have written, which is where three narrower rules in turn fell short. Per-file ownership
-    let two renders that both found the name free delete each other's work; adding preexistence
-    fixed that pair and still left the case where the file was genuinely missing when this
-    render looked; and both together still left a picture standing when two renders failed in
-    turn, each deferring to the other's claim and neither sweeping up. With no manifest and no
-    other claimant, nothing under this name was ever finished, so all of it is debris.
+    Called with this render's claim held, and the claim is exclusive, so no other render is
+    inside this name and none can enter until the claim is given up. That is what makes the
+    sweep safe and what four earlier rules were trying to reason around while renders were
+    allowed to overlap. A finished manifest is the one thing left to check: this render never
+    reached its own, so one standing here belongs to a bundle somebody may already be holding
+    paths from.
     """
 
     try:
-        held_by_others = any(
-            claim != ours
-            for claim in manifest_path.parent.glob(f"{manifest_path.name}.reserving-*")
-        )
-        if held_by_others or manifest_path.exists():
+        if manifest_path.exists():
             return
         stem = manifest_path.name.removesuffix("_manifest.json")
         abandoned = sorted(manifest_path.parent.glob(f"{stem}_*.png"))
@@ -391,20 +407,24 @@ def _take_back(manifest_path: Path, ours: Path) -> None:
 
 
 def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> Path:
-    """Post this render's claim on the name, and refuse if another vintage is already drawing it.
+    """Take this name for one render at a time, and refuse while anyone else holds it.
 
-    Returns the claim this call made, which is the only one it may ever remove. Each render
-    gets its own file: two renders of the same input are allowed to draw at once, and a claim
-    they shared belonged to neither, so whichever finished or failed first took it away and
-    left the name open while the other was still working.
+    One claim per name, created with `O_EXCL`, so the filesystem decides who gets it and only
+    one render is ever inside a name. Two renders of the same input used to be allowed to draw
+    at once -- the digests and the renderer all agree, so nothing they wrote could disagree --
+    and every rule that tried to make cleanup safe under that permission failed against some
+    interleaving of the two. Ownership, preexistence, deferring to a live claim, sweeping the
+    whole name: each closed the case the last one missed and left the next. They were all
+    trying to reason about a window that need not exist.
 
-    Posted before it is read rather than after, so two colliding renders cannot both look, both
-    see nothing, and both proceed. Racing that way they now both see each other and both refuse,
-    which is a retry rather than a picture under the wrong digests.
+    Refusing the second render costs a caller a retry, and buys the one thing the previous four
+    rules could not: while this render is drawing, no other render can be. So a directory
+    holding no claim and no finished manifest holds no bundle anybody is relying on, which is
+    what cleanup needs to be true and could not previously establish.
 
-    Each claim is written complete and then given its name, by linking a file that already has
-    its contents. Created empty and filled a moment later, a claim is briefly a file with no
-    digests in it, and a reader arriving in that moment cannot tell it from another vintage.
+    A claim outliving its render blocks the name until it is deleted, which is safe to do by
+    hand once nothing is running -- and it is a claim on this name only, so any other ticker,
+    date, input, or renderer is unaffected.
     """
 
     claim = json.dumps(
@@ -416,28 +436,17 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
         separators=(",", ":"),
         sort_keys=True,
     )
-    handle, staged = tempfile.mkstemp(dir=reserving.parent, prefix=".staging-")
-    ours = reserving.parent / f"{reserving.name}-{os.urandom(8).hex()}"
     try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            stream.write(claim)
-        os.link(staged, ours)
-    finally:
-        try:
-            os.unlink(staged)
-        except OSError:
-            # The claim is already made -- both names point at one inode by this line, and the
-            # staging name is the one nobody reads. Failing here would fail a render over
-            # tidying up, and would do it after the thing being tidied had already worked.
-            pass
-    try:
-        for other in sorted(reserving.parent.glob(f"{reserving.name}-*")):
-            if other != ours:
-                _refuse_a_taken_name(other, input_sha256, measured_bars)
-    except BaseException:
-        ours.unlink(missing_ok=True)
-        raise
-    return ours
+        handle = os.open(reserving, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError as clash:
+        raise ArtifactNameTaken(
+            f"{reserving.name} says another render holds {reserving.name.removesuffix('.reserving')} "
+            "right now. Wait for it and read its manifest, or -- if nothing is running -- delete "
+            "that claim, which a killed render leaves behind."
+        ) from clash
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(claim)
+    return reserving
 
 
 def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | None) -> None:
@@ -739,7 +748,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         # measuring it against a figure that exists, and only this function has one.
         for axis, also in (
             (price_axis, ()),
-            (volume_axis, _tallest_of_the_baselines(volume_axis, bars, power_play["spans"])),
+            (volume_axis, _the_volume_being_judged(volume_axis, bars, power_play["spans"])),
         ):
             if axis.get_legend_handles_labels()[0]:
                 _place_clear_of_the_marks(axis, also=also)
