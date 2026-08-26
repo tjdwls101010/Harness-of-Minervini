@@ -592,11 +592,16 @@ def _walk_the_tops(
     }
 
 
+# Not None, because None is a value this argument takes and means something: a history that
+# never said whether a split occurred has no overlay digest, and the chart prints null for it.
+_UNSTATED = object()
+
+
 def build_power_play_evidence(
     history: Any,
     chart_readings: Mapping[str, str] | None = None,
     drawn_bars: str | None = None,
-    measured_bars: str | None = None,
+    measured_bars: Any = _UNSTATED,
 ) -> dict[str, Any]:
     """Measure a history and read the criteria against it, deciding nothing.
 
@@ -707,6 +712,18 @@ def build_power_play_evidence(
     # Reproduced: two questions here, no span at all on the chart, matching digests, and an
     # answer read off the blank picture accepted through to `qualified`.
     measured_from = bars_fingerprint(read_bars(history)[0])
+    # Refused rather than defaulted. Left to mean "unstated", an older call that passes readings
+    # and `drawn_bars` alone would land on `measured_bars != fingerprint` for every answer and
+    # come back reporting, with no error anywhere, that the caller had read another vintage --
+    # a finding about the stock, arrived at from a call that is simply out of date.
+    if given and measured_bars is _UNSTATED:
+        raise ValueError(
+            "chart_readings now name two digests: pass measured_bars beside drawn_bars, as "
+            "ticker.chart prints it in power_play.measured_bars (None where the history carries "
+            "no corporate-action columns)"
+        )
+    if measured_bars is _UNSTATED:
+        measured_bars = None
     covers_other_bars = bool(given) and (
         drawn_bars != measured_from or measured_bars != fingerprint
     )

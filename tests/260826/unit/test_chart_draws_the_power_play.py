@@ -20,6 +20,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -87,8 +89,11 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
             with self.subTest(timeframe=artifact["timeframe"]):
                 self.assertIn("power_play_drawn", artifact)
                 for question in self.questions:
-                    self.assertIn(question["peak_date"], artifact["power_play_drawn"])
-                    self.assertIn(question["advance_anchor_date"], artifact["power_play_drawn"])
+                    self.assertIn(question["peak_date"], artifact["power_play_drawn"]["peak_date"])
+                    self.assertIn(
+                        question["advance_anchor_date"],
+                        artifact["power_play_drawn"]["advance_anchor_date"],
+                    )
 
     def test_the_session_the_volume_question_is_about_is_marked_on_the_volume_axis(self) -> None:
         """The clause is about one bar's volume, and the price panel is not where a reader
@@ -98,7 +103,7 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
 
         for artifact in manifest["artifacts"]:
             with self.subTest(timeframe=artifact["timeframe"]):
-                self.assertTrue(artifact["heaviest_advance_session_drawn"])
+                self.assertTrue(artifact["power_play_drawn"]["advance_peak_volume_date"])
 
     def test_the_manifest_on_disk_carries_it_too(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -106,6 +111,64 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
             written = json.loads(Path(manifest["manifest_path"]).read_text(encoding="utf-8"))
 
         self.assertEqual(written["power_play"], manifest["power_play"])
+
+
+class AQuestionThatCannotNameEveryLandmark(unittest.TestCase):
+    """A history ending on the peak has no flag low, and the picture cannot invent one.
+
+    Reported as a flat list of the sessions that were marked, an absent flag low reads exactly
+    like a session this timeframe does not reach -- the reader is looking for a cross that was
+    never drawn, with nothing on the page or in the manifest telling them which it is. One list
+    per landmark says it: the peak's list has the date, the flag low's is empty.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series().loc[:"2026-04-30"]
+        self.question = next(
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        )
+
+    def test_the_fixture_really_asks_about_a_span_with_a_hole_in_it(self) -> None:
+        self.assertIsNone(self.question["flag_low_date"])
+        self.assertIsNotNone(self.question["peak_date"])
+
+    def test_the_manifest_says_which_landmark_is_not_on_the_picture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        for artifact in manifest["artifacts"]:
+            with self.subTest(timeframe=artifact["timeframe"]):
+                drawn = artifact["power_play_drawn"]
+                self.assertEqual(drawn["flag_low_date"], [])
+                self.assertEqual(drawn["peak_date"], [self.question["peak_date"]])
+
+
+class ASpanTheQuestionCannotFullyName(unittest.TestCase):
+    """A landmark the question stopped carrying is a mark the picture silently loses.
+
+    Read with `.get`, it arrives as None, `_containing_bar` is never reached for it, and the
+    artifact's `power_play_drawn` simply does not list it -- which reads exactly like a session
+    this chart does not reach. The reader is looking for a cross that was never drawn and has
+    nothing telling them the difference, so the chart refuses the span instead.
+    """
+
+    def test_the_chart_refuses_a_question_missing_a_landmark(self) -> None:
+        frame = power_play_series()
+        real = build_power_play_evidence(frame)
+        thinned = {
+            **real,
+            "chart_questions": [
+                {name: value for name, value in question.items() if name != "flag_low_date"}
+                for question in real["chart_questions"]
+            ],
+        }
+
+        with unittest.mock.patch(
+            "scripts.minervini.chart.build_power_play_evidence", return_value=thinned
+        ):
+            with self.assertRaises(KeyError):
+                _power_play_spans(frame, "digest")
 
 
 class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
@@ -156,6 +219,60 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         self.assertNotEqual(
             plain["power_play"]["measured_bars"], split["power_play"]["measured_bars"]
         )
+
+    def test_the_files_are_named_by_the_overlay_too(self) -> None:
+        """Same prices, different events, same directory: the second render wrote its picture
+        over the first one's, and the first one's digests went on naming a file that had been
+        replaced -- a reader holding that manifest looking at somebody else's overlay."""
+        with tempfile.TemporaryDirectory() as directory:
+            plain = _rendered(self.frame, directory)
+            split = _rendered(self.split, directory)
+
+            self.assertNotEqual(plain["manifest_path"], split["manifest_path"])
+            self.assertNotEqual(set(plain["paths"].values()), set(split["paths"].values()))
+            self.assertTrue(Path(plain["paths"]["daily"]).exists())
+            self.assertTrue(Path(split["paths"]["daily"]).exists())
+
+        for manifest in (plain, split):
+            for path in manifest["paths"].values():
+                with self.subTest(path=path):
+                    self.assertIn(manifest["input_sha256"][:12], Path(path).name)
+                    self.assertIn(manifest["power_play"]["measured_bars"][:8], Path(path).name)
+
+    def test_the_recorded_side_effect_names_the_overlay_input_too(self) -> None:
+        """What was written, and everything the file at that path depends on."""
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        snapshot = ProviderSnapshot(
+            self.frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=self.frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            payload = execute(
+                "ticker.chart",
+                {
+                    "ticker": "TEST",
+                    "as_of": self.frame.index[-1].date().isoformat(),
+                    "output_dir": directory,
+                    "no_cache": True,
+                },
+                runtime=Runtime(price_history=lambda ticker, requested: snapshot),
+            )
+
+        artifacts = [item for item in payload["side_effects"] if item["type"] == "chart_artifact"]
+        self.assertTrue(artifacts)
+        for item in artifacts:
+            with self.subTest(path=item["path"]):
+                self.assertEqual(
+                    item["power_play_measured_bars"],
+                    payload["data"]["power_play"]["measured_bars"],
+                )
 
     def test_a_history_that_never_said_whether_a_split_occurred_names_nothing(self) -> None:
         """The same abstention the capability makes: absence is not a report of none."""
@@ -227,9 +344,9 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
     def test_the_weekly_panel_marks_the_week_without_one(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
 
-        drawn, marked = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+        drawn = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
 
-        self.assertTrue(marked)
+        self.assertTrue(drawn["advance_peak_volume_date"])
         self.assertIn("week of the heaviest advance session", volume.labels)
         self.assertFalse([label for label in volume.labels if "x baseline" in label])
 
@@ -291,8 +408,10 @@ class AStockNobodyIsAskingAbout(unittest.TestCase):
         self.assertEqual(manifest["power_play"]["spans"], [])
         for artifact in manifest["artifacts"]:
             with self.subTest(timeframe=artifact["timeframe"]):
-                self.assertEqual(artifact["power_play_drawn"], [])
-                self.assertFalse(artifact["heaviest_advance_session_drawn"])
+                self.assertEqual(
+                    artifact["power_play_drawn"],
+                    {name: [] for name in artifact["power_play_drawn"]},
+                )
 
 
 class EveryTopTheCapabilityIsAskingAbout(unittest.TestCase):
@@ -323,7 +442,7 @@ class EveryTopTheCapabilityIsAskingAbout(unittest.TestCase):
         self.assertEqual(set(manifest["power_play"]["asked_about"]), asked)
         for artifact in manifest["artifacts"]:
             with self.subTest(timeframe=artifact["timeframe"]):
-                self.assertTrue(asked.issubset(set(artifact["power_play_drawn"])))
+                self.assertTrue(asked.issubset(set(artifact["power_play_drawn"]["peak_date"])))
 
     def test_a_top_asked_two_things_is_still_drawn_once(self) -> None:
         """The volume clause and the flag's tightness are two questions about one picture, and
@@ -394,9 +513,87 @@ class TopsThatShareOneBar(unittest.TestCase):
     def test_the_manifest_still_reports_all_five_because_all_five_are_named(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
 
-        drawn, _ = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+        drawn = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
 
-        self.assertTrue(set(self.tops).issubset(set(drawn)))
+        self.assertTrue(set(self.tops).issubset(set(drawn["peak_date"])))
+
+    def test_a_landmark_the_readings_agree_on_is_reported_once(self) -> None:
+        """These five share one advance, so the anchor is one bar and one date.
+
+        Reported per reading, `power_play_drawn` says the anchor was drawn five times and the
+        label names one session five times over -- a manifest counting what was available to put
+        on the picture rather than what the picture holds, which is the contract it exists for.
+        """
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        drawn = _draw_power_play(price, volume, self.weekly, self.span, "weekly")
+
+        for landmark, days in drawn.items():
+            with self.subTest(landmark=landmark):
+                self.assertEqual(len(days), len(set(days)))
+
+    def test_a_shared_bar_prints_no_volume_multiple_the_readings_disagree_on(self) -> None:
+        """One number beside a mark that stands for two readings names neither of them."""
+        spans = [
+            {**span, "advance_peak_volume_ratio": 6.0 + index}
+            for index, span in enumerate(self.span["spans"][:2])
+        ]
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, {"spans": spans}, "daily")
+
+        self.assertEqual([label for label in volume.labels if "x baseline" in label], [])
+        self.assertIn("heaviest advance session", volume.labels)
+
+    def test_nor_one_two_baselines_happen_to_agree_on(self) -> None:
+        """The multiple is a claim about a division, so both halves have to be one thing.
+
+        Two readings that divided by different quiet windows can land on the same number, and
+        checking only the number printed "6.0x" beside a mark standing for both -- with two
+        shades under it, either of which the reader might check the arithmetic against.
+        """
+        windows = (("2026-01-29", "2026-03-25"), ("2026-01-30", "2026-03-24"))
+        spans = [
+            {**span, "advance_peak_volume_ratio": 6.0,
+             "baseline_first_session": first, "baseline_last_session": last}
+            for span, (first, last) in zip(self.span["spans"][:2], windows)
+        ]
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, {"spans": spans}, "daily")
+
+        self.assertEqual([label for label in volume.labels if "x baseline" in label], [])
+
+    def test_flag_lows_that_share_a_week_mark_the_lowest_of_them(self) -> None:
+        """The opposite edge from the peaks, and for the opposite reason: the cross stands for
+        how far that week's readings fell, so the shallowest of them is the wrong end."""
+        lows = ("2026-04-21", "2026-04-23")
+        spans = [
+            {**self.span["spans"][index], "flag_low_date": day, "flag_low": low}
+            for index, (day, low) in enumerate(zip(lows, (18.9, 18.1)))
+        ]
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, {"spans": spans}, "weekly")
+
+        self.assertIn(18.1, [point[1] for point in price.points])
+        self.assertNotIn(18.9, [point[1] for point in price.points])
+
+    def test_baselines_that_land_on_the_same_weeks_are_one_shade(self) -> None:
+        """Two entries behind one rectangle say the panel is showing something it is not."""
+        windows = (("2026-01-29", "2026-03-25"), ("2026-01-30", "2026-03-24"))
+        spans = [
+            {**self.span["spans"][index], "baseline_first_session": first,
+             "baseline_last_session": last}
+            for index, (first, last) in enumerate(windows)
+        ]
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.weekly, {"spans": spans}, "weekly")
+
+        self.assertEqual(len(volume.spans), 1)
+        self.assertEqual([label for label in volume.labels if label.startswith("baseline")],
+                         ["baseline volume"])
 
     def test_the_daily_picture_keeps_one_mark_per_session(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()

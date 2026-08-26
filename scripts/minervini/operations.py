@@ -1963,6 +1963,8 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             "path": artifact["path"],
             "as_of": result["as_of"],
             "input_sha256": result["input_sha256"],
+            # The overlay's own input, because the file at this path depends on it too.
+            "power_play_measured_bars": result["power_play"]["measured_bars"],
         }
         for artifact in result["artifacts"]
     ]

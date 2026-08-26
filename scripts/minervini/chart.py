@@ -79,19 +79,34 @@ def render_chart_artifacts(
     # number -- so it hands back a question and waits. Sending that reader to a picture with
     # none of the span on it asks them about a session the chart never identifies.
     power_play = _power_play_spans(daily, input_sha256)
+    # And the overlay's own input joins the name, for the reason the price digest is in it.
+    # `input_sha256` cannot see a split, so two vintages differing only there wrote the same
+    # PNGs and the same manifest over each other: the second render's picture sitting under the
+    # first render's digests, which is the mismatched approval the stamp exists to prevent. No
+    # suffix where the overlay has no digest -- a history that never said whether a split
+    # occurred issues no question, so the only overlay it can carry is the empty one.
+    if power_play["measured_bars"] is not None:
+        stamp = f"{stamp}-{power_play['measured_bars'][:8]}"
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_{timeframe}.png"
-        drawn, pivot_drawn, span_drawn, volume_marked = _render_png(
+        drawn, pivot_drawn, span_drawn = _render_png(
             bars, path, symbol, timeframe, as_of_date, segmentation, power_play
         )
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
+        #
+        # Per landmark for the Power Play, because a flat list of sessions cannot say which of
+        # them is missing. A question does not always carry every landmark -- a history ending
+        # on the peak has no flag low, one that starts inside the advance has no baseline -- and
+        # reported as a list of what was drawn, an absent flag low is indistinguishable from a
+        # session this timeframe does not reach. The reader is then looking for a cross that was
+        # never drawn with nothing telling them so.
         artifacts.append({
             "timeframe": timeframe, "path": str(path), "bars": len(bars),
             "anchors_drawn": drawn, "pivot_drawn": pivot_drawn,
-            "power_play_drawn": span_drawn, "heaviest_advance_session_drawn": volume_marked,
+            "power_play_drawn": span_drawn,
             # A week read before it ends aggregates the sessions it has. Its volume bar is
             # short for that reason and not because the stock went quiet, which is exactly the
             # thing a reader is looking for on this picture.
@@ -178,13 +193,17 @@ def _week_in_progress(daily: pd.DataFrame, as_of: date) -> bool:
     return bool(friday.date() > as_of)
 
 
-_SPAN_LANDMARKS = (
+# The dated landmarks, in the order a reader meets them on the picture. The manifest reports
+# what was drawn under these names, one list each.
+_SPAN_LANDMARK_DATES = (
     "advance_anchor_date",
     "peak_date",
     "flag_low_date",
     "advance_peak_volume_date",
     "baseline_first_session",
     "baseline_last_session",
+)
+_SPAN_LANDMARKS = _SPAN_LANDMARK_DATES + (
     "peak_high",
     "flag_low",
     "advance_peak_volume_ratio",
@@ -245,7 +264,7 @@ def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
     }
 
 
-def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, list[str], bool]:
+def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, dict[str, list[str]]]:
     figure, (price_axis, volume_axis) = plt.subplots(
         2,
         1,
@@ -278,7 +297,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
                 price_axis.plot(bars.index, values, linewidth=0.9, label=label)
         drawn, pivot_drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
         volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
-        span_drawn, volume_marked = _draw_power_play(price_axis, volume_axis, bars, power_play, timeframe)
+        span_drawn = _draw_power_play(price_axis, volume_axis, bars, power_play, timeframe)
         price_axis.set_title(f"{ticker} {timeframe.title()} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
         volume_axis.set_ylabel("Volume")
@@ -289,7 +308,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         figure.autofmt_xdate(rotation=30, ha="right")
         _atomic_figure(figure, path)
-        return drawn, pivot_drawn, span_drawn, volume_marked
+        return drawn, pivot_drawn, span_drawn
     finally:
         plt.close(figure)
 
@@ -332,7 +351,7 @@ def _draw_power_play(
     bars: pd.DataFrame,
     power_play: dict[str, Any] | None,
     timeframe: str,
-) -> tuple[list[str], bool]:
+) -> dict[str, list[str]]:
     """Put the spans being asked about on the picture the volume clause is judged from.
 
     Three things each question needs and the chart did not have. The advance: where it started
@@ -350,11 +369,13 @@ def _draw_power_play(
     legend said the same sentence twice with a different date after it.
     """
     spans = (power_play or {}).get("spans") or []
+    # One list per landmark, so a landmark the question never carried is an empty list rather
+    # than an absence a reader has to guess the cause of.
+    drawn: dict[str, list[str]] = {name: [] for name in _SPAN_LANDMARK_DATES}
     if not spans:
-        return [], False
-    drawn: list[str] = []
+        return drawn
 
-    drawn.extend(_shade_baselines(volume_axis, bars, spans, timeframe))
+    drawn.update(_shade_baselines(volume_axis, bars, spans, timeframe))
 
     # A landmark earns a date in its label only when the readings disagree about where it is.
     marks = _marks(spans, bars, timeframe, "advance_anchor_date")
@@ -365,7 +386,7 @@ def _draw_power_play(
         # the whole panel reads at any scale, and with the star at the other end the move is
         # bracketed rather than dotted.
         price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label=f"advance begins{_names(marks, days)}")
-        drawn.extend(days)
+        drawn["advance_anchor_date"].extend(days)
 
     # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
     # is a detected swing high -- on MRNA the two were the same bar at the same price -- and a
@@ -387,13 +408,22 @@ def _draw_power_play(
                 markerfacecolor="none", markeredgewidth=1.6, zorder=1.5,
                 label=f"{label}{_names(marks, days)}",
             )
-            drawn.extend(days)
+            drawn[date_field].extend(days)
 
     marked = False
     marks = _marks(spans, bars, timeframe, "advance_peak_volume_date")
     for stamp, days, readings in marks:
-        ratios = {
-            span["advance_peak_volume_ratio"] for span in readings
+        # The ratio and the window it was divided by, together. The multiple is a claim about a
+        # division, so agreeing on the answer is not enough: two readings that used different
+        # quiet windows can land on the same number, and printing it beside a mark that stands
+        # for both puts two shades under one arithmetic the reader is invited to check.
+        divisions = {
+            (
+                span["advance_peak_volume_ratio"],
+                span.get("baseline_first_session"),
+                span.get("baseline_last_session"),
+            )
+            for span in readings
             if span.get("advance_peak_volume_ratio") is not None
         }
         # The ratio belongs on the daily picture and only there. It divides one session's
@@ -404,19 +434,19 @@ def _draw_power_play(
         # a reader to the right place on the daily. And readings that divided by different
         # baselines print no ratio either: one number beside a mark that stands for two of them
         # names neither.
-        if timeframe == "daily" and len(ratios) == 1:
-            label = f"heaviest advance session ({ratios.pop():.1f}x baseline)"
+        if timeframe == "daily" and len(divisions) == 1:
+            label = f"heaviest advance session ({divisions.pop()[0]:.1f}x baseline)"
         else:
             label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
         volume_axis.plot(
             [stamp], [float(bars.loc[stamp, "Volume"])], marker="v", color="#7a5af5",
             markersize=9, linestyle="none", label=f"{label}{_names(marks, days)}",
         )
-        drawn.extend(days)
+        drawn["advance_peak_volume_date"].extend(days)
         marked = True
     if marked:
         volume_axis.legend(loc="upper left", fontsize=8, frameon=False)
-    return drawn, marked
+    return drawn
 
 
 def _marks(
@@ -457,11 +487,13 @@ def _names(marks: list[tuple[Any, list[str], Any]], days: list[str]) -> str:
     return f" ({', '.join(days)})"
 
 
-def _shade_baselines(volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str, Any]], timeframe: str) -> list[str]:
+def _shade_baselines(
+    volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str, Any]], timeframe: str
+) -> dict[str, list[str]]:
     """The quiet windows the ratios were measured against, one shade per distinct window."""
 
-    drawn: list[str] = []
-    windows: dict[tuple[Any, Any], list[str]] = {}
+    drawn: dict[str, list[str]] = {"baseline_first_session": [], "baseline_last_session": []}
+    windows: dict[tuple[Any, Any], list[tuple[str, str]]] = {}
     for span in spans:
         first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
         if not (first and last):
@@ -474,13 +506,14 @@ def _shade_baselines(volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str,
         # windows a week apart are one rectangle here, and two entries behind one rectangle
         # say the panel is showing something it is not.
         held = windows.setdefault((start, end), [])
-        for day in (str(first), str(last)):
-            if day not in held:
-                held.append(day)
-    for (start, end), days in windows.items():
-        suffix = f" ({days[0]})" if len(windows) > 1 else ""
+        for name, day in (("baseline_first_session", str(first)), ("baseline_last_session", str(last))):
+            if (name, day) not in held:
+                held.append((name, day))
+    for (start, end), held in windows.items():
+        suffix = f" ({held[0][1]})" if len(windows) > 1 else ""
         volume_axis.axvspan(start, end, color="#7a5af5", alpha=0.12, label=f"baseline volume{suffix}")
-        drawn.extend(days)
+        for name, day in held:
+            drawn[name].append(day)
     return drawn
 
 

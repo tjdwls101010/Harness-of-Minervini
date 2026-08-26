@@ -21,7 +21,10 @@ from scripts.minervini.cache import ProviderCache
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
-from scripts.minervini.power_play_evidence import power_play_fingerprint
+from scripts.minervini.power_play_evidence import (
+    build_power_play_evidence,
+    power_play_fingerprint,
+)
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import power_play_series
 
@@ -194,6 +197,47 @@ class TheOverlayHasItsOwnInput(unittest.TestCase):
                     },
                     runtime=self.runtime,
                 )
+
+
+class TheLibraryCallIsRefusedRatherThanMisread(unittest.TestCase):
+    """`build_power_play_evidence` is public, and the new digest cannot default quietly.
+
+    Defaulted to None, an older call that passes readings and `drawn_bars` alone lands on
+    `measured_bars != fingerprint` for every answer and comes back, with no error anywhere,
+    reporting that the caller read another vintage. That is a finding about the stock produced
+    by a call that is merely out of date -- the same substitution the request boundary refuses
+    when a digest is malformed. Passing None stays legal, because None is what the chart prints
+    where the history carries no corporate-action columns.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.keys = {
+            question["key"]: "observed"
+            for question in build_power_play_evidence(self.frame)["chart_questions"]
+        }
+
+    def test_answers_with_no_overlay_digest_stated_are_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            build_power_play_evidence(
+                self.frame, chart_readings=self.keys, drawn_bars=bars_fingerprint(self.frame)
+            )
+
+        self.assertIn("measured_bars", str(caught.exception))
+
+    def test_stating_it_as_none_is_a_statement_and_is_allowed(self) -> None:
+        evidence = build_power_play_evidence(
+            self.frame,
+            chart_readings=self.keys,
+            drawn_bars=bars_fingerprint(self.frame),
+            measured_bars=None,
+        )
+
+        self.assertTrue(evidence["readings_cover_other_bars"])
+
+    def test_and_a_call_with_nothing_to_apply_is_untouched(self) -> None:
+        """No answer, no claim about a picture, nothing to refuse."""
+        self.assertTrue(build_power_play_evidence(self.frame)["chart_questions"])
 
 
 class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
