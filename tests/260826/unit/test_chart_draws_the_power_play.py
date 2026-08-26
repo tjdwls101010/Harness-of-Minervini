@@ -990,6 +990,47 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         self.assertEqual(missing, [])
         self.assertTrue(standing)
 
+    def test_a_failing_render_leaves_a_concurrent_one_alone(self) -> None:
+        """Both renders find the name free, so preexistence says nothing: the one that replaced
+        the other's picture and then failed deleted an inode that was genuinely its own, and the
+        survivor published a manifest naming a file that no longer existed. A claim standing
+        beside this render's own says someone else is drawing this name, and that is enough to
+        take nothing back."""
+        frame = power_play_series()
+        with tempfile.TemporaryDirectory() as directory:
+            real = chart_module._render_png
+            other_claim: list[Path] = []
+            calls = 0
+
+            def fail_beside_another_claim(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    # Before drawing, as a real failure inside the atomic write would be.
+                    raise OSError("the second picture failed")
+                drawn = real(*args, **kwargs)
+                if calls == 1:
+                    # The other render is still drawing: its claim is on the directory.
+                    manifest = next(Path(directory).glob("*_manifest.json.reserving-*"))
+                    beside = manifest.parent / f"{manifest.name.rsplit('-', 1)[0]}-{'f' * 16}"
+                    beside.write_text("{}", encoding="utf-8")
+                    other_claim.append(beside)
+                return drawn
+
+            chart_module._render_png = fail_beside_another_claim
+            try:
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+            finally:
+                chart_module._render_png = real
+
+            kept = sorted(path.name for path in Path(directory).glob("*.png"))
+            claims = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
+
+        self.assertTrue(other_claim)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(len(claims), 1)
+
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but
         refuses hard links is answered by choosing a different directory, not by reporting that
@@ -1608,6 +1649,66 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                 self.assertEqual(end, pd.Timestamp(self.span["spans"][0]["baseline_last_session"]))
                 self.assertGreater(end - start, pd.Timedelta(days=1))
 
+    def test_the_picture_and_the_manifest_name_the_ticker_that_was_asked_for(self) -> None:
+        """Nothing was comparing either of them with the request, so both could name some other
+        stock on some other date and agree with each other perfectly while doing it."""
+        real = chart_module._atomic_figure
+        titles: list[str] = []
+
+        def measure(figure, path):
+            titles.append(figure.axes[0].get_title())
+            return real(figure, path)
+
+        asked = self.frame.index[-1].date()
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                manifest = render_chart_artifacts(
+                    self.frame, ticker="ASKED", as_of=asked, output_dir=directory
+                )
+                names = sorted(Path(path).name for path in Path(directory).glob("*.png"))
+        finally:
+            chart_module._atomic_figure = real
+
+        self.assertEqual(manifest["ticker"], "ASKED")
+        self.assertEqual(manifest["as_of"], asked.isoformat())
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertTrue(title.startswith("ASKED "))
+                self.assertIn(asked.isoformat(), title)
+        for name in names:
+            with self.subTest(name=name):
+                self.assertTrue(name.startswith(f"ASKED_{asked.isoformat()}_"))
+
+    def test_what_it_reports_drawing_is_what_the_panel_actually_holds(self) -> None:
+        """The report is what a reader consults instead of hunting the picture, so a landmark
+        the panel shows and the report denies sends them looking for a mark that is there and
+        telling them it is not -- and the other way round. Checked against the sessions each
+        panel covers rather than against the report's own contents."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        asked = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
+        for artifact in manifest["artifacts"]:
+            covered = self.frame.loc[:artifact_end(artifact, self.frame)]
+            for landmark in chart_module._SPAN_LANDMARK_DATES:
+                named = {
+                    question[landmark] for question in asked
+                    if question.get(landmark) is not None
+                    and chart_module._containing_bar(
+                        _panel_index(artifact, self.frame), str(question[landmark]),
+                        artifact["timeframe"],
+                    ) is not None
+                }
+                with self.subTest(timeframe=artifact["timeframe"], landmark=landmark):
+                    self.assertEqual(
+                        sorted(artifact["power_play_drawn"][landmark]), sorted(named)
+                    )
+            self.assertTrue(len(covered) > 0)
+
     def test_the_panel_says_what_each_of_its_axes_holds(self) -> None:
         """The title and the two axis labels are the whole of what a picture says about itself.
         Nothing was reading them, so this panel could have called its volume axis Price while
@@ -1748,6 +1849,54 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
         self.assertTrue(panels, "the render has to have drawn something")
         self.assertEqual(collisions, [])
 
+    def test_no_candle_body_reaches_past_the_session_it_belongs_to(self) -> None:
+        """The floor that keeps a doji visible is a fraction of the bar's own range, and drawn
+        upward from a doji sitting at its high it put the body above the high -- a price the
+        stock never traded, on the picture a base's tightness is approved from."""
+        import matplotlib.pyplot as plt
+
+        pinned = self.frame.copy()
+        # A session that opened and closed at its high, and one that never moved at all.
+        pinned.iloc[10, pinned.columns.get_indexer(["Open", "Close", "High"])] = 10.0
+        pinned.iloc[10, pinned.columns.get_loc("Low")] = 9.0
+        pinned.iloc[11, pinned.columns.get_indexer(["Open", "High", "Low", "Close"])] = 7.5
+
+        real = chart_module._atomic_figure
+        outside: list[tuple[float, float]] = []
+
+        def measure(figure, path):
+            price_axis = figure.axes[0]
+            for patch, (_, row) in zip(price_axis.patches, self._bars_of(figure, pinned)):
+                top = patch.get_y() + patch.get_height()
+                if top > row["High"] + 1e-9 or patch.get_y() < row["Low"] - 1e-9:
+                    outside.append((patch.get_y(), top))
+            return real(figure, path)
+
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                _rendered(pinned, directory)
+        finally:
+            chart_module._atomic_figure = real
+
+        self.assertEqual(outside, [])
+
+    @staticmethod
+    def _bars_of(figure, daily):
+        """The sessions this panel drew, in the order its candles were added."""
+        title = figure.axes[0].get_title()
+        if "Weekly" in title:
+            weekly = (
+                daily.resample("W-FRI")
+                .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
+                .dropna()
+            )
+            return list(weekly.iterrows())
+        if "Power Play" in title:
+            span = chart_module._span_window(daily, _power_play_spans(daily, "digest")["spans"])
+            return list(span.iterrows())
+        return list(daily.iterrows())
+
     def test_the_boundary_is_never_printed_from_either_side(self) -> None:
         """Falling short of the baseline reads the same way from the other side: 0.999 printed
         as `1.00x` claims a session matched a baseline it did not. Below one is the reading that
@@ -1775,6 +1924,25 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
         chart_module._shade_baselines(volume, weekly, self.span["spans"], "weekly")
 
         self.assertEqual(volume.levels, [])
+
+
+def _panel_index(artifact, daily):
+    """The bars the named panel actually drew, as an index."""
+    if artifact["timeframe"] == "weekly":
+        return (
+            daily.resample("W-FRI")
+            .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
+            .dropna()
+            .index
+        )
+    if artifact["timeframe"] == "power_play":
+        window = chart_module._span_window(daily, _power_play_spans(daily, "digest")["spans"])
+        return window.index
+    return daily.index
+
+
+def artifact_end(artifact, daily):
+    return _panel_index(artifact, daily)[-1]
 
 
 class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):

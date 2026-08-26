@@ -189,10 +189,10 @@ def render_chart_artifacts(
         # check above -- the parent was writable and the manifest name was free -- and came
         # back as `internal_error`, which tells a reader the harness is broken when what is
         # broken is the path they handed it.
-        _take_back(committed)
+        _take_back(committed, manifest_path, reserved)
         raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
     except BaseException:
-        _take_back(committed)
+        _take_back(committed, manifest_path, reserved)
         raise
     finally:
         _release(reserved)
@@ -327,22 +327,37 @@ def _identity(path: Path) -> tuple[int, int]:
     return (stat.st_dev, stat.st_ino)
 
 
-def _take_back(committed: list[tuple[Path, tuple[int, int], bool]]) -> None:
-    """Remove what an abandoned bundle *created*, and only if it is still what this render wrote.
+def _take_back(
+    committed: list[tuple[Path, tuple[int, int], bool]], manifest_path: Path, ours: Path
+) -> None:
+    """Remove what an abandoned bundle created, unless anyone else could be relying on it.
 
-    Two conditions, because a name here can be shared. Two renders of the same input are allowed
-    to run at once and both are entitled to it -- the digests and the renderer all agree -- so
-    an unconditional removal is the mistake the reservation already made once: whichever render
-    failed took away the files the other had just finished, and the paths it had already
-    returned pointed at nothing.
+    Removing at all is worth doing because a bundle that stopped half-way leaves a picture under
+    a digest-stamped name beside an envelope reporting nothing written. Removing carelessly is
+    worse, and the name here can be shared: two renders of the same input are entitled to it,
+    since the digests and the renderer all agree.
 
-    A file this render replaced rather than created is left standing for the same reason from
-    the other direction. Rendering twice into one directory and failing the second time on the
-    second picture, an ownership check alone still removed the first picture -- the one the
-    first render's manifest names -- because this render had genuinely written what was there.
-    What it replaced was a render of the same bars by the same renderer, which is what the
-    shared name asserts, so leaving it is leaving the earlier bundle whole.
+    So nothing is taken back while another claim stands on this name, or while a finished
+    manifest does. Both say a bundle other than this one is being relied on -- and the one this
+    render is inside cannot be either, because it never got as far as its manifest. Reached
+    through per-file ownership alone this was still wrong: two renders that both found the name
+    free, one replacing the other's picture and then failing, deleted an inode that was
+    genuinely its own and left the survivor's manifest naming a file that no longer existed.
+
+    Past those, a file this render replaced rather than created still stays. What it replaced
+    was a render of the same bars by the same renderer, which is exactly what sharing the name
+    asserts, so leaving it leaves the earlier bundle whole.
     """
+
+    try:
+        held_by_others = any(
+            claim != ours
+            for claim in manifest_path.parent.glob(f"{manifest_path.name}.reserving-*")
+        )
+        if held_by_others or manifest_path.exists():
+            return
+    except OSError:
+        return
 
     for path, identity, stood_there in committed:
         try:
@@ -669,6 +684,11 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
             # base's tightness from. The floor is a fraction of the bar's own range instead, so
             # a doji stays a doji at any price.
             body_height = max(abs(row["Close"] - row["Open"]), (row["High"] - row["Low"]) * 0.03)
+            # And kept inside the session it belongs to. A doji whose open and close sit at the
+            # high got its minimum body drawn upward from there, three percent of the range
+            # above a price the stock never traded -- on the picture a person approves a base's
+            # tightness from, where the highs are exactly what they are reading.
+            body_low = min(body_low, row["High"] - body_height)
             price_axis.add_patch(Rectangle((position - width / 2, body_low), width, body_height, facecolor=color, edgecolor=color, linewidth=0.6))
         for label, values in _price_overlays(bars["Close"], timeframe).items():
             if values.notna().any():
