@@ -18,6 +18,7 @@ already carries every landmark with its date, so nothing here is recomputed or g
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -887,6 +888,46 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
             left_behind = sorted(path.name for path in Path(directory).iterdir())
 
         self.assertEqual(left_behind, [blocked])
+
+    def test_it_does_not_take_back_a_file_another_render_replaced(self) -> None:
+        """Two renders of the same input may run at once and share a name -- the claim permits
+        it, because the digests and the renderer all agree. Removing unconditionally is the
+        mistake the reservation already made once: the render that failed took away the files
+        the other had just finished, and the paths it had already handed back pointed at
+        nothing."""
+        frame = power_play_series()
+        with tempfile.TemporaryDirectory() as directory:
+            finished = _rendered(frame, directory)
+            standing = {Path(path): Path(path).read_bytes() for path in finished["paths"].values()}
+
+            real = chart_module._render_png
+            calls = 0
+
+            def fail_after_the_first(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                drawn = real(*args, **kwargs)
+                if calls == 2:
+                    # The other render replaces what this one just wrote, exactly as a
+                    # concurrent render of the same input is entitled to -- and by replacing
+                    # rather than rewriting, which is how every commit in this module lands.
+                    for path, content in standing.items():
+                        spare = path.with_suffix(".other")
+                        spare.write_bytes(content)
+                        os.replace(spare, path)
+                    raise OSError("the destination stopped taking files")
+                return drawn
+
+            chart_module._render_png = fail_after_the_first
+            try:
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+            finally:
+                chart_module._render_png = real
+
+            survived = {path: path.read_bytes() for path in standing if path.exists()}
+
+        self.assertEqual(survived, standing)
 
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but

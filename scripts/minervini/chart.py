@@ -177,7 +177,7 @@ def render_chart_artifacts(
     # an envelope reporting no side effects at all, which is the reader's cue that nothing was
     # written. Every name here is this render's by the claim above, so removing them takes
     # nothing that belongs to anyone else.
-    committed: list[Path] = []
+    committed: list[tuple[Path, tuple[int, int]]] = []
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
@@ -209,12 +209,13 @@ def _draw_the_bundle(
     input_sha256: str,
     segmentation: dict[str, Any] | None,
     power_play: dict[str, Any],
-    committed: list[Path],
+    committed: list[tuple[Path, tuple[int, int]]],
 ) -> dict[str, Any]:
     """Draw both pictures and write the manifest over the claim that reserved its name.
 
-    Every file this succeeds in putting on disk is appended to `committed` as it lands, so a
-    caller that has to abandon the bundle knows exactly what to take back.
+    Every file this succeeds in putting on disk is appended to `committed` as it lands, with the
+    identity the filesystem gave it, so a caller that has to abandon the bundle knows exactly
+    what to take back and can tell it apart from something that replaced it since.
     """
 
     # And, where there is a span to look at, the span. A stock with three years of history draws
@@ -232,7 +233,7 @@ def _draw_the_bundle(
         drawn, pivot_drawn, span_drawn = _render_png(
             bars, path, symbol, timeframe, as_of_date, segmentation, power_play
         )
-        committed.append(path)
+        committed.append((path, _identity(path)))
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
         #
@@ -263,16 +264,32 @@ def _draw_the_bundle(
         "artifacts": artifacts,
     }
     _atomic_json(manifest_path, manifest)
-    committed.append(manifest_path)
+    committed.append((manifest_path, _identity(manifest_path)))
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
-def _take_back(committed: list[Path]) -> None:
-    """Remove what an abandoned bundle managed to write, leaving the directory as it was found."""
+def _identity(path: Path) -> tuple[int, int]:
+    """What the filesystem calls this file, so a later look can tell it from its replacement."""
 
-    for path in committed:
+    stat = path.stat()
+    return (stat.st_dev, stat.st_ino)
+
+
+def _take_back(committed: list[tuple[Path, tuple[int, int]]]) -> None:
+    """Remove what an abandoned bundle wrote, and only if it is still what this render wrote.
+
+    Two renders of the same input are allowed to run at once and share a name -- the claim
+    permits it, because the digests and the renderer all agree. So an unconditional removal here
+    is the mistake the reservation already made once: whichever render failed took away the
+    files the other had just finished, and the paths it had already returned pointed at nothing.
+    A file replaced since is a different file by the only identity a filesystem offers, and this
+    render leaves it alone.
+    """
+
+    for path, identity in committed:
         try:
-            path.unlink(missing_ok=True)
+            if _identity(path) == identity:
+                path.unlink()
         except OSError:
             # The destination is already refusing this render; failing again while tidying up
             # would replace the reason the caller needs with the second one.
