@@ -1052,6 +1052,39 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         self.assertEqual(len(written), 3)
         self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
 
+    def test_a_finished_manifest_protects_the_pictures_it_names(self) -> None:
+        """A claim standing beside this one is not the only way another bundle can be relied on.
+        A render that finished has already given its claim up, and its manifest is what remains
+        naming the pictures -- so a later render that finds one of those pictures gone, redraws
+        it, and then fails must not take it away again. Preexistence cannot answer this: the
+        file genuinely was not there when this render looked."""
+        frame = power_play_series()
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(frame, directory)
+            # The finished bundle loses a picture -- and nothing about the manifest changes.
+            Path(first["paths"]["weekly"]).unlink()
+
+            real = chart_module._render_png
+            calls = 0
+
+            def fail_the_second(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise OSError("the second picture failed")
+                return real(*args, **kwargs)
+
+            chart_module._render_png = fail_the_second
+            try:
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+            finally:
+                chart_module._render_png = real
+
+            restored = Path(first["paths"]["weekly"]).exists()
+
+        self.assertTrue(restored)
+
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but
         refuses hard links is answered by choosing a different directory, not by reporting that
