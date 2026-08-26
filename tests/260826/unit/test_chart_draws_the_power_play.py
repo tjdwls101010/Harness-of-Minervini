@@ -479,6 +479,36 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
 
         self.assertTrue(manifest["artifacts"])
 
+    def test_a_manifest_whose_overlay_block_is_not_a_block_is_refused(self) -> None:
+        """Read one level deep, `power_play` was assumed to be an object and a string there
+        raised an AttributeError the caller could do nothing with."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+            written = Path(manifest["manifest_path"])
+            written.write_text(
+                json.dumps({"input_sha256": manifest["input_sha256"], "power_play": "gone"}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ArtifactNameTaken):
+                _rendered(self.frame, directory)
+
+    def test_a_directory_it_cannot_write_is_the_callers_to_change(self) -> None:
+        """`mkdir(exist_ok=True)` is happy with a directory that is already there, and the first
+        write is several steps later -- so the caller got an internal_error for a destination
+        they could have chosen differently."""
+        from scripts.minervini.chart import UnusableOutputDirectory
+
+        with tempfile.TemporaryDirectory() as directory:
+            sealed = Path(directory) / "sealed"
+            sealed.mkdir()
+            sealed.chmod(0o500)
+            try:
+                with self.assertRaises(UnusableOutputDirectory):
+                    _rendered(self.frame, sealed)
+            finally:
+                sealed.chmod(0o700)
+
     def test_valid_json_that_is_not_a_manifest_is_still_not_this_render(self) -> None:
         """Reaching into a list for a digest raised an AttributeError nobody could act on."""
         with tempfile.TemporaryDirectory() as directory:
@@ -551,6 +581,16 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
                     self._execute_a_render(self.split, directory)
 
         self.assertEqual(caught.exception.args[1], "output_dir")
+
+    def test_every_picture_it_wrote_is_reported_as_a_side_effect(self) -> None:
+        """What was written, all of it. Reporting the first two of three is a file on disk that
+        the envelope never admits to creating."""
+        with tempfile.TemporaryDirectory() as directory:
+            payload = self._execute_a_render(self.frame, directory)
+
+        written = {item["path"] for item in payload["side_effects"] if item["type"] == "chart_artifact"}
+        self.assertEqual(written, {artifact["path"] for artifact in payload["data"]["artifacts"]})
+        self.assertEqual(len(written), 3)
 
     def test_a_chart_that_drew_a_span_points_back_at_what_asked_for_it(self) -> None:
         """ticker.power-play sends a reader here; without the return leg an orchestrator that
@@ -646,6 +686,32 @@ class ThePanelTheFlagCanBeMeasuredOn(unittest.TestCase):
         chart_module._draw_power_play(price, volume, window, span, "power_play")
 
         self.assertTrue([label for label in volume.labels if "x baseline" in label])
+
+    def test_it_draws_no_moving_average(self) -> None:
+        """An average over one span is not the one the daily panel draws at the same dates, and
+        two pictures printing different lines under one name is the quiet disagreement this
+        overlay exists to stop. Worse still: the weekly branch is the fallback, so a lapse here
+        labels values computed from sessions as `SMA 10W`."""
+        close = self.frame["Close"]
+
+        self.assertEqual(chart_module._price_overlays(close, "power_play"), {})
+        self.assertEqual(
+            list(chart_module._price_overlays(close, "daily")), ["EMA 10", "EMA 21", "SMA 50"]
+        )
+        self.assertEqual(
+            list(chart_module._price_overlays(close, "weekly")),
+            ["SMA 10W", "SMA 30W", "SMA 40W"],
+        )
+
+    def test_the_lead_in_before_the_quiet_window_is_there(self) -> None:
+        """A window that begins exactly at the baseline's first session puts that session on the
+        left edge of the page, where a reader cannot tell a boundary from a crop."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        panel = next(a for a in manifest["artifacts"] if a["timeframe"] == "power_play")
+        earliest = min(question["baseline_first_session"] for question in self.questions)
+        self.assertEqual(panel["bars"], len(self.frame.loc[earliest:]) + 5)
 
     def test_a_stock_nobody_is_asking_about_gets_no_third_picture(self) -> None:
         plain, _ = base_series()
@@ -808,12 +874,17 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
         self.assertTrue(price.drawn and volume.drawn)
         for drawn in price.drawn + volume.drawn:
             with self.subTest(label=drawn.get("label")):
+                # Above nothing is not the bar. A rule a millionth of a point wide and a shade
+                # at a millionth of an alpha are both "greater than zero" and neither is on the
+                # picture, so the floors are sizes a person can actually see.
                 if "markersize" in drawn:
                     self.assertGreater(drawn["markersize"], 4)
                 if "linewidth" in drawn:
-                    self.assertGreater(drawn["linewidth"], 0)
+                    self.assertGreater(drawn["linewidth"], 0.5)
                 if "alpha" in drawn:
-                    self.assertGreater(drawn["alpha"], 0)
+                    self.assertGreater(drawn["alpha"], 0.05)
+                if "marker" in drawn:
+                    self.assertNotIn(drawn["marker"], (None, "none", ""))
 
     def test_the_pictures_are_a_size_a_person_can_read(self) -> None:
         """Read off the file, because the figure is the deliverable and its dimensions are the

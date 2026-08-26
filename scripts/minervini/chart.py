@@ -74,10 +74,15 @@ def render_chart_artifacts(
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except OSError as error:
-        # A path that is a file, or under one, or that this process cannot write. All of them
-        # are the caller's to change, and an unhandled OSError became an internal_error naming
-        # `[Errno 17] File exists`, which reads as a defect in the renderer.
+        # A path that is a file, or under one. Both are the caller's to change, and an unhandled
+        # OSError became an internal_error naming `[Errno 17] File exists`, which reads as a
+        # defect in the renderer.
         raise UnusableOutputDirectory(f"{directory} cannot hold chart artifacts: {error}") from error
+    # And one that exists but this process cannot write. `mkdir(exist_ok=True)` is happy with it
+    # and the first write is several steps later, so the caller got the same internal_error for
+    # a directory they could have chosen differently.
+    if not os.access(directory, os.W_OK):
+        raise UnusableOutputDirectory(f"{directory} cannot hold chart artifacts: not writable")
 
     # The same digest the segmentation carries, so an approval can be traced to its picture.
     input_sha256 = bars_fingerprint(daily)
@@ -272,8 +277,12 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
         taken = None
     # Valid JSON that is not an object is still not a manifest, and reaching into it for a
     # digest raised an AttributeError a caller could do nothing with.
+    overlay = taken.get("power_play") if isinstance(taken, Mapping) else None
     held = (
-        (taken.get("input_sha256"), (taken.get("power_play") or {}).get("measured_bars"))
+        (
+            taken.get("input_sha256"),
+            overlay.get("measured_bars") if isinstance(overlay, Mapping) else None,
+        )
         if isinstance(taken, Mapping)
         else (None, None)
     )
@@ -385,12 +394,12 @@ def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
     they are about, and now the whole span with it, so what is drawn is what is being asked --
     by construction rather than by two measurements agreeing.
     """
+    # Built with no readings, which is what makes every question here an open one: answers live
+    # in a request and this capability is not in it.
     evidence = build_power_play_evidence(daily)
     spans: list[dict[str, Any]] = []
     seen: set[Any] = set()
     for question in evidence.get("chart_questions") or []:
-        if question.get("answered") is not None:
-            continue
         # One top can be asked two things -- the volume clause and the flag's tightness -- and
         # they are the same picture. Drawing it twice would stack the markers and double the
         # legend without adding a landmark.
@@ -400,10 +409,10 @@ def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
         # Subscripted rather than `.get`: a landmark the question stopped carrying would
         # otherwise arrive as None and be quietly skipped at drawing time, which is a picture
         # missing a mark and a manifest that never says so.
-        spans.append({name: question[name] for name in _SPAN_LANDMARKS} | {
-            "reading": question["reading"],
-            "peak_date": question["peak_date"],
-        })
+        spans.append(
+            {name: question[name] for name in _SPAN_LANDMARKS}
+            | {"reading": question["reading"]}
+        )
     return {
         "spans": spans,
         # Both digests the question carries, under the words the question uses, because a reader
@@ -450,8 +459,37 @@ def _span_window(daily: pd.DataFrame, spans: list[dict[str, Any]]) -> pd.DataFra
     if not starts:
         return None
     position = int(daily.index.searchsorted(min(starts)))
+    # A start past the last bar is a span this frame does not hold, and slicing from it would
+    # hand back the final few sessions as though they were the structure.
+    if position >= len(daily.index):
+        return None
     window = daily.iloc[max(0, position - _SPAN_CONTEXT_SESSIONS):]
     return window if len(window) > 1 else None
+
+
+def _price_overlays(close: pd.Series, timeframe: str) -> dict[str, pd.Series]:
+    """The averages this panel draws, by the scale its bars are on.
+
+    None at all on the Power Play panel. An average over one span is not the average the daily
+    panel draws at the same dates, and two pictures printing different lines under one name is
+    the quiet disagreement this overlay exists to stop. Worse, the weekly set is the fallback,
+    so a lapse here labels numbers computed from single sessions `SMA 10W`. That panel is for
+    the flag's shape and the volume comparison; the averages are read off the daily.
+    """
+
+    if timeframe == "power_play":
+        return {}
+    if timeframe == "daily":
+        return {
+            "EMA 10": close.ewm(span=10, adjust=False, min_periods=10).mean(),
+            "EMA 21": close.ewm(span=21, adjust=False, min_periods=21).mean(),
+            "SMA 50": close.rolling(50, min_periods=50).mean(),
+        }
+    return {
+        "SMA 10W": close.rolling(10, min_periods=10).mean(),
+        "SMA 30W": close.rolling(30, min_periods=30).mean(),
+        "SMA 40W": close.rolling(40, min_periods=40).mean(),
+    }
 
 
 def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, dict[str, list[str]]]:
@@ -477,18 +515,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
             # a doji stays a doji at any price.
             body_height = max(abs(row["Close"] - row["Open"]), (row["High"] - row["Low"]) * 0.03)
             price_axis.add_patch(Rectangle((position - width / 2, body_low), width, body_height, facecolor=color, edgecolor=color, linewidth=0.6))
-        close = bars["Close"]
-        if timeframe == "power_play":
-            # None here on purpose. An average over one span is not the average the daily panel
-            # draws at the same dates, and two pictures printing different lines under the same
-            # name is the quiet inconsistency this overlay exists to stop. This panel is for the
-            # flag's shape and the volume comparison; the averages are read off the daily.
-            overlays: dict[str, Any] = {}
-        elif timeframe == "daily":
-            overlays = {"EMA 10": close.ewm(span=10, adjust=False, min_periods=10).mean(), "EMA 21": close.ewm(span=21, adjust=False, min_periods=21).mean(), "SMA 50": close.rolling(50, min_periods=50).mean()}
-        else:
-            overlays = {"SMA 10W": close.rolling(10, min_periods=10).mean(), "SMA 30W": close.rolling(30, min_periods=30).mean(), "SMA 40W": close.rolling(40, min_periods=40).mean()}
-        for label, values in overlays.items():
+        for label, values in _price_overlays(bars["Close"], timeframe).items():
             if values.notna().any():
                 price_axis.plot(bars.index, values, linewidth=0.9, label=label)
         drawn, pivot_drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
