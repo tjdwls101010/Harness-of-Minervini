@@ -192,10 +192,10 @@ def render_chart_artifacts(
         # check above -- the parent was writable and the manifest name was free -- and came
         # back as `internal_error`, which tells a reader the harness is broken when what is
         # broken is the path they handed it.
-        _take_back(manifest_path)
+        _take_back(manifest_path, reserved)
         raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
     except BaseException:
-        _take_back(manifest_path)
+        _take_back(manifest_path, reserved)
         raise
     finally:
         _release(reserved)
@@ -466,20 +466,26 @@ def _still_holding(reserved: tuple[Path, int]) -> bool:
         return False
 
 
-def _take_back(manifest_path: Path) -> None:
+def _take_back(manifest_path: Path, reserved: tuple[Path, int]) -> None:
     """Clear this name of pictures, unless a finished bundle stands under it.
 
     Clearing at all is worth doing because a bundle that stopped half-way leaves a picture under
     a digest-stamped name beside an envelope reporting nothing written.
 
-    Called with this render's claim held, and the claim is exclusive, so no other render is
-    inside this name and none can enter until the claim is given up. That is what makes the
-    sweep safe and what four earlier rules were trying to reason around while renders were
-    allowed to overlap. A finished manifest is the one thing left to check: this render never
-    reached its own, so one standing here belongs to a bundle somebody may already be holding
-    paths from.
+    Safe only while this render's claim is held, which is what makes the name exclusive: no
+    other render is inside it and none can enter until the claim is given up. That is what four
+    earlier rules were trying to reason around while renders were allowed to overlap. So the
+    claim is asked for first, by inode -- a destination renamed mid-render leaves this path
+    leading to a directory another render is inside, holding its own claim and its own
+    same-named panels, and sweeping there deletes a live render's work. Nothing there is this
+    render's, and nothing is what it takes.
+
+    A finished manifest is the other thing to check: this render never reached its own, so one
+    standing here belongs to a bundle somebody may already be holding paths from.
     """
 
+    if not _still_holding(reserved):
+        return
     try:
         if manifest_path.exists():
             return
@@ -840,7 +846,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
     )
     try:
         dates = mdates.date2num(bars.index.to_pydatetime())
-        width = 0.65 if timeframe in _BY_SESSION else 3.25
+        width = _bar_width(timeframe)
         colors = np.where(bars["Close"].to_numpy() >= bars["Open"].to_numpy(), "#18794e", "#b42318")
         for position, (_, row), color in zip(dates, bars.iterrows(), colors, strict=True):
             price_axis.vlines(position, row["Low"], row["High"], color=color, linewidth=0.8)
@@ -1117,9 +1123,18 @@ def _shade_baselines(
         for name, day in (("baseline_first_session", str(first)), ("baseline_last_session", str(last))):
             if (name, day) not in held:
                 held.append((name, day))
+    # A bar is drawn centred on its session, so a shade running centre to centre leaves half of
+    # each boundary bar outside a window that counted the whole of it. The reader's question on
+    # this panel is which bars the median was taken over, and they answer it by looking at what
+    # the shade covers: on a real ABCL render the first and last sessions of the window were
+    # half in and half out of the rectangle their own volume is inside of.
+    edge = pd.Timedelta(days=_bar_width(timeframe) / 2)
     for (start, end), held in windows.items():
         suffix = f" ({held[0][1]})" if len(windows) > 1 else ""
-        volume_axis.axvspan(start, end, color="#7a5af5", alpha=0.12, label=f"baseline volume{suffix}")
+        volume_axis.axvspan(
+            start - edge, end + edge, color="#7a5af5", alpha=0.12,
+            label=f"baseline volume{suffix}",
+        )
         # The divisor drawn across the window it was taken over, because it is the one number on
         # this panel a reader cannot point at. Every ratio is a division by the window's median,
         # and the shade alone invites the comparison the eye actually makes -- against the
@@ -1133,12 +1148,19 @@ def _shade_baselines(
         levels = divisors.get((start, end), set())
         if timeframe in _BY_SESSION and len(levels) == 1:
             volume_axis.hlines(
-                levels.pop(), start, end, color="#7a5af5", linewidth=1.4, linestyle=":",
+                levels.pop(), start - edge, end + edge, color="#7a5af5", linewidth=1.4,
+                linestyle=":",
                 zorder=2.5, label=f"baseline median{suffix}",
             )
         for name, day in held:
             drawn[name].append(day)
     return drawn
+
+
+def _bar_width(timeframe: str) -> float:
+    """How wide a bar is drawn, in days -- the unit this figure's x axis is in."""
+
+    return 0.65 if timeframe in _BY_SESSION else 3.25
 
 
 def _containing_bar(index: pd.DatetimeIndex, day: str, timeframe: str) -> pd.Timestamp | None:

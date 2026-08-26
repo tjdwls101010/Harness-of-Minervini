@@ -1127,10 +1127,12 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
         self.frame = power_play_series()
         self.span = _power_play_spans(self.frame, "digest")
 
-    def test_the_shade_is_a_different_colour_from_the_panel_under_it(self) -> None:
+    def test_nothing_is_drawn_the_colour_of_the_panel_under_it(self) -> None:
         """Size was the only visibility this class asked about. Painted white on a white panel
-        the baseline window vanishes at every size, and its legend entry stays -- so the picture
-        names a window a reader cannot find, which is the multiple's own divisor."""
+        the baseline window vanishes at every size and its legend entry stays -- so the picture
+        names a window a reader cannot find, which is the multiple's own divisor. The same edit
+        to the marker colour erased every peak star and flag-low cross while `power_play_drawn`
+        went on reporting all of them."""
         from matplotlib import colors as mcolors
         import matplotlib.pyplot as plt
 
@@ -1138,12 +1140,12 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
         _draw_power_play(price, volume, self.frame, self.span, "daily")
 
         under = mcolors.to_rgb(plt.rcParams["axes.facecolor"])
-        shaded = [drawn for drawn in volume.drawn if "color" in drawn and "alpha" in drawn]
+        shaded = [drawn for drawn in price.drawn + volume.drawn if "color" in drawn]
         self.assertTrue(shaded)
         for drawn in shaded:
             with self.subTest(label=drawn.get("label")):
                 over = mcolors.to_rgb(drawn["color"])
-                alpha = float(drawn["alpha"])
+                alpha = float(drawn.get("alpha", 1.0))
                 # What the eye is given, which is the colour composited onto the panel rather
                 # than the colour asked for: a strong hue at a low alpha is a faint wash. The
                 # floor is under what this module draws today -- the baseline shade lands at
@@ -1630,11 +1632,20 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
 
         chart_module._shade_baselines(volume, self.frame, self.span["spans"], "daily")
 
+        # Whole bars. A bar is drawn centred on its session, so a rectangle running centre to
+        # centre leaves half of each boundary session outside a window that counted all of it --
+        # and this panel is where a reader answers which sessions the median was taken over.
+        edge = pd.Timedelta(days=chart_module._bar_width("daily") / 2)
         self.assertTrue(volume.spans)
         for start, end in volume.spans:
             with self.subTest(start=start):
-                self.assertEqual(start, pd.Timestamp(self.span["spans"][0]["baseline_first_session"]))
-                self.assertEqual(end, pd.Timestamp(self.span["spans"][0]["baseline_last_session"]))
+                self.assertEqual(
+                    start,
+                    pd.Timestamp(self.span["spans"][0]["baseline_first_session"]) - edge,
+                )
+                self.assertEqual(
+                    end, pd.Timestamp(self.span["spans"][0]["baseline_last_session"]) + edge
+                )
                 self.assertGreater(end - start, pd.Timedelta(days=1))
 
     def test_the_picture_and_the_manifest_name_the_ticker_that_was_asked_for(self) -> None:
@@ -1772,12 +1783,15 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                 ].median()
             ),
         )
+        # Across the shade rather than across the window's centres: a line stopping short of
+        # the rectangle it belongs to reads as a level that ran out partway through it.
+        edge = pd.Timedelta(days=chart_module._bar_width("daily") / 2)
         self.assertEqual(
             volume.levels,
             [(
                 float(divisor),
-                pd.Timestamp(self.span["spans"][0]["baseline_first_session"]),
-                pd.Timestamp(self.span["spans"][0]["baseline_last_session"]),
+                pd.Timestamp(self.span["spans"][0]["baseline_first_session"]) - edge,
+                pd.Timestamp(self.span["spans"][0]["baseline_last_session"]) + edge,
             )],
         )
         self.assertIn("baseline median", volume.labels)
@@ -2136,6 +2150,38 @@ class AManifestNeverNamesAPictureThatIsNotThere(unittest.TestCase):
 
         self.assertIn("no longer the file at its own path", str(refusal))
         self.assertEqual(published, [])
+
+    def test_rollback_in_a_directory_this_render_no_longer_holds_takes_nothing(self) -> None:
+        """Refusing to publish was only half of it. Rollback runs next, and it sweeps this
+        render's panel names -- which in the directory that now answers to this path are another
+        render's live ones, drawn under its own claim. The refusal saved the manifest and the
+        cleanup deleted the pictures."""
+        frame = power_play_series()
+
+        with tempfile.TemporaryDirectory() as outer:
+            root = Path(outer)
+            destination = root / "out"
+            destination.mkdir()
+            standing: list[Path] = []
+
+            def swap_in_another_render(parent: Path) -> None:
+                names = sorted(path.name for path in parent.iterdir())
+                parent.rename(root / "moved")
+                parent.mkdir()
+                for name in names:
+                    # The other render's own claim and its own three panels, under the names
+                    # this render is about to go looking for.
+                    (parent / name).write_bytes(b"the other render's work")
+                    standing.append(parent / name)
+
+            refusal = self._render_losing(frame, str(destination), swap_in_another_render)
+
+            self.assertIn("no longer the file at its own path", str(refusal))
+            self.assertEqual(len(standing), 4)
+            for path in standing:
+                with self.subTest(name=path.name):
+                    self.assertTrue(path.exists())
+                    self.assertEqual(path.read_bytes(), b"the other render's work")
 
     def test_what_the_caller_put_beside_the_bundle_is_not_this_render_s_to_take(self) -> None:
         """The sweep is for a panel this renderer wrote and abandoned. Reaching every
