@@ -687,6 +687,36 @@ class ThePanelTheFlagCanBeMeasuredOn(unittest.TestCase):
 
         self.assertTrue([label for label in volume.labels if "x baseline" in label])
 
+    def test_a_span_starting_past_the_last_bar_gets_no_panel(self) -> None:
+        """Slicing from a start this frame does not reach hands back the final few sessions.
+
+        They would be labelled the span, carry the landmarks' legend, and be measured for a
+        flag depth -- a picture of the last week answering a question about a structure that is
+        not on it. A panel that cannot hold the span is not a panel.
+        """
+        past_the_end = (self.frame.index[-1] + pd.Timedelta(days=30)).date().isoformat()
+        real = chart_module._power_play_spans
+
+        def beyond(daily, digest):
+            answer = real(daily, digest)
+            answer["spans"] = [
+                dict(span, baseline_first_session=past_the_end, advance_anchor_date=past_the_end)
+                for span in answer["spans"]
+            ]
+            return answer
+
+        chart_module._power_play_spans = beyond
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                manifest = _rendered(self.frame, directory)
+                written = sorted(Path(directory).glob("*.png"))
+        finally:
+            chart_module._power_play_spans = real
+
+        timeframes = [artifact["timeframe"] for artifact in manifest["artifacts"]]
+        self.assertEqual(timeframes, ["weekly", "daily"])
+        self.assertEqual(len(written), 2)
+
     def test_it_draws_no_moving_average(self) -> None:
         """An average over one span is not the one the daily panel draws at the same dates, and
         two pictures printing different lines under one name is the quiet disagreement this

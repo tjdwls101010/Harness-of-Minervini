@@ -82,6 +82,6 @@
       "partial": "Completed price history stops before the requested session, so no artifact is written.",
       "unavailable": "Completed price history is unavailable, or the history the provider returned is not renderable -- the reason names which, in the same vocabulary ticker.swings uses, because a caller told only that something failed cannot tell a data problem from a bug."
     },
-    "summary": "Render auditable weekly-first and daily chart artifacts from the same completed bars used by deterministic analysis."
+    "summary": "Render auditable weekly-first and daily chart artifacts, plus a span-only panel wherever there is Power Play structure to read, from the same completed bars used by deterministic analysis."
   }
 }
