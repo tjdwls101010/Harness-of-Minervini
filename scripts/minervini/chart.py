@@ -23,9 +23,7 @@ import numpy as np
 import pandas as pd
 
 from .setup_structure import bars_fingerprint, read_bars
-from . import doctrine
-from .power_play import measure_power_play
-from .power_play_evidence import compile_power_play_spec
+from .power_play_evidence import build_power_play_evidence
 from .swings import canonical_chain
 
 
@@ -40,10 +38,9 @@ class UnrenderableHistory(ValueError):
     """
 
 
-RENDERER_VERSION = "1.1.0"
+RENDERER_VERSION = "1.2.0"
 _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _TICKER_PATTERN = re.compile(r"[A-Z][A-Z0-9.-]{0,9}")
-_CLAIM = "fundamentals.power_play_exception"
 
 
 def render_chart_artifacts(
@@ -81,7 +78,7 @@ def render_chart_artifacts(
     # volume clause on its own -- the source says "commences on huge volume" and names no
     # number -- so it hands back a question and waits. Sending that reader to a picture with
     # none of the span on it asks them about a session the chart never identifies.
-    power_play = _power_play_span(daily, input_sha256)
+    power_play = _power_play_spans(daily, input_sha256)
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
@@ -188,49 +185,50 @@ _SPAN_LANDMARKS = (
     "advance_peak_volume_date",
     "baseline_first_session",
     "baseline_last_session",
+    "peak_high",
+    "flag_low",
+    "advance_peak_volume_ratio",
 )
 
 
-def _power_play_span(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
-    """The landmarks the Power Play numbers were read between, and nothing derived here.
+def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
+    """The spans the capability is currently asking a person about, and no others.
 
-    Every value is lifted from the measurement rather than recomputed, so the picture cannot
-    disagree with the capability that asked the question. The digest travels with them for the
-    same reason the segmentation's does: an approval cites it, and a span measured from other
-    bars than the picture was cut from is an approval of something the reader never saw.
+    An earlier version measured the structure here and decided for itself whether it was worth
+    drawing, and both halves of that were wrong. It measured only the highest top while the
+    capability walks a chain of candidates and can be asking about a lower one -- so the reader
+    got a picture of a top nobody had asked about, carrying the same digest, which meant their
+    answer to the wrong question was accepted. And the gate it decided on read the advance from
+    low to high where the capability reads it close to close, so a single wick was the
+    difference between drawing and not.
+
+    Both disappear if the chart stops having an opinion. The questions already name the top
+    they are about, and now the whole span with it, so what is drawn is what is being asked --
+    by construction rather than by two measurements agreeing.
     """
-    measured = measure_power_play(daily, compile_power_play_spec())
-    span = {name: measured.get(name) for name in _SPAN_LANDMARKS}
-    span["peak_high"] = measured.get("peak_high")
-    span["flag_low"] = measured.get("flag_low")
-    span["advance_peak_volume_ratio"] = measured.get("advance_peak_volume_ratio")
-    span["rejection"] = measured.get("rejection")
-    span["drawn_because"] = _why_draw(measured)
-    span["bars_fingerprint"] = input_sha256
-    return span
-
-
-def _why_draw(measured: Mapping[str, Any]) -> str | None:
-    """Whether this history holds an advance the volume clause could be asked about.
-
-    The arithmetic succeeds on any history -- a placid base has a highest bar, a first bar of
-    its rise and a quiet window before it, and reporting those as a Power Play span would put
-    a claim on the picture that no measurement made. What separates the two is the pair of
-    gates the source states about the advance itself, so they are read from the registry
-    rather than restated here: the same numbers the capability decides on, asked here only as
-    "is there an explosive move at all", which is the precondition for the question existing.
-
-    This is not a verdict and cannot become one. Everything after the advance -- the flag, the
-    volume clause, the market -- is the capability's to decide and a chart may not anticipate it.
-    """
-    if measured.get("rejection") is not None:
-        return None
-    advance_pct, advance_weeks = measured.get("advance_pct"), measured.get("advance_weeks")
-    if advance_pct is None or advance_weeks is None:
-        return None
-    minimum = doctrine.evaluate_gate(_CLAIM, "advance_minimum_pct", float(advance_pct))
-    maximum = doctrine.evaluate_gate(_CLAIM, "advance_maximum_weeks", float(advance_weeks))
-    return "advance_gates_met" if {minimum["state"], maximum["state"]} == {"pass"} else None
+    evidence = build_power_play_evidence(daily)
+    spans: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    for question in evidence.get("chart_questions") or []:
+        if question.get("answered") is not None:
+            continue
+        # One top can be asked two things -- the volume clause and the flag's tightness -- and
+        # they are the same picture. Drawing it twice would stack the markers and double the
+        # legend without adding a landmark.
+        if question["reading"] in seen:
+            continue
+        seen.add(question["reading"])
+        spans.append({name: question.get(name) for name in _SPAN_LANDMARKS} | {
+            "reading": question["reading"],
+            "peak_date": question["peak_date"],
+        })
+    return {
+        "spans": spans,
+        # The digest a reader compares against the question's `drawn_bars`. Same value the
+        # segmentation carries, for the same reason.
+        "bars_fingerprint": input_sha256,
+        "asked_about": [span["peak_date"] for span in spans],
+    }
 
 
 def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, list[str], bool]:
@@ -321,90 +319,124 @@ def _draw_power_play(
     power_play: dict[str, Any] | None,
     timeframe: str,
 ) -> tuple[list[str], bool]:
-    """Put the Power Play span on the picture the volume clause is judged from.
+    """Put the spans being asked about on the picture the volume clause is judged from.
 
-    Three things the question needs and the chart did not have. The advance: where it started
+    Three things each question needs and the chart did not have. The advance: where it started
     and the peak it ended on, because "commences" is a claim about a place in a move. The
     baseline: the quiet window the ratio was divided by, shaded under the volume bars so the
     comparison is one a person can make with their eyes instead of taking on faith. And the
     heaviest session of the advance, marked on the volume panel rather than the price one --
     the clause is about that bar's volume, and the price panel is not where anybody judges it.
+
+    Every span the capability has an open question about is drawn, because a chain of tops is
+    asked about one at a time and a reader answering the third one needs to see the third one.
+    Drawn by landmark rather than by span, though: a chain is usually one advance read to
+    several tops, so the anchor, the baseline and the heaviest session are the same bar in
+    every reading. Per span, the picture stacked identical marks on identical pixels and the
+    legend said the same sentence twice with a different date after it.
     """
-    span = power_play or {}
-    if span.get("drawn_because") is None:
+    spans = (power_play or {}).get("spans") or []
+    if not spans:
         return [], False
     drawn: list[str] = []
 
-    baseline = _shade_baseline(volume_axis, bars, span, timeframe)
-    if baseline:
-        drawn.extend(baseline)
+    drawn.extend(_shade_baselines(volume_axis, bars, spans, timeframe))
 
-    # Each landmark says which one it is. A single shared legend entry leaves a reader
-    # looking at a star and a cross with nothing telling them which is the top of the advance
-    # and which is the bottom of the flag -- the picture would name the structure without
-    # naming any part of it, which is the same silence this whole overlay exists to end.
-    # Where the advance began is a date, not a price, and a marker sitting at that bar's low
-    # is a tick lost among three years of candles -- on a real chart it was invisible, which is
-    # the one landmark "commences on huge volume" is a claim about. A rule down the whole panel
-    # reads at any scale, and with the star at the other end the move is bracketed rather than
-    # dotted.
-    start = span.get("advance_anchor_date")
-    stamp = _containing_bar(bars.index, str(start), timeframe) if start else None
-    if stamp is not None:
-        price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label="advance begins")
-        drawn.append(str(start))
-
-    for name, price, marker, label in (
-        ("peak_date", span.get("peak_high"), "*", "advance peak"),
-        ("flag_low_date", span.get("flag_low"), "x", "flag low"),
-    ):
-        day = span.get(name)
-        stamp = _containing_bar(bars.index, str(day), timeframe) if day else None
+    # A landmark earns a date in its label only when the readings disagree about where it is.
+    for day, suffix in _distinct(spans, "advance_anchor_date"):
+        stamp = _containing_bar(bars.index, day, timeframe)
         if stamp is None:
             continue
-        level = float(price) if price is not None else float(bars.loc[stamp, "Low"])
-        price_axis.plot(
-            [stamp], [level], marker=marker, color="#7a5af5", markersize=10, linestyle="none",
-            label=label,
+        # Where the advance began is a date, not a price, and a marker sitting at that bar's
+        # low is a tick lost among three years of candles -- on a real chart it was invisible,
+        # which is the one landmark "commences on huge volume" is a claim about. A rule down
+        # the whole panel reads at any scale, and with the star at the other end the move is
+        # bracketed rather than dotted.
+        price_axis.axvline(stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8, label=f"advance begins{suffix}")
+        drawn.append(day)
+
+    # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
+    # is a detected swing high -- on MRNA the two were the same bar at the same price -- and a
+    # filled marker drawn afterwards covered the blue one completely while the manifest went on
+    # reporting that the anchor had been drawn.
+    for date_field, price_field, marker, label in (
+        ("peak_date", "peak_high", "*", "advance peak"),
+        ("flag_low_date", "flag_low", "x", "flag low"),
+    ):
+        for day, suffix in _distinct(spans, date_field):
+            stamp = _containing_bar(bars.index, day, timeframe)
+            if stamp is None:
+                continue
+            price = next(span[price_field] for span in spans if str(span.get(date_field)) == day)
+            level = float(price) if price is not None else float(bars.loc[stamp, "Low"])
+            price_axis.plot(
+                [stamp], [level], marker=marker, color="#7a5af5", markersize=13, linestyle="none",
+                markerfacecolor="none", markeredgewidth=1.6, zorder=1.5, label=f"{label}{suffix}",
+            )
+            drawn.append(day)
+
+    marked = False
+    for day, suffix in _distinct(spans, "advance_peak_volume_date"):
+        stamp = _containing_bar(bars.index, day, timeframe)
+        if stamp is None:
+            continue
+        ratio = next(span["advance_peak_volume_ratio"] for span in spans if str(span.get("advance_peak_volume_date")) == day)
+        # The ratio belongs on the daily picture and only there. It divides one session's
+        # volume by a session baseline, and a weekly bar is a sum of five -- printing "6.0x"
+        # beside a weekly bar that towers over the ones after it invites the reader to check
+        # the arithmetic against bars it was never computed from. The week is still marked,
+        # because the weekly is read first and knowing which week holds the event is what sends
+        # a reader to the right place on the daily.
+        if timeframe == "daily" and ratio is not None:
+            label = f"heaviest advance session ({ratio:.1f}x baseline)"
+        else:
+            label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
+        volume_axis.plot(
+            [stamp], [float(bars.loc[stamp, "Volume"])], marker="v", color="#7a5af5",
+            markersize=9, linestyle="none", label=f"{label}{suffix}",
         )
-        drawn.append(str(day))
-
-    heaviest = span.get("advance_peak_volume_date")
-    stamp = _containing_bar(bars.index, str(heaviest), timeframe) if heaviest else None
-    if stamp is None:
-        return drawn, False
-    # The ratio belongs on the daily picture and only there. It divides one session's volume
-    # by a session baseline, and a weekly bar is a sum of five -- printing "6.0x" beside a
-    # weekly bar that towers over the ones after it invites the reader to check the arithmetic
-    # against bars it was never computed from. The week is still marked, because the weekly is
-    # read first and knowing which week holds the event is what sends a reader to the right
-    # place on the daily.
-    ratio = span.get("advance_peak_volume_ratio")
-    if timeframe == "daily" and ratio is not None:
-        label = f"heaviest advance session ({ratio:.1f}x baseline)"
-    else:
-        label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
-    volume_axis.plot(
-        [stamp], [float(bars.loc[stamp, "Volume"])], marker="v", color="#7a5af5",
-        markersize=9, linestyle="none", label=label,
-    )
-    volume_axis.legend(loc="upper left", fontsize=8, frameon=False)
-    drawn.append(str(heaviest))
-    return drawn, True
+        drawn.append(day)
+        marked = True
+    if marked:
+        volume_axis.legend(loc="upper left", fontsize=8, frameon=False)
+    return drawn, marked
 
 
-def _shade_baseline(volume_axis: Any, bars: pd.DataFrame, span: dict[str, Any], timeframe: str) -> list[str]:
-    """The quiet window the ratio was measured against, or nothing when the chart misses it."""
+def _distinct(spans: list[dict[str, Any]], field: str) -> list[tuple[str, str]]:
+    """Each value the readings gave for one landmark, with the date that tells them apart.
 
-    first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
-    if not first or not last:
-        return []
-    start = _containing_bar(bars.index, str(first), timeframe)
-    end = _containing_bar(bars.index, str(last), timeframe)
-    if start is None or end is None:
-        return []
-    volume_axis.axvspan(start, end, color="#7a5af5", alpha=0.12, label="baseline volume")
-    return [str(first), str(last)]
+    A chain read to three tops shares one advance, so its anchor is one bar and wants one
+    legend entry. The peaks are what differ, and only then is a date after the label doing any
+    work for the reader.
+    """
+    values: list[str] = []
+    for span in spans:
+        value = span.get(field)
+        if value is not None and str(value) not in values:
+            values.append(str(value))
+    if len(values) < 2:
+        return [(value, "") for value in values]
+    return [(value, f" ({value})") for value in values]
+
+
+def _shade_baselines(volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str, Any]], timeframe: str) -> list[str]:
+    """The quiet windows the ratios were measured against, one shade per distinct window."""
+
+    drawn: list[str] = []
+    windows: list[tuple[str, str]] = []
+    for span in spans:
+        first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
+        if first and last and (str(first), str(last)) not in windows:
+            windows.append((str(first), str(last)))
+    for first, last in windows:
+        start = _containing_bar(bars.index, first, timeframe)
+        end = _containing_bar(bars.index, last, timeframe)
+        if start is None or end is None:
+            continue
+        suffix = f" ({first})" if len(windows) > 1 else ""
+        volume_axis.axvspan(start, end, color="#7a5af5", alpha=0.12, label=f"baseline volume{suffix}")
+        drawn.extend((first, last))
+    return drawn
 
 
 def _containing_bar(index: pd.DatetimeIndex, day: str, timeframe: str) -> pd.Timestamp | None:

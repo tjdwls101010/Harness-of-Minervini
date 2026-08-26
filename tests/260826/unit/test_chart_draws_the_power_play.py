@@ -23,10 +23,12 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from scripts.minervini.chart import _draw_power_play, _power_play_span, render_chart_artifacts
+import pandas as pd
+
+from scripts.minervini.chart import _draw_power_play, _power_play_spans, render_chart_artifacts
 from scripts.minervini.power_play import measure_power_play
-from scripts.minervini.power_play_evidence import compile_power_play_spec
-from tests.series import base_series, power_play_series
+from scripts.minervini.power_play_evidence import build_power_play_evidence, compile_power_play_spec
+from tests.series import base_series, power_play_series, two_tops_that_both_await_the_chart_series
 
 
 def _rendered(frame, directory):
@@ -38,25 +40,28 @@ def _rendered(frame, directory):
 class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
     def setUp(self) -> None:
         self.frame = power_play_series()
-        self.measured = measure_power_play(self.frame, compile_power_play_spec())
+        self.questions = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
 
-    def test_the_fixture_really_is_a_measurable_power_play(self) -> None:
-        self.assertIsNone(self.measured["rejection"])
-        self.assertEqual(self.measured["advance_anchor_date"], "2026-03-26")
-        self.assertEqual(self.measured["peak_date"], "2026-04-30")
+    def test_the_fixture_really_has_the_capability_asking(self) -> None:
+        self.assertTrue(self.questions)
 
-    def test_the_manifest_carries_the_span_the_numbers_were_read_from(self) -> None:
+    def test_the_manifest_carries_the_span_each_question_is_about(self) -> None:
+        """Not a span the chart measured for itself -- the values are the question's own, so the
+        two cannot drift into describing different tops with the same digest on both."""
         with tempfile.TemporaryDirectory() as directory:
             manifest = _rendered(self.frame, directory)
 
-        power_play = manifest["power_play"]
-        self.assertEqual(power_play["drawn_because"], "advance_gates_met")
-        self.assertEqual(power_play["advance_anchor_date"], self.measured["advance_anchor_date"])
-        self.assertEqual(power_play["peak_date"], self.measured["peak_date"])
-        self.assertEqual(power_play["flag_low_date"], self.measured["flag_low_date"])
-        self.assertEqual(power_play["advance_peak_volume_date"], self.measured["advance_peak_volume_date"])
-        self.assertEqual(power_play["baseline_first_session"], self.measured["baseline_first_session"])
-        self.assertEqual(power_play["baseline_last_session"], self.measured["baseline_last_session"])
+        drawn = {span["peak_date"]: span for span in manifest["power_play"]["spans"]}
+        self.assertEqual(set(drawn), {question["peak_date"] for question in self.questions})
+        for question in self.questions:
+            span = drawn[question["peak_date"]]
+            for landmark in ("advance_anchor_date", "flag_low_date", "advance_peak_volume_date",
+                             "baseline_first_session", "baseline_last_session"):
+                with self.subTest(peak=question["peak_date"], landmark=landmark):
+                    self.assertEqual(span[landmark], question[landmark])
 
     def test_it_names_one_set_of_bars_with_everything_else_on_the_page(self) -> None:
         """An approval cites the digest, so a span measured from other bars than the picture
@@ -65,6 +70,7 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
             manifest = _rendered(self.frame, directory)
 
         self.assertEqual(manifest["power_play"]["bars_fingerprint"], manifest["input_sha256"])
+        self.assertEqual(manifest["power_play"]["bars_fingerprint"], self.questions[0]["drawn_bars"])
 
     def test_each_picture_reports_which_landmarks_it_actually_shows(self) -> None:
         """The same contract the anchors already keep: what the picture contains, not what was
@@ -75,8 +81,9 @@ class TheChartCarriesTheStructureItAsksAbout(unittest.TestCase):
         for artifact in manifest["artifacts"]:
             with self.subTest(timeframe=artifact["timeframe"]):
                 self.assertIn("power_play_drawn", artifact)
-                self.assertIn(self.measured["peak_date"], artifact["power_play_drawn"])
-                self.assertIn(self.measured["advance_anchor_date"], artifact["power_play_drawn"])
+                for question in self.questions:
+                    self.assertIn(question["peak_date"], artifact["power_play_drawn"])
+                    self.assertIn(question["advance_anchor_date"], artifact["power_play_drawn"])
 
     def test_the_session_the_volume_question_is_about_is_marked_on_the_volume_axis(self) -> None:
         """The clause is about one bar's volume, and the price panel is not where a reader
@@ -106,8 +113,10 @@ class RecordingAxis:
         self.labels: list[str] = []
         self.spans: list[tuple] = []
         self.rules: list[Any] = []
+        self.points: list[tuple] = []
 
-    def plot(self, _x, _y, **kwargs) -> None:
+    def plot(self, x, y, **kwargs) -> None:
+        self.points.append((x[0], float(y[0])))
         if kwargs.get("label"):
             self.labels.append(str(kwargs["label"]))
 
@@ -137,7 +146,7 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
 
     def setUp(self) -> None:
         self.frame = power_play_series()
-        self.span = _power_play_span(self.frame, "irrelevant-digest")
+        self.span = _power_play_spans(self.frame, "irrelevant-digest")
         self.weekly = (
             self.frame.resample("W-FRI")
             .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
@@ -180,13 +189,16 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
         self.assertEqual(len(price.rules), 1)
 
 
-class AStockWithNoSuchStructure(unittest.TestCase):
+class AStockNobodyIsAskingAbout(unittest.TestCase):
     """Drawing is not the same as claiming.
 
     The arithmetic succeeds on any history: an ordinary base has a highest bar, a first bar of
-    its rise and a quiet window before it. Reporting those as a Power Play span would put a
-    claim on the picture that no measurement made, and a reader who came to that chart for
-    some other reason would be looking at a structure nobody said was there."""
+    its rise and a quiet window before it. An earlier version drew whenever it liked the look
+    of those, and put a Power Play span on charts the capability had asked nothing about --
+    AAOI, OCC, HPE and MRNA all drew while every one of them was `not_qualified` with no
+    question outstanding. Now the questions are the only reason to draw, so there is nothing
+    left to disagree with.
+    """
 
     def setUp(self) -> None:
         self.frame, _ = base_series()
@@ -200,32 +212,99 @@ class AStockWithNoSuchStructure(unittest.TestCase):
         self.assertLess(self.measured["advance_pct"], 100)
         self.assertIsNotNone(self.measured["peak_date"])
 
-    def test_so_nothing_is_drawn_and_the_manifest_says_it_was_not(self) -> None:
+    def test_but_the_capability_asks_nothing_about_it(self) -> None:
+        open_questions = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
+
+        self.assertEqual(open_questions, [])
+
+    def test_so_nothing_is_drawn(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             manifest = _rendered(self.frame, directory)
 
-        self.assertIsNone(manifest["power_play"]["drawn_because"])
+        self.assertEqual(manifest["power_play"]["spans"], [])
         for artifact in manifest["artifacts"]:
             with self.subTest(timeframe=artifact["timeframe"]):
                 self.assertEqual(artifact["power_play_drawn"], [])
                 self.assertFalse(artifact["heaviest_advance_session_drawn"])
 
-    def test_an_advance_that_took_too_long_is_not_one_either(self) -> None:
-        """Both gates, not just the size. The source bounds how long the move may take, and a
-        stock that doubled at a stroll did not do it explosively.
 
-        Forty-five sessions of rise fills the measurement's advance window, so the move is read
-        from as far back as it looks and still runs the full eight weeks -- clearing the size
-        gate and failing the duration one, which is the pair this test needs."""
-        slow = power_play_series(advance_sessions=45, advance_pct=160.0, dormancy_sessions=60)
-        measured = measure_power_play(slow, compile_power_play_spec())
-        self.assertGreaterEqual(measured["advance_pct"], 100)
-        self.assertGreaterEqual(measured["advance_weeks"], 8)
+class EveryTopTheCapabilityIsAskingAbout(unittest.TestCase):
+    """A chain of candidate tops is asked about one at a time, and the chart drew only the
+    highest.
 
+    So a reader sent to answer about the second top saw the first one, with the same digest on
+    the picture -- which meant the seam accepted an answer read off a structure the question
+    was not about. That is a worse failure than drawing nothing: the reader has no way to know
+    they are looking at the wrong top, and the harness has no way to notice either.
+    """
+
+    def setUp(self) -> None:
+        self.frame = two_tops_that_both_await_the_chart_series()
+        self.questions = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
+
+    def test_the_fixture_really_asks_about_more_than_one_top(self) -> None:
+        self.assertGreater(len({question["peak_date"] for question in self.questions}), 1)
+
+    def test_every_one_of_those_tops_is_on_the_picture(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            manifest = _rendered(slow, directory)
+            manifest = _rendered(self.frame, directory)
 
-        self.assertIsNone(manifest["power_play"]["drawn_because"])
+        asked = {question["peak_date"] for question in self.questions}
+        self.assertEqual(set(manifest["power_play"]["asked_about"]), asked)
+        for artifact in manifest["artifacts"]:
+            with self.subTest(timeframe=artifact["timeframe"]):
+                self.assertTrue(asked.issubset(set(artifact["power_play_drawn"])))
+
+    def test_a_top_asked_two_things_is_still_drawn_once(self) -> None:
+        """The volume clause and the flag's tightness are two questions about one picture, and
+        drawing it twice stacks the markers and doubles the legend without adding a landmark."""
+        spans = _power_play_spans(self.frame, "digest")["spans"]
+
+        self.assertEqual(len(spans), len({span["peak_date"] for span in spans}))
+
+
+class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
+    """A reviewer moved the heaviest-volume marker onto the advance anchor and every test here
+    still passed, because they all asked whether something was drawn and never where."""
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.span = _power_play_spans(self.frame, "digest")["spans"][0]
+
+    def test_the_volume_marker_sits_on_the_session_the_ratio_belongs_to(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, {"spans": [self.span]}, "daily")
+
+        expected = pd.Timestamp(self.span["advance_peak_volume_date"])
+        self.assertEqual([point[0] for point in volume.points], [expected])
+        self.assertEqual(volume.points[0][1], float(self.frame.loc[expected, "Volume"]))
+
+    def test_the_peak_and_the_flag_low_sit_on_their_own_bars_at_their_own_prices(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, {"spans": [self.span]}, "daily")
+
+        self.assertEqual(
+            price.points,
+            [
+                (pd.Timestamp(self.span["peak_date"]), float(self.span["peak_high"])),
+                (pd.Timestamp(self.span["flag_low_date"]), float(self.span["flag_low"])),
+            ],
+        )
+
+    def test_the_advance_rule_stands_on_the_anchor_session(self) -> None:
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        _draw_power_play(price, volume, self.frame, {"spans": [self.span]}, "daily")
+
+        self.assertEqual(price.rules, [pd.Timestamp(self.span["advance_anchor_date"])])
 
 
 if __name__ == "__main__":

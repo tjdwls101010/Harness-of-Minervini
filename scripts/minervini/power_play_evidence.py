@@ -710,6 +710,20 @@ def build_power_play_evidence(
                     "peak_date": reading["peak_date"],
                     "advance_anchor_date": reading["advance_anchor_date"],
                     "flag_low_date": reading["flag_low_date"],
+                    # The rest of what it takes to see this reading rather than read about it.
+                    # The volume clause is asked about one session measured against one quiet
+                    # window, and a question that names neither sends the reader to a picture
+                    # that has to guess which top it is being asked about -- which is how a
+                    # chart came to draw the highest top while the question was about a lower
+                    # one, with the same digest on both so the mismatched answer was accepted.
+                    # None of this widens the key: `_chart_key` binds `_BOUNDARIES`, and the
+                    # baseline sessions are already in it.
+                    "baseline_first_session": reading["baseline_first_session"],
+                    "baseline_last_session": reading["baseline_last_session"],
+                    "advance_peak_volume_date": reading["advance_peak_volume_date"],
+                    "peak_high": reading["peak_high"],
+                    "flag_low": reading["flag_low"],
+                    "advance_peak_volume_ratio": reading["advance_peak_volume_ratio"],
                     "measured": {measured: reading[measured]},
                     "asks": asks[condition],
                     "answered": answer,
