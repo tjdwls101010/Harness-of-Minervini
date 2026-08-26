@@ -29,6 +29,10 @@ from .swings import canonical_chain
 
 # 1.1.0 draws the detector's turning points and pivot, and records per timeframe which
 # of them the picture actually contains.
+class UnusableOutputDirectory(ValueError):
+    """The requested destination cannot hold artifacts, for a reason the caller can change."""
+
+
 class ArtifactNameTaken(ValueError):
     """This directory already holds a different render under the name this one would use.
 
@@ -67,7 +71,13 @@ def render_chart_artifacts(
     as_of_date = _as_of_date(as_of)
     daily = _completed_daily(daily_ohlcv, as_of_date)
     directory = Path(output_dir).expanduser().resolve()
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        # A path that is a file, or under one, or that this process cannot write. All of them
+        # are the caller's to change, and an unhandled OSError became an internal_error naming
+        # `[Errno 17] File exists`, which reads as a defect in the renderer.
+        raise UnusableOutputDirectory(f"{directory} cannot hold chart artifacts: {error}") from error
 
     # The same digest the segmentation carries, so an approval can be traced to its picture.
     input_sha256 = bars_fingerprint(daily)
@@ -148,7 +158,15 @@ def _draw_the_bundle(
 ) -> dict[str, Any]:
     """Draw both pictures and write the manifest over the claim that reserved its name."""
 
-    artifact_specs = (("weekly", weekly), ("daily", daily))
+    # And, where there is a span to look at, the span. A stock with three years of history draws
+    # seven hundred sessions into twelve inches, and a four-session flag is a handful of pixels
+    # under a marker wider than the flag is -- so the reader was asked whether that flag was
+    # tight while looking at something they could not measure. The two whole-history pictures
+    # are what a base is read from and are left exactly as they were; this one is the span.
+    artifact_specs = [("weekly", weekly), ("daily", daily)]
+    span_bars = _span_window(daily, power_play["spans"])
+    if span_bars is not None:
+        artifact_specs.append(("power_play", span_bars))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_{timeframe}.png"
@@ -406,6 +424,36 @@ def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
     }
 
 
+# Timeframes whose bars are sessions. The Power Play panel is a daily chart of one span, so
+# everything that turns on "is a bar one session" answers the same for both.
+_BY_SESSION = ("daily", "power_play")
+# Enough room before the quiet window that its left edge is visible as an edge.
+_SPAN_CONTEXT_SESSIONS = 5
+_PANEL_TITLES = {"weekly": "Weekly", "daily": "Daily", "power_play": "Power Play"}
+
+
+def _span_window(daily: pd.DataFrame, spans: list[dict[str, Any]]) -> pd.DataFrame | None:
+    """The sessions the questions are about, from the quiet window through the last bar.
+
+    Back to the earliest baseline or advance start across every span, because the ratio is a
+    comparison with that window and a panel that cuts it off asks the reader to take the
+    denominator on faith. A little context before it, so the advance begins somewhere on the
+    picture rather than at its left edge.
+    """
+
+    starts = [
+        pd.Timestamp(span[field])
+        for span in spans
+        for field in ("baseline_first_session", "advance_anchor_date")
+        if span.get(field) is not None
+    ]
+    if not starts:
+        return None
+    position = int(daily.index.searchsorted(min(starts)))
+    window = daily.iloc[max(0, position - _SPAN_CONTEXT_SESSIONS):]
+    return window if len(window) > 1 else None
+
+
 def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, dict[str, list[str]]]:
     figure, (price_axis, volume_axis) = plt.subplots(
         2,
@@ -417,7 +465,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
     )
     try:
         dates = mdates.date2num(bars.index.to_pydatetime())
-        width = 0.65 if timeframe == "daily" else 3.25
+        width = 0.65 if timeframe in _BY_SESSION else 3.25
         colors = np.where(bars["Close"].to_numpy() >= bars["Open"].to_numpy(), "#18794e", "#b42318")
         for position, (_, row), color in zip(dates, bars.iterrows(), colors, strict=True):
             price_axis.vlines(position, row["Low"], row["High"], color=color, linewidth=0.8)
@@ -430,7 +478,13 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
             body_height = max(abs(row["Close"] - row["Open"]), (row["High"] - row["Low"]) * 0.03)
             price_axis.add_patch(Rectangle((position - width / 2, body_low), width, body_height, facecolor=color, edgecolor=color, linewidth=0.6))
         close = bars["Close"]
-        if timeframe == "daily":
+        if timeframe == "power_play":
+            # None here on purpose. An average over one span is not the average the daily panel
+            # draws at the same dates, and two pictures printing different lines under the same
+            # name is the quiet inconsistency this overlay exists to stop. This panel is for the
+            # flag's shape and the volume comparison; the averages are read off the daily.
+            overlays: dict[str, Any] = {}
+        elif timeframe == "daily":
             overlays = {"EMA 10": close.ewm(span=10, adjust=False, min_periods=10).mean(), "EMA 21": close.ewm(span=21, adjust=False, min_periods=21).mean(), "SMA 50": close.rolling(50, min_periods=50).mean()}
         else:
             overlays = {"SMA 10W": close.rolling(10, min_periods=10).mean(), "SMA 30W": close.rolling(30, min_periods=30).mean(), "SMA 40W": close.rolling(40, min_periods=40).mean()}
@@ -440,7 +494,7 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         drawn, pivot_drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
         volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
         span_drawn = _draw_power_play(price_axis, volume_axis, bars, power_play, timeframe)
-        price_axis.set_title(f"{ticker} {timeframe.title()} — as of {as_of.isoformat()}")
+        price_axis.set_title(f"{ticker} {_PANEL_TITLES[timeframe]} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
         volume_axis.set_ylabel("Volume")
         price_axis.grid(axis="y", alpha=0.25)
@@ -576,7 +630,7 @@ def _draw_power_play(
         # a reader to the right place on the daily. And readings that divided by different
         # baselines print no ratio either: one number beside a mark that stands for two of them
         # names neither.
-        if timeframe == "daily" and len(divisions) == 1:
+        if timeframe in _BY_SESSION and len(divisions) == 1:
             label = f"heaviest advance session ({divisions.pop()[0]:.1f}x baseline)"
         else:
             label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
@@ -667,7 +721,7 @@ def _containing_bar(index: pd.DatetimeIndex, day: str, timeframe: str) -> pd.Tim
     if position >= len(index):
         return None
     label = index[position]
-    if timeframe == "daily" and label != stamp:
+    if timeframe in _BY_SESSION and label != stamp:
         return None
     return label
 

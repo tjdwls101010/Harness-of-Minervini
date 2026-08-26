@@ -1925,11 +1925,11 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
-    from .chart import ArtifactNameTaken, UnrenderableHistory
+    from .chart import ArtifactNameTaken, UnrenderableHistory, UnusableOutputDirectory
 
     try:
         result = _render(prices.data, ticker, clock, destination)
-    except ArtifactNameTaken as error:
+    except (ArtifactNameTaken, UnusableOutputDirectory) as error:
         # A directory that already holds a different render under this name is something the
         # caller can move, and an internal_error envelope -- which is what an unhandled raise
         # becomes, with the request and the explicit as_of stripped off -- tells them nothing

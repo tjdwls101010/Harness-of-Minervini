@@ -580,6 +580,120 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         self.assertEqual(manifest["power_play"]["spans"], [])
 
 
+class ThePanelTheFlagCanBeMeasuredOn(unittest.TestCase):
+    """Seven hundred sessions in twelve inches cannot show a four-session flag.
+
+    On a real name with three years of history the flag was a handful of pixels under a marker
+    wider than the flag itself, so the reader was asked whether it corrected no more than
+    twenty-five percent while looking at something they could not measure. The two
+    whole-history pictures are what a base is read from and stay exactly as they were; this is
+    a third one, and it is the span.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series(dormancy_sessions=400)
+        self.questions = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
+
+    def test_the_fixture_is_long_enough_that_the_span_would_disappear(self) -> None:
+        self.assertTrue(self.questions)
+        self.assertGreater(len(self.frame), 400)
+
+    def test_the_span_panel_is_a_third_artifact_and_the_others_are_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        timeframes = [artifact["timeframe"] for artifact in manifest["artifacts"]]
+        self.assertEqual(timeframes, ["weekly", "daily", "power_play"])
+        held = {artifact["timeframe"]: artifact["bars"] for artifact in manifest["artifacts"]}
+        self.assertEqual(held["daily"], len(self.frame))
+
+    def test_it_holds_the_span_and_little_else(self) -> None:
+        """Back to the quiet window, because the ratio is a comparison with it, and no further."""
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        panel = next(a for a in manifest["artifacts"] if a["timeframe"] == "power_play")
+        earliest = min(
+            question["baseline_first_session"] for question in self.questions
+        )
+        sessions = len(self.frame.loc[earliest:])
+        self.assertLess(panel["bars"], len(self.frame) // 4)
+        self.assertGreaterEqual(panel["bars"], sessions)
+
+    def test_every_landmark_is_on_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        panel = next(a for a in manifest["artifacts"] if a["timeframe"] == "power_play")
+        for question in self.questions:
+            with self.subTest(top=question["peak_date"]):
+                self.assertIn(question["peak_date"], panel["power_play_drawn"]["peak_date"])
+                self.assertIn(
+                    question["baseline_first_session"],
+                    panel["power_play_drawn"]["baseline_first_session"],
+                )
+
+    def test_it_prints_the_ratio_because_its_bars_are_sessions(self) -> None:
+        """A weekly bar is five sessions added together and the multiple is about one of them.
+        This panel's bars are the sessions, so the number belongs on it."""
+        span = _power_play_spans(self.frame, "digest")
+        window = self.frame.loc[span["spans"][0]["baseline_first_session"]:]
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        chart_module._draw_power_play(price, volume, window, span, "power_play")
+
+        self.assertTrue([label for label in volume.labels if "x baseline" in label])
+
+    def test_a_stock_nobody_is_asking_about_gets_no_third_picture(self) -> None:
+        plain, _ = base_series()
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(plain, directory)
+
+        self.assertEqual(
+            [artifact["timeframe"] for artifact in manifest["artifacts"]], ["weekly", "daily"]
+        )
+        self.assertNotIn("power_play", manifest["paths"])
+
+
+class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
+    def test_a_path_that_is_a_file_is_the_callers_to_change(self) -> None:
+        """Unhandled, `[Errno 17] File exists` reached the caller as a defect in the renderer."""
+        from scripts.minervini.contracts import RequestError
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        frame = power_play_series()
+        snapshot = ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            occupied = Path(directory) / "not-a-directory"
+            occupied.write_text("", encoding="utf-8")
+
+            with self.assertRaises(RequestError) as caught:
+                execute(
+                    "ticker.chart",
+                    {
+                        "ticker": "TEST",
+                        "as_of": frame.index[-1].date().isoformat(),
+                        "output_dir": str(occupied),
+                        "no_cache": True,
+                    },
+                    runtime=Runtime(price_history=lambda ticker, requested: snapshot),
+                )
+
+        self.assertEqual(caught.exception.args[1], "output_dir")
+
+
 class RecordingAxis:
     """Keeps what was drawn on it and what each thing was called.
 
