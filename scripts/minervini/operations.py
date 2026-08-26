@@ -1980,6 +1980,10 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             "path": result["manifest_path"],
             "as_of": result["as_of"],
             "input_sha256": result["input_sha256"],
+            # Both digests here too. The manifest holds the overlay's input and its name is
+            # stamped with it, so a record naming only the price digest identifies this file
+            # less completely than the pictures it lists.
+            "power_play_measured_bars": result["power_play"]["measured_bars"],
         }
     )
     return envelope(

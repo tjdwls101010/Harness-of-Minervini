@@ -592,6 +592,30 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         self.assertEqual(written, {artifact["path"] for artifact in payload["data"]["artifacts"]})
         self.assertEqual(len(written), 3)
 
+    def test_every_side_effect_names_the_file_it_actually_identifies(self) -> None:
+        """A side-effect record is what a reader carries away instead of the file. Both digests
+        on every record, and both of them the manifest's own -- a record naming a digest the
+        file does not hold identifies some other render, and nothing in the envelope would say
+        so. The manifest record carried only the price digest while the pictures it lists
+        carried both, though the manifest depends on the overlay's and is stamped with it."""
+        with tempfile.TemporaryDirectory() as directory:
+            payload = self._execute_a_render(self.frame, directory)
+            manifest = json.loads(
+                Path(payload["data"]["manifest_path"]).read_text(encoding="utf-8")
+            )
+
+        recorded = [
+            item for item in payload["side_effects"]
+            if item["type"] in ("chart_artifact", "artifact_manifest")
+        ]
+        self.assertEqual(len(recorded), 4)
+        for item in recorded:
+            with self.subTest(path=item["path"]):
+                self.assertEqual(item["input_sha256"], manifest["input_sha256"])
+                self.assertEqual(
+                    item["power_play_measured_bars"], manifest["power_play"]["measured_bars"]
+                )
+
     def test_a_chart_that_drew_a_span_points_back_at_what_asked_for_it(self) -> None:
         """ticker.power-play sends a reader here; without the return leg an orchestrator that
         follows these lists draws the picture and has nowhere to carry the answer."""
@@ -824,6 +848,84 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
                 execute("ticker.chart", request | {"output_dir": directory}, runtime=runtime)
 
         self.assertEqual(caught.exception.args[1], "output_dir")
+
+    def test_a_bundle_that_could_not_finish_leaves_nothing_behind(self) -> None:
+        """The pictures are committed one at a time, so a bundle failing on its second left the
+        first standing under a digest-stamped name -- a finished-looking artifact beside an
+        envelope reporting no side effects, which is the reader's cue that nothing was written.
+        Every name is this render's by the claim, so taking them back takes nothing else."""
+        from scripts.minervini.contracts import RequestError
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        frame = power_play_series()
+        snapshot = ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        request = {
+            "ticker": "TEST",
+            "as_of": frame.index[-1].date().isoformat(),
+            "no_cache": True,
+        }
+        runtime = Runtime(price_history=lambda ticker, requested: snapshot)
+        with tempfile.TemporaryDirectory() as directory:
+            written = execute("ticker.chart", request | {"output_dir": directory}, runtime=runtime)
+            blocked = Path(written["data"]["paths"]["daily"]).name
+
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / blocked).mkdir()
+
+            with self.assertRaises(RequestError):
+                execute("ticker.chart", request | {"output_dir": directory}, runtime=runtime)
+
+            left_behind = sorted(path.name for path in Path(directory).iterdir())
+
+        self.assertEqual(left_behind, [blocked])
+
+    def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
+        """Taking the claim is already writing there. A filesystem that holds ordinary files but
+        refuses hard links is answered by choosing a different directory, not by reporting that
+        this harness is broken."""
+        from scripts.minervini.contracts import RequestError
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        frame = power_play_series()
+        snapshot = ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module.os, "link", side_effect=PermissionError("hard links disabled")
+            ):
+                with self.assertRaises(RequestError) as caught:
+                    execute(
+                        "ticker.chart",
+                        {
+                            "ticker": "TEST",
+                            "as_of": frame.index[-1].date().isoformat(),
+                            "output_dir": directory,
+                            "no_cache": True,
+                        },
+                        runtime=Runtime(price_history=lambda ticker, requested: snapshot),
+                    )
+
+            left_behind = sorted(path.name for path in Path(directory).iterdir())
+
+        self.assertEqual(caught.exception.args[1], "output_dir")
+        self.assertEqual(left_behind, [])
 
 
 class RecordingAxis:
@@ -1272,6 +1374,38 @@ class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
             ],
         )
 
+    def test_those_prices_are_the_bars_own_and_not_just_the_questions(self) -> None:
+        """Comparing the picture with the field it was drawn from says they agree and nothing
+        more. Publish zero for the peak and the star lands on zero, with the two still in
+        perfect agreement about a price the bars never traded at. So the levels are checked
+        against the sessions they name."""
+        self.assertEqual(
+            float(self.span["peak_high"]),
+            float(self.frame.loc[self.span["peak_date"], "High"]),
+        )
+        self.assertEqual(
+            float(self.span["flag_low"]),
+            float(self.frame.loc[self.span["flag_low_date"], "Low"]),
+        )
+        after_the_peak = self.frame.loc[self.span["peak_date"]:, "Low"]
+        self.assertEqual(float(self.span["flag_low"]), float(after_the_peak.min()))
+
+    def test_the_span_says_which_reading_it_came_from(self) -> None:
+        """The reading index is what carries a mark back to the question it belongs to, and a
+        chain of tops issues several spans that differ in little else."""
+        spans = _power_play_spans(self.frame, "digest")["spans"]
+        asked = [
+            question for question in build_power_play_evidence(self.frame)["chart_questions"]
+            if question.get("answered") is None
+        ]
+
+        # One span per reading, not per question: a reading with three undecided criteria is
+        # three questions about one picture.
+        self.assertEqual(
+            [span["reading"] for span in spans],
+            sorted({question["reading"] for question in asked}),
+        )
+
     def test_the_advance_rule_stands_on_the_anchor_session(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
 
@@ -1377,6 +1511,26 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
             )],
         )
         self.assertIn("baseline median", volume.labels)
+
+    def test_a_multiple_just_over_one_is_not_printed_as_one(self) -> None:
+        """One decimal is the right precision for judging expansion, and harmless everywhere but
+        at 1.0. A published 1.04 printed there says the heaviest session of the advance merely
+        matched its baseline -- and exceeding the baseline is the condition that makes the
+        question exist, so the picture argues against the number that put it on the page."""
+        frame = power_play_series(advance_volume_multiple=1.04)
+        span = _power_play_spans(frame, "digest")
+        self.assertTrue(span["spans"], "the fixture has to still be asking for this to mean anything")
+        ratio = span["spans"][0]["advance_peak_volume_ratio"]
+        self.assertGreater(ratio, 1.0)
+        self.assertEqual(round(ratio, 1), 1.0)
+        price, volume = RecordingAxis(), RecordingAxis()
+
+        chart_module._draw_power_play(price, volume, frame, span, "daily")
+
+        printed = [label for label in volume.labels if label.startswith("heaviest advance")]
+        self.assertTrue(printed)
+        self.assertNotIn("(1.0x", printed[0])
+        self.assertIn(f"({ratio:.2f}x", printed[0])
 
     def test_the_weekly_panel_draws_no_divisor(self) -> None:
         """It is a session median, and a weekly bar is five sessions added together -- a line at

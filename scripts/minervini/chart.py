@@ -33,6 +33,12 @@ class UnusableOutputDirectory(ValueError):
     """The requested destination cannot hold artifacts, for a reason the caller can change."""
 
 
+_UNUSABLE = (
+    "{directory} cannot hold this render's files: {error}. Give --output-dir a directory whose "
+    "contents this process may write, or clear what is in the way."
+)
+
+
 class ArtifactNameTaken(ValueError):
     """This directory already holds a different render under the name this one would use.
 
@@ -142,11 +148,18 @@ def render_chart_artifacts(
     # removed the only reservation, and a third render from a colliding vintage walked into the
     # gap while the first two were still drawing.
     _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
-    reserved = _reserve_the_name(
-        manifest_path.parent / f"{manifest_path.name}.reserving",
-        input_sha256,
-        power_play["measured_bars"],
-    )
+    try:
+        reserved = _reserve_the_name(
+            manifest_path.parent / f"{manifest_path.name}.reserving",
+            input_sha256,
+            power_play["measured_bars"],
+        )
+    except OSError as error:
+        # Taking the claim is already writing to the destination, so the same reasons the
+        # drawing can fail apply here -- a filesystem that takes ordinary files but not hard
+        # links, a directory that stopped being writable between the check and this line. Both
+        # are answered by handing this capability a different one.
+        raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
     # And again, now that the reservation is held. The first ask happens before anything is
     # claimed, so a render already drawing can finish in the gap between them: it leaves a
     # manifest this one never saw, and having found no in-flight claim either, this one goes on
@@ -158,10 +171,17 @@ def render_chart_artifacts(
     except ArtifactNameTaken:
         reserved.unlink(missing_ok=True)
         raise
+    # What this render has actually put on disk, so a failure half-way through can take it back
+    # off again. The pictures are committed one at a time, so a bundle that failed on its second
+    # left the first standing under a digest-stamped name -- a finished-looking artifact beside
+    # an envelope reporting no side effects at all, which is the reader's cue that nothing was
+    # written. Every name here is this render's by the claim above, so removing them takes
+    # nothing that belongs to anyone else.
+    committed: list[Path] = []
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
-            daily, weekly, input_sha256, segmentation, power_play,
+            daily, weekly, input_sha256, segmentation, power_play, committed,
         )
     except OSError as error:
         # A destination that cannot take the files is the caller's to fix, and it stays that
@@ -169,10 +189,11 @@ def render_chart_artifacts(
         # check above -- the parent was writable and the manifest name was free -- and came
         # back as `internal_error`, which tells a reader the harness is broken when what is
         # broken is the path they handed it.
-        raise UnusableOutputDirectory(
-            f"{directory} cannot hold this render's files: {error}. Give --output-dir a "
-            "directory whose contents this process may write, or clear what is in the way."
-        ) from error
+        _take_back(committed)
+        raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
+    except BaseException:
+        _take_back(committed)
+        raise
     finally:
         reserved.unlink(missing_ok=True)
 
@@ -188,8 +209,13 @@ def _draw_the_bundle(
     input_sha256: str,
     segmentation: dict[str, Any] | None,
     power_play: dict[str, Any],
+    committed: list[Path],
 ) -> dict[str, Any]:
-    """Draw both pictures and write the manifest over the claim that reserved its name."""
+    """Draw both pictures and write the manifest over the claim that reserved its name.
+
+    Every file this succeeds in putting on disk is appended to `committed` as it lands, so a
+    caller that has to abandon the bundle knows exactly what to take back.
+    """
 
     # And, where there is a span to look at, the span. A stock with three years of history draws
     # seven hundred sessions into twelve inches, and a four-session flag is a handful of pixels
@@ -206,6 +232,7 @@ def _draw_the_bundle(
         drawn, pivot_drawn, span_drawn = _render_png(
             bars, path, symbol, timeframe, as_of_date, segmentation, power_play
         )
+        committed.append(path)
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
         #
@@ -236,7 +263,20 @@ def _draw_the_bundle(
         "artifacts": artifacts,
     }
     _atomic_json(manifest_path, manifest)
+    committed.append(manifest_path)
     return {**manifest, "manifest_path": str(manifest_path)}
+
+
+def _take_back(committed: list[Path]) -> None:
+    """Remove what an abandoned bundle managed to write, leaving the directory as it was found."""
+
+    for path in committed:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            # The destination is already refusing this render; failing again while tidying up
+            # would replace the reason the caller needs with the second one.
+            pass
 
 
 def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> Path:
@@ -574,7 +614,10 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         price_axis.grid(axis="y", alpha=0.25)
         volume_axis.grid(axis="y", alpha=0.25)
         if price_axis.get_legend_handles_labels()[0]:
-            price_axis.legend(loc="upper left", fontsize=8, frameon=False)
+            # Placed where it does not sit on the bars. Pinned to the upper left it covered
+            # historical candles on real names, and a legend is what carries a mark back to the
+            # question it belongs to -- overlapping the picture it explains, it costs both.
+            price_axis.legend(loc="best", fontsize=8, framealpha=0.85)
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         figure.autofmt_xdate(rotation=30, ha="right")
         _atomic_figure(figure, path)
@@ -707,7 +750,7 @@ def _draw_power_play(
         if timeframe in _BY_SESSION and len(divisions) == 1:
             # "x baseline" reads as the shade, and the shade is not what it divided by. The
             # median is, and it is now drawn, so the label names the line rather than the window.
-            label = f"heaviest advance session ({divisions.pop()[0]:.1f}x baseline median)"
+            label = f"heaviest advance session ({_multiple(divisions.pop()[0])}x baseline median)"
         else:
             label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
         volume_axis.plot(
@@ -717,8 +760,27 @@ def _draw_power_play(
         drawn["advance_peak_volume_date"].extend(days)
         marked = True
     if marked:
-        volume_axis.legend(loc="upper left", fontsize=8, frameon=False)
+        # Same reason as the price panel's: on a quiet window holding one enormous day, the
+        # upper left is exactly where that day's bar is, and the legend sat on top of the bar
+        # the reader is being asked to compare against.
+        volume_axis.legend(loc="best", fontsize=8, framealpha=0.85)
     return drawn
+
+
+def _multiple(ratio: float) -> str:
+    """The ratio at a decimal that cannot put it on the wrong side of one.
+
+    One decimal is the right precision for judging whether volume expanded, and everywhere but
+    one place it is harmless. That place is 1.0: a published 1.04 printed as `1.0x` says the
+    advance's heaviest session merely matched its baseline, and exceeding the baseline is the
+    exact condition that makes this question exist. So the boundary case gets another digit
+    rather than a rounding that argues against the number it came from.
+    """
+
+    rounded = round(ratio, 1)
+    if rounded == 1.0 and ratio != 1.0:
+        return f"{ratio:.2f}"
+    return f"{rounded:.1f}"
 
 
 def _marks(
