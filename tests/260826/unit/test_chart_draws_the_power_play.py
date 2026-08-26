@@ -1127,6 +1127,33 @@ class WhatIsDrawnHasToBeVisible(unittest.TestCase):
         self.frame = power_play_series()
         self.span = _power_play_spans(self.frame, "digest")
 
+    def test_the_shade_is_a_different_colour_from_the_panel_under_it(self) -> None:
+        """Size was the only visibility this class asked about. Painted white on a white panel
+        the baseline window vanishes at every size, and its legend entry stays -- so the picture
+        names a window a reader cannot find, which is the multiple's own divisor."""
+        from matplotlib import colors as mcolors
+        import matplotlib.pyplot as plt
+
+        price, volume = RecordingAxis(), RecordingAxis()
+        _draw_power_play(price, volume, self.frame, self.span, "daily")
+
+        under = mcolors.to_rgb(plt.rcParams["axes.facecolor"])
+        shaded = [drawn for drawn in volume.drawn if "color" in drawn and "alpha" in drawn]
+        self.assertTrue(shaded)
+        for drawn in shaded:
+            with self.subTest(label=drawn.get("label")):
+                over = mcolors.to_rgb(drawn["color"])
+                alpha = float(drawn["alpha"])
+                # What the eye is given, which is the colour composited onto the panel rather
+                # than the colour asked for: a strong hue at a low alpha is a faint wash. The
+                # floor is under what this module draws today -- the baseline shade lands at
+                # 0.078 -- and above nothing, which is what a same-colour mutant leaves.
+                reached = max(
+                    abs(alpha * over[channel] + (1 - alpha) * under[channel] - under[channel])
+                    for channel in range(3)
+                )
+                self.assertGreater(reached, 0.05)
+
     def test_nothing_is_drawn_at_a_size_nobody_can_see(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
 
@@ -1979,6 +2006,38 @@ def artifact_end(artifact, daily):
     return _panel_index(artifact, daily)[-1]
 
 
+class AClaimIsAFileNotAPathname(unittest.TestCase):
+    """Reached by hand, because the sequence needs a directory swapped mid-render and there is
+    no seam above these two functions that can do that between them.
+
+    Giving the claim up by pathname is what makes the exclusive rule breakable from outside: the
+    path a render took its claim under can be made to lead somewhere else, and the release then
+    deletes whatever claim is standing at the new place -- a second render's live one. A third
+    render walks in behind it, and two are inside one name, which is the state the whole rule
+    exists to prevent.
+    """
+
+    def test_giving_up_the_claim_never_takes_somebody_else_s(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            started_in, replacement = root / "out", root / "other"
+            started_in.mkdir()
+            replacement.mkdir()
+
+            name = "TEST_2026-08-26_abc_manifest.json.reserving"
+            reserved = chart_module._reserve_the_name(started_in / name, "a" * 64, None)
+
+            # Somebody else's live claim, in a directory that is about to answer to this path.
+            (replacement / name).write_bytes(b'{"input_sha256":"b"}')
+            started_in.rename(root / "moved")
+            replacement.rename(started_in)
+
+            chart_module._release(reserved)
+
+            self.assertTrue((started_in / name).exists())
+            self.assertEqual((started_in / name).read_bytes(), b'{"input_sha256":"b"}')
+
+
 class AManifestNeverNamesAPictureThatIsNotThere(unittest.TestCase):
     """Published last and read first, so what it names has to be there when it is written.
 
@@ -2009,30 +2068,91 @@ class AManifestNeverNamesAPictureThatIsNotThere(unittest.TestCase):
             self.assertEqual(sorted(second["paths"]), ["daily", "weekly"])
             self.assertTrue(all(Path(path).exists() for path in second["paths"].values()))
 
-    def test_a_picture_that_stopped_being_there_refuses_instead_of_publishing(self) -> None:
-        frame = power_play_series()
+    def _render_losing(self, frame, directory, lose):
+        """Render, and let `lose` happen to the destination once the last panel is drawn."""
+
         real = chart_module._render_png
 
-        def draw_then_lose_the_weekly(bars, path, symbol, timeframe, *args, **kwargs):
+        def draw_then_lose_it(bars, path, symbol, timeframe, *args, **kwargs):
             drawn = real(bars, path, symbol, timeframe, *args, **kwargs)
             if timeframe == "power_play":
-                # The destination moved: the weekly went to the directory that used to answer
-                # to this path, and the later panels to whatever answers to it now.
-                next(path.parent.glob("*_weekly.png")).unlink()
+                lose(path.parent)
             return drawn
 
-        with tempfile.TemporaryDirectory() as directory:
-            with unittest.mock.patch.object(
-                chart_module, "_render_png", draw_then_lose_the_weekly
-            ):
-                with self.assertRaises(chart_module.UnusableOutputDirectory) as refusal:
-                    _rendered(frame, directory)
+        with unittest.mock.patch.object(chart_module, "_render_png", draw_then_lose_it):
+            with self.assertRaises(chart_module.UnusableOutputDirectory) as refusal:
+                _rendered(frame, directory)
+        return refusal.exception
 
+    def test_a_picture_that_stopped_being_there_refuses_instead_of_publishing(self) -> None:
+        """Every panel, not the first one: checking only weekly leaves the two the reader is
+        sent to the Power Play question for unchecked."""
+        frame = power_play_series()
+        for timeframe in ("weekly", "daily", "power_play"):
+            with self.subTest(timeframe=timeframe), tempfile.TemporaryDirectory() as directory:
+                # The destination moved: the earlier panels went to the directory that used to
+                # answer to this path, and the later ones to whatever answers to it now.
+                refusal = self._render_losing(
+                    frame, directory,
+                    lambda parent, timeframe=timeframe: next(
+                        parent.glob(f"*_{timeframe}.png")
+                    ).unlink(),
+                )
+                self.assertIn(f"_{timeframe}.png", str(refusal))
+                self.assertIn(directory, str(refusal))
+                self.assertEqual(sorted(path.name for path in Path(directory).iterdir()), [])
+
+    def test_a_directory_standing_where_a_picture_belongs_is_not_a_picture(self) -> None:
+        """`exists` says yes to it, and a reader who opens it gets nothing. The manifest would
+        have named it as the picture the Power Play question is answered from."""
+        frame = power_play_series()
+
+        def replace_the_weekly_with_a_directory(parent: Path) -> None:
+            weekly = next(parent.glob("*_weekly.png"))
+            weekly.unlink()
+            weekly.mkdir()
+
+        with tempfile.TemporaryDirectory() as directory:
+            refusal = self._render_losing(frame, directory, replace_the_weekly_with_a_directory)
             left = sorted(path.name for path in Path(directory).iterdir())
 
-        self.assertIn("_weekly.png", str(refusal.exception))
-        self.assertIn(directory, str(refusal.exception))
-        self.assertEqual(left, [])
+        self.assertIn("_weekly.png", str(refusal))
+        self.assertEqual(len(left), 1)
+        self.assertTrue(left[0].endswith("_weekly.png"))
+
+    def test_a_render_that_lost_its_own_claim_refuses_instead_of_publishing(self) -> None:
+        """The claim is what says this is still the directory the render started in. Gone, the
+        sweep below it would be clearing a name in somebody else's directory and the check
+        would be reading somebody else's pictures -- both passing, since the names are the ones
+        this render expects to find."""
+        frame = power_play_series()
+
+        with tempfile.TemporaryDirectory() as directory:
+            refusal = self._render_losing(
+                frame, directory,
+                lambda parent: next(parent.glob("*.reserving")).unlink(),
+            )
+            published = list(Path(directory).glob("*_manifest.json"))
+
+        self.assertIn("no longer the file at its own path", str(refusal))
+        self.assertEqual(published, [])
+
+    def test_what_the_caller_put_beside_the_bundle_is_not_this_render_s_to_take(self) -> None:
+        """The sweep is for a panel this renderer wrote and abandoned. Reaching every
+        `{stem}_*.png` it also took an annotated copy the caller had been working from."""
+        frame, _ = base_series()
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(frame, directory)
+            standing = Path(first["manifest_path"])
+            stem = standing.name.removesuffix("_manifest.json")
+            annotated = standing.parent / f"{stem}_annotated.png"
+            annotated.write_bytes(b"the caller's own crop")
+            standing.unlink()
+
+            second = _rendered(frame, directory)
+
+            self.assertTrue(annotated.exists())
+            self.assertEqual(sorted(second["paths"]), ["daily", "weekly"])
 
 
 class WhatARefusalTellsTheCallerToDo(unittest.TestCase):

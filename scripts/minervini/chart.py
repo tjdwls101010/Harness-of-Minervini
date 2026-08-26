@@ -184,7 +184,7 @@ def render_chart_artifacts(
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
-            daily, weekly, input_sha256, segmentation, power_play,
+            daily, weekly, input_sha256, segmentation, power_play, reserved,
         )
     except OSError as error:
         # A destination that cannot take the files is the caller's to fix, and it stays that
@@ -212,6 +212,7 @@ def _draw_the_bundle(
     input_sha256: str,
     segmentation: dict[str, Any] | None,
     power_play: dict[str, Any],
+    reserved: tuple[Path, int],
 ) -> dict[str, Any]:
     """Draw both pictures and write the manifest over the claim that reserved its name."""
 
@@ -259,13 +260,13 @@ def _draw_the_bundle(
         "power_play": power_play,
         "artifacts": artifacts,
     }
-    _leave_only_this_render_under_the_name(manifest_path, artifacts)
+    _leave_only_this_render_under_the_name(manifest_path, artifacts, reserved)
     _atomic_json(manifest_path, manifest)
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
 def _leave_only_this_render_under_the_name(
-    manifest_path: Path, artifacts: list[dict[str, Any]]
+    manifest_path: Path, artifacts: list[dict[str, Any]], reserved: tuple[Path, int]
 ) -> None:
     """Clear strangers from the name, then refuse unless every picture the manifest names is there.
 
@@ -286,14 +287,26 @@ def _leave_only_this_render_under_the_name(
     can do is not publish the claim.
     """
 
+    # Asked first, because everything below acts on the destination. If this path no longer
+    # leads to the directory the claim was taken in, the sweep would be clearing somebody
+    # else's name and the check would be reading somebody else's pictures -- and both would
+    # pass, since the names are the ones this render expects to find.
+    if not _still_holding(reserved):
+        raise UnusableOutputDirectory(
+            _UNUSABLE.format(
+                directory=manifest_path.parent,
+                error=(
+                    "the claim this render took is no longer the file at its own path, so this "
+                    "is not the directory the render started in"
+                ),
+            )
+        )
+
     kept = {Path(artifact["path"]).name for artifact in artifacts}
     stem = manifest_path.name.removesuffix("_manifest.json")
-    try:
-        beside = sorted(manifest_path.parent.glob(f"{stem}_*.png"))
-    except OSError:
-        beside = []
-    for path in beside:
-        if path.name in kept:
+    for timeframe in _PANEL_TITLES:
+        path = manifest_path.parent / f"{stem}_{timeframe}.png"
+        if path.name in kept or not path.exists():
             continue
         try:
             path.unlink()
@@ -302,15 +315,19 @@ def _leave_only_this_render_under_the_name(
             # this render could not remove is one the check either tolerates or catches.
             pass
 
-    absent = [artifact["path"] for artifact in artifacts if not Path(artifact["path"]).exists()]
+    # `is_file`, not `exists`. A directory standing where a PNG belongs satisfies "it is there"
+    # and satisfies nothing a reader opening it wants.
+    absent = [
+        artifact["path"] for artifact in artifacts if not Path(artifact["path"]).is_file()
+    ]
     if absent:
         raise UnusableOutputDirectory(
             _UNUSABLE.format(
                 directory=manifest_path.parent,
                 error=(
-                    f"{', '.join(Path(path).name for path in absent)} stopped being there "
-                    "between being written and being published, which is the destination "
-                    "having moved under this render"
+                    f"{', '.join(Path(path).name for path in absent)} is not a file this render "
+                    "can be said to have written, which is the destination having moved or "
+                    "been written into under it"
                 ),
             )
         )
@@ -419,7 +436,7 @@ def _inside(box: Any, page: Any) -> bool:
     return box.x0 >= page.x0 and box.x1 <= page.x1 and box.y0 >= page.y0 and box.y1 <= page.y1
 
 
-def _release(reserved: Path) -> None:
+def _release(reserved: tuple[Path, int]) -> None:
     """Give up this render's claim, and never let giving it up be what fails the render.
 
     Unguarded, a destination that stopped taking changes between the last write and this line
@@ -428,10 +445,25 @@ def _release(reserved: Path) -> None:
     it can clear by hand, which is the cheaper of the two.
     """
 
+    path, held = reserved
     try:
-        reserved.unlink(missing_ok=True)
+        if path.stat().st_ino != held:
+            # Somebody else's claim now answers to this path. Deleting it would take a live
+            # render's reservation and let a third into a name two are already inside.
+            return
+        path.unlink(missing_ok=True)
     except OSError:
         pass
+
+
+def _still_holding(reserved: tuple[Path, int]) -> bool:
+    """Whether the claim this render took is still the file at the path it took it under."""
+
+    path, held = reserved
+    try:
+        return path.stat().st_ino == held
+    except OSError:
+        return False
 
 
 def _take_back(manifest_path: Path) -> None:
@@ -452,7 +484,15 @@ def _take_back(manifest_path: Path) -> None:
         if manifest_path.exists():
             return
         stem = manifest_path.name.removesuffix("_manifest.json")
-        abandoned = sorted(manifest_path.parent.glob(f"{stem}_*.png"))
+        # This renderer's own panel names and nothing else. `{stem}_*.png` also matches whatever
+        # a caller put beside the bundle -- an annotated copy, a crop they were working from --
+        # and none of that is this render's to take.
+        abandoned = [
+            path for path in (
+                manifest_path.parent / f"{stem}_{timeframe}.png" for timeframe in _PANEL_TITLES
+            )
+            if path.exists()
+        ]
     except OSError:
         return
 
@@ -465,7 +505,9 @@ def _take_back(manifest_path: Path) -> None:
             pass
 
 
-def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> Path:
+def _reserve_the_name(
+    reserving: Path, input_sha256: str, measured_bars: str | None
+) -> tuple[Path, int]:
     """Take this name for one render at a time, and refuse while anyone else holds it.
 
     One claim per name, created with `O_EXCL`, so the filesystem decides who gets it and only
@@ -515,7 +557,14 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
         ) from clash
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write(claim)
-    return reserving
+        held = os.fstat(stream.fileno()).st_ino
+    # The pathname is not the claim; this file is. A directory renamed out from under a running
+    # render leaves the same path answering to a different directory, and every later look at
+    # that path -- to give the claim up, to check it is still held -- finds whatever the
+    # replacement holds. Giving it up then deleted a *second* render's live claim and let a
+    # third in behind it, which is the overlapping-render state this whole rule exists to
+    # prevent. So the inode comes along, and both looks compare against it.
+    return reserving, held
 
 
 def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | None) -> None:
