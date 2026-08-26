@@ -87,6 +87,14 @@ def render_chart_artifacts(
     # occurred issues no question, so the only overlay it can carry is the empty one.
     if power_play["measured_bars"] is not None:
         stamp = f"{stamp}-{power_play['measured_bars'][:8]}"
+    manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_manifest.json"
+    # Both halves of that stamp are truncated, and a truncated digest is a name two inputs can
+    # share. Thirty-two bits of the overlay half were reached in under four seconds by varying
+    # split multiples until two histories agreed -- one with a span, one without -- and the
+    # second render replaced the first's pictures under the first's manifest. Widening the name
+    # only moves the number; what makes it exact is asking the directory. A re-render of the
+    # same input is the same content, so it overwrites itself as before.
+    _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
     artifact_specs = (("weekly", weekly), ("daily", daily))
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
@@ -113,7 +121,6 @@ def render_chart_artifacts(
             "last_bar_partial": timeframe == "weekly" and _week_in_progress(daily, as_of_date),
         })
 
-    manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_manifest.json"
     manifest = {
         "renderer_version": RENDERER_VERSION,
         "ticker": symbol,
@@ -126,6 +133,32 @@ def render_chart_artifacts(
     }
     _atomic_json(manifest_path, manifest)
     return {**manifest, "manifest_path": str(manifest_path)}
+
+
+def _refuse_a_taken_name(manifest_path: Path, input_sha256: str, measured_bars: str | None) -> None:
+    """Stop before writing over a manifest that names a different pair of inputs.
+
+    Reading it back rather than trusting the name is what makes the check exact: the file says
+    in full what its truncated name only gestures at. A manifest written before the overlay had
+    a digest carries none, and can only share a name with a render whose overlay has none
+    either -- so the two agree and the newer picture, drawn from the same bars, replaces it.
+    """
+
+    if not manifest_path.exists():
+        return
+    try:
+        taken = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    held = (taken.get("input_sha256"), (taken.get("power_play") or {}).get("measured_bars"))
+    if held == (input_sha256, measured_bars):
+        return
+    raise ValueError(
+        f"{manifest_path.name} already names bars {held[0]} and an overlay from {held[1]}; "
+        f"this render is {input_sha256} and {measured_bars}. Two inputs reached one name, and "
+        "writing would leave the older manifest's digests beside a picture they never named. "
+        "Render to another directory."
+    )
 
 
 def _ticker(value: str) -> str:

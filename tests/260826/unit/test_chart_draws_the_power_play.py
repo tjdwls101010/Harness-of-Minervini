@@ -274,6 +274,49 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
                     payload["data"]["power_play"]["measured_bars"],
                 )
 
+    def test_a_name_two_inputs_reached_is_refused_rather_than_overwritten(self) -> None:
+        """Both halves of the stamp are truncated, so a name is something two inputs can share.
+
+        Thirty-two bits of the overlay half were reached in under four seconds by varying split
+        multiples until two histories agreed -- one with a span, one without -- and the second
+        render replaced the first's pictures while the first's manifest went on naming them.
+        Widening the name moves the number; asking the directory settles it.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+            written = Path(manifest["manifest_path"])
+            collided = json.loads(written.read_text(encoding="utf-8"))
+            collided["power_play"]["measured_bars"] = "f" * 64
+            written.write_text(json.dumps(collided), encoding="utf-8")
+
+            with self.assertRaises(ValueError) as caught:
+                _rendered(self.frame, directory)
+
+        self.assertIn(manifest["power_play"]["measured_bars"], str(caught.exception))
+
+    def test_rendering_the_same_input_twice_still_writes_over_itself(self) -> None:
+        """The check is about two inputs, not two runs."""
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(self.frame, directory)
+            second = _rendered(self.frame, directory)
+
+        self.assertEqual(first["manifest_path"], second["manifest_path"])
+
+    def test_a_manifest_written_before_the_overlay_had_a_digest_is_not_a_collision(self) -> None:
+        """It can only share a name with a render whose overlay has no digest either, and then
+        the two agree about the bars, so the newer picture is the same picture redrawn."""
+        bare = self.frame.drop(columns=["Stock Splits", "Dividends"])
+        with tempfile.TemporaryDirectory() as directory:
+            first = _rendered(bare, directory)
+            written = Path(first["manifest_path"])
+            older = json.loads(written.read_text(encoding="utf-8"))
+            del older["power_play"]
+            written.write_text(json.dumps(older), encoding="utf-8")
+
+            second = _rendered(bare, directory)
+
+        self.assertEqual(first["manifest_path"], second["manifest_path"])
+
     def test_a_history_that_never_said_whether_a_split_occurred_names_nothing(self) -> None:
         """The same abstention the capability makes: absence is not a report of none."""
         bare = self.frame.drop(columns=["Stock Splits", "Dividends"])
