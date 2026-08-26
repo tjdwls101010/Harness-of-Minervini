@@ -110,6 +110,13 @@ def render_chart_artifacts(
     # occurred issues no question, so the only overlay it can carry is the empty one.
     if power_play["measured_bars"] is not None:
         stamp = f"{stamp}-{power_play['measured_bars'][:8]}"
+    # And the renderer, because the digests name the input and this name is claimed for the
+    # output. Two renders of identical bars under different versions of this module draw
+    # different pictures, and with only the input in the name the second wrote its PNGs under
+    # the first's manifest -- a bundle whose manifest says 1.2.0 beside a picture stamped
+    # 9.9.9. In the name rather than refused, so a version bump writes a new bundle instead of
+    # making every directory holding an older one permanently unusable.
+    stamp = f"{stamp}-r{RENDERER_VERSION.replace('.', '-')}"
     manifest_path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_manifest.json"
     # Both halves of that stamp are truncated, and a truncated digest is a name two inputs can
     # share. Thirty-two bits of the overlay half were reached in under four seconds by varying
@@ -140,11 +147,32 @@ def render_chart_artifacts(
         input_sha256,
         power_play["measured_bars"],
     )
+    # And again, now that the reservation is held. The first ask happens before anything is
+    # claimed, so a render already drawing can finish in the gap between them: it leaves a
+    # manifest this one never saw, and having found no in-flight claim either, this one goes on
+    # to write its own bundle over the finished one under the same name. The second ask closes
+    # that gap -- after this point no other render can complete without first taking a claim
+    # this one would have refused.
+    try:
+        _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
+    except ArtifactNameTaken:
+        reserved.unlink(missing_ok=True)
+        raise
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
             daily, weekly, input_sha256, segmentation, power_play,
         )
+    except OSError as error:
+        # A destination that cannot take the files is the caller's to fix, and it stays that
+        # way once the writing starts. A directory sitting where a PNG belongs passed every
+        # check above -- the parent was writable and the manifest name was free -- and came
+        # back as `internal_error`, which tells a reader the harness is broken when what is
+        # broken is the path they handed it.
+        raise UnusableOutputDirectory(
+            f"{directory} cannot hold this render's files: {error}. Give --output-dir a "
+            "directory whose contents this process may write, or clear what is in the way."
+        ) from error
     finally:
         reserved.unlink(missing_ok=True)
 
@@ -229,7 +257,11 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
     """
 
     claim = json.dumps(
-        {"input_sha256": input_sha256, "power_play": {"measured_bars": measured_bars}},
+        {
+            "input_sha256": input_sha256,
+            "renderer_version": RENDERER_VERSION,
+            "power_play": {"measured_bars": measured_bars},
+        },
         separators=(",", ":"),
         sort_keys=True,
     )
@@ -252,16 +284,21 @@ def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | N
 
 
 def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | None) -> None:
-    """Stop unless the file already at this name was written from these same two inputs.
+    """Stop unless the file already at this name was written from this same input by this renderer.
 
     Reading it back rather than trusting the name is what makes the check exact: the file says
     in full what its truncated name only gestures at. A manifest written before the overlay had
     a digest carries none, and can only share a name with a render whose overlay has none
     either -- so the two agree and the newer picture, drawn from the same bars, replaces it.
 
-    Nothing at the name is nothing to refuse. Anything else that cannot be read as those two
-    digests is refused, because a name whose holder cannot be identified is a name this render
-    cannot prove is its own.
+    The renderer's own version is part of that identity. The digests name what went in, and
+    this name is claimed for what comes out: the same bars through two versions of this module
+    are two different pictures, and one replacing the other left a manifest reporting a version
+    the picture beside it was not drawn by.
+
+    Nothing at the name is nothing to refuse. Anything else that cannot be read as those three
+    is refused, because a name whose holder cannot be identified is a name this render cannot
+    prove is its own.
     """
 
     # `lexists`, because a symlink pointing at nothing is a name this render does not hold and
@@ -282,15 +319,17 @@ def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | 
         (
             taken.get("input_sha256"),
             overlay.get("measured_bars") if isinstance(overlay, Mapping) else None,
+            taken.get("renderer_version"),
         )
         if isinstance(taken, Mapping)
-        else (None, None)
+        else (None, None, None)
     )
-    if held == (input_sha256, measured_bars):
+    if held == (input_sha256, measured_bars, RENDERER_VERSION):
         return
     raise ArtifactNameTaken(
-        f"{manifest_path.name} already names bars {held[0]} and an overlay from {held[1]}; "
-        f"this render is {input_sha256} and {measured_bars}. Two inputs reached one name, and "
+        f"{manifest_path.name} already names bars {held[0]}, an overlay from {held[1]} and "
+        f"renderer {held[2]}; this render is {input_sha256}, {measured_bars} and "
+        f"{RENDERER_VERSION}. Two inputs reached one name, and "
         "writing would leave the older manifest's digests beside a picture they never named. "
         "Render to another directory, or remove that file if it is a claim left behind by a "
         "render that was killed."
@@ -376,6 +415,7 @@ _SPAN_LANDMARKS = _SPAN_LANDMARK_DATES + (
     "peak_high",
     "flag_low",
     "advance_peak_volume_ratio",
+    "baseline_volume",
 )
 
 
@@ -524,6 +564,13 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         price_axis.set_title(f"{ticker} {_PANEL_TITLES[timeframe]} — as of {as_of.isoformat()}")
         price_axis.set_ylabel("Price")
         volume_axis.set_ylabel("Volume")
+        # Headroom above the tallest bar, because the mark for the heaviest advance session
+        # sits on top of it. Left to autoscale, the axis stops at that bar and the triangle is
+        # cut in half by the border -- and it is cut on exactly the session the panel is asking
+        # about, since the heaviest session is the tallest bar whenever the baseline is quiet.
+        top = float(bars["Volume"].max()) if len(bars) else 0.0
+        if top > 0:
+            volume_axis.set_ylim(0, top * 1.12)
         price_axis.grid(axis="y", alpha=0.25)
         volume_axis.grid(axis="y", alpha=0.25)
         if price_axis.get_legend_handles_labels()[0]:
@@ -658,7 +705,9 @@ def _draw_power_play(
         # baselines print no ratio either: one number beside a mark that stands for two of them
         # names neither.
         if timeframe in _BY_SESSION and len(divisions) == 1:
-            label = f"heaviest advance session ({divisions.pop()[0]:.1f}x baseline)"
+            # "x baseline" reads as the shade, and the shade is not what it divided by. The
+            # median is, and it is now drawn, so the label names the line rather than the window.
+            label = f"heaviest advance session ({divisions.pop()[0]:.1f}x baseline median)"
         else:
             label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
         volume_axis.plot(
@@ -717,6 +766,7 @@ def _shade_baselines(
 
     drawn: dict[str, list[str]] = {"baseline_first_session": [], "baseline_last_session": []}
     windows: dict[tuple[Any, Any], list[tuple[str, str]]] = {}
+    divisors: dict[tuple[Any, Any], set[float]] = {}
     for span in spans:
         first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
         if not (first and last):
@@ -725,6 +775,8 @@ def _shade_baselines(
         end = _containing_bar(bars.index, str(last), timeframe)
         if start is None or end is None:
             continue
+        if span.get("baseline_volume") is not None:
+            divisors.setdefault((start, end), set()).add(float(span["baseline_volume"]))
         # Keyed by the shade rather than by the window, for the reason the markers are: two
         # windows a week apart are one rectangle here, and two entries behind one rectangle
         # say the panel is showing something it is not.
@@ -735,6 +787,22 @@ def _shade_baselines(
     for (start, end), held in windows.items():
         suffix = f" ({held[0][1]})" if len(windows) > 1 else ""
         volume_axis.axvspan(start, end, color="#7a5af5", alpha=0.12, label=f"baseline volume{suffix}")
+        # The divisor drawn across the window it was taken over, because it is the one number on
+        # this panel a reader cannot point at. Every ratio is a division by the window's median,
+        # and the shade alone invites the comparison the eye actually makes -- against the
+        # tallest bar inside it. On a quiet window holding one enormous day those are far apart:
+        # a session marked "10.5x baseline" can be visibly shorter than a bar in the shade, and
+        # a reader checking the arithmetic against what they can see reads the label as false.
+        #
+        # Session-scale panels only, for the reason the ratio itself is: a weekly bar is five
+        # sessions added together, so a line at a session median sits near the floor of a panel
+        # it was never measured on.
+        levels = divisors.get((start, end), set())
+        if timeframe in _BY_SESSION and len(levels) == 1:
+            volume_axis.hlines(
+                levels.pop(), start, end, color="#7a5af5", linewidth=1.4, linestyle=":",
+                zorder=2.5, label=f"baseline median{suffix}",
+            )
         for name, day in held:
             drawn[name].append(day)
     return drawn

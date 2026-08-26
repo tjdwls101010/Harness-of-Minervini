@@ -227,6 +227,7 @@ _SPAN = (
     "advance_peak_volume_date",
     "baseline_first_session",
     "baseline_last_session",
+    "baseline_volume",
     "peak_high",
     "flag_low",
     "advance_peak_volume_ratio",

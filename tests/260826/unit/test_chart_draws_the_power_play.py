@@ -789,6 +789,42 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
 
         self.assertEqual(caught.exception.args[1], "output_dir")
 
+    def test_something_sitting_where_a_picture_goes_is_the_callers_to_change_too(self) -> None:
+        """The parent is writable and the manifest name is free, so every check before the
+        drawing passes -- and the write then fails on `Is a directory`, which reached the caller
+        as `internal_error`. That tells a reader the harness is broken when the path is."""
+        from scripts.minervini.contracts import RequestError
+        from scripts.minervini.operations import Runtime, execute
+        from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+        frame = power_play_series()
+        snapshot = ProviderSnapshot(
+            frame,
+            SnapshotMeta(
+                provider="fixture-prices",
+                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                as_of=frame.index[-1].date(),
+                coverage={"completed_only": True},
+            ),
+        )
+        request = {
+            "ticker": "TEST",
+            "as_of": frame.index[-1].date().isoformat(),
+            "no_cache": True,
+        }
+        runtime = Runtime(price_history=lambda ticker, requested: snapshot)
+        with tempfile.TemporaryDirectory() as directory:
+            written = execute("ticker.chart", request | {"output_dir": directory}, runtime=runtime)
+            taken = Path(written["data"]["artifacts"][0]["path"]).name
+
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / taken).mkdir()
+
+            with self.assertRaises(RequestError) as caught:
+                execute("ticker.chart", request | {"output_dir": directory}, runtime=runtime)
+
+        self.assertEqual(caught.exception.args[1], "output_dir")
+
 
 class RecordingAxis:
     """Keeps what was drawn on it and what each thing was called.
@@ -801,6 +837,7 @@ class RecordingAxis:
         self.spans: list[tuple] = []
         self.rules: list[Any] = []
         self.points: list[tuple] = []
+        self.levels: list[tuple] = []
         # How each thing was drawn, not only that it was. A reviewer set every marker to size
         # zero and every rule to width zero and the whole suite passed: the drawing calls all
         # happened, and nothing on the picture could be seen.
@@ -820,6 +857,12 @@ class RecordingAxis:
 
     def axvspan(self, start, end, **kwargs) -> None:
         self.spans.append((start, end))
+        self.drawn.append(kwargs)
+        if kwargs.get("label"):
+            self.labels.append(str(kwargs["label"]))
+
+    def hlines(self, level, start, end, **kwargs) -> None:
+        self.levels.append((float(level), start, end))
         self.drawn.append(kwargs)
         if kwargs.get("label"):
             self.labels.append(str(kwargs["label"]))
@@ -852,7 +895,7 @@ class TheRatioBelongsToTheTimeframeItWasMeasuredOn(unittest.TestCase):
 
         _draw_power_play(price, volume, self.frame, self.span, "daily")
 
-        self.assertIn("heaviest advance session (6.0x baseline)", volume.labels)
+        self.assertIn("heaviest advance session (6.0x baseline median)", volume.labels)
 
     def test_the_weekly_panel_marks_the_week_without_one(self) -> None:
         price, volume = RecordingAxis(), RecordingAxis()
@@ -1235,6 +1278,159 @@ class TheMarkerLandsOnTheBarItNames(unittest.TestCase):
         _draw_power_play(price, volume, self.frame, {"spans": [self.span]}, "daily")
 
         self.assertEqual(price.rules, [pd.Timestamp(self.span["advance_anchor_date"])])
+
+
+class WhatThePictureSaysAboutItself(unittest.TestCase):
+    """Every published thing that names the bundle has to name the same bundle.
+
+    Three of these went unpinned until a reviewer mutated them: the panel could call itself
+    Daily while the manifest called it power_play, `paths` could omit a picture that `artifacts`
+    and the directory both hold, and the shaded baseline could collapse to zero width with both
+    boundary dates still reported.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series(dormancy_sessions=400)
+        self.span = _power_play_spans(self.frame, "digest")
+
+    def test_the_panel_calls_itself_what_the_manifest_calls_it(self) -> None:
+        """The title is the only thing on the picture that says which panel a reader is holding."""
+        self.assertEqual(
+            chart_module._PANEL_TITLES,
+            {"weekly": "Weekly", "daily": "Daily", "power_play": "Power Play"},
+        )
+
+    def test_paths_holds_every_picture_the_artifacts_list_does(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        self.assertEqual(
+            sorted(manifest["paths"]),
+            sorted(artifact["timeframe"] for artifact in manifest["artifacts"]),
+        )
+        self.assertEqual(
+            sorted(manifest["paths"].values()),
+            sorted(artifact["path"] for artifact in manifest["artifacts"]),
+        )
+
+    def test_the_shade_covers_the_window_it_names(self) -> None:
+        """A rectangle of zero width is a window the manifest reports and the picture does not
+        show, and the ratio beside it is divided by sessions the reader cannot see."""
+        volume = RecordingAxis()
+
+        chart_module._shade_baselines(volume, self.frame, self.span["spans"], "daily")
+
+        self.assertTrue(volume.spans)
+        for start, end in volume.spans:
+            with self.subTest(start=start):
+                self.assertEqual(start, pd.Timestamp(self.span["spans"][0]["baseline_first_session"]))
+                self.assertEqual(end, pd.Timestamp(self.span["spans"][0]["baseline_last_session"]))
+                self.assertGreater(end - start, pd.Timedelta(days=1))
+
+    def test_the_divisor_is_drawn_across_the_window_it_was_taken_over(self) -> None:
+        """The median is the one number on this panel a reader cannot point at, and without it
+        the eye checks the multiple against the tallest bar in the shade instead."""
+        volume = RecordingAxis()
+
+        chart_module._shade_baselines(volume, self.frame, self.span["spans"], "daily")
+
+        divisor = self.span["spans"][0]["baseline_volume"]
+        self.assertIsNotNone(divisor)
+        self.assertEqual(
+            volume.levels,
+            [(
+                float(divisor),
+                pd.Timestamp(self.span["spans"][0]["baseline_first_session"]),
+                pd.Timestamp(self.span["spans"][0]["baseline_last_session"]),
+            )],
+        )
+        self.assertIn("baseline median", volume.labels)
+
+    def test_the_weekly_panel_draws_no_divisor(self) -> None:
+        """It is a session median, and a weekly bar is five sessions added together -- a line at
+        that level sits on the floor of a panel it was never measured on."""
+        weekly = (
+            self.frame.resample("W-FRI")
+            .agg({"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"})
+            .dropna()
+        )
+        volume = RecordingAxis()
+
+        chart_module._shade_baselines(volume, weekly, self.span["spans"], "weekly")
+
+        self.assertEqual(volume.levels, [])
+
+
+class TheRendererIsPartOfWhatTheNameClaims(unittest.TestCase):
+    """The digests name what went in; this name is claimed for what comes out.
+
+    The same bars through two versions of this module are two different pictures. With only the
+    input in the name the second wrote its PNGs under the first's manifest, leaving a bundle
+    whose manifest reported 1.2.0 beside a picture stamped 9.9.9.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+
+    def test_the_version_is_in_the_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = _rendered(self.frame, directory)
+
+        tag = f"-r{chart_module.RENDERER_VERSION.replace('.', '-')}_"
+        for path in manifest["paths"].values():
+            with self.subTest(path=path):
+                self.assertIn(tag, Path(path).name)
+
+    def test_a_bundle_from_another_version_is_refused_rather_than_replaced(self) -> None:
+        """Reached by hand, because the name carries the version and the two cannot collide on
+        their own -- what is under test is the check, which is what covers a manifest that
+        arrived by some other route."""
+        with tempfile.TemporaryDirectory() as directory:
+            _rendered(self.frame, directory)
+            standing = next(Path(directory).glob("*_manifest.json"))
+            payload = json.loads(standing.read_text(encoding="utf-8"))
+            payload["renderer_version"] = "9.9.9"
+            standing.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaises(chart_module.ArtifactNameTaken) as refusal:
+                _rendered(self.frame, directory)
+
+        self.assertIn("9.9.9", str(refusal.exception))
+        self.assertIn(chart_module.RENDERER_VERSION, str(refusal.exception))
+
+    def test_a_manifest_finished_after_the_first_look_is_not_overwritten(self) -> None:
+        """The durable check runs before anything is claimed, so a render already drawing can
+        finish in the gap. It is asked again once the claim is held."""
+        with tempfile.TemporaryDirectory() as directory:
+            real = chart_module._reserve_the_name
+            overtaking = False
+
+            def finish_first(reserving, *args, **kwargs):
+                nonlocal overtaking
+                claim = real(reserving, *args, **kwargs)
+                if not overtaking:
+                    overtaking = True
+                    standing = Path(str(reserving).removesuffix(".reserving"))
+                    standing.write_text(
+                        json.dumps({
+                            "input_sha256": "a" * 64,
+                            "renderer_version": chart_module.RENDERER_VERSION,
+                            "power_play": {"measured_bars": None},
+                        }),
+                        encoding="utf-8",
+                    )
+                return claim
+
+            chart_module._reserve_the_name = finish_first
+            try:
+                with self.assertRaises(chart_module.ArtifactNameTaken):
+                    _rendered(self.frame, directory)
+            finally:
+                chart_module._reserve_the_name = real
+
+            left_behind = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
+
+        self.assertEqual(left_behind, [])
 
 
 if __name__ == "__main__":
