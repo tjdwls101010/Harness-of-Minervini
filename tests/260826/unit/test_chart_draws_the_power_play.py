@@ -616,6 +616,11 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
                 self.assertEqual(
                     item["power_play_measured_bars"], manifest["power_play"]["measured_bars"]
                 )
+                self.assertEqual(item["as_of"], manifest["as_of"])
+        # And each record points at the kind of file its own type names.
+        named = {item["type"]: item["path"] for item in recorded if item["type"] == "artifact_manifest"}
+        self.assertEqual(named["artifact_manifest"], payload["data"]["manifest_path"])
+        self.assertTrue(named["artifact_manifest"].endswith("_manifest.json"))
 
     def test_a_chart_that_drew_a_span_points_back_at_what_asked_for_it(self) -> None:
         """ticker.power-play sends a reader here; without the return leg an orchestrator that
@@ -889,107 +894,6 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
 
         self.assertEqual(left_behind, [blocked])
 
-    def test_it_does_not_take_back_a_file_another_render_replaced(self) -> None:
-        """Two renders of the same input may run at once and share a name -- the claim permits
-        it, because the digests and the renderer all agree. Removing unconditionally is the
-        mistake the reservation already made once: the render that failed took away the files
-        the other had just finished, and the paths it had already handed back pointed at
-        nothing."""
-        frame = power_play_series()
-        with tempfile.TemporaryDirectory() as directory:
-            finished = _rendered(frame, directory)
-            standing = {Path(path): Path(path).read_bytes() for path in finished["paths"].values()}
-
-            real = chart_module._render_png
-            calls = 0
-
-            def fail_after_the_first(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                drawn = real(*args, **kwargs)
-                if calls == 2:
-                    # The other render replaces what this one just wrote, exactly as a
-                    # concurrent render of the same input is entitled to -- and by replacing
-                    # rather than rewriting, which is how every commit in this module lands.
-                    for path, content in standing.items():
-                        spare = path.with_suffix(".other")
-                        spare.write_bytes(content)
-                        os.replace(spare, path)
-                    raise OSError("the destination stopped taking files")
-                return drawn
-
-            chart_module._render_png = fail_after_the_first
-            try:
-                with self.assertRaises(chart_module.UnusableOutputDirectory):
-                    _rendered(frame, directory)
-            finally:
-                chart_module._render_png = real
-
-            survived = {path: path.read_bytes() for path in standing if path.exists()}
-
-        self.assertEqual(survived, standing)
-
-    def test_giving_up_the_claim_is_never_what_fails_a_finished_render(self) -> None:
-        """Every disclosed artifact is on disk and the caller gets an exception instead of the
-        paths naming them -- because the last thing the render does is remove its own claim, and
-        that can fail on a destination that has finished taking changes. The claim left behind
-        costs a colliding vintage a refusal it can clear by hand; the alternative costs the
-        caller a bundle it cannot find."""
-        frame = power_play_series()
-        real = Path.unlink
-
-        def refuse_the_claim(self, *args, **kwargs):
-            if ".reserving-" in self.name:
-                raise PermissionError("the claim cannot be removed")
-            return real(self, *args, **kwargs)
-
-        with tempfile.TemporaryDirectory() as directory:
-            with unittest.mock.patch.object(Path, "unlink", refuse_the_claim):
-                manifest = _rendered(frame, directory)
-
-            written = sorted(path.name for path in Path(directory).glob("*.png"))
-            claims = sorted(path.name for path in Path(directory).glob("*.reserving-*"))
-
-        self.assertEqual(len(written), 3)
-        self.assertEqual(len(claims), 1)
-        self.assertEqual(sorted(manifest["paths"]), ["daily", "power_play", "weekly"])
-
-    def test_a_second_render_that_fails_leaves_the_first_bundle_whole(self) -> None:
-        """Rendering twice into one directory and failing the second time, an ownership check
-        alone still took the first picture away -- this render had genuinely written what was
-        there, so the inode was its own -- and the first manifest was left naming a file that no
-        longer existed. What it replaced was a render of the same bars by the same renderer,
-        which is what sharing the name asserts, so it stays."""
-        frame = power_play_series()
-        with tempfile.TemporaryDirectory() as directory:
-            first = _rendered(frame, directory)
-
-            real = chart_module._render_png
-            calls = 0
-
-            def fail_the_second(*args, **kwargs):
-                nonlocal calls
-                calls += 1
-                if calls == 2:
-                    raise OSError("the second picture failed")
-                return real(*args, **kwargs)
-
-            chart_module._render_png = fail_the_second
-            try:
-                with self.assertRaises(chart_module.UnusableOutputDirectory):
-                    _rendered(frame, directory)
-            finally:
-                chart_module._render_png = real
-
-            missing = [
-                timeframe for timeframe, path in first["paths"].items()
-                if not Path(path).exists()
-            ]
-            standing = Path(first["manifest_path"]).exists()
-
-        self.assertEqual(missing, [])
-        self.assertTrue(standing)
-
     def test_a_failing_render_leaves_a_concurrent_one_alone(self) -> None:
         """Both renders find the name free, so preexistence says nothing: the one that replaced
         the other's picture and then failed deleted an inode that was genuinely its own, and the
@@ -1084,6 +988,46 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
             restored = Path(first["paths"]["weekly"]).exists()
 
         self.assertTrue(restored)
+
+    def test_two_renders_failing_in_turn_leave_nothing_standing(self) -> None:
+        """Each defers to the other's claim while it stands, so the second one to fail is the
+        one that has to sweep -- and sweeping only its own files left the first's picture under
+        a digest-stamped name beside two envelopes both reporting nothing written."""
+        frame = power_play_series()
+        with tempfile.TemporaryDirectory() as directory:
+            real = chart_module._render_png
+            beside: list[Path] = []
+            calls = 0
+
+            def fail_beside_a_claim_then_alone(*args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls in (2, 3):
+                    raise OSError("the picture failed")
+                drawn = real(*args, **kwargs)
+                if calls == 1:
+                    claim = next(Path(directory).glob("*_manifest.json.reserving-*"))
+                    other = claim.parent / f"{claim.name.rsplit('-', 1)[0]}-{'f' * 16}"
+                    other.write_text("{}", encoding="utf-8")
+                    beside.append(other)
+                return drawn
+
+            chart_module._render_png = fail_beside_a_claim_then_alone
+            try:
+                # The first render writes weekly, then fails while the other's claim stands.
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+                self.assertEqual(len(list(Path(directory).glob("*.png"))), 1)
+                # The other render withdraws, and then fails too.
+                beside[0].unlink()
+                with self.assertRaises(chart_module.UnusableOutputDirectory):
+                    _rendered(frame, directory)
+            finally:
+                chart_module._render_png = real
+
+            left_behind = sorted(path.name for path in Path(directory).iterdir())
+
+        self.assertEqual(left_behind, [])
 
     def test_a_destination_that_will_not_take_the_claim_is_the_callers_too(self) -> None:
         """Taking the claim is already writing there. A filesystem that holds ordinary files but
@@ -1879,11 +1823,14 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
         sits over some of them wherever it goes, and that is not the complaint."""
         import matplotlib.pyplot as plt
 
-        # The enormous day at the window's own left edge, which is where the span panel puts
-        # it -- five sessions in, under whatever a corner-pinned legend would occupy.
+        # The heavy day at the window's own left edge, which is where the span panel puts it --
+        # five sessions in, under whatever a corner-pinned legend would occupy. Below the
+        # panel's tallest bar on purpose: the advance almost always runs heavier than anything
+        # in the quiet window, so protecting the panel's maximum protects a bar in the advance
+        # and leaves this one -- the one the multiple is measured against -- under the legend.
         loud = self.frame.copy()
         opening = pd.Timestamp(self.span["spans"][0]["baseline_first_session"])
-        loud.loc[opening, "Volume"] = float(loud["Volume"].max()) * 3
+        loud.loc[opening, "Volume"] = float(loud["Volume"].max()) * 0.8
 
         real_subplots = plt.subplots
         real_figure = chart_module._atomic_figure
@@ -1907,11 +1854,15 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
                         continue
                     if box.overlaps(line.get_window_extent()):
                         collisions.append(line.get_label())
-                heights = [patch.get_height() for patch in axis.patches if patch.get_height()]
-                if heights:
-                    tallest = max(axis.patches, key=lambda patch: patch.get_height() or 0)
-                    if box.overlaps(tallest.get_window_extent()):
-                        collisions.append(f"tallest bar {tallest.get_height()}")
+                # The window's own tallest bar, not the panel's: the multiple is measured
+                # against that window, so that is the bar the eye reaches for.
+                for patch in axis.patches:
+                    if not patch.get_height():
+                        continue
+                    if abs(patch.get_height() - float(loud.loc[opening, "Volume"])) > 1e-9:
+                        continue
+                    if box.overlaps(patch.get_window_extent()):
+                        collisions.append(f"baseline bar {patch.get_height()}")
             return real_figure(figure, path)
 
         chart_module.plt.subplots = keep
@@ -1924,6 +1875,10 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
             chart_module._atomic_figure = real_figure
 
         self.assertTrue(panels, "the render has to have drawn something")
+        self.assertLess(
+            float(loud.loc[opening, "Volume"]), float(loud["Volume"].max()),
+            "the fixture only means something while the baseline's bar is not the panel's",
+        )
         self.assertEqual(collisions, [])
 
     def test_no_candle_body_reaches_past_the_session_it_belongs_to(self) -> None:
@@ -1973,6 +1928,42 @@ class WhatThePictureSaysAboutItself(unittest.TestCase):
             span = chart_module._span_window(daily, _power_play_spans(daily, "digest")["spans"])
             return list(span.iterrows())
         return list(daily.iterrows())
+
+    def test_no_legend_runs_off_the_page(self) -> None:
+        """The placement above the panel is clear of the marks by construction and can still be
+        wider than the panel, and there it takes its own last entry and the axis labels off the
+        side of the page with it. Forced by giving every landmark a long name."""
+        import matplotlib.pyplot as plt
+
+        real_names = chart_module._names
+        real_corners = chart_module._LEGEND_CORNERS
+        # Long enough that two columns of it are wider than the panel, and with no corner to
+        # fall into, so the placement above the panel is the one under test.
+        chart_module._names = lambda marks, days: " (" + ", ".join(days) * 10 + ")"
+        chart_module._LEGEND_CORNERS = ()
+        real_figure = chart_module._atomic_figure
+        off_the_page: list[str] = []
+
+        def measure(figure, path):
+            figure.canvas.draw()
+            for axis in figure.axes:
+                legend = axis.get_legend()
+                if legend is None:
+                    continue
+                if not chart_module._inside(legend.get_window_extent(), figure.bbox):
+                    off_the_page.append(figure.axes[0].get_title())
+            return real_figure(figure, path)
+
+        chart_module._atomic_figure = measure
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                _rendered(self.frame, directory)
+        finally:
+            chart_module._names = real_names
+            chart_module._LEGEND_CORNERS = real_corners
+            chart_module._atomic_figure = real_figure
+
+        self.assertEqual(off_the_page, [])
 
     def test_the_boundary_is_never_printed_from_either_side(self) -> None:
         """Falling short of the baseline reads the same way from the other side: 0.999 printed

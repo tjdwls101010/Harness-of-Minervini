@@ -171,17 +171,10 @@ def render_chart_artifacts(
     except ArtifactNameTaken:
         _release(reserved)
         raise
-    # What this render has actually put on disk, so a failure half-way through can take it back
-    # off again. The pictures are committed one at a time, so a bundle that failed on its second
-    # left the first standing under a digest-stamped name -- a finished-looking artifact beside
-    # an envelope reporting no side effects at all, which is the reader's cue that nothing was
-    # written. Every name here is this render's by the claim above, so removing them takes
-    # nothing that belongs to anyone else.
-    committed: list[tuple[Path, tuple[int, int], bool]] = []
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
-            daily, weekly, input_sha256, segmentation, power_play, committed,
+            daily, weekly, input_sha256, segmentation, power_play,
         )
     except OSError as error:
         # A destination that cannot take the files is the caller's to fix, and it stays that
@@ -189,10 +182,10 @@ def render_chart_artifacts(
         # check above -- the parent was writable and the manifest name was free -- and came
         # back as `internal_error`, which tells a reader the harness is broken when what is
         # broken is the path they handed it.
-        _take_back(committed, manifest_path, reserved)
+        _take_back(manifest_path, reserved)
         raise UnusableOutputDirectory(_UNUSABLE.format(directory=directory, error=error)) from error
     except BaseException:
-        _take_back(committed, manifest_path, reserved)
+        _take_back(manifest_path, reserved)
         raise
     finally:
         _release(reserved)
@@ -209,14 +202,8 @@ def _draw_the_bundle(
     input_sha256: str,
     segmentation: dict[str, Any] | None,
     power_play: dict[str, Any],
-    committed: list[tuple[Path, tuple[int, int], bool]],
 ) -> dict[str, Any]:
-    """Draw both pictures and write the manifest over the claim that reserved its name.
-
-    Every file this succeeds in putting on disk is appended to `committed` as it lands, with the
-    identity the filesystem gave it, so a caller that has to abandon the bundle knows exactly
-    what to take back and can tell it apart from something that replaced it since.
-    """
+    """Draw both pictures and write the manifest over the claim that reserved its name."""
 
     # And, where there is a span to look at, the span. A stock with three years of history draws
     # seven hundred sessions into twelve inches, and a four-session flag is a handful of pixels
@@ -230,11 +217,9 @@ def _draw_the_bundle(
     artifacts: list[dict[str, Any]] = []
     for timeframe, bars in artifact_specs:
         path = directory / f"{symbol}_{as_of_date.isoformat()}_{stamp}_{timeframe}.png"
-        stood_there = path.exists()
         drawn, pivot_drawn, span_drawn = _render_png(
             bars, path, symbol, timeframe, as_of_date, segmentation, power_play
         )
-        committed.append((path, _identity(path), stood_there))
         # What the picture contains, rather than what was available to put in it. A reader
         # asked to approve a chain off this chart needs to know which anchors it actually shows.
         #
@@ -264,9 +249,7 @@ def _draw_the_bundle(
         "power_play": power_play,
         "artifacts": artifacts,
     }
-    stood_there = manifest_path.exists()
     _atomic_json(manifest_path, manifest)
-    committed.append((manifest_path, _identity(manifest_path), stood_there))
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
@@ -288,7 +271,10 @@ def _place_clear_of_the_marks(axis: Any, *, also: Sequence[Any] = ()) -> None:
 
     Tried rather than computed, because where a legend fits depends on how large it is, and it
     is not measurable until it has been drawn somewhere. Falling through every corner it goes
-    above the panel, which is always clear and costs only height.
+    above the panel, which is clear of the marks by construction -- and is measured too, because
+    a legend wider than the panel runs off the side of the page there, taking its own last entry
+    and the axis labels with it. A picture that cannot be read at the edge is no better than one
+    whose mark is covered, so the last resort is back inside, in the corner it fits in.
     """
 
     marks = [line for line in axis.lines if line.get_marker() not in (None, "None", "none", "")]
@@ -300,9 +286,51 @@ def _place_clear_of_the_marks(axis: Any, *, also: Sequence[Any] = ()) -> None:
         box = legend.get_window_extent()
         if not any(box.overlaps(mark.get_window_extent()) for mark in marks):
             return
-    axis.legend(
-        loc="lower left", bbox_to_anchor=(0, 1.01), fontsize=8, framealpha=0.85, ncol=2
-    )
+    for columns, size in ((2, 8), (1, 8), (1, 7)):
+        legend = axis.legend(
+            loc="lower left", bbox_to_anchor=(0, 1.01), fontsize=size,
+            framealpha=0.85, ncol=columns,
+        )
+        figure.canvas.draw()
+        if _inside(legend.get_window_extent(), figure.bbox):
+            return
+    # Nothing fits and something has to be drawn: a legend the reader must scroll past is worse
+    # than one they must look around, so the last resort is back inside at the smallest size.
+    axis.legend(loc="upper left", fontsize=7, framealpha=0.85)
+
+
+def _tallest_of_the_baselines(
+    volume_axis: Any, bars: pd.DataFrame, spans: list[dict[str, Any]]
+) -> list[Any]:
+    """The bar in each quiet window that a covered legend would cost the reader most.
+
+    The multiple is a comparison against that window, so the window's own tallest bar is where
+    the eye goes to check it. The tallest bar of the whole panel is a different bar and usually
+    inside the advance: protecting that one and calling it done left the baseline's own tallest
+    under the legend whenever the advance ran heavier, which is nearly always.
+    """
+
+    protected = []
+    for span in spans:
+        first, last = span.get("baseline_first_session"), span.get("baseline_last_session")
+        if not (first and last):
+            continue
+        window = bars.loc[str(first):str(last)]
+        if window.empty:
+            continue
+        reached = float(window["Volume"].max())
+        found = [
+            patch for patch in volume_axis.patches
+            if patch.get_height() and abs(patch.get_height() - reached) < 1e-9
+        ]
+        protected.extend(found)
+    return protected
+
+
+def _inside(box: Any, page: Any) -> bool:
+    """Whether every edge of the legend is still on the page."""
+
+    return box.x0 >= page.x0 and box.x1 <= page.x1 and box.y0 >= page.y0 and box.y1 <= page.y1
 
 
 def _release(reserved: Path) -> None:
@@ -320,33 +348,25 @@ def _release(reserved: Path) -> None:
         pass
 
 
-def _identity(path: Path) -> tuple[int, int]:
-    """What the filesystem calls this file, so a later look can tell it from its replacement."""
+def _take_back(manifest_path: Path, ours: Path) -> None:
+    """Clear this name of pictures, unless anyone else could still be relying on them.
 
-    stat = path.stat()
-    return (stat.st_dev, stat.st_ino)
-
-
-def _take_back(
-    committed: list[tuple[Path, tuple[int, int], bool]], manifest_path: Path, ours: Path
-) -> None:
-    """Remove what an abandoned bundle created, unless anyone else could be relying on it.
-
-    Removing at all is worth doing because a bundle that stopped half-way leaves a picture under
-    a digest-stamped name beside an envelope reporting nothing written. Removing carelessly is
+    Clearing at all is worth doing because a bundle that stopped half-way leaves a picture under
+    a digest-stamped name beside an envelope reporting nothing written. Clearing carelessly is
     worse, and the name here can be shared: two renders of the same input are entitled to it,
     since the digests and the renderer all agree.
 
-    So nothing is taken back while another claim stands on this name, or while a finished
-    manifest does. Both say a bundle other than this one is being relied on -- and the one this
-    render is inside cannot be either, because it never got as far as its manifest. Reached
-    through per-file ownership alone this was still wrong: two renders that both found the name
-    free, one replacing the other's picture and then failing, deleted an inode that was
-    genuinely its own and left the survivor's manifest naming a file that no longer existed.
+    So nothing goes while another claim stands on this name, or while a finished manifest does.
+    Both say a bundle other than this one is being relied on -- and the one this render is
+    inside cannot be either, because it never got as far as its manifest.
 
-    Past those, a file this render replaced rather than created still stays. What it replaced
-    was a render of the same bars by the same renderer, which is exactly what sharing the name
-    asserts, so leaving it leaves the earlier bundle whole.
+    Past those two, the sweep is of the whole name rather than of the files this render happens
+    to have written, which is where three narrower rules in turn fell short. Per-file ownership
+    let two renders that both found the name free delete each other's work; adding preexistence
+    fixed that pair and still left the case where the file was genuinely missing when this
+    render looked; and both together still left a picture standing when two renders failed in
+    turn, each deferring to the other's claim and neither sweeping up. With no manifest and no
+    other claimant, nothing under this name was ever finished, so all of it is debris.
     """
 
     try:
@@ -356,13 +376,14 @@ def _take_back(
         )
         if held_by_others or manifest_path.exists():
             return
+        stem = manifest_path.name.removesuffix("_manifest.json")
+        abandoned = sorted(manifest_path.parent.glob(f"{stem}_*.png"))
     except OSError:
         return
 
-    for path, identity, stood_there in committed:
+    for path in abandoned:
         try:
-            if not stood_there and _identity(path) == identity:
-                path.unlink()
+            path.unlink()
         except OSError:
             # The destination is already refusing this render; failing again while tidying up
             # would replace the reason the caller needs with the second one.
@@ -716,12 +737,10 @@ def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_
         volume_axis.grid(axis="y", alpha=0.25)
         # Both legends here rather than where their marks are drawn, because placing one means
         # measuring it against a figure that exists, and only this function has one.
-        tallest = max(
-            (patch for patch in volume_axis.patches if patch.get_height()),
-            key=lambda patch: patch.get_height(),
-            default=None,
-        )
-        for axis, also in ((price_axis, ()), (volume_axis, () if tallest is None else (tallest,))):
+        for axis, also in (
+            (price_axis, ()),
+            (volume_axis, _tallest_of_the_baselines(volume_axis, bars, power_play["spans"])),
+        ):
             if axis.get_legend_handles_labels()[0]:
                 _place_clear_of_the_marks(axis, also=also)
         volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
