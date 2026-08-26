@@ -45,6 +45,7 @@ class TheUnreadTopKeepsItsVote(unittest.TestCase):
 
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+        from scripts.minervini.power_play_evidence import power_play_fingerprint
         from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = a_top_the_history_ends_before_series()
@@ -63,7 +64,8 @@ class TheUnreadTopKeepsItsVote(unittest.TestCase):
         keys = [f'{q["key"]}=observed' for q in first["data"]["chart_questions"]]
         payload = execute(
             "ticker.power-play",
-            {**request, "chart_readings": keys, "drawn_bars": bars_fingerprint(frame)},
+            {**request, "chart_readings": keys, "drawn_bars": bars_fingerprint(frame),
+             "measured_bars": power_play_fingerprint(frame)},
             runtime=runtime,
         )
 

@@ -47,12 +47,17 @@ def full(frame: pd.DataFrame, chain: Sequence[str], **overrides):
 def power_play_answers(history, chart_readings):
     """The arguments an answered Power Play reading now takes.
 
-    The digest travels with every answer, so a test that skips it is testing a call the request
-    boundary refuses. Kept in one place because five modules make the same call.
+    Both digests travel with every answer, so a test that skips either is testing a call the
+    request boundary refuses. Kept in one place because five modules make the same call.
     """
+    from scripts.minervini.power_play_evidence import power_play_fingerprint
     from scripts.minervini.setup_structure import bars_fingerprint, read_bars
 
-    return {"chart_readings": chart_readings, "drawn_bars": bars_fingerprint(read_bars(history)[0])}
+    return {
+        "chart_readings": chart_readings,
+        "drawn_bars": bars_fingerprint(read_bars(history)[0]),
+        "measured_bars": power_play_fingerprint(history),
+    }
 
 
 @contextmanager

@@ -21,6 +21,10 @@ from scripts.minervini.cache import ProviderCache
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.power_play_evidence import (
+    build_power_play_evidence,
+    power_play_fingerprint,
+)
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import power_play_series
 
@@ -68,7 +72,8 @@ class TheAnswerNamesThePictureItCameFrom(unittest.TestCase):
         keys = [f'{q["key"]}=observed' for q in self._questions()]
         payload = execute(
             "ticker.power-play",
-            {**self.request, "chart_readings": keys, "drawn_bars": bars_fingerprint(self.frame)},
+            {**self.request, "chart_readings": keys, "drawn_bars": bars_fingerprint(self.frame),
+             "measured_bars": power_play_fingerprint(self.frame)},
             runtime=self.runtime,
         )
 
@@ -84,7 +89,8 @@ class TheAnswerNamesThePictureItCameFrom(unittest.TestCase):
         keys = [f'{q["key"]}=observed' for q in self._questions()]
         payload = execute(
             "ticker.power-play",
-            {**self.request, "chart_readings": keys, "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18))},
+            {**self.request, "chart_readings": keys, "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18)),
+             "measured_bars": power_play_fingerprint(self.frame)},
             runtime=self.runtime,
         )
 
@@ -97,6 +103,153 @@ class TheAnswerNamesThePictureItCameFrom(unittest.TestCase):
         self.assertEqual(
             [q["answered"] for q in payload["data"]["chart_questions"]], [None, None]
         )
+
+
+class TheOverlayHasItsOwnInput(unittest.TestCase):
+    """Naming the picture is not the same as naming the overlay drawn on it.
+
+    `drawn_bars` covers the five price columns, which identifies the candles. This capability
+    does not read the span from prices alone -- a split inside it leaves the structure deciding
+    nothing, a payout withholds the criteria it decided -- so two histories with identical prices
+    and different events issue different questions. Reproduced: the capability asked two, the
+    chart drew no span at all, and `input_sha256` matched on both. The reader answered off a
+    blank picture and the answer was accepted straight through to `qualified`.
+
+    So the overlay names its own input too, under the word the question already prints it under.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        # Same five price columns, a different corporate-action history.
+        self.split = self.frame.copy()
+        self.split.loc[self.split.index[-30], "Stock Splits"] = 2.0
+        self.runtime = Runtime(price_history=lambda ticker, requested: snapshot(self.frame))
+        self.request = {
+            "ticker": "TEST",
+            "as_of": self.frame.index[-1].date().isoformat(),
+            "no_cache": True,
+        }
+
+    def _readings(self):
+        payload = execute("ticker.power-play", self.request, runtime=self.runtime)
+        return [f'{q["key"]}=observed' for q in payload["data"]["chart_questions"]]
+
+    def test_the_fixture_really_separates_the_two_digests(self) -> None:
+        self.assertEqual(bars_fingerprint(self.frame), bars_fingerprint(self.split))
+        self.assertNotEqual(power_play_fingerprint(self.frame), power_play_fingerprint(self.split))
+
+    def test_a_payout_moves_the_digest_as_much_as_a_split_does(self) -> None:
+        """Both halves of the event history, not just the split. A dividend inside the span
+        withdraws the criteria it decided, so a payout-only history is a different input for
+        exactly the reason a split-only one is -- and covering only the split half left the
+        digest saying two such histories were the same evidence."""
+        paid = self.frame.copy()
+        paid.loc[paid.index[-30], "Dividends"] = 0.25
+
+        self.assertEqual(bars_fingerprint(self.frame), bars_fingerprint(paid))
+        self.assertNotEqual(power_play_fingerprint(self.frame), power_play_fingerprint(paid))
+        self.assertNotEqual(power_play_fingerprint(paid), power_play_fingerprint(self.split))
+
+    def test_an_answer_that_names_no_overlay_is_refused(self) -> None:
+        with self.assertRaises(RequestError) as caught:
+            execute(
+                "ticker.power-play",
+                {
+                    **self.request,
+                    "chart_readings": self._readings(),
+                    "drawn_bars": bars_fingerprint(self.frame),
+                },
+                runtime=self.runtime,
+            )
+
+        self.assertIn("measured_bars", str(caught.exception))
+
+    def test_an_overlay_from_another_events_vintage_closes_nothing(self) -> None:
+        """The digest that used to match on both sides of the failure."""
+        payload = execute(
+            "ticker.power-play",
+            {
+                **self.request,
+                "chart_readings": self._readings(),
+                "drawn_bars": bars_fingerprint(self.frame),
+                "measured_bars": power_play_fingerprint(self.split),
+            },
+            runtime=self.runtime,
+        )
+
+        self.assertEqual(payload["data"]["power_play_state"], "incomplete")
+        self.assertEqual({item["reason"] for item in payload["missing"]}, {"approval_covers_different_bars"})
+        self.assertEqual(payload["data"]["measured_bars"], power_play_fingerprint(self.frame))
+        self.assertEqual([q["answered"] for q in payload["data"]["chart_questions"]], [None, None])
+
+    def test_naming_both_lets_the_answer_through(self) -> None:
+        payload = execute(
+            "ticker.power-play",
+            {
+                **self.request,
+                "chart_readings": self._readings(),
+                "drawn_bars": bars_fingerprint(self.frame),
+                "measured_bars": power_play_fingerprint(self.frame),
+            },
+            runtime=self.runtime,
+        )
+
+        self.assertEqual(payload["data"]["power_play_state"], "qualified")
+
+    def test_a_value_that_is_not_a_fingerprint_is_refused(self) -> None:
+        for value in ("not-a-sha256", "abc", power_play_fingerprint(self.frame).upper()):
+            with self.subTest(value=value), self.assertRaises(RequestError):
+                execute(
+                    "ticker.power-play",
+                    {
+                        **self.request,
+                        "chart_readings": ["a=observed"],
+                        "drawn_bars": bars_fingerprint(self.frame),
+                        "measured_bars": value,
+                    },
+                    runtime=self.runtime,
+                )
+
+
+class TheLibraryCallIsRefusedRatherThanMisread(unittest.TestCase):
+    """`build_power_play_evidence` is public, and the new digest cannot default quietly.
+
+    Defaulted to None, an older call that passes readings and `drawn_bars` alone lands on
+    `measured_bars != fingerprint` for every answer and comes back, with no error anywhere,
+    reporting that the caller read another vintage. That is a finding about the stock produced
+    by a call that is merely out of date -- the same substitution the request boundary refuses
+    when a digest is malformed. Passing None stays legal, because None is what the chart prints
+    where the history carries no corporate-action columns.
+    """
+
+    def setUp(self) -> None:
+        self.frame = power_play_series()
+        self.keys = {
+            question["key"]: "observed"
+            for question in build_power_play_evidence(self.frame)["chart_questions"]
+        }
+
+    def test_answers_with_no_overlay_digest_stated_are_refused(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            build_power_play_evidence(
+                self.frame, chart_readings=self.keys, drawn_bars=bars_fingerprint(self.frame)
+            )
+
+        self.assertIn("measured_bars", str(caught.exception))
+
+    def test_stating_it_as_none_is_a_statement_and_is_allowed(self) -> None:
+        evidence = build_power_play_evidence(
+            self.frame,
+            chart_readings=self.keys,
+            drawn_bars=bars_fingerprint(self.frame),
+            measured_bars=None,
+        )
+
+        self.assertTrue(evidence["readings_cover_other_bars"])
+
+    def test_and_a_call_with_nothing_to_apply_is_untouched(self) -> None:
+        """No answer, no claim about a picture, nothing to refuse."""
+        self.assertTrue(build_power_play_evidence(self.frame)["chart_questions"])
 
 
 class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
@@ -129,6 +282,7 @@ class TheTwoCapabilitiesCanReachDifferentBars(unittest.TestCase):
                     **request,
                     "chart_readings": [f'{q["key"]}=observed' for q in questions],
                     "drawn_bars": chart["data"]["input_sha256"],
+                    "measured_bars": chart["data"]["power_play"]["measured_bars"],
                 },
                 runtime=runtime,
             )
@@ -161,7 +315,8 @@ class ADigestIsWhatIsAskedFor(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(RequestError):
                 execute(
                     "ticker.power-play",
-                    {**self.request, "chart_readings": ["a=observed"], "drawn_bars": value},
+                    {**self.request, "chart_readings": ["a=observed"], "drawn_bars": value,
+                     "measured_bars": power_play_fingerprint(self.frame)},
                     runtime=self.runtime,
                 )
 
@@ -188,6 +343,7 @@ class ADigestIsWhatIsAskedFor(unittest.TestCase):
                     ]
                 ],
                 "drawn_bars": f" {bars_fingerprint(self.frame)}\n",
+                "measured_bars": f" {power_play_fingerprint(self.frame)}\n",
             },
             runtime=self.runtime,
         )
@@ -214,6 +370,7 @@ class ARejectionIsNotWaitingOnAPicture(unittest.TestCase):
                 "no_cache": True,
                 "chart_readings": ["some-key-this-run-never-issued=observed"],
                 "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18)),
+                "measured_bars": power_play_fingerprint(frame),
             },
             runtime=runtime,
         )
@@ -241,6 +398,7 @@ class BeingToldToRedrawSendsYouSomewhere(unittest.TestCase):
                 **request,
                 "chart_readings": [f'{q["key"]}=observed' for q in questions],
                 "drawn_bars": bars_fingerprint(power_play_series(flag_sessions=18)),
+                "measured_bars": power_play_fingerprint(frame),
             },
             runtime=runtime,
         )

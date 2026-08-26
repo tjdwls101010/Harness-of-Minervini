@@ -76,6 +76,7 @@ def _empty(reason: str | None, *, peak_date: str | None = None, peak_high: float
         "measured_span_first_session": None,
         "baseline_first_session": None,
         "baseline_last_session": None,
+        "baseline_volume": None,
         "advance_anchor_date": None,
         "advance_sessions": None,
         "advance_weeks": None,
@@ -282,6 +283,11 @@ def measure_power_play(
         "measured_span_first_session": _label(bars, earliest),
         "baseline_first_session": _label(bars, launch - advance_window) if len(baseline) else None,
         "baseline_last_session": _label(bars, launch - 1) if len(baseline) else None,
+        # The divisor itself, not just the window it was taken over. Every ratio below is a
+        # division by this number, and a reader handed the window has to take the arithmetic on
+        # faith -- the median is not a bar they can point at, and on a window holding one
+        # enormous day it sits nowhere near the tallest thing inside the shade.
+        "baseline_volume": baseline_volume,
         "advance_anchor_date": _label(bars, launch),
         "advance_sessions": peak - launch,
         "advance_weeks": (peak - launch) / week,

@@ -563,33 +563,66 @@ def _chart_readings(request: Mapping[str, Any]) -> dict[str, str]:
     return readings
 
 
+def _chart_digest(
+    request: Mapping[str, Any], name: str, required: bool, prints: str, describes: str, kind: str
+) -> str | None:
+    """One of the digests an answer names the picture by, checked before anything is applied.
+
+    Required with an answer, the way approved_bars is required with a complete chain, and for the
+    same reason: a chart reading is a reading of one picture, and the harness never sees it.
+
+    And it has to be a digest rather than any non-empty string. Taken as written, a typo was a
+    picture this run had not measured -- so a malformed value came back as an honest reading of
+    another vintage, which is a finding about the stock rather than about the request.
+    """
+
+    value = request.get(name)
+    if required and not (isinstance(value, str) and value.strip()):
+        raise RequestError(
+            f"{name} is required with chart_readings: name the bars {describes}, as ticker.chart "
+            f"reports them in {prints} and every chart question carries them",
+            name,
+        )
+    if value is None:
+        return None
+    # Accepted on the stripped value, so it has to be *used* stripped too. A padded digest
+    # passing validation and then being compared raw is worse than a refusal: it reads as an
+    # honest chart of another vintage, and the padding is invisible in the reported reason.
+    value = str(value).strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise RequestError(
+            f"{name} is {kind}: sixty-four lowercase hex characters, as ticker.chart reports "
+            f"it in {prints}",
+            name,
+        )
+    return value
+
+
 def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
     readings = _chart_readings(request)
-    drawn_bars = request.get("drawn_bars")
-    # Required with an answer, the way approved_bars is required with a complete chain, and for
-    # the same reason: a chart reading is a reading of one picture, and the harness never sees it.
-    if readings and not (isinstance(drawn_bars, str) and drawn_bars.strip()):
-        raise RequestError(
-            "drawn_bars is required with chart_readings: name the bars the chart was read from, "
-            "as ticker.chart reports them and every chart question carries them",
-            "drawn_bars",
-        )
-    # And it has to be a digest rather than any non-empty string. Taken as written, a typo was a
-    # picture this run had not measured -- so a malformed value came back as an honest reading of
-    # another vintage, which is a finding about the stock rather than about the request.
-    if drawn_bars is not None:
-        # Accepted on the stripped value, so it has to be *used* stripped too. A padded digest
-        # passing validation and then being compared raw is worse than a refusal: it reads as an
-        # honest chart of another vintage, and the padding is invisible in the reported reason.
-        drawn_bars = str(drawn_bars).strip()
-        if not re.fullmatch(r"[0-9a-f]{64}", drawn_bars):
-            raise RequestError(
-                "drawn_bars is a bars_fingerprint: sixty-four lowercase hex characters, as "
-                "ticker.chart reports it in input_sha256",
-                "drawn_bars",
-            )
+    # Two digests, because the picture and the overlay drawn on it have different inputs. The
+    # candles are the five price columns; the span is not, and a history with the same prices and
+    # a different corporate-action column asks different questions -- reproduced as two questions
+    # from here, no span at all on the chart, and `input_sha256` matching on both, which let an
+    # answer read off a blank picture through to `qualified`.
+    drawn_bars = _chart_digest(
+        request,
+        "drawn_bars",
+        bool(readings),
+        "input_sha256",
+        "the chart was read from",
+        "a bars_fingerprint",
+    )
+    measured_bars = _chart_digest(
+        request,
+        "measured_bars",
+        bool(readings),
+        "power_play.measured_bars",
+        "the overlay was drawn from",
+        "the digest the overlay was computed from",
+    )
     try:
         prices = _cached_provider(
             runtime,
@@ -621,7 +654,9 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             missing=[stale_price],
             sources=[_source(prices.meta)],
         )
-    evidence = build_power_play_evidence(prices.data, chart_readings=readings, drawn_bars=drawn_bars)
+    evidence = build_power_play_evidence(
+        prices.data, chart_readings=readings, drawn_bars=drawn_bars, measured_bars=measured_bars
+    )
     # Refused rather than dropped, and before the verdict is assembled. The ordinary way an
     # approval stops matching is a session closing between the chart and the request; a caller
     # told nothing would read the unchanged answer as the harness ignoring them.
@@ -1890,10 +1925,16 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
     destination = Path(output_dir) if output_dir else Path(__file__).resolve().parents[2] / ".artifacts" / "charts"
-    from .chart import UnrenderableHistory
+    from .chart import ArtifactNameTaken, UnrenderableHistory, UnusableOutputDirectory
 
     try:
         result = _render(prices.data, ticker, clock, destination)
+    except (ArtifactNameTaken, UnusableOutputDirectory) as error:
+        # A directory that already holds a different render under this name is something the
+        # caller can move, and an internal_error envelope -- which is what an unhandled raise
+        # becomes, with the request and the explicit as_of stripped off -- tells them nothing
+        # they could act on.
+        raise RequestError(str(error), "output_dir") from error
     except UnrenderableHistory as error:
         # The renderer refuses unusable history by raising, and an unhandled raise becomes an
         # internal_error envelope with the request and the explicit as_of stripped off it. The
@@ -1928,6 +1969,8 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             "path": artifact["path"],
             "as_of": result["as_of"],
             "input_sha256": result["input_sha256"],
+            # The overlay's own input, because the file at this path depends on it too.
+            "power_play_measured_bars": result["power_play"]["measured_bars"],
         }
         for artifact in result["artifacts"]
     ]
@@ -1937,6 +1980,10 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             "path": result["manifest_path"],
             "as_of": result["as_of"],
             "input_sha256": result["input_sha256"],
+            # Both digests here too. The manifest holds the overlay's input and its name is
+            # stamped with it, so a record naming only the price digest identifies this file
+            # less completely than the pictures it lists.
+            "power_play_measured_bars": result["power_play"]["measured_bars"],
         }
     )
     return envelope(
@@ -1945,7 +1992,13 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
         as_of=_as_of(clock),
         data=result,
         sources=[_source(prices.meta)],
-        next_capabilities=["ticker.qualify", "ticker.setup"],
+        # And back where the overlay came from, when there is one. ticker.power-play sends a
+        # reader here to look at a span; without the return leg an orchestrator that follows
+        # these lists draws the picture and has nowhere to carry the answer.
+        next_capabilities=(
+            ["ticker.qualify", "ticker.setup"]
+            + (["ticker.power-play"] if (result.get("power_play") or {}).get("spans") else [])
+        ),
         side_effects=side_effects,
     )
 
