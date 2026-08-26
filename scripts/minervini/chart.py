@@ -102,23 +102,29 @@ def render_chart_artifacts(
     # second render replaced the first's pictures under the first's manifest. Widening the name
     # only moves the number; what makes it exact is asking the directory.
     #
-    # Claimed before anything is drawn rather than merely checked, because three files are
-    # written one at a time and asking first leaves a window: two colliding renders both passed
-    # the check, then interleaved, and the surviving manifest named a span while the surviving
-    # pictures had none -- the mismatch answered as `qualified`. The claim is the manifest
-    # itself, so a second render meets it wherever in the first one's work it arrives. A
-    # re-render of the same input meets its own digests and goes on to overwrite itself, which
-    # is the same content either way.
-    reserved = _reserve_the_name(manifest_path, input_sha256, power_play["measured_bars"])
+    # Two claims, because the name is taken over two different spans of time. The finished
+    # manifest is the durable one: it says in full what the truncated name only gestures at,
+    # and it outlives the render. The other covers the render itself -- three files written one
+    # at a time, and asking once at the start leaves a window wide enough that two colliding
+    # renders both passed the check, interleaved, and left a manifest naming a span beside
+    # pictures that had none, a mismatch answered as `qualified`.
+    #
+    # That in-flight claim is a file of its own rather than a stub under the manifest's name.
+    # Written there it was a manifest with no `artifacts` key for the length of every render,
+    # which anything watching the directory reads and fails on -- and worse, a render that
+    # failed after another had finished took the *finished* manifest away with it, because the
+    # name it thought it owned was the same name. Nothing here ever deletes a manifest.
+    reserving = manifest_path.parent / f"{manifest_path.name}.reserving"
+    _refuse_a_taken_name(manifest_path, input_sha256, power_play["measured_bars"])
+    reserved = _reserve_the_name(reserving, input_sha256, power_play["measured_bars"])
     try:
         return _draw_the_bundle(
             manifest_path, directory, symbol, stamp, as_of_date,
             daily, weekly, input_sha256, segmentation, power_play,
         )
-    except BaseException:
+    finally:
         if reserved:
-            manifest_path.unlink(missing_ok=True)
-        raise
+            reserving.unlink(missing_ok=True)
 
 
 def _draw_the_bundle(
@@ -175,43 +181,52 @@ def _draw_the_bundle(
     return {**manifest, "manifest_path": str(manifest_path)}
 
 
-def _reserve_the_name(manifest_path: Path, input_sha256: str, measured_bars: str | None) -> bool:
-    """Claim the manifest before drawing, or refuse if another pair of inputs holds it.
+def _reserve_the_name(reserving: Path, input_sha256: str, measured_bars: str | None) -> bool:
+    """Claim this name for the length of the render, or refuse if other inputs are drawing it.
 
-    Says whether this call created the claim, so a render that fails partway can take its own
-    reservation back rather than leaving a name nobody can use.
+    Says whether this call created the claim, so only the render that took it takes it back.
+
+    Created with its contents already in it, by linking a file that is complete before it has
+    a name. `O_EXCL` and then a write is two steps, and in between the claim is an empty file
+    -- which reads as no digests at all, so a second render of the *same* input met it and was
+    refused for a collision that was really its own reservation half-written.
     """
 
     claim = json.dumps(
-        {
-            "input_sha256": input_sha256,
-            "power_play": {"measured_bars": measured_bars},
-            # A manifest with no pictures under it is a render that did not finish, and saying
-            # so is cheaper than leaving a reader to work it out from the missing keys.
-            "reserved": True,
-        },
+        {"input_sha256": input_sha256, "power_play": {"measured_bars": measured_bars}},
         separators=(",", ":"),
         sort_keys=True,
     )
+    handle, staged = tempfile.mkstemp(dir=reserving.parent, prefix=".reserving-")
     try:
-        handle = os.open(manifest_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-    except FileExistsError:
-        _refuse_a_taken_name(manifest_path, input_sha256, measured_bars)
-        return False
-    with os.fdopen(handle, "w", encoding="utf-8") as stream:
-        stream.write(claim)
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(claim)
+        try:
+            os.link(staged, reserving)
+        except FileExistsError:
+            _refuse_a_taken_name(reserving, input_sha256, measured_bars)
+            return False
+    finally:
+        os.unlink(staged)
     return True
 
 
-def _refuse_a_taken_name(manifest_path: Path, input_sha256: str, measured_bars: str | None) -> None:
-    """Stop before writing over a manifest that names a different pair of inputs.
+def _refuse_a_taken_name(held_by: Path, input_sha256: str, measured_bars: str | None) -> None:
+    """Stop unless the file already at this name was written from these same two inputs.
 
     Reading it back rather than trusting the name is what makes the check exact: the file says
     in full what its truncated name only gestures at. A manifest written before the overlay had
     a digest carries none, and can only share a name with a render whose overlay has none
     either -- so the two agree and the newer picture, drawn from the same bars, replaces it.
+
+    Nothing at the name is nothing to refuse. Anything else that cannot be read as those two
+    digests is refused, because a name whose holder cannot be identified is a name this render
+    cannot prove is its own.
     """
 
+    if not held_by.exists():
+        return
+    manifest_path = held_by
     try:
         taken = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

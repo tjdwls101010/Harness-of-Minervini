@@ -339,6 +339,79 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         self.assertEqual(written["power_play"]["measured_bars"], manifest["power_play"]["measured_bars"])
         self.assertTrue(written["artifacts"])
 
+    def test_a_render_in_flight_puts_nothing_under_the_manifest_name(self) -> None:
+        """Anything watching the directory reads that name, and read mid-render it was a
+        manifest with no artifacts and no paths -- eight fields short, for the whole length of
+        every render. The claim that covers the render is a file of its own."""
+        seen: list[Any] = []
+        real = chart_module._render_png
+
+        def look_at_the_directory(bars, path, *args, **kwargs):
+            seen.extend(sorted(item.name for item in path.parent.iterdir()))
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", look_at_the_directory
+            ):
+                manifest = _rendered(self.frame, directory)
+
+        self.assertTrue(seen)
+        self.assertNotIn(Path(manifest["manifest_path"]).name, seen)
+
+    def test_a_second_render_of_the_same_input_is_not_refused_mid_flight(self) -> None:
+        """The claim used to be created empty and filled a moment later, and in between it read
+        as no digests at all -- so the same input met its own half-written reservation and was
+        told another vintage held the name."""
+        done: list[dict[str, Any]] = []
+        real = chart_module._render_png
+        # Set before the inner render rather than after it, because that render draws through
+        # this same patch and would otherwise start a third, and a fourth.
+        overtaking = False
+
+        def render_the_same_input_again(bars, path, *args, **kwargs):
+            nonlocal overtaking
+            if not overtaking:
+                overtaking = True
+                done.append(_rendered(self.frame, path.parent))
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", render_the_same_input_again
+            ):
+                manifest = _rendered(self.frame, directory)
+
+        self.assertTrue(done)
+        self.assertEqual(done[0]["manifest_path"], manifest["manifest_path"])
+
+    def test_a_failing_render_never_takes_a_finished_manifest_with_it(self) -> None:
+        """The one that follows from owning the manifest's own name: a render that reserved it,
+        was overtaken by an identical one that finished, and then failed, deleted the manifest
+        the finished render had just returned to its caller."""
+        finished: list[dict[str, Any]] = []
+        real = chart_module._render_png
+        overtaking = False
+
+        def finish_the_other_render_then_fall_over(bars, path, *args, **kwargs):
+            nonlocal overtaking
+            if not overtaking:
+                overtaking = True
+                finished.append(_rendered(self.frame, path.parent))
+                raise RuntimeError("the plotting stack fell over")
+            return real(bars, path, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with unittest.mock.patch.object(
+                chart_module, "_render_png", finish_the_other_render_then_fall_over
+            ):
+                with self.assertRaises(RuntimeError):
+                    _rendered(self.frame, directory)
+
+            self.assertTrue(finished)
+            self.assertTrue(Path(finished[0]["manifest_path"]).exists())
+            self.assertEqual([], list(Path(directory).glob("*.reserving")))
+
     def test_a_failed_render_does_not_leave_a_name_nobody_can_use(self) -> None:
         """The claim is this render's to take back."""
         with tempfile.TemporaryDirectory() as directory:
