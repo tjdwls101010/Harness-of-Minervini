@@ -438,6 +438,26 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
     )
 
 
+# Which price each protective level is a level of, and what counts as crossing it. A stop is
+# an order resting in the market: the tape takes it out the moment the Low reaches it, so
+# reaching it is enough. A structural invalidation is a threshold the thesis has to be
+# carried through -- the condition a caller writes beside one says "below" -- so a close that
+# stopped exactly on it has not gone below it. Both the audit over completed bars and every
+# comparison against a price handed in read a level from here, because a level read two ways
+# is two answers to one question.
+AUDIT_BASIS = {"stop": "completed_daily_low", "initial_stop": "completed_daily_low", "invalidation": "completed_daily_close"}
+_CROSSES = {
+    "completed_daily_low": lambda price, level: price <= level,
+    "completed_daily_close": lambda price, level: price < level,
+}
+
+
+def crosses(role: str, price: float, level: float) -> bool:
+    """Whether ``price`` crossed ``level``, asked the way that role's own audit asks it."""
+
+    return _CROSSES[AUDIT_BASIS[role]](price, level)
+
+
 def triggered_state(record: Any) -> bool:
     """Whether a record's state word says the thing it is about happened."""
 
@@ -558,8 +578,8 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # the position ended and nothing more, which is what an assertion is.
     asserted_path = _triggered(payload.get("asserted_price_path"))
     asserted_stop = asserted_stop or asserted_path
-    completed_stop = asserted_stop or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
-    invalidation_price_breach = (current is not None and invalidation_price is not None and current <= invalidation_price) or (
+    completed_stop = asserted_stop or _triggered(completed_price_path) or (current is not None and stop is not None and crosses("stop", current, stop))
+    invalidation_price_breach = (current is not None and invalidation_price is not None and crosses("invalidation", current, invalidation_price)) or (
         _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
     )
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach

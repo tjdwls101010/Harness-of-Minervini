@@ -36,7 +36,7 @@ from .providers.yfinance import completed_daily_bars, current_classification_sna
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, split_sized_discontinuities
-from .risk import declares_exit_plan, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
+from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
@@ -1618,18 +1618,9 @@ def _positive(value: Any) -> float | None:
     return float(value) if value > 0 and math.isfinite(value) else None
 
 
-# Whether a price crossed a level, asked the way that level's own audit asks it.
-_CROSSES = {
-    "completed_daily_low": lambda price, level: price <= level,
-    "completed_daily_close": lambda price, level: price < level,
-}
 # A window whose refusal is a coordinate-system break rather than a missing bar.
 _UNCROSSABLE_REASONS = frozenset({"share_split_inside_stop_window", "corporate_action_evidence_missing"})
 _COVERAGE_FIELDS = frozenset({"first_bar_checked", "last_bar_checked", "bars_checked"})
-# Which price each protective level is a level of. A stop is an order in the market and the
-# tape takes it out intraday; a structural invalidation is a statement about where a session
-# finished, and the condition a caller writes beside one says "completed close below".
-_AUDIT_BASIS = {"stop": "completed_daily_low", "initial_stop": "completed_daily_low", "invalidation": "completed_daily_close"}
 
 
 def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2087,7 +2078,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # Each level is read the way its own audit reads it: a stop is a price the position
     # transacts at, an invalidation a threshold the close has to be carried through.
     explicit_crossed = (
-        [(role, level, effective) for role, level, effective, _end in protective_plan if _CROSSES[_AUDIT_BASIS[role]](float(explicit_current), level)]
+        [(role, level, effective) for role, level, effective, _end in protective_plan if _crosses(role, float(explicit_current), level)]
         if explicit_declared
         else []
     )
@@ -2114,7 +2105,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 "effective_from": effective.isoformat(),
                 **(
                     {"through": clock.date.isoformat(), "state": "breached", "basis": "explicit_completed_price", "breach_date": clock.date.isoformat(), "breach_price": price}
-                    if _CROSSES[_AUDIT_BASIS[role]](price, level) and (end_before is None or clock.date < end_before)
+                    if _crosses(role, price, level) and (end_before is None or clock.date < end_before)
                     else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
                 ),
             }

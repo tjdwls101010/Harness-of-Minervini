@@ -127,6 +127,15 @@ class WithNoBarsThePriceIsTheWholeRecord(unittest.TestCase):
         self.assertEqual(path["checked_level"], 90.0)
         self.assertEqual(payload["data"]["failed"], ["completed_stop_breach"])
 
+    def test_a_price_exactly_at_the_invalidation_crosses_nothing_at_all(self) -> None:
+        # With no bars to fall back on, whether the price crossed anything is the whole
+        # question. A threshold stopped exactly on has not been gone below, so there is no
+        # record here and the position is unresolved rather than sold.
+        payload = self.refused(stop_price=90.0, invalidation={"price": 95.0}, current_price=95.0)
+
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual(payload["data"]["failed"], [])
+
     def test_two_close_read_levels_are_named_by_the_higher(self) -> None:
         payload = self.refused(stop_price=80.0, invalidation={"price": 95.0}, current_price=88.0)
 
