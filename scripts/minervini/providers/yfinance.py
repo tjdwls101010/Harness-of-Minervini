@@ -195,12 +195,15 @@ def completed_daily_bars(
         # it was complete, silently shortening every average built on it.
         if dates.isna().any():
             raise ProviderUnavailable("yfinance", "daily_bars_unreadable_session_index", operation="daily_bars")
+        completed = completed.loc[dates <= clock.date]
+    if not completed.empty:
         # A close above the high did not happen. Every measurement downstream reads the close as
         # the session's price, so accepting one the same row says the session never reached
         # publishes a multiple, a stop distance and an extension from a number nobody printed.
+        # Asked of the sessions `as_of` reached, and only those: a provider that hands back more
+        # than was requested does not get to invalidate the history that was.
         if _impossible_range(completed).any():
             raise ProviderUnavailable("yfinance", "daily_bars_impossible_session_range", operation="daily_bars")
-        completed = completed.loc[dates <= clock.date]
     if completed.empty:
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
 

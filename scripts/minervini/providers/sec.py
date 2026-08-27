@@ -406,7 +406,10 @@ def _metric_records(taxonomies: list[tuple[Mapping[str, Any], str]], concepts: t
     dollars beside a hundred and thirty Canadian ones is not thirty percent of growth.
     """
 
-    found: set[tuple[str, str, str]] = set()
+    # Keyed by the regime too. Without it a 20-F filer tagging the same period under both
+    # taxonomies lost the second one here, before the grouping that exists to keep them apart
+    # could ever see it -- and the provenance refusals downstream then had nothing to refuse.
+    found: set[tuple[str, str, str, str]] = set()
     for taxonomy, accounting_basis in taxonomies:
         for concept_name in concepts:
             concept = taxonomy.get(concept_name)
@@ -417,9 +420,9 @@ def _metric_records(taxonomies: list[tuple[Mapping[str, Any], str]], concepts: t
                     continue
                 for raw in unit_records:
                     record = _normalized_metric_record(raw, kind, annual_ends)
-                    if record is None or (record["accn"], record["period"], record["end"]) in found:
+                    if record is None or (record["accn"], record["period"], record["end"], accounting_basis) in found:
                         continue
-                    found.add((record["accn"], record["period"], record["end"]))
+                    found.add((record["accn"], record["period"], record["end"], accounting_basis))
                     yield {**record, "accounting_basis": accounting_basis, "unit": unit if isinstance(unit, str) else None}
 
 

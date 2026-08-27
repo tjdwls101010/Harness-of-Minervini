@@ -108,7 +108,7 @@ def evaluate_fundamentals(
     identity_missing = (["quarterly_periods_two_closes_reached"] if quarterly_conflicts else []) + (["annual_periods_two_closes_reached"] if annual_conflicts else [])
     basis = _accounting_basis(filings)
 
-    quarterly = _quarterly_read(quarters)
+    quarterly = _quarterly_read(quarters, quarterly_conflicts)
     annual_growth = _annual_growth(annual)
     integrity, safety_missing = _integrity_read(quarters, going_concern=going_concern, accounting_integrity=accounting_integrity)
     earnings_quality = {
@@ -264,7 +264,7 @@ def _accounting_basis(filings: list[dict[str, Any]]) -> list[str]:
     return _dedupe([str(filing["accounting_basis"]) for filing in filings])
 
 
-def _quarterly_read(quarters: list[dict[str, Any]]) -> dict[str, Any]:
+def _quarterly_read(quarters: list[dict[str, Any]], withheld: list[str] | None = None) -> dict[str, Any]:
     eps = _metric_series(quarters, "eps")
     revenue = _metric_series(quarters, "revenue")
     margin = []
@@ -287,10 +287,12 @@ def _quarterly_read(quarters: list[dict[str, Any]]) -> dict[str, Any]:
         "diluted_shares": _metric_series(quarters, "diluted_shares"),
         "eps_yoy_growth": _yoy_growth(eps),
         "revenue_yoy_growth": _yoy_growth(revenue),
-        # The latest quarter the company filed, whatever it carried. Every series above drops
-        # the quarters whose figure was absent, so reading "the latest" off one of them made
-        # the quarter before an empty report into the company's current quarter.
-        "latest_filed_period": quarters[-1]["period"] if quarters else None,
+        # The latest quarter the company filed, whatever it carried and whether or not it
+        # survived. Every series above drops the quarters whose figure was absent, so reading
+        # "the latest" off one of them made the quarter before an empty report into the
+        # company's current quarter -- and a period withheld for reaching two closing dates
+        # did the same thing while the envelope reported the collision beside it.
+        "latest_filed_period": _latest_filed_period(quarters, withheld or []),
     }
 
 
@@ -308,7 +310,7 @@ def _yoy_growth(series: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Both quarters have to have been measured the same way. A rise from an IFRS quarter to
         # a US-GAAP one is a change of accounting as much as a change of business, and nothing
         # here can tell the reader which half of it they are looking at.
-        if earlier is not None and earlier["accounting_basis"] != point["accounting_basis"]:
+        if earlier is not None and _provenance_of(earlier) != _provenance_of(point):
             continue
         previous = None if earlier is None else earlier["value"]
         # A percentage change needs a base that means something. From a loss the arithmetic
@@ -360,6 +362,26 @@ def _metric_series(facts: list[dict[str, Any]], metric: str) -> list[dict[str, A
     return [_point(fact, float(fact[metric]), metric) for fact in facts if _is_number(fact.get(metric))]
 
 
+def _latest_filed_period(quarters: list[dict[str, Any]], withheld: list[str]) -> str | None:
+    """The latest quarter the company filed, whether or not it survived the merge.
+
+    A period withheld for reaching two closing dates is still a quarter that was filed, and
+    dropping it here let the quarter before it become "the latest" -- so a trailing year a
+    quarter out of date went out as `reported` while the envelope named the collision beside it.
+    """
+
+    names = [quarters[-1]["period"]] if quarters else []
+    names += [name for name in withheld if isinstance(name, str)]
+    ordered = [(name, _period_ordinal(name)) for name in names]
+    return max(ordered, key=lambda pair: (pair[1] is not None, pair[1] or 0, pair[0]))[0] if ordered else None
+
+
+def _provenance_of(point: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    """The regime and the unit a measured point carries, as one answer."""
+
+    return point.get("accounting_basis"), point.get("unit")
+
+
 def _measured_under(fact: Mapping[str, Any], metric: str) -> tuple[str | None, str | None]:
     """Under which regime and in which unit this one number was measured.
 
@@ -383,7 +405,11 @@ def _point(fact: Mapping[str, Any], value: float, metric: str) -> dict[str, Any]
         "period": fact["period"],
         "end": fact.get("end"),
         "value": value,
+        # Both halves of the provenance, because both decide whether two of these can be
+        # compared. Carrying only the regime let a reporting-currency change through as a
+        # year of growth, and let a twelve-month sum add two currencies together.
         "accounting_basis": source["accounting_basis"],
+        "unit": source.get("unit"),
         "filed_at": source["filed_at"],
     }
 
@@ -557,6 +583,11 @@ def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, 
 
     series = quarterly["eps_yoy_growth"]
     latest_filed = quarterly["latest_filed_period"]
+    # Every reading below whose subject is the present state reads the anchored view. The
+    # history lookback deliberately does not: its subject is the past one to two years, it
+    # publishes the periods it examined, and eight quarters ending at the last measurable one
+    # are still inside the window the source named.
+    now = _anchored(quarterly, latest_filed)
     current = _current_tail(series, latest_filed)
     latest = current[-1]["yoy_pct"] if current else None
     superperformance = doctrine.evaluate_band(_SUPERPERFORMANCE, "superperformance_yoy_earnings_growth_percent", latest)
@@ -564,12 +595,12 @@ def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, 
         "minimum_quarterly_earnings_growth": _banded_window(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", "minimum_growth_window_quarters", series, latest_filed),
         "superperformance_quarterly_earnings_growth": superperformance if current else {**superperformance, "reason": _STALE_HEADLINE, "latest_filed_period": latest_filed},
         "bull_market_quarterly_earnings_growth": _bull_market_read(series, latest, market_regime, latest_filed),
-        "earnings_deceleration": _deceleration_read(series),
-        "two_quarter_rolling_average": _rolling_average(quarterly),
-        "margin_trend": _margin_read(quarterly["margin_pct"]),
-        "code_33_triple_acceleration": _code_33(quarterly),
-        "earnings_without_sales_growth": _earnings_without_sales_growth(quarterly),
-        "acceleration_vs_historical_growth_rate": _acceleration_vs_history(quarterly, annual),
+        "earnings_deceleration": _deceleration_read(_current_tail(series, latest_filed)),
+        "two_quarter_rolling_average": _rolling_average(now),
+        "margin_trend": _margin_read(_current_tail(quarterly["margin_pct"], latest_filed)),
+        "code_33_triple_acceleration": _code_33(now),
+        "earnings_without_sales_growth": _earnings_without_sales_growth(now),
+        "acceleration_vs_historical_growth_rate": _acceleration_vs_history(now, annual),
         "earnings_history_lookback": _earnings_history_lookback(quarterly),
         "practitioner_readings": _practitioner_readings(series, latest_filed),
     }
@@ -935,7 +966,7 @@ def _one_regime(points: list[dict[str, Any]]) -> bool:
     skipped rather than published with a caveat: there is no reading of it that is right.
     """
 
-    return len({point.get("accounting_basis") for point in points}) <= 1
+    return len({_provenance_of(point) for point in points}) <= 1
 
 
 def _consecutive_quarter_windows(series: list[dict[str, Any]]) -> list[tuple[str, float]]:
@@ -1106,7 +1137,9 @@ def _cyclical_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]
     the earnings direction alone would invert the very reading the claim exists to warn about.
     """
 
-    series = quarterly["eps_yoy_growth"]
+    # "Poised to rally" or "near the end" is a statement about now, so the rate it reads has to
+    # be the latest filed quarter's or there is no direction to name.
+    series = _current_tail(quarterly["eps_yoy_growth"], quarterly.get("latest_filed_period"))
     latest = series[-1]["yoy_pct"] if series else None
     direction = "unavailable" if latest is None else "rising" if latest > 0 else "falling" if latest < 0 else "flat"
     return {
@@ -1289,8 +1322,8 @@ def _pe_expansion(
     known = _eligible_filings(filings, breakout)
     # The same question at the breakout, asked of the filings that existed then: the latest
     # quarter filed by that date, not the latest one carrying an earnings figure.
-    quarters_then = _latest_periods(known, "quarterly")
-    at_breakout, _, at_breakout_route = _trailing_twelve_months(_metric_series(quarters_then, "eps"), _metric_series(_latest_periods(known, "annual"), "eps"), quarters_then[-1]["period"] if quarters_then else None)
+    quarters_then, withheld_then = _merge_periods(known, "quarterly")
+    at_breakout, _, at_breakout_route = _trailing_twelve_months(_metric_series(quarters_then, "eps"), _metric_series(_latest_periods(known, "annual"), "eps"), _latest_filed_period(quarters_then, withheld_then))
     current = _price_earnings(last_close, trailing)
     # Both ratios are divided raw and rounded only on the way out. Dividing the two published
     # numbers instead put a measurement a hair under the source's two-times edge exactly on it,
@@ -1361,8 +1394,13 @@ def _return_on_equity(annual: list[dict[str, Any]]) -> dict[str, Any]:
     )
     if latest is None:
         return {**reading, "state": "unavailable", "reason": "annual_net_income_and_stockholders_equity_required", "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
-    if _measured_under(latest, "net_income") != _measured_under(latest, "stockholders_equity"):
-        return {**reading, "state": "unavailable", "reason": "net_income_and_equity_measured_under_different_accounting_bases", "period": latest.get("period"), "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
+    income_from, equity_from = _measured_under(latest, "net_income"), _measured_under(latest, "stockholders_equity")
+    if income_from != equity_from:
+        # Which half differed decides what the reader does next, and one reason standing in for
+        # the other is the same contradiction the annual pair had: a company reported as having
+        # changed accounting regime when what changed was the currency.
+        reason = "net_income_and_equity_measured_under_different_accounting_bases" if income_from[0] != equity_from[0] else "net_income_and_equity_measured_in_different_units"
+        return {**reading, "state": "unavailable", "reason": reason, "period": latest.get("period"), "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
     equity = float(latest["stockholders_equity"])
     if equity <= 0:
         # A negative book value returns a ratio whose sign says the opposite of what it means:
@@ -1525,6 +1563,18 @@ def _adjacent(earlier: Any, later: Any) -> bool:
 
     ordinals = (_period_ordinal(earlier), _period_ordinal(later))
     return None not in ordinals and ordinals[1] - ordinals[0] == 1
+
+
+def _anchored(quarterly: Mapping[str, Any], latest_filed: str | None) -> dict[str, Any]:
+    """The quarterly series, each cut back to nothing unless it still reaches the latest filing.
+
+    One helper answers "does this series still speak about now" and every reading whose subject
+    is the present state asks it. Passing the raw series instead left Code 33, the margin trend,
+    the smoothed pair and the deceleration flag all describing a quarter the company has since
+    filed past.
+    """
+
+    return {name: (_current_tail(value, latest_filed) if isinstance(value, list) else value) for name, value in quarterly.items()}
 
 
 def _current_tail(series: list[dict[str, Any]], latest_filed: str | None) -> list[dict[str, Any]]:
@@ -1731,8 +1781,13 @@ def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, A
     both = [ratios["inventory_vs_sales_ratio"], ratios["accounts_receivable_vs_sales_ratio"]]
     # The source's finding is about both at once: one line running ahead of sales has an
     # ordinary explanation far more often than two do.
-    gates = {name: doctrine.evaluate_gate(_EARNINGS_QUALITY, "receivables_and_inventory_vs_sales_double_trouble_ratio", value) for name, value in ratios.items()}
-    doubled = all(value is not None and gate["state"] == "fail" for value, gate in zip(both, gates.values()))
+    # One gate, because the source stated one condition: "if receivables and inventories are
+    # BOTH increasing at a greater rate than sales (twice or more)". Two gates applied the
+    # combined limit to each balance on its own, so a company whose inventory ran ahead while
+    # its receivables did not was published with a failing gate for a filter it had cleared.
+    # The slower of the two is what the conjunction turns on.
+    gate = doctrine.evaluate_gate(_EARNINGS_QUALITY, "receivables_and_inventory_vs_sales_double_trouble_ratio", min(both) if all(value is not None for value in both) else None)
+    doubled = gate["state"] == "fail"
     # "Twice or more without explanation" -- and the explanation is management's, written in
     # prose this harness does not read. So the ratios say what they say and the source's own
     # phrase for the finding is not put on them, the same way the three footnote claims in
@@ -1741,7 +1796,7 @@ def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, A
         **reading,
         **ratios,
         "state": "both_grew_at_least_twice_as_fast_as_sales" if doubled else "reported",
-        "gates": gates,
+        "gate": gate,
         **({"missing_inputs": ["management_explanation_for_the_increase"]} if doubled else {}),
     }
 
