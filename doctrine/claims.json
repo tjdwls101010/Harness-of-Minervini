@@ -12100,6 +12100,68 @@
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
+    },
+    {
+      "id": "convention.long_average_slope_window",
+      "title": "The 200-session average's slope is read over twenty sessions",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "Minervini's stage 3 description says the 200-day average flattens out and rolls over and names no way to measure flattening. The harness reads the 200-session simple average against itself twenty sessions earlier and reports the percentage change; both lengths are harness choices recorded here so they are read from one place."
+      },
+      "thresholds": {},
+      "parameters": {
+        "long_average_sessions": {
+          "value": 200,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "The average the source names in sessions. It selects which series exists; no verdict reads the slope."
+        },
+        "slope_lookback_sessions": {
+          "value": 20,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention -- roughly a month of sessions -- for how far back the average is compared with itself."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the average plus the lookback the slope has nothing to compare and is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the source describes a flattening 200-day average and names no measurement"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

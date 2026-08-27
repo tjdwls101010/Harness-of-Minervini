@@ -88,3 +88,12 @@ class TimeEvidenceTravelsWithTheHold(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheBandEdgesAreAcceptedInputs(unittest.TestCase):
+    def test_a_third_base_is_a_valid_count_at_the_lower_edge(self) -> None:
+        payload = run(base_count=3)
+
+        block = payload["data"]["management_evidence"]["base_count_context"]
+        self.assertEqual(block["base_count"], 3)
+        self.assertEqual(block["band"]["state"], "within_source_range")

@@ -264,6 +264,12 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     stop = _number(payload.get("stop_price"))
     band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", (entry - stop) / entry * 100 if entry and stop is not None else None)
     low, high = doctrine.get_claim(_MARKET_DEFENSE)["claim"]["thresholds"]["difficult_market_loss_pct"]["range"]
+    tighten_to = _reported(entry * (1 - high / 100)) if entry else None
+    current = _number(payload.get("current_price"))
+    # A stop above the last price is not a tighter stop, it is a sale at the market -- which
+    # is exactly what this claim says a deteriorating tape must not cause. When the range the
+    # source names sits above where the stock trades, the range is reported and nothing acts.
+    placeable = tighten_to is not None and (current is None or tighten_to < current)
     blocks["market_defense"] = {
         "doctrine_id": _MARKET_DEFENSE,
         "binds": doctrine.binds(_MARKET_DEFENSE),
@@ -271,20 +277,26 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
         "market_state": market_state,
         "stop_pct": band.get("measured"),
         "difficult_market_band": band,
-        "tighten_to": _reported(entry * (1 - high / 100)) if entry else None,
+        "tighten_to": tighten_to,
+        "tighten_to_is_placeable": placeable,
+        "not_placeable_reason": None if placeable else ("entry_price_unavailable" if tighten_to is None else "tightened_level_is_at_or_above_the_last_price"),
         "never_sells_on_market_opinion": True,
     }
     earnings_date = _iso_date(payload.get("earnings_date"))
     if earnings_date is None:
         blocks["earnings"] = {"state": "unavailable", "reason": "earnings_date_not_declared"}
     else:
-        ahead = as_of is not None and earnings_date >= as_of
+        # A report dated on as_of belongs to a session that has completed, so it is not still
+        # ahead; it is due on the session the request is asking about, which is its own state.
+        ahead = as_of is not None and earnings_date > as_of
+        due_on_as_of = as_of is not None and earnings_date == as_of
         blocks["earnings"] = {
             "doctrine_id": _EARNINGS,
             "binds": doctrine.binds(_EARNINGS),
             "state": "reported",
             "earnings_date": earnings_date.isoformat(),
             "ahead": ahead,
+            "due_on_as_of": due_on_as_of,
             "days_until": (earnings_date - as_of).days if as_of is not None else None,
             "contrast": {
                 "doctrine_id": _ZANGER_EARNINGS,
@@ -620,7 +632,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "evidence": failed_volume})
         defense = _mapping(management_evidence.get("market_defense"))
         tightened = _mapping(defense.get("difficult_market_band")).get("state")
-        if defense.get("market_state") in _DIFFICULT_MARKET and defense.get("tighten_to") is not None and tightened == "above_source_range":
+        if defense.get("market_state") in _DIFFICULT_MARKET and defense.get("tighten_to_is_placeable") and tightened == "above_source_range":
             # The source's answer to a difficult tape is a tighter stop and smaller targets,
             # not a sale: "I don't usually sell everything on my opinion of the market."
             # A stop already inside the tightened range needs nothing, and this can never sell.
@@ -635,13 +647,13 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                 }
             )
         earnings = _mapping(management_evidence.get("earnings"))
-        if earnings.get("ahead") is True:
+        if earnings.get("ahead") is True or earnings.get("due_on_as_of") is True:
             actions.append(
                 {
                     "action": "REVIEW",
                     "doctrine_id": _EARNINGS,
                     "binds": doctrine.binds(_EARNINGS),
-                    "reason": "earnings_ahead",
+                    "reason": "earnings_ahead" if earnings.get("ahead") else "earnings_due_on_as_of",
                     "evidence": earnings,
                 }
             )

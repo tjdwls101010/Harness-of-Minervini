@@ -57,6 +57,7 @@ _TENNIS_BALL = "management.tennis_ball_action_after_the_breakout"
 _ACTS_AS_EXPECTED = "management.stock_that_does_not_act_as_expected"
 _FIRST_SESSIONS = "management.zanger_first_two_days_out_of_the_base"
 _STAGE3 = "stage.stage3_characteristics"
+_SLOPE = "convention.long_average_slope_window"
 _CLOSING_RANGE = "setup.closing_range_formula"
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
@@ -164,9 +165,9 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
 
 
 def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, selected: str | None, readable: _Readable) -> dict[str, Any]:
-    sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
-    entry_positions = _positions_since(bars, entry_date)
-    gap = readable.gap(max(0, (entry_positions[0] if entry_positions else 0) - sma_length))
+    # An EMA is recursive from the first bar, so an unreadable close anywhere is inside its
+    # computation; the simple average only reads its own window plus the audit's.
+    gap = readable.gap(0, columns=("Close",))
     if gap is not None:
         return {**gap, "selected": selected}
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
@@ -188,7 +189,7 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
 
 def _twenty_day_average(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     length = int(doctrine.threshold(_TWENTY_DAY, "average_length_sessions"))
-    gap = readable.gap(len(bars) - length)
+    gap = readable.gap(len(bars) - length, columns=("Close",))
     if gap is not None:
         return {**gap, "doctrine_id": _TWENTY_DAY}
     closes = bars["Close"].astype(float)
@@ -293,7 +294,7 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
         # sessions before it as missing when none of them exist.
         stage2_start = stage2_start + timedelta(days=7 - stage2_start.weekday())
     anchored = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= stage2_start]
-    gap = readable.gap(max(0, (anchored[0] if anchored else 0) - 1))
+    gap = readable.gap(max(0, (anchored[0] if anchored else 0) - 1), columns=("Close",))
     if gap is not None:
         return {**gap, "doctrine_id": _LARGEST_DECLINE}
     first_available = bars.index[0].date()
@@ -329,26 +330,37 @@ class _Readable:
     """
 
     def __init__(self, bars: pd.DataFrame) -> None:
-        bad = np.zeros(len(bars), dtype=bool)
+        self._bad: dict[str, Any] = {}
         for column, floor in (("Open", 0.0), ("High", 0.0), ("Low", 0.0), ("Close", 0.0), ("Volume", -1.0)):
             if column not in bars.columns:
                 continue
             values = pd.to_numeric(bars[column], errors="coerce").to_numpy(dtype=float)
-            bad |= ~np.isfinite(values) | (values <= floor)
-        self._bad = bad
+            self._bad[column] = ~np.isfinite(values) | (values <= floor)
+        self._length = len(bars)
         self._bars = bars
 
-    def gap(self, start: int = 0, end: int | None = None) -> dict[str, Any] | None:
-        """The unavailable block for a window holding an unreadable session, or None."""
+    def gap(self, start: int = 0, end: int | None = None, columns: tuple[str, ...] = ("Open", "High", "Low", "Close", "Volume")) -> dict[str, Any] | None:
+        """The unavailable block for a window holding a session this reading cannot use, or None.
 
-        window = self._bad[max(0, start) : len(self._bad) if end is None else end]
-        if not bool(window.any()):
+        Columns as well as sessions: a broken Volume has nothing to do with an average of
+        closes, and voiding one because of the other hides a measurement that is fine.
+        """
+
+        first: int | None = None
+        for column in columns:
+            mask = self._bad.get(column)
+            if mask is None:
+                continue
+            window = mask[max(0, start) : self._length if end is None else end]
+            if bool(window.any()):
+                position = max(0, start) + int(window.argmax())
+                first = position if first is None else min(first, position)
+        if first is None:
             return None
-        position = max(0, start) + int(window.argmax())
-        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[position].date().isoformat()}
+        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[first].date().isoformat()}
 
-    def clean_positions(self, positions: list[int]) -> list[int]:
-        return [position for position in positions if not self._bad[position]]
+    def clean_positions(self, positions: list[int], columns: tuple[str, ...] = ("Close",)) -> list[int]:
+        return [position for position in positions if all(not self._bad.get(column, np.zeros(self._length, dtype=bool))[position] for column in columns)]
 
 
 def _positions_since(bars: pd.DataFrame, since: date) -> list[int]:
@@ -379,6 +391,11 @@ def _first_sessions(bars: pd.DataFrame, *, window: list[int]) -> dict[str, Any]:
                 "volume_ratio": _reported(volume / baseline if baseline and volume is not None else None),
             }
         )
+    missing_inputs: list[str] = []
+    if "Volume" not in bars.columns:
+        missing_inputs.append("volume_history")
+    elif baseline is None:
+        missing_inputs.append("volume_baseline")
     return {
         "doctrine_id": _FIRST_SESSIONS,
         "binds": doctrine.binds(_FIRST_SESSIONS),
@@ -386,6 +403,8 @@ def _first_sessions(bars: pd.DataFrame, *, window: list[int]) -> dict[str, Any]:
         "window_sessions": length,
         "sessions_available": min(len(window), length),
         "volume_baseline_sessions": baseline_sessions if baseline is not None else None,
+        "missing_inputs": missing_inputs,
+        "volume_baseline_reason": None if baseline is not None else ("volume_history_unavailable" if "Volume" not in bars.columns else "insufficient_history_for_volume_baseline"),
         "sessions": sessions,
     }
 
@@ -407,6 +426,8 @@ def _natural_reactions(bars: pd.DataFrame, *, window: list[int]) -> list[dict[st
     for position in window[1:]:
         close = float(closes.iloc[position])
         if close > peak:
+            # Strictly above: a close that matches the peak is the stock failing to make a
+            # new high, which is the opposite of the tennis ball bouncing back to one.
             if trough_position is not None:
                 trough = float(closes.iloc[trough_position])
                 reactions.append(
@@ -423,7 +444,9 @@ def _natural_reactions(bars: pd.DataFrame, *, window: list[int]) -> list[dict[st
                 )
             peak_position, peak, trough_position = position, close, None
             continue
-        if trough_position is None or close < float(closes.iloc[trough_position]):
+        if close < peak and (trough_position is None or close < float(closes.iloc[trough_position])):
+            # A session that closed level with the peak did not pull back, so it opens no
+            # reaction: a flat stretch is not a zero-percent decline.
             trough_position = position
     if trough_position is not None:
         trough = float(closes.iloc[trough_position])
@@ -449,14 +472,21 @@ def _post_breakout_behavior(bars: pd.DataFrame, *, entry_date: date, breakout_da
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
-    gap = readable.gap(max(0, window[0] - baseline_sessions))
+    gap = readable.gap(max(0, window[0] - baseline_sessions), columns=("Close", "Volume"))
     if gap is not None:
         return {**gap, "doctrine_id": _TENNIS_BALL}
     closes = bars["Close"].astype(float)
     first_close = float(closes.iloc[window[0]])
     last_close = float(closes.iloc[-1])
-    highs = [position for position in window if float(closes.iloc[position]) >= max(float(closes.iloc[other]) for other in window if other <= position)]
-    last_high = highs[-1] if highs else window[0]
+    # Strictly higher than everything before it, for the same reason the reaction scan uses:
+    # an equal retest is not a new high, and letting it reset the clock would report a stock
+    # that has gone nowhere for a month as having made a new high today.
+    last_high = window[0]
+    running = float(closes.iloc[window[0]])
+    for position in window[1:]:
+        close = float(closes.iloc[position])
+        if close > running:
+            running, last_high = close, position
     return {
         "doctrine_id": _TENNIS_BALL,
         "doctrine_ids": [_TENNIS_BALL, _ACTS_AS_EXPECTED, _FIRST_SESSIONS],
@@ -478,7 +508,9 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
     """Rising volatility and a flattening long average, measured; the reading stays the analyst's."""
 
     length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
-    gap = readable.gap(len(bars) - (200 + 20))
+    sma_length = int(doctrine.parameter(_SLOPE, "long_average_sessions"))
+    lookback = int(doctrine.parameter(_SLOPE, "slope_lookback_sessions"))
+    gap = readable.gap(len(bars) - (sma_length + lookback), columns=("High", "Low", "Close"))
     if gap is not None:
         return {**gap, "doctrine_id": _STAGE3}
     recent = _average_true_range(bars)
@@ -487,7 +519,6 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
     if recent.get("value") and earlier.get("value"):
         ratio = float(recent["value"]) / float(earlier["value"])
     closes = bars["Close"].astype(float)
-    sma_length, lookback = 200, 20
     slope: float | None = None
     state = "unavailable"
     if len(bars) >= sma_length + lookback:
@@ -498,13 +529,14 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
             state = "reported"
     return {
         "doctrine_id": _STAGE3,
-        "doctrine_ids": [_STAGE3, _ATR],
+        "doctrine_ids": [_STAGE3, _ATR, _SLOPE],
         "binds": doctrine.binds(_STAGE3),
         "state": "reported",
         "average_true_range": recent,
         "earlier_average_true_range": earlier,
         "volatility_ratio": _reported(ratio),
         "sma200_slope_pct": _reported(slope),
+        "sma200_average_sessions": sma_length,
         "sma200_lookback_sessions": lookback,
         "sma200_state": state,
         "needs_chart": True,
@@ -515,7 +547,7 @@ def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | N
     if base_top is None:
         return {"state": "unavailable", "reason": "base_top_not_declared"}
     held_positions = _positions_since(bars, entry_date)
-    gap = readable.gap(held_positions[0] if held_positions else 0)
+    gap = readable.gap(held_positions[0] if held_positions else 0, columns=("High", "Close"))
     if gap is not None:
         return {**gap, "doctrine_id": _PAUSE_ZONE}
     closes = bars["Close"].astype(float)
@@ -556,14 +588,17 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
     sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
     atr_length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
-    gap = readable.gap(len(bars) - (sma_length + atr_length + 1))
+    gap = readable.gap(0, columns=("Close",)) or readable.gap(len(bars) - (sma_length + atr_length + 1), columns=("High", "Low", "Close"))
     if gap is not None:
         return {**gap, "doctrine_id": _OWN_CHARACTER}
     closes = bars["Close"].astype(float)
     atr = _average_true_range(bars)
     atr_value = atr.get("value")
+    # No warm-up mask here: the length guard below already refuses a history shorter than
+    # the average, and every position this block reads starts at the average's own warm-up.
+    # A mutation probe proved a mask changes nothing, which makes it a line that looks like
+    # a rule and is not one.
     ema = closes.ewm(span=ema_length, adjust=False).mean()
-    ema.iloc[: ema_length - 1] = float("nan")
     sma = closes.rolling(sma_length).mean()
     block: dict[str, Any] = {"doctrine_id": _OWN_CHARACTER, "binds": doctrine.binds(_OWN_CHARACTER), "atr": atr, "needs_chart": True}
     for name, series, length in (("ema21", ema, ema_length), ("sma50", sma, sma_length)):
@@ -682,7 +717,7 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
     lengths = [int(doctrine.parameter(_WINDOWS, name)) for name in ("short_window_sessions", "medium_window_sessions", "long_window_sessions")]
     gap_window = int(doctrine.parameter(_WINDOWS, "medium_window_sessions"))
-    gap = readable.gap(len(bars) - (max(lengths) + 1))
+    gap = readable.gap(len(bars) - (max(lengths) + 1), columns=("Open", "High", "Low", "Close", "Volume"))
     if gap is not None:
         return {**gap, "doctrine_id": _CLIMAX}
     if len(bars) <= max(lengths):
@@ -727,7 +762,7 @@ def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | Non
         return {"state": "unavailable", "reason": "no_completed_bar_on_or_after_breakout_date"}
     breakout = window[0]
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
-    gap = readable.gap(max(0, breakout - baseline_sessions))
+    gap = readable.gap(max(0, breakout - baseline_sessions), columns=("Close", "Volume"))
     if gap is not None:
         return {**gap, "doctrine_id": _FAILED_VOLUME}
     if breakout < baseline_sessions:
