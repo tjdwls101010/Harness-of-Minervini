@@ -20,6 +20,22 @@ from scripts.minervini.providers.yfinance import completed_daily_bars
 FIXTURES = resources.files("tests.260817.fixtures.providers")
 
 
+
+def close_only(index: "pd.DatetimeIndex", closes: list[float]) -> "pd.DataFrame":
+    """A frame carrying every OHLCV column, varying only the closes.
+
+    The provider requires the price columns to be present, because a frame missing them was
+    passing as a completed session and the multiple then reported the close as its missing
+    input while the envelope called the evidence whole. These fixtures care about the closes,
+    so the rest are filled in rather than left out.
+    """
+
+    return pd.DataFrame(
+        {"Open": closes, "High": closes, "Low": closes, "Close": closes, "Volume": [1_000_000] * len(closes)},
+        index=index,
+    )
+
+
 class FakeTicker:
     def __init__(self, frame: pd.DataFrame) -> None:
         self.frame = frame
@@ -68,7 +84,7 @@ class FakeRS:
 class ProviderContractTests(unittest.TestCase):
     def test_yfinance_never_returns_a_partial_or_future_daily_bar(self) -> None:
         index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14", "2026-08-17"])
-        ticker = FakeTicker(pd.DataFrame({"Close": [10.0, 11.0, 12.0, 99.0]}, index=index))
+        ticker = FakeTicker(close_only(index, [10.0, 11.0, 12.0, 99.0]))
 
         snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=ticker)
 
@@ -133,7 +149,7 @@ class ProviderContractTests(unittest.TestCase):
 
     def test_a_complete_history_through_the_requested_session_is_not_stale(self) -> None:
         index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
-        frame = pd.DataFrame({"Close": [10.2, 11.2, 12.2]}, index=index)
+        frame = close_only(index, [10.2, 11.2, 12.2])
 
         snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
 
@@ -142,7 +158,7 @@ class ProviderContractTests(unittest.TestCase):
 
     def test_an_infinite_price_is_not_a_completed_bar(self) -> None:
         index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-17"])
-        frame = pd.DataFrame({"Close": [10.2, 11.2, float("inf")]}, index=index)
+        frame = close_only(index, [10.2, 11.2, float("inf")])
 
         snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
 
@@ -151,7 +167,7 @@ class ProviderContractTests(unittest.TestCase):
 
     def test_a_repeated_session_never_truncates_the_history_to_the_wrong_bar(self) -> None:
         index = pd.to_datetime(["2026-08-13", "2026-08-14", "2026-08-14", "2026-08-17"])
-        frame = pd.DataFrame({"Close": [10.2, 11.2, 11.3, float("nan")]}, index=index)
+        frame = close_only(index, [10.2, 11.2, 11.3, float("nan")])
 
         snapshot = completed_daily_bars("ACME", as_of="2026-08-17", ticker=FakeTicker(frame))
 
@@ -160,7 +176,7 @@ class ProviderContractTests(unittest.TestCase):
 
     def test_blank_rows_before_a_listing_started_are_trimmed_not_called_a_gap(self) -> None:
         index = pd.to_datetime(["2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"])
-        frame = pd.DataFrame({"Close": [float("nan"), float("nan"), 11.2, 12.0]}, index=index)
+        frame = close_only(index, [float("nan"), float("nan"), 11.2, 12.0])
 
         snapshot = completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))
 
@@ -170,7 +186,7 @@ class ProviderContractTests(unittest.TestCase):
 
     def test_a_gap_inside_the_history_is_unavailable_rather_than_silently_compressed(self) -> None:
         index = pd.to_datetime(["2026-08-12", "2026-08-13", "2026-08-14"])
-        frame = pd.DataFrame({"Close": [10.0, float("nan"), 12.0]}, index=index)
+        frame = close_only(index, [10.0, float("nan"), 12.0])
 
         with self.assertRaises(ProviderUnavailable) as raised:
             completed_daily_bars("ACME", as_of="2026-08-14", ticker=FakeTicker(frame))

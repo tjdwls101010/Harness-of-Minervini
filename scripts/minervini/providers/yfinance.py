@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 import re
 from typing import Any
 import unicodedata
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -44,9 +45,22 @@ def _index_dates(frame: pd.DataFrame) -> pd.Series:
     return pd.Series(index.date, index=frame.index)
 
 
+def _session_date(observed_at: datetime) -> date:
+    """What day it is where the sessions are.
+
+    These are US listings, so today is a New York date. Reading the UTC clock made every
+    instant between 00:00 UTC and New York midnight -- an evening on the east coast, the whole
+    afternoon on the west -- report yesterday as today, so a report due this afternoon read as
+    one filed already.
+    """
+
+    stamped = observed_at if observed_at.tzinfo is not None else observed_at.replace(tzinfo=timezone.utc)
+    return stamped.astimezone(ZoneInfo("America/New_York")).date()
+
+
 def _current_date(as_of: str | date | None, observed_at: datetime) -> date:
     if as_of is None:
-        return observed_at.date()
+        return _session_date(observed_at)
     return as_of if isinstance(as_of, date) else date.fromisoformat(as_of)
 
 
@@ -75,7 +89,7 @@ def current_classification_snapshot(
 
     observed_at = retrieved_at or datetime.now(timezone.utc)
     requested_date = _current_date(as_of, observed_at)
-    if requested_date != observed_at.date():
+    if requested_date != _session_date(observed_at):
         raise ProviderUnavailable("yfinance", "historical_classification_unavailable", operation="current_classification")
 
     if info is None:
@@ -104,7 +118,7 @@ def current_classification_snapshot(
         meta=SnapshotMeta(
             provider="yfinance",
             retrieved_at=observed_at,
-            as_of=observed_at.date(),
+            as_of=_session_date(observed_at),
             coverage={
                 "kind": "current_classification_only",
                 "historical": False,
@@ -147,6 +161,13 @@ def completed_daily_bars(
     )
     if not isinstance(frame, pd.DataFrame):
         raise ProviderUnavailable("yfinance", "invalid_daily_bar_response", operation="daily_bars")
+
+    # Every column the frame carries is checked below, and nothing was checking that it
+    # carried them. A frame with no Close passed as a completed session, and the multiple then
+    # reported the close as the missing input while the envelope called the evidence whole.
+    missing_columns = [column for column in OHLCV_COLUMNS if column not in frame]
+    if missing_columns:
+        raise ProviderUnavailable("yfinance", "daily_bars_missing_price_columns", operation="daily_bars")
 
     completed = frame.copy()
     if not completed.empty:
@@ -220,7 +241,7 @@ def next_earnings_snapshot(
 
     observed_at = retrieved_at or datetime.now(timezone.utc)
     requested_date = _current_date(as_of, observed_at)
-    if requested_date != observed_at.date():
+    if requested_date != _session_date(observed_at):
         raise ProviderUnavailable("yfinance", "historical_earnings_calendar_unavailable", operation="next_earnings")
 
     if calendar is None:
@@ -240,7 +261,7 @@ def next_earnings_snapshot(
     if not entries:
         raise ProviderUnavailable("yfinance", "earnings_date_missing", operation="next_earnings")
     dates = sorted(_calendar_date(entry) for entry in entries)
-    if dates[0] < observed_at.date():
+    if dates[0] < _session_date(observed_at):
         # A calendar still showing the last report is not answering the question that was
         # asked. Publishing it would put a date behind the holder into a block whose whole
         # meaning is whether a report is ahead of them.
@@ -256,7 +277,7 @@ def next_earnings_snapshot(
         meta=SnapshotMeta(
             provider="yfinance",
             retrieved_at=observed_at,
-            as_of=observed_at.date(),
+            as_of=_session_date(observed_at),
             coverage={
                 "kind": "forward_looking_current_only",
                 "historical": False,

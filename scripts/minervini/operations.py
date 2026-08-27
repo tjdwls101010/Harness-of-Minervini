@@ -1227,7 +1227,9 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     result = evaluate_fundamentals(
         snapshot.data,
         as_of=clock.date.isoformat(),
-        breakout_date=breakout_date.isoformat() if breakout_date is not None and closes["breakout_close"] is not None else None,
+        # The date the caller gave, whether or not a close could be found for it. Dropping it
+        # made the reading name a missing breakout date beside a request that carried one.
+        breakout_date=breakout_date.isoformat() if breakout_date is not None else None,
         breakout_close=closes["breakout_close"],
         last_close=closes["last_close"],
         **declared,
@@ -1276,7 +1278,10 @@ def _valuation_closes(frame: Any, *, as_of: date, breakout_date: date | None) ->
         timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
     ordered = frame.copy()
     ordered.index = timestamps
-    ordered = ordered.sort_index()
+    # Stable, so that two prints of one session stay in the order the provider sent them and
+    # `keep="last"` keeps the last one it actually sent. The default sort is free to reorder
+    # equal timestamps, which made "the last print wins" pick whichever it happened to move.
+    ordered = ordered.sort_index(kind="stable")
     ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
     by_date = {}
     for timestamp, row in ordered.iterrows():

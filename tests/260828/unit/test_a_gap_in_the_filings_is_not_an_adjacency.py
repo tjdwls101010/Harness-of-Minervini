@@ -173,7 +173,11 @@ class TheRollingAverageAndTheRunReadAdjacentQuarters(unittest.TestCase):
         result = evaluate_fundamentals(evidence(quarters, []), as_of="2026-05-08")
 
         self.assertIsNone(result["growth"]["two_quarter_rolling_average"]["eps_yoy_pct"])
-        self.assertEqual(result["growth"]["practitioner_readings"]["minervini_sequential_acceleration"]["consecutive_accelerating_quarters"], 0)
+        # 2025-Q2 is not on file, so nothing on file is the quarter before 2025-Q3 -- which is
+        # a history too short to answer, not a run that came out at zero.
+        run = result["growth"]["practitioner_readings"]["minervini_sequential_acceleration"]
+        self.assertIsNone(run["consecutive_accelerating_quarters"])
+        self.assertEqual(run["state"], "unavailable")
 
     def test_the_band_window_names_only_the_quarters_it_actually_held(self) -> None:
         quarters = [quarter("2024-Q1", 1.00), quarter("2024-Q3", 1.00), quarter("2025-Q1", 1.10), quarter("2025-Q3", 1.30)]

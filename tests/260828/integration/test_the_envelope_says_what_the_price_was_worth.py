@@ -91,5 +91,15 @@ class TheExpansionMeasuresWhatItSays(unittest.TestCase):
         self.assertNotIn("filings_used_at_breakout", expansion)
 
 
+
+class ADateTheCallerGaveIsNotAMissingDate(unittest.TestCase):
+    def test_a_stale_history_withholds_the_close_and_keeps_the_date(self) -> None:
+        payload = run(price_history=lambda ticker, as_of: snapshot(bars("2026-05-06"), "2026-05-06", stale=True), breakout_date="2025-03-14")
+
+        expansion = payload["data"]["valuation"]["pe_expansion"]
+        self.assertEqual(expansion["missing_inputs"], ["breakout_close"])
+        self.assertEqual(expansion["breakout_date"], "2025-03-14")
+
+
 if __name__ == "__main__":
     unittest.main()

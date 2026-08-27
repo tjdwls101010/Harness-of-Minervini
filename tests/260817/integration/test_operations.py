@@ -536,7 +536,19 @@ class OperationCompositionTests(unittest.TestCase):
                 coverage={"kind": "filed_facts"},
             ),
         )
-        runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot)
+        # The capability reads its own price now. Leaving the hook undeclared sends this test
+        # to the live provider, so it passes or fails on whether the machine has a network.
+        prices = pd.DataFrame(
+            {"Open": 100.0, "High": 100.0, "Low": 100.0, "Close": 100.0, "Volume": 1_000_000},
+            index=pd.bdate_range("2024-01-02", "2026-05-08"),
+        )
+        runtime = Runtime(
+            fundamentals_evidence=lambda ticker, as_of, cik: snapshot,
+            price_history=lambda ticker, as_of: ProviderSnapshot(
+                prices,
+                SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date(2026, 5, 8), coverage={"completed_only": True}),
+            ),
+        )
 
         payload = execute(
             "ticker.fundamentals",

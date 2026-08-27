@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import math
@@ -21,6 +21,12 @@ _FORM_TYPES = {"10-Q", "10-K", "20-F"}
 # shapes of the document, not doctrine -- nothing here is a threshold a source stated.
 _QUARTER_LENGTH_DAYS = (80, 100)
 _FISCAL_YEAR_LENGTH_DAYS = (340, 380)
+# How far back from a close the middle of the period it closes sits. Read from the close alone
+# rather than from the span, because the close is the half of a duration fact an amendment
+# never moves: a 10-K/A correcting 52 weeks to 53 pushed a span midpoint back across New Year
+# and the corrected year arrived as the year before the one it was correcting.
+_HALF_QUARTER_DAYS = 45
+_HALF_YEAR_DAYS = 182
 _QUARTERLY_METRICS = {
     "eps": ("EarningsPerShareDiluted", "BasicAndDilutedEarningsLossPerShare"),
     "revenue": ("RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "Revenues", "Revenue"),
@@ -32,10 +38,13 @@ _ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRI
 # filing carries no `start` for them and the period they belong to is the one whose books
 # close on that date -- never the fiscal year of the report, which for a comparative column
 # is this year while the balance is last year's.
+# Both taxonomies, because the provider accepts both. Looking for US-GAAP names only meant a
+# 20-F filer's balance sheet was dropped before per-field provenance could see it, and the
+# readings built on it reported evidence the company had in fact filed as evidence it lacked.
 _ANNUAL_INSTANT_METRICS = {
-    "inventory": ("InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross"),
-    "accounts_receivable": ("AccountsReceivableNetCurrent", "ReceivablesNetCurrent", "AccountsReceivableNet"),
-    "stockholders_equity": ("StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"),
+    "inventory": ("InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross", "Inventories"),
+    "accounts_receivable": ("AccountsReceivableNetCurrent", "ReceivablesNetCurrent", "AccountsReceivableNet", "TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"),
+    "stockholders_equity": ("StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "Equity", "EquityAttributableToOwnersOfParent"),
 }
 
 
@@ -258,7 +267,10 @@ def normalize_filed_facts(
                 bucket = "annual" if kind == "annual_instant" else kind
                 fact = filing[bucket].setdefault(
                     record["period"],
-                    {"period": record["period"], "end": record["end"]},
+                    # The span travels with the period. Two annual periods that overlap are
+                    # not a year and the year before it, and without the start nothing
+                    # downstream can tell that they do.
+                    {"period": record["period"], "end": record["end"], **({"start": record["start"]} if record.get("start") else {})},
                 )
                 fact[metric] = record["val"]
 
@@ -396,7 +408,7 @@ def _normalized_metric_record(raw: Any, kind: str, annual_ends: Mapping[str, str
     period = _period_from_fact(raw, kind, annual_ends)
     if period is None:
         return None
-    return {"accn": raw["accn"], "form": form, "filed": raw["filed"], "period": period, "end": raw["end"], "val": raw["val"]}
+    return {"accn": raw["accn"], "form": form, "filed": raw["filed"], "period": period, "start": raw.get("start"), "end": raw["end"], "val": raw["val"]}
 
 
 def _is_supported_form(value: Any) -> bool:
@@ -424,9 +436,9 @@ def _period_from_fact(raw: Mapping[str, Any], kind: str, annual_ends: Mapping[st
     # against. Length is what tells the two apart; nothing else in the fact does.
     if not lower <= days <= upper:
         return None
-    middle = start + (end - start) / 2
     if kind == "annual":
-        return str(middle.year)
+        return str((end - timedelta(days=_HALF_YEAR_DAYS)).year)
+    middle = end - timedelta(days=_HALF_QUARTER_DAYS)
     return f"{middle.year}-Q{(middle.month - 1) // 3 + 1}"
 
 

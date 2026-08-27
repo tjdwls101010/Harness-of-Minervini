@@ -117,7 +117,7 @@
     "limitations": [
       "SEC facts are selected by filed_at, never period end alone.",
       "Current ticker-to-CIK lookup is not used for historical identity; provide --cik.",
-      "Power Play may waive only unavailable verified fundamentals, never integrity, dilution, market, setup, eligibility, or risk controls.",
+      "This capability runs no Power Play waiver. The exception belongs to the setup surface, which is where the VCP quality it depends on is measured, so nothing here waives a fundamentals reading.",
       "The current SEC adapter reads the recent submissions index and discloses that older index files were not fetched.",
       "Every EPS figure here is as reported. Stripping a nonrecurring gain out is a footnote reading, and so are the repeated-one-time-charge and tax-disclosure red flags; all three are published as boundaries rather than run.",
       "Peer evidence is not held here. The categories that are defined by a group -- top competitor, laggard -- and the peer halves of the low-multiple warning and of return on equity report what they needed instead of a reading computed from one company.",
@@ -131,11 +131,11 @@
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
-      "needs_input": "Historical identity or another required argument is missing, or --breakout-date names a session after --as-of.",
-      "ok": "Filed evidence supports or contradicts convergence, or a fully proven exception applies.",
+      "needs_input": "Historical identity or another required argument is missing, or --breakout-date names a session after --as-of or a day the tape has no completed session for.",
+      "ok": "Filed evidence supports convergence or prompts review, and every reading it required was available.",
       "partial": "Filed evidence exists but required facts are incomplete, or the price provider had nothing to give and only the valuation readings are short.",
       "unavailable": "SEC evidence could not be obtained after one retry."
     },
-    "summary": "Evaluate filed growth, revenue and margin confirmation, accounting integrity, dilution, leadership profile, and the narrow Power Play exception."
+    "summary": "Evaluate filed growth, revenue and margin confirmation, accounting integrity, dilution, leadership profile, and the category the filings are read under."
   }
 }
