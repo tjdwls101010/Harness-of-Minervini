@@ -41,6 +41,9 @@ class TheEntrySessionMustBeInTheHistory(unittest.TestCase):
         self.assertEqual(path["reason"], "no_completed_bar_on_window_start")
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertEqual(payload["status"], "partial")
+        # Nothing was established, so nothing is measured about it.
+        self.assertEqual(payload["data"]["management_evidence"], {})
+        self.assertEqual(payload["data"]["management_actions"], [])
 
     def test_a_stop_raised_on_a_saturday_still_splits_the_window(self) -> None:
         # A stop can be moved on a day the market is shut; an entry cannot happen on one.

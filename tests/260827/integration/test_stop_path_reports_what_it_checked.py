@@ -92,3 +92,24 @@ class TheWindowNamesTheBarsThatSpoke(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheFurthestTheTradeGot(unittest.TestCase):
+    """The favorable excursion reads the same bar the stop audit reads."""
+
+    def test_an_out_of_order_repeated_session_is_resolved_by_date_not_by_row_order(self) -> None:
+        # The session's later print comes first in row order, so keeping the last row
+        # rather than the last session picks the print the market superseded.
+        rows = [
+            ("2025-12-01", 99.0, 100.0),
+            ("2025-12-02", 99.0, 100.0),
+            ("2025-12-03", 99.0, 100.0),
+            ("2025-12-04", 99.0, 100.0),
+            ("2025-12-05 16:00", 99.0, 130.0),
+            ("2025-12-05 09:30", 99.0, 105.0),
+        ]
+        payload = run(frame(rows))
+
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+        self.assertAlmostEqual(payload["data"]["max_high_since_entry"], 131.3)
+        self.assertEqual(payload["data"]["max_high_date"], "2025-12-05")
