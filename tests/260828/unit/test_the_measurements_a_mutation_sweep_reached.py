@@ -90,7 +90,7 @@ class NearThePeakIsNotAtThePeak(unittest.TestCase):
         self.assertEqual(reading["trailing_12m_eps"], 0.74)
         self.assertEqual(reading["trailing_12m_eps_prior_peak"], 0.82)
         self.assertIs(reading["trailing_12m_eps_at_or_above_prior_peak"], False)
-        self.assertIs(reading["satisfied"], False)
+        self.assertIsNone(reading["satisfied"])
 
 
 class AStretchCannotSpanAYearNobodyFiled(unittest.TestCase):

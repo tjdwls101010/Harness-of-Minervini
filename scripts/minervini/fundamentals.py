@@ -524,6 +524,10 @@ def _dilution_reading(quarters: list[dict[str, Any]]) -> dict[str, Any]:
 
     if len(quarters) < 2 or not _is_number(quarters[-1].get("diluted_shares")) or not _is_number(quarters[-2].get("diluted_shares")):
         return {"state": "unavailable", "reason": "two_filed_share_counts_required"}
+    # A quarterly change is a change over one quarter. Across a hole in the filings the same
+    # subtraction reports a year of dilution under a field name that says three months.
+    if not _adjacent(quarters[-2].get("period"), quarters[-1].get("period")):
+        return {"state": "unavailable", "reason": "no_adjacent_quarter_to_compare", "periods": [quarters[-2].get("period"), quarters[-1].get("period")]}
     previous, current = float(quarters[-2]["diluted_shares"]), float(quarters[-1]["diluted_shares"])
     if previous <= 0:
         return {"state": "unavailable", "reason": "share_count_is_not_a_count"}
@@ -852,7 +856,10 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, An
     strong = growth["window_quarters_passing"]
     gate = doctrine.evaluate_gate(_TURNAROUND_CRITERIA, "turnaround_min_strong_quarters", strong)
     trailing, peak, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"), quarterly["latest_filed_period"])
-    at_or_above = None if trailing is None or peak is None else trailing >= peak
+    # Both figures are refused on the way out when the sums ran past what binary64 holds, so
+    # comparing them there published a boolean computed from numbers the reading is not allowed
+    # to show. `inf >= inf` is true, and it is not a company that got back to its old peak.
+    at_or_above = None if not _is_finite(trailing) or not _is_finite(peak) else trailing >= peak
     return {
         "doctrine_id": _TURNAROUND_CRITERIA,
         "binds": doctrine.binds(_TURNAROUND_CRITERIA),
@@ -865,10 +872,11 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, An
         "trailing_12m_eps_prior_peak": _reported(peak),
         "trailing_12m_eps_at_or_above_prior_peak": at_or_above,
         "unquantified": ["near_prior_peak_is_unquantified"],
-        # Either route satisfies it, so a failed gate settles nothing while the other route
-        # went unmeasured. False or unknown is unknown, and publishing it as a refusal reads
-        # as evidence the stock fell short of a bar nobody could measure it against.
-        "satisfied": True if gate["state"] == "pass" or at_or_above is True else (False if gate["state"] == "fail" and at_or_above is False else None),
+        # Either route satisfies it, and only one of the two is quantified. A trailing year
+        # below its old peak has not failed "near or above" -- nobody in the corpus said how
+        # near is near -- so this criterion can be satisfied or open and never refused. The
+        # measured half is published beside it, which is the part a reader can act on.
+        "satisfied": True if gate["state"] == "pass" or at_or_above is True else None,
     }
 
 
@@ -1228,7 +1236,13 @@ def _price_earnings(last_close: float | None, trailing: float | None, route: str
         return {**reading, "state": "not_meaningful", "reason": "trailing_12m_eps_beyond_arithmetic_range", "pe_ratio": None}
     if trailing <= 0:
         return {**reading, "state": "not_meaningful", "reason": "trailing_12m_eps_not_positive", "pe_ratio": None}
-    return {**reading, "state": "reported", "pe_ratio": _reported(float(last_close) / trailing)}
+    # The inputs are finite and the quotient need not be. `_reported` turns the infinity into a
+    # null on the way out, which is right -- but the state was chosen before it, so the block
+    # said `reported` and carried no ratio, which reads like a number the filings never had.
+    ratio = float(last_close) / trailing
+    if not math.isfinite(ratio):
+        return {**reading, "state": "not_meaningful", "reason": "price_earnings_ratio_beyond_arithmetic_range", "pe_ratio": None}
+    return {**reading, "state": "reported", "pe_ratio": _reported(ratio)}
 
 
 def _pe_expansion(
@@ -1338,7 +1352,10 @@ def _return_on_equity(annual: list[dict[str, Any]]) -> dict[str, Any]:
         # A negative book value returns a ratio whose sign says the opposite of what it means:
         # a loss on negative equity comes out positive. It is refused rather than published.
         return {**reading, "state": "not_meaningful", "reason": "stockholders_equity_not_positive", "period": latest.get("period"), "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
-    roe = _reported(float(latest["net_income"]) / equity * 100)
+    computed = float(latest["net_income"]) / equity * 100
+    if not math.isfinite(computed):
+        return {**reading, "state": "not_meaningful", "reason": "return_on_equity_beyond_arithmetic_range", "period": latest.get("period"), "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
+    roe = _reported(computed)
     return {
         **reading,
         "state": "reported",
@@ -1481,6 +1498,19 @@ def _bull_market_read(series: list[dict[str, Any]], latest: float | None, market
     return {**_banded_window(_BULL_MARKET, "bull_market_yoy_earnings_growth_percent", "bull_market_growth_window_quarters", series, latest_filed), "market_regime": market_regime}
 
 
+def _is_finite(value: Any) -> bool:
+    """A number the arithmetic produced and can still be compared."""
+
+    return _is_number(value) and math.isfinite(float(value))
+
+
+def _adjacent(earlier: Any, later: Any) -> bool:
+    """Whether the second period is the one immediately after the first."""
+
+    ordinals = (_period_ordinal(earlier), _period_ordinal(later))
+    return None not in ordinals and ordinals[1] - ordinals[0] == 1
+
+
 def _current_tail(series: list[dict[str, Any]], latest_filed: str | None) -> list[dict[str, Any]]:
     """The series, but only while it still reaches the quarter the company last filed.
 
@@ -1589,6 +1619,11 @@ def _deceleration_read(series: list[dict[str, Any]]) -> dict[str, Any]:
 
     if len(series) < 2:
         return {"doctrine_id": _DECELERATION, "reason": "two_year_over_year_rates_required", "latest_yoy_pct": series[-1]["yoy_pct"] if series else None, "previous_yoy_pct": None, "decelerated": None}
+    # "The one before it" is the quarter before it, not whichever rate survived next to it in
+    # the list. Over a hole in the filings that was a rate from two years ago called previous,
+    # and a company growing faster every year came out decelerating.
+    if not _adjacent(series[-2]["period"], series[-1]["period"]):
+        return {"doctrine_id": _DECELERATION, "reason": "no_adjacent_quarter_to_compare", "periods": [series[-2]["period"], series[-1]["period"]], "latest_yoy_pct": series[-1]["yoy_pct"], "previous_yoy_pct": None, "decelerated": None}
     latest, previous = series[-1]["yoy_pct"], series[-2]["yoy_pct"]
     return {
         "doctrine_id": _DECELERATION,

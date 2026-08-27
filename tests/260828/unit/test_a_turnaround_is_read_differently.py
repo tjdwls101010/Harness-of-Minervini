@@ -94,7 +94,9 @@ class TwoStrongQuartersOrOneBigEnough(unittest.TestCase):
         self.assertEqual(criteria["trailing_12m_eps_prior_peak"], 1.00)
         self.assertIs(criteria["trailing_12m_eps_at_or_above_prior_peak"], False)
         self.assertEqual(criteria["unquantified"], ["near_prior_peak_is_unquantified"])
-        self.assertIs(criteria["satisfied"], False)
+        # Below the peak is not a failed criterion. "Near or above" is a disjunction whose
+        # second half nobody quantified, so it can be satisfied or open and never refused.
+        self.assertIsNone(criteria["satisfied"])
 
 
 class TheCategoryDecidesWhatIsRead(unittest.TestCase):
