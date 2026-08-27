@@ -106,7 +106,8 @@ class MarketEvidenceTests(unittest.TestCase):
         self.assertEqual(technology["price_momentum"]["state"], "supports")
         self.assertEqual(technology["rs_concentration"]["state"], "observed")
         self.assertEqual(technology["breadth"]["state"], "unavailable")
-        self.assertEqual(avgo["behavior"]["state"], "observed")
+        # No history was handed in, so no behavior word is invented from the RS rank.
+        self.assertEqual(avgo["behavior"], {"state": "unavailable", "reason": "leader_price_history_not_read"})
         self.assertEqual(avgo["basis"], {"as_of": "2026-08-14", "rating": 97, "rank": 2})
         self.assertNotIn("score", technology)
         self.assertNotIn("score", snapshot["group_ranks"]["sectors"][0])

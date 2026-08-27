@@ -1558,7 +1558,18 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     )
 
 
-def _qqq_rows(frame: Any) -> list[dict[str, Any]]:
+def _leader_symbols(rows: list[dict[str, Any]] | None) -> list[str]:
+    """Each ranked leader once, in rank order, skipping rows that name no ticker."""
+
+    symbols: list[str] = []
+    for row in rows or []:
+        symbol = row.get("ticker") if isinstance(row, Mapping) else None
+        if isinstance(symbol, str) and symbol not in symbols:
+            symbols.append(symbol)
+    return symbols
+
+
+def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, row in frame.iterrows():
         timestamp = index.date().isoformat() if hasattr(index, "date") else str(index)
@@ -1694,13 +1705,43 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     sector_rows = _ranked_groups(sectors.data, "sector", as_of) if sectors is not None else None
     industry_rows = _ranked_groups(industries.data, "industry", as_of) if industries is not None else None
     leader_rows = _ranked_leaders(leaders.data, as_of) if leaders is not None else None
+    # The RS source ranks a leader and says nothing about how it is behaving, so the behavior
+    # reading has to come from the leader's own completed bars. Withheld or session-behind
+    # history is left withheld: the evidence adapter reports the gap rather than a word.
+    leader_history: dict[str, Any] = {}
+    for symbol in _leader_symbols(leader_rows):
+        try:
+            history = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="market.snapshot",
+                provider="yfinance",
+                operation="daily_bars",
+                params={"ticker": symbol},
+                fetch=lambda symbol=symbol: runtime.price_history(symbol, as_of),
+            )
+        except ProviderUnavailable as error:
+            withheld = _missing_provider(error, required=False)
+            withheld["ticker"] = symbol
+            provider_missing.append(withheld)
+            continue
+        sources.append(_source(history.meta))
+        stale_price = _stale_price_gap(history.meta)
+        if stale_price is not None:
+            stale_price["ticker"] = symbol
+            stale_price["required"] = False
+            provider_missing.append(stale_price)
+            continue
+        leader_history[symbol] = _ohlcv_rows(history.data)
     evidence = build_market_evidence(
-        qqq_daily_ohlcv=_qqq_rows(qqq.data) if qqq is not None else None,
+        qqq_daily_ohlcv=_ohlcv_rows(qqq.data) if qqq is not None else None,
         finviz_html=finviz.data if finviz is not None else None,
         sector_rows=sector_rows,
         industry_rows=industry_rows,
         leader_rows=leader_rows,
         trade_traction={"state": trade_traction} if trade_traction is not None else None,
+        leader_history=leader_history,
     )
     result = evaluate_market_snapshot(evidence)
     section_missing = [
@@ -1729,7 +1770,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         request=_clean_request(request),
         as_of=_as_of(clock),
         status=status,
-        data={**result, "leaders": leader_rows or []},
+        data={**result, "leaders": evidence["leaders"] or []},
         signals=result["signal_vector"],
         missing=missing,
         sources=sources,

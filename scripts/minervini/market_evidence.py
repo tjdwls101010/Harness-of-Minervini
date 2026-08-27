@@ -13,6 +13,8 @@ import math
 import re
 from typing import Any
 
+from . import doctrine
+
 
 _FINVIZ_SECTIONS = (
     ("advancing_declining", "advancing", "declining"),
@@ -21,6 +23,12 @@ _FINVIZ_SECTIONS = (
     ("sma200", "above", "below"),
 )
 _GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
+_STRIKING_DISTANCE = "market.striking_distance_52w_high"
+_LOW_LIST = "market.avoid_52w_low_list"
+_CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
+# Fifty-two weeks of completed US sessions. A count of sessions rather than a calendar window,
+# because the window this measures is the one the phrase "52-week high" names on a price screen.
+_SESSIONS_PER_YEAR = 252
 _PCT_COUNT = re.compile(r"(?P<pct>\d+(?:\.\d+)?)%\s*\(\s*(?P<count>[\d,]+)\s*\)")
 _COUNT_PCT = re.compile(r"\(\s*(?P<count>[\d,]+)\s*\)\s*(?P<pct>\d+(?:\.\d+)?)%")
 
@@ -70,6 +78,7 @@ def build_market_evidence(
     industry_rows: Iterable[Mapping[str, Any]] | None,
     leader_rows: Iterable[Mapping[str, Any]] | None,
     trade_traction: Any,
+    leader_history: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Convert completed source snapshots to ``evaluate_market_snapshot`` input.
 
@@ -81,7 +90,7 @@ def build_market_evidence(
         "qqq_21ema": _qqq_21ema_switch(qqq_daily_ohlcv),
         "sectors": _group_evidence(sector_rows, "sector"),
         "industries": _group_evidence(industry_rows, "industry"),
-        "leaders": _leader_evidence(leader_rows),
+        "leaders": _leader_evidence(leader_rows, leader_history or {}),
         "trade_traction": trade_traction,
     }
 
@@ -276,7 +285,19 @@ def _group_evidence(rows: Iterable[Mapping[str, Any]] | None, group_type: str) -
     return result
 
 
-def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None) -> list[dict[str, Any]] | None:
+def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None, history: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+    """Each ranked leader, with what its own completed bars say about how it is behaving.
+
+    The RS source ranks tickers and says nothing about behavior, so this used to stand a
+    placeholder in that slot -- and a placeholder reports `observed`, which is not `supports`.
+    The favorable regime was therefore unreachable from any live snapshot, not because the
+    market never qualified but because one of its four signals could never be met.
+
+    A caller-supplied behavior word is no longer read where the bars can answer. It was the same
+    shape as the going-concern field the fundamentals evaluator used to read off a provider that
+    never sent it: a verdict input with no evidence under it.
+    """
+
     if rows is None:
         return None
     if isinstance(rows, (str, bytes, Mapping)):
@@ -286,16 +307,124 @@ def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None) -> list[dict[str,
         if not isinstance(row, Mapping):
             continue
         basis = _basis(row)
-        behavior = row.get("behavior", row.get("leader_behavior"))
+        ticker = row.get("ticker")
         leaders.append(
             {
-                "ticker": row.get("ticker"),
-                "behavior": behavior if behavior is not None else _observed(basis),
+                "ticker": ticker,
+                **_leader_price_behavior(history.get(ticker) if isinstance(ticker, str) else None),
                 "basis": basis,
                 "source_row": dict(row),
             }
         )
     return leaders
+
+
+def _leader_price_behavior(bars: Any) -> dict[str, Any]:
+    """The three deterministic things this corpus says about a leader's own price.
+
+    How far it sits from a new 52-week high, whether it is printing on the 52-week-low list, and
+    how deep its correction from the last peak has run. The band never carries the state alone:
+    the depth's own gate is the only reading here that can refuse, and the source's instruction
+    about the low list is a filter it stated outright.
+    """
+
+    closes, highs, lows = _leader_series(bars)
+    if closes is None:
+        return {
+            "behavior": {"state": "unavailable", "reason": "leader_price_history_not_read"},
+            "distance_from_52w_high": doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", None),
+            "on_52w_low_list": {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "unavailable", "measured": None},
+            "correction_depth": doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", None),
+            "correction_gate": doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", None),
+        }
+    window = slice(-_SESSIONS_PER_YEAR, None)
+    last, high_52w, low_52w = closes[-1], max(highs[window]), min(lows[window])
+    distance = doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", _reported((high_52w - last) / high_52w * 100) if high_52w > 0 else None)
+    # The list is the 52-week-low list, so what puts a ticker on it is its own low being made
+    # now. Reported as the measurement it is; the source's instruction about the list is what
+    # the behavior state below reads it for.
+    on_low_list = {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "reported", "measured": bool(last <= low_52w)}
+    depth = _correction_depth(highs[window], lows[window])
+    correction = doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", depth)
+    gate = doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", depth)
+    return {
+        "behavior": _leader_behavior_state(distance, on_low_list, gate),
+        "distance_from_52w_high": distance,
+        "on_52w_low_list": on_low_list,
+        "correction_depth": correction,
+        "correction_gate": gate,
+    }
+
+
+def _leader_behavior_state(distance: Mapping[str, Any], on_low_list: Mapping[str, Any], gate: Mapping[str, Any]) -> dict[str, Any]:
+    """One state from a gate and a band, in that order of authority.
+
+    A band cannot carry a verdict alone, so nearness to a new high supports only alongside a
+    correction the source's own ceiling did not refuse. The low list is a filter the source
+    stated outright -- "stay away from this list and all of its components" -- so it contradicts
+    on its own.
+    """
+
+    if on_low_list.get("measured") is True:
+        return {"state": "contradicts", "reason": "printing_on_the_52_week_low_list"}
+    if gate.get("state") == "fail":
+        return {"state": "contradicts", "reason": "correction_deeper_than_the_source_ceiling"}
+    if gate.get("state") == "pass" and distance.get("state") in {"within_source_range", "below_source_range"}:
+        return {"state": "supports"}
+    if distance.get("state") in {None, "unavailable"} or gate.get("state") in {None, "unavailable"}:
+        return {"state": "unavailable", "reason": "leader_price_history_not_read"}
+    return {"state": "observed"}
+
+
+def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[float]]:
+    """Closes, highs and lows from completed rows, or nothing at all.
+
+    A history with one unreadable row is not a history with a hole to work around: every
+    measurement below reads the whole window, so a partial read would report a 52-week high the
+    ticker may never have printed.
+    """
+
+    if bars is None:
+        return None, [], []
+    try:
+        rows = list(bars)
+    except TypeError:
+        return None, [], []
+    closes: list[float] = []
+    highs: list[float] = []
+    lows: list[float] = []
+    for row in rows:
+        if not isinstance(row, Mapping) or row.get("completed") is False:
+            return None, [], []
+        close = _finite_number(row.get("close", row.get("Close")))
+        high = _finite_number(row.get("high", row.get("High")))
+        low = _finite_number(row.get("low", row.get("Low")))
+        if close is None or high is None or low is None:
+            return None, [], []
+        closes.append(close)
+        highs.append(high)
+        lows.append(low)
+    return (closes, highs, lows) if closes else (None, [], [])
+
+
+def _correction_depth(highs: list[float], lows: list[float]) -> float | None:
+    """Peak to low, from the highest high in the window to the lowest low after it.
+
+    Measured forward from the peak rather than across the whole window, because a decline that
+    happened before the peak is not this peak's correction -- reading the window's own low
+    against its own high reports a recovery as a drawdown.
+    """
+
+    if not highs or not lows:
+        return None
+    peak_index = max(range(len(highs)), key=lambda index: highs[index])
+    trough = min(lows[peak_index:])
+    peak = highs[peak_index]
+    return _reported((peak - trough) / peak * 100) if peak > 0 else None
+
+
+def _reported(value: float | None) -> float | None:
+    return None if value is None or not math.isfinite(value) else round(value, 10)
 
 
 def _basis(row: Mapping[str, Any]) -> dict[str, Any]:
