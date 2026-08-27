@@ -104,5 +104,30 @@ class BaseCountIsPerspectiveNotAVerdict(unittest.TestCase):
         self.assertEqual(result["management_evidence"]["base_count_context"]["band"]["state"], "above_source_range")
 
 
+class BreakevenProtectionIsNeverAnUndeclaredSale(unittest.TestCase):
+    """A stop above the last completed close would take the position out at market."""
+
+    PROTECTION = "risk.profit_protection_at_3r"
+
+    def test_three_r_reached_and_given_back_reports_instead_of_ordering(self) -> None:
+        payload = held(stop_price=94.0, current_price=95.0, max_high_since_entry=118.0)
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "HOLD")
+        self.assertEqual([action for action in result["management_actions"] if action["doctrine_id"] == self.PROTECTION], [])
+        withheld = result["risk_controls"]["breakeven_protection_not_placeable"]
+        self.assertEqual(withheld["to_at_least"], 100.0)
+        self.assertEqual(withheld["current_price"], 95.0)
+        self.assertEqual(withheld["reason"], "breakeven_is_above_the_current_price")
+        self.assertIs(result["risk_controls"]["breakeven_protection_required"], True)
+
+    def test_still_above_breakeven_the_stop_is_ordered_as_before(self) -> None:
+        result = reduce_risk(held(stop_price=94.0, current_price=112.0, max_high_since_entry=118.0))
+
+        action = next(item for item in result["management_actions"] if item["doctrine_id"] == self.PROTECTION)
+        self.assertEqual(action["action"], "RAISE_STOP")
+        self.assertEqual(action["to_at_least"], 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()

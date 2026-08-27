@@ -157,6 +157,25 @@ class TheMeasurementsRefuseTheSameWindow(unittest.TestCase):
         self.assertEqual(block["reason"], "corporate_action_evidence_missing")
         self.assertEqual(block["date"], bars.index[40].date().isoformat())
 
+    def test_a_declared_exit_triggered_before_the_split_still_sells(self) -> None:
+        # Two closes below the declared average happened in the trader's own coordinate
+        # system, so the position was closed then. A two-for-one three weeks later cannot
+        # un-trigger the exit plan the trader declared.
+        closes = [100.0] * 55 + [95.0, 95.0] + [100.0] * 3 + [50.0] * 20
+        bars = frame(closes, splits={60: 2.0})
+        result = build_management_evidence(bars, entry_date=bars.index[50].date(), as_of=bars.index[-1].date(), management_average="ema21")
+
+        trail = result["moving_average_trail"]["ema21"]
+        self.assertEqual(trail["state"], "breached")
+        self.assertEqual(trail["breach_date"], bars.index[56].date().isoformat())
+
+    def test_nothing_found_before_the_split_still_refuses_the_window(self) -> None:
+        closes = [100.0] * 60 + [50.0] * 20
+        bars = frame(closes, splits={60: 2.0})
+        result = build_management_evidence(bars, entry_date=bars.index[50].date(), as_of=bars.index[-1].date(), management_average="ema21")
+
+        self.assertEqual(result["moving_average_trail"]["reason"], "share_split_inside_window")
+
     def test_a_split_before_the_simple_average_s_window_does_not_void_it(self) -> None:
         # The split is a hundred sessions before the position and fifty before the first
         # value the SMA uses, so no average this audit reads spans it. Withholding it would

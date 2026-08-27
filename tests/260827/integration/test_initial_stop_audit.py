@@ -137,12 +137,53 @@ class ABreachNamesTheLevelItCrossed(unittest.TestCase):
         self.assertEqual(stop_audit["state"], "unavailable")
         self.assertEqual(stop_audit["reason"], "not_audited_after_explicit_breach")
 
-    def test_a_price_under_both_levels_is_the_stop_breach(self) -> None:
+    def test_a_price_under_both_levels_is_named_by_the_one_it_crossed_first(self) -> None:
+        # Price falls from above, so 95 was crossed before 90. Naming the lower level would
+        # report the trade as ending at a line the market reached second.
         payload = run(quiet(40), stop_price=90.0, invalidation={"price": 95.0, "condition": "close at or below 95"}, current_price=88.0)
 
         data = payload["data"]
-        self.assertEqual(data["failed"], ["completed_stop_breach"])
-        self.assertEqual(data["completed_price_path"]["governing_role"], "stop")
+        self.assertEqual(data["failed"], ["invalidation_breach"])
+        path = data["completed_price_path"]
+        self.assertEqual(path["governing_role"], "invalidation")
+        self.assertEqual(path["checked_level"], 95.0)
+        self.assertEqual({audit["role"]: audit["state"] for audit in path["audits"]}, {"stop": "breached", "invalidation": "breached"})
+
+    def test_an_expired_initial_stop_is_not_audited_by_a_price_printed_since(self) -> None:
+        # The raise ended the initial stop's window on 2025-12-15. Today's 90 breaches the
+        # stop that is actually in force, and says nothing about a window that closed.
+        payload = run(quiet(40), stop_price=97.0, initial_stop_price=94.0, stop_effective_date="2025-12-15", current_price=90.0)
+
+        path = payload["data"]["completed_price_path"]
+        self.assertEqual(path["governing_role"], "stop")
+        self.assertEqual(path["checked_level"], 97.0)
+        self.assertEqual(path["from"], "2025-12-15")
+        initial = next(audit for audit in path["audits"] if audit["role"] == "initial_stop")
+        self.assertEqual(initial["reason"], "not_audited_after_explicit_breach")
+
+    def test_a_widened_stop_publishes_the_initial_level_that_still_governs(self) -> None:
+        # A stop is never widened, so 94 stayed in force. The 88 Low broke both; the record
+        # is about the higher one, which is the one the session crossed first.
+        rows = quiet(43)
+        rows[-7] = (100.0, 101.0, 88.0, 100.0)
+        payload = run(rows, stop_price=90.0, initial_stop_price=94.0, stop_effective_date="2025-12-15")
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "SELL")
+        self.assertEqual(data["completed_price_path"]["governing_role"], "initial_stop")
+        self.assertEqual(data["completed_price_path"]["checked_level"], 94.0)
+
+    def test_an_initial_stop_at_the_same_level_still_governed_its_own_window(self) -> None:
+        # The levels being equal does not mean there was no earlier window: what makes one
+        # is the later effective date, and a breach inside it is a breach.
+        rows = quiet(43)
+        rows[-16] = (100.0, 101.0, 89.0, 100.0)
+        payload = run(rows, stop_price=90.0, initial_stop_price=90.0, stop_effective_date="2025-12-15")
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "SELL")
+        self.assertEqual(data["completed_price_path"]["state"], "breached")
+        self.assertEqual(data["completed_price_path"]["checked_level"], 90.0)
 
 
 if __name__ == "__main__":

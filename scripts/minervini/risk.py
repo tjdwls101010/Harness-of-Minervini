@@ -318,6 +318,10 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
             "band": doctrine.evaluate_band(_BASE_COUNT, "typical_base_count_before_top", base_count),
             "disclaimer_doctrine_id": _BASE_COUNT_DISCLAIMER,
             "disclaimer": "Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.",
+            # The disclaimer's claim also lists price and volume history, which this reading
+            # never consumes: it reports the count the caller declared against the source's
+            # band and quotes the qualification the source attached to it.
+            "claim_inputs_not_read": ["price_history", "volume_history"],
         }
     return blocks
 
@@ -399,6 +403,9 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
 
 
 _POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
+# Two ways a declared breakout is not a session these rules can hang from: no bar printed on
+# it, or the history the provider returned begins after it. Either way the anchor is absent.
+_UNLOCATABLE_BREAKOUT_REASONS = frozenset({"no_completed_bar_on_breakout_date", "history_starts_after_breakout_date"})
 
 
 def _unlocatable_breakout(management: Mapping[str, Any]) -> str | None:
@@ -411,7 +418,7 @@ def _unlocatable_breakout(management: Mapping[str, Any]) -> str | None:
 
     for name in _POST_BREAKOUT_BLOCKS:
         reason = _mapping(management.get(name)).get("reason")
-        if reason == "no_completed_bar_on_breakout_date":
+        if reason in _UNLOCATABLE_BREAKOUT_REASONS:
             return reason
     return None
 
@@ -572,9 +579,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     elif breached:
         verdict = "SELL"
         missing = []
+        # A path that names the level it is about decides the word: when one price is under
+        # both an invalidation and a stop, the trade ended at the line it crossed first, and
+        # the failure has to be reported under that line.
+        path_names_invalidation = _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
         reasons = [
             "live_stop_breach"
             if live_triggered
+            else "invalidation_breach"
+            if path_names_invalidation
             else "completed_stop_breach"
             if completed_stop
             else "invalidation_triggered"
@@ -613,14 +626,21 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             controls["favorable_excursion_basis"] = basis
             if stop is not None and stop < entry and doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", r_multiple)["state"] == "pass":
                 controls["breakeven_protection_required"] = True
-                actions.append(
-                    {
-                        "action": "RAISE_STOP",
-                        "doctrine_id": _PROFIT_PROTECTION,
+                evidence = {"r_multiple_reached": controls["r_multiple_reached"], "measured_from": basis}
+                placeable = current is None or entry < current
+                if placeable:
+                    actions.append({"action": "RAISE_STOP", "doctrine_id": _PROFIT_PROTECTION, "to_at_least": entry, "evidence": evidence})
+                else:
+                    # Price has already come back through breakeven. A stop ordered above the
+                    # last completed close is not a stop -- it is a sale this harness never
+                    # said it was making -- so the protection that was missed is reported and
+                    # not ordered. The same placeability rule the market-defense action uses.
+                    controls["breakeven_protection_not_placeable"] = {
+                        **evidence,
                         "to_at_least": entry,
-                        "evidence": {"r_multiple_reached": controls["r_multiple_reached"], "measured_from": basis},
+                        "current_price": current,
+                        "reason": "breakeven_is_above_the_current_price",
                     }
-                )
         if profile == "tl_stage12" and entry is not None and reached:
             price, basis = max(reached, key=lambda item: item[0])
             gain_pct = (price - entry) / entry * 100

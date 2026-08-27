@@ -1627,7 +1627,10 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
 
     breaches = [audit for audit in audits if audit["state"] == "breached"]
     if breaches:
-        governing = min(breaches, key=lambda audit: audit["breach_date"])
+        # Earliest breach first, and among levels breached on the same session the highest
+        # one: price falls from above, so that is the level it crossed first. Picking the
+        # lower one publishes a record under a line the market reached second.
+        governing = min(breaches, key=lambda audit: (audit["breach_date"], -audit["level"]))
     else:
         unresolved = [audit for audit in audits if audit["state"] != "clear"]
         governing = unresolved[0] if unresolved else max(audits, key=lambda audit: audit["level"])
@@ -1806,12 +1809,17 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     refused: tuple[dict[str, Any], float | None] | None = None
     if refuse_from is not None:
         current_price = None
+        prefix = [(bar_date, row) for bar_date, row in dated_rows if effective_date <= bar_date < refuse_from and (end_before is None or bar_date < end_before)]
         refused = (
             {
                 "state": "unavailable",
                 "reason": "share_split_inside_stop_window" if split_reason == "share_split" else split_reason,
                 "date": refuse_from.isoformat(),
                 "requested_from": effective_date.isoformat(),
+                # The sessions before the event were audited and came through clear. Saying
+                # so is the difference between a window nothing was read in and one that was
+                # read up to the point it stopped being readable.
+                **(_bars_that_spoke(prefix) if prefix else {}),
             },
             None,
         )
@@ -2007,8 +2015,8 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         protective_plan.append(("stop", stop_price, stop_effective_date, None))
     if invalidation_price is not None and entry_date is not None:
         protective_plan.append(("invalidation", invalidation_price, entry_date, None))
-    if initial_stop_price is not None and stop_price is not None and initial_stop_price != stop_price and entry_date is not None and stop_effective_date is not None:
-        if stop_price > initial_stop_price:
+    if initial_stop_price is not None and stop_price is not None and entry_date is not None and stop_effective_date is not None:
+        if stop_price >= initial_stop_price:
             # The initial stop governed every completed session before the raise took effect.
             if stop_effective_date > entry_date:
                 protective_plan.append(("initial_stop", initial_stop_price, entry_date, stop_effective_date))
@@ -2025,8 +2033,15 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # cleared -- no bar was read, and a session last week could have taken it out -- so
         # it is unaudited rather than clear. The record is about the level the price actually
         # crossed, named by role, because a breached invalidation is not a breached stop.
-        crossed = [(role, level, effective) for role, level, effective, _end in protective_plan if price <= level]
-        governing_role, governing_level, governing_from = min(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
+        # Only a level whose own window reaches as_of can be breached by today's price: an
+        # initial stop the raise ended weeks ago is not audited by a price printed since.
+        crossed = [
+            (role, level, effective)
+            for role, level, effective, end_before in protective_plan
+            if price <= level and (end_before is None or clock.date < end_before)
+        ]
+        # The highest level crossed is the one the price passed first on its way down.
+        governing_role, governing_level, governing_from = max(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
         evidence["completed_price_path"] = {
             "state": "breached",
             "basis": "explicit_completed_price",
@@ -2043,11 +2058,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                     "effective_from": effective.isoformat(),
                     **(
                         {"through": clock.date.isoformat(), "state": "breached"}
-                        if price <= level
+                        if price <= level and (end_before is None or clock.date < end_before)
                         else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
                     ),
                 }
-                for role, level, effective, _end_before in protective_plan
+                for role, level, effective, end_before in protective_plan
             ],
         }
     # A breach that already settles the verdict needs no price history, and a

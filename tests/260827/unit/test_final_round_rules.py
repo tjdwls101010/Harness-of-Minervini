@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from scripts.minervini.management_evidence import build_management_evidence
+from scripts.minervini.management_evidence import BLOCKS, build_management_evidence
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 from scripts.minervini.risk import reduce_risk
@@ -115,6 +115,45 @@ class ADeclineNamesTheVolumeItCouldNotRead(unittest.TestCase):
         self.assertEqual(block["missing_inputs"], ["volume_history"])
         self.assertIsNone(block["volume_ratio"])
         self.assertAlmostEqual(block["largest_pct"], -10.0)
+
+
+class ABarThatWasNeverThereAnswersNothing(unittest.TestCase):
+    def test_a_missing_first_low_leaves_the_quality_comparison_unanswered(self) -> None:
+        # Comparing a close against NaN returns False, which would read as "the second close
+        # did not hold the first session's low" -- a finding about the stock, from a bar the
+        # provider never filled.
+        closes = [100.0 + 0.5 * index for index in range(60)] + [110.0, 108.0]
+        index = pd.bdate_range(end=AS_OF, periods=len(closes))
+        bars = pd.DataFrame({"Open": closes, "High": [close * 1.01 for close in closes], "Low": [close * 0.99 for close in closes], "Close": closes, "Volume": [1_000_000] * len(closes), "Stock Splits": [0.0] * len(closes)}, index=index)
+        bars.iloc[-2, bars.columns.get_loc("Low")] = float("nan")
+        quality = build_management_evidence(bars, entry_date=index[40].date(), as_of=index[-1].date(), management_average="ema21")["moving_average_trail"]["ema21"]["quality"]
+
+        self.assertIsNone(quality["second_close_above_first_low"])
+        self.assertEqual(quality["missing_inputs"], ["first_session_low"])
+
+    def test_a_volume_column_holding_nothing_usable_is_still_missing_evidence(self) -> None:
+        closes = [100.0] * 61 + [80.0]
+        index = pd.bdate_range(end=AS_OF, periods=len(closes))
+        volumes = [1_000_000.0] * 61 + [float("nan")]
+        bars = pd.DataFrame({"Open": closes, "High": [close * 1.01 for close in closes], "Low": [close * 0.99 for close in closes], "Close": closes, "Volume": volumes, "Stock Splits": [0.0] * len(closes)}, index=index)
+        block = build_management_evidence(bars, entry_date=index[40].date(), as_of=index[-1].date(), stage2_start=index[0].date())["largest_decline_since_stage2_start"]["daily"]
+
+        self.assertAlmostEqual(block["largest_pct"], -20.0)
+        self.assertIsNone(block["volume_ratio"])
+        self.assertEqual(block["missing_inputs"], ["volume_history"])
+
+
+class EveryPromisedBlockIsNamed(unittest.TestCase):
+    def test_an_unreadable_history_still_names_all_eleven_blocks(self) -> None:
+        # A key that vanishes reads as a measurement with nothing to report, which a caller
+        # cannot tell from one that was never attempted.
+        index = pd.bdate_range(end=AS_OF, periods=40)
+        bars = pd.DataFrame({"Low": [99.5] * 40, "Close": [101.0] * 40, "Stock Splits": [0.0] * 40}, index=index)
+        result = build_management_evidence(bars, entry_date=index[20].date(), as_of=index[-1].date())
+
+        self.assertEqual(set(result), set(BLOCKS))
+        for name, block in result.items():
+            self.assertEqual(block["reason"], "completed_ohlc_history_unavailable", name)
 
 
 class TheFailedVolumeEventNamesWhatItCouldNotSettle(unittest.TestCase):
