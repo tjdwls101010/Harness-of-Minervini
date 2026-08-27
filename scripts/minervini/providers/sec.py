@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
-import re
+import math
 from typing import Any, Callable, Iterable, Mapping
 
 from . import ProviderSnapshot, ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry
@@ -15,14 +15,40 @@ SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_PROVIDER = "sec"
 MIN_REQUEST_INTERVAL_SECONDS = 0.15
 _THROTTLE = RequestThrottle(MIN_REQUEST_INTERVAL_SECONDS)
-_FORM_TYPES = {"10-Q", "10-K", "20-F"}
+# 40-F is the Canadian MJDS annual report, and this harness covers ADRs. Dropping the form
+# turned every such issuer into a company that had filed nothing. 6-K stays out: it furnishes
+# whatever the issuer chose to send, so its form name says nothing about what is inside it.
+_FORM_TYPES = {"10-Q", "10-K", "20-F", "40-F"}
+# What a duration fact has to span to be one. Thirteen weeks is 91 days and a fourteen-week
+# quarter is 98; a 52/53-week year is 364 or 371 and a calendar one 365 or 366. These are
+# shapes of the document, not doctrine -- nothing here is a threshold a source stated.
+_QUARTER_LENGTH_DAYS = (80, 100)
+_FISCAL_YEAR_LENGTH_DAYS = (340, 380)
+# How far back from a close the middle of the period it closes sits. Read from the close alone
+# rather than from the span, because the close is the half of a duration fact an amendment
+# never moves: a 10-K/A correcting 52 weeks to 53 pushed a span midpoint back across New Year
+# and the corrected year arrived as the year before the one it was correcting.
+_HALF_QUARTER_DAYS = 45
+_HALF_YEAR_DAYS = 182
 _QUARTERLY_METRICS = {
-    "eps": ("EarningsPerShareDiluted", "BasicAndDilutedEarningsLossPerShare"),
+    "eps": ("EarningsPerShareDiluted", "DilutedEarningsLossPerShare", "BasicAndDilutedEarningsLossPerShare"),
     "revenue": ("RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "Revenues", "Revenue"),
     "net_income": ("NetIncomeLoss", "ProfitLoss"),
     "diluted_shares": ("WeightedAverageNumberOfDilutedSharesOutstanding",),
 }
-_ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRICS["revenue"]}
+_ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRICS["revenue"], "net_income": _QUARTERLY_METRICS["net_income"], "diluted_shares": _QUARTERLY_METRICS["diluted_shares"]}
+# Balances rather than flows. Inventory and receivables are reported as of a date, so a
+# filing carries no `start` for them and the period they belong to is the one whose books
+# close on that date -- never the fiscal year of the report, which for a comparative column
+# is this year while the balance is last year's.
+# Both taxonomies, because the provider accepts both. Looking for US-GAAP names only meant a
+# 20-F filer's balance sheet was dropped before per-field provenance could see it, and the
+# readings built on it reported evidence the company had in fact filed as evidence it lacked.
+_ANNUAL_INSTANT_METRICS = {
+    "inventory": ("InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross", "Inventories"),
+    "accounts_receivable": ("AccountsReceivableNetCurrent", "ReceivablesNetCurrent", "AccountsReceivableNet", "TradeAndOtherCurrentReceivables", "CurrentTradeReceivables"),
+    "stockholders_equity": ("StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "Equity", "EquityAttributableToOwnersOfParent"),
+}
 
 
 def _filed_date(value: Any) -> date:
@@ -210,11 +236,12 @@ def normalize_filed_facts(
     validate_company_submissions(submissions, cik=submissions_cik)
 
     submission_rows = _submission_rows(submissions)
-    taxonomy, accounting_basis = _accounting_taxonomy(company_facts)
+    taxonomies = _accounting_taxonomies(company_facts)
     filings: dict[str, dict[str, Any]] = {}
-    for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS)):
+    annual_ends = _annual_period_by_end(taxonomies, submission_rows, boundary)
+    for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS), ("annual_instant", _ANNUAL_INSTANT_METRICS)):
         for metric, concepts in metrics.items():
-            for record in _metric_records(taxonomy, concepts, kind):
+            for record in _metric_records(taxonomies, concepts, kind, annual_ends):
                 accession = record["accn"]
                 submission = submission_rows.get(accession)
                 if submission is None or not _is_supported_form(submission["form"]):
@@ -226,29 +253,48 @@ def normalize_filed_facts(
                     continue
                 if record.get("filed") != submission["filed_at"]:
                     raise ValueError(f"SEC fact filing date does not match submissions for {accession}.")
+                # Keyed by the regime as well as the accession, because a filing can carry
+                # both and the basis is what stamps every field's provenance. One entry per
+                # regime keeps each number under the regime that measured it.
                 filing = filings.setdefault(
-                    accession,
+                    (accession, record["accounting_basis"]),
                     {
                         "filed_at": submission["filed_at"],
-                        "accounting_basis": accounting_basis,
+                        # The form as filed, amendment suffix and all. Support is decided on
+                        # the half before the slash, because an amendment carries facts, but
+                        # publishing only that half loses the one thing that tells a reader
+                        # these numbers replaced numbers already published.
+                        "form": submission["form"],
+                        "accounting_basis": record["accounting_basis"],
                         "quarterly": {},
                         "annual": {},
                     },
                 )
-                fact = filing[kind].setdefault(
-                    record["period"],
-                    {"period": record["period"], "end": record["end"]},
+                bucket = "annual" if kind == "annual_instant" else kind
+                # Keyed by the closing date too. The period name is a projection and two closes
+                # can reach one; merging them here kept a single figure and left the evaluator
+                # nothing to notice, where its own rule is to withhold the whole period.
+                fact = filing[bucket].setdefault(
+                    (record["period"], record["end"]),
+                    # The span travels with the period. Two annual periods that overlap are
+                    # not a year and the year before it, and without the start nothing
+                    # downstream can tell that they do.
+                    {"period": record["period"], "end": record["end"], **({"start": record["start"]} if record.get("start") else {}), "_units": {}},
                 )
                 fact[metric] = record["val"]
+                fact["_units"][metric] = record["unit"]
 
     normalized_filings = []
-    for filing in sorted(filings.values(), key=lambda item: item["filed_at"]):
+    for filing in sorted(filings.values(), key=lambda item: (item["filed_at"], item["accounting_basis"])):
         normalized_filings.append(
             {
                 "filed_at": filing["filed_at"],
+                "form": filing["form"],
                 "accounting_basis": filing["accounting_basis"],
-                "quarterly": list(filing["quarterly"].values()),
-                "annual": list(filing["annual"].values()),
+                # Ordered by the closing date, so that a period two closes reached arrives the
+                # same way whichever order the provider sent the two facts in.
+                "quarterly": [fact for _, fact in sorted(filing["quarterly"].items())],
+                "annual": [fact for _, fact in sorted(filing["annual"].items())],
             }
         )
     return {"source": "sec_filed_facts", "cik": facts_cik, "filings": normalized_filings}
@@ -302,64 +348,134 @@ def _submission_rows(submissions: Mapping[str, Any]) -> dict[str, dict[str, str]
     }
 
 
-def _accounting_taxonomy(company_facts: Mapping[str, Any]) -> tuple[Mapping[str, Any], str]:
+def _accounting_taxonomies(company_facts: Mapping[str, Any]) -> list[tuple[Mapping[str, Any], str]]:
+    """Every taxonomy the company filed under, because a registrant can change one.
+
+    Choosing one for the whole company read whichever was present first, so the day a 10-K
+    appeared every IFRS year the filer had ever published stopped existing -- including for an
+    `as_of` before that 10-K was filed, which is a future document deciding a past answer.
+    Provenance is already per field, so both regimes can travel together from here.
+    """
+
     facts = company_facts["facts"]
-    if isinstance(facts.get("us-gaap"), Mapping):
-        return facts["us-gaap"], "US-GAAP"
-    if isinstance(facts.get("ifrs-full"), Mapping):
-        return facts["ifrs-full"], "IFRS"
-    raise ValueError("SEC companyfacts must contain US-GAAP or IFRS facts.")
+    found = [(facts[name], basis) for name, basis in (("us-gaap", "US-GAAP"), ("ifrs-full", "IFRS")) if isinstance(facts.get(name), Mapping)]
+    if not found:
+        raise ValueError("SEC companyfacts must contain US-GAAP or IFRS facts.")
+    return found
 
 
-def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind: str) -> Iterable[dict[str, Any]]:
-    found: set[tuple[str, str]] = set()
-    for concept_name in concepts:
-        concept = taxonomy.get(concept_name)
-        if not isinstance(concept, Mapping) or not isinstance(concept.get("units"), Mapping):
-            continue
-        for unit_records in concept["units"].values():
-            if not isinstance(unit_records, list):
+def _annual_period_by_end(taxonomies: list[tuple[Mapping[str, Any], str]], submission_rows: Mapping[str, Any], boundary: date) -> dict[str, str]:
+    """Each fiscal year's closing date, mapped to the year it closes, as of the request's boundary.
+
+    A balance is dated, not spanned, so nothing in the fact itself says which fiscal year it
+    closes. The income statement for that year does: it ends on the same date. Requiring 31
+    December instead dropped every balance a September or January filer ever filed, silently,
+    because a dropped fact and a fact the company never filed look identical downstream.
+
+    The map is built from the same filings the request can see. Reading the whole taxonomy let a
+    filing three weeks past `as_of` decide which fiscal year an earlier balance belonged to,
+    which is a future document reaching into a point-in-time answer. And a closing date two
+    filings disagree about is left out rather than resolved by input order: the balance is then
+    a balance nobody can place, which is what it is.
+    """
+
+    ends: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for concepts in _ANNUAL_METRICS.values():
+        for record in _metric_records(taxonomies, concepts, "annual", {}):
+            submission = submission_rows.get(record["accn"])
+            if submission is None or not _is_supported_form(submission["form"]) or record.get("form") != submission["form"]:
                 continue
-            for raw in unit_records:
-                record = _normalized_metric_record(raw, kind)
-                if record is None or (record["accn"], record["period"]) in found:
+            if _filed_date(submission["filed_at"]) > boundary:
+                continue
+            end = record.get("end")
+            if not isinstance(end, str):
+                continue
+            if ends.setdefault(end, record["period"]) != record["period"]:
+                conflicts.add(end)
+    return {end: period for end, period in ends.items() if end not in conflicts}
+
+
+def _metric_records(taxonomies: list[tuple[Mapping[str, Any], str]], concepts: tuple[str, ...], kind: str, annual_ends: Mapping[str, str]) -> Iterable[dict[str, Any]]:
+    """Every fact of this metric, once per closing date rather than once per period name.
+
+    The name is a projection and two closes can reach one, which is precisely the collision the
+    evaluator withholds. Deduplicating on the name alone kept whichever fact the provider
+    happened to send first, so that decision never saw the second close and the answer depended
+    on input order. The unit travels too: SEC files a concept once per unit, and a hundred US
+    dollars beside a hundred and thirty Canadian ones is not thirty percent of growth.
+    """
+
+    # Keyed by the regime too. Without it a 20-F filer tagging the same period under both
+    # taxonomies lost the second one here, before the grouping that exists to keep them apart
+    # could ever see it -- and the provenance refusals downstream then had nothing to refuse.
+    found: set[tuple[str, str, str, str]] = set()
+    for taxonomy, accounting_basis in taxonomies:
+        for concept_name in concepts:
+            concept = taxonomy.get(concept_name)
+            if not isinstance(concept, Mapping) or not isinstance(concept.get("units"), Mapping):
+                continue
+            for unit, unit_records in concept["units"].items():
+                if not isinstance(unit_records, list):
                     continue
-                found.add((record["accn"], record["period"]))
-                yield record
+                for raw in unit_records:
+                    record = _normalized_metric_record(raw, kind, annual_ends)
+                    if record is None or (record["accn"], record["period"], record["end"], accounting_basis) in found:
+                        continue
+                    found.add((record["accn"], record["period"], record["end"], accounting_basis))
+                    yield {**record, "accounting_basis": accounting_basis, "unit": unit if isinstance(unit, str) else None}
 
 
-def _normalized_metric_record(raw: Any, kind: str) -> dict[str, Any] | None:
+def _normalized_metric_record(raw: Any, kind: str, annual_ends: Mapping[str, str]) -> dict[str, Any] | None:
     if not isinstance(raw, Mapping) or not isinstance(raw.get("accn"), str) or not isinstance(raw.get("end"), str):
         return None
-    if not isinstance(raw.get("val"), (int, float)) or isinstance(raw.get("val"), bool):
+    value = raw.get("val")
+    # A boundary that admits a value the arithmetic cannot use is not a boundary. `nan` reached
+    # a published return-on-equity and then broke strict JSON encoding at the envelope.
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
         return None
     form = raw.get("form")
     if not _is_supported_form(form) or not isinstance(raw.get("filed"), str):
         return None
-    period = _period_from_fact(raw, kind)
+    period = _period_from_fact(raw, kind, annual_ends)
     if period is None:
         return None
-    return {"accn": raw["accn"], "form": form, "filed": raw["filed"], "period": period, "end": raw["end"], "val": raw["val"]}
+    return {"accn": raw["accn"], "form": form, "filed": raw["filed"], "period": period, "start": raw.get("start"), "end": raw["end"], "val": raw["val"]}
 
 
 def _is_supported_form(value: Any) -> bool:
     return isinstance(value, str) and value.split("/", 1)[0] in _FORM_TYPES
 
 
-def _period_from_fact(raw: Mapping[str, Any], kind: str) -> str | None:
-    frame = raw.get("frame")
-    if isinstance(frame, str):
-        matched = re.fullmatch(r"CY(\d{4})(?:Q([1-4]))?", frame)
-        if matched:
-            year, quarter = matched.groups()
-            if kind == "annual" and quarter is None:
-                return year
-            if kind == "quarterly" and quarter is not None:
-                return f"{year}-Q{quarter}"
-    fiscal_year, fiscal_period = raw.get("fy"), raw.get("fp")
-    if isinstance(fiscal_year, int) and isinstance(fiscal_period, str):
-        if kind == "annual" and fiscal_period == "FY":
-            return str(fiscal_year)
-        if kind == "quarterly" and fiscal_period in {"Q1", "Q2", "Q3", "Q4"}:
-            return f"{fiscal_year}-{fiscal_period}"
-    return None
+def _period_from_fact(raw: Mapping[str, Any], kind: str, annual_ends: Mapping[str, str]) -> str | None:
+    if kind == "annual_instant":
+        # A balance sheet date is the period, and the fiscal year it belongs to is the one whose
+        # income statement closes on that same date. `fy` names the report it was printed in, and
+        # a prior-year comparative column carries this year's -- reading it would file last
+        # year's inventory under this year and erase a year of growth. A date matching no fiscal
+        # year end is a quarter's balance and is not this bucket's fact.
+        end = raw.get("end")
+        return annual_ends.get(end) if isinstance(end, str) else None
+    span = _duration(raw)
+    if span is None:
+        return None
+    start, end = span
+    days = (end - start).days
+    lower, upper = _QUARTER_LENGTH_DAYS if kind == "quarterly" else _FISCAL_YEAR_LENGTH_DAYS
+    # A quarter's fact spans a quarter. Every 10-Q also carries the year-to-date run-up to the
+    # same closing date, and reading that as one quarter published a nine-month cumulative
+    # figure as three months of earnings -- above every growth band it was then measured
+    # against. Length is what tells the two apart; nothing else in the fact does.
+    if not lower <= days <= upper:
+        return None
+    if kind == "annual":
+        return str((end - timedelta(days=_HALF_YEAR_DAYS)).year)
+    middle = end - timedelta(days=_HALF_QUARTER_DAYS)
+    return f"{middle.year}-Q{(middle.month - 1) // 3 + 1}"
+
+
+def _duration(raw: Mapping[str, Any]) -> tuple[date, date] | None:
+    try:
+        return date.fromisoformat(str(raw["start"])), date.fromisoformat(str(raw["end"]))
+    except (KeyError, TypeError, ValueError):
+        return None

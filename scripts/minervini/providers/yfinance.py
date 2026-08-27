@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 import re
 from typing import Any
 import unicodedata
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -44,9 +45,40 @@ def _index_dates(frame: pd.DataFrame) -> pd.Series:
     return pd.Series(index.date, index=frame.index)
 
 
+def _impossible_range(frame: pd.DataFrame) -> np.ndarray:
+    """Rows whose four prices cannot all have come from one session.
+
+    Only rows where every price is present are judged: a blank is a session the provider has
+    not finished writing, which the completeness check answers, and calling it impossible would
+    replace one true statement about the feed with a different, false one.
+    """
+
+    values = {column: pd.to_numeric(frame[column], errors="coerce") for column in ("Open", "High", "Low", "Close")}
+    present = np.ones(len(frame), dtype=bool)
+    for series in values.values():
+        present &= np.asarray(series.notna())
+    ordered = np.array(values["High"] >= values["Low"], dtype=bool)
+    for column in ("Open", "Close"):
+        ordered &= np.asarray(values[column] <= values["High"]) & np.asarray(values[column] >= values["Low"])
+    return present & ~ordered
+
+
+def _session_date(observed_at: datetime) -> date:
+    """What day it is where the sessions are.
+
+    These are US listings, so today is a New York date. Reading the UTC clock made every
+    instant between 00:00 UTC and New York midnight -- an evening on the east coast, the whole
+    afternoon on the west -- report yesterday as today, so a report due this afternoon read as
+    one filed already.
+    """
+
+    stamped = observed_at if observed_at.tzinfo is not None else observed_at.replace(tzinfo=timezone.utc)
+    return stamped.astimezone(ZoneInfo("America/New_York")).date()
+
+
 def _current_date(as_of: str | date | None, observed_at: datetime) -> date:
     if as_of is None:
-        return observed_at.date()
+        return _session_date(observed_at)
     return as_of if isinstance(as_of, date) else date.fromisoformat(as_of)
 
 
@@ -75,7 +107,7 @@ def current_classification_snapshot(
 
     observed_at = retrieved_at or datetime.now(timezone.utc)
     requested_date = _current_date(as_of, observed_at)
-    if requested_date != observed_at.date():
+    if requested_date != _session_date(observed_at):
         raise ProviderUnavailable("yfinance", "historical_classification_unavailable", operation="current_classification")
 
     if info is None:
@@ -104,7 +136,7 @@ def current_classification_snapshot(
         meta=SnapshotMeta(
             provider="yfinance",
             retrieved_at=observed_at,
-            as_of=observed_at.date(),
+            as_of=_session_date(observed_at),
             coverage={
                 "kind": "current_classification_only",
                 "historical": False,
@@ -148,10 +180,30 @@ def completed_daily_bars(
     if not isinstance(frame, pd.DataFrame):
         raise ProviderUnavailable("yfinance", "invalid_daily_bar_response", operation="daily_bars")
 
+    # Every column the frame carries is checked below, and nothing was checking that it
+    # carried them. A frame with no Close passed as a completed session, and the multiple then
+    # reported the close as the missing input while the envelope called the evidence whole.
+    missing_columns = [column for column in OHLCV_COLUMNS if column not in frame]
+    if missing_columns:
+        raise ProviderUnavailable("yfinance", "daily_bars_missing_price_columns", operation="daily_bars")
+
     completed = frame.copy()
     if not completed.empty:
         dates = _index_dates(completed)
+        # An index entry that is not a date coerces to `NaT`, and `NaT <= as_of` is false -- so
+        # a session with a full set of prices vanished from a history whose coverage still said
+        # it was complete, silently shortening every average built on it.
+        if dates.isna().any():
+            raise ProviderUnavailable("yfinance", "daily_bars_unreadable_session_index", operation="daily_bars")
         completed = completed.loc[dates <= clock.date]
+    if not completed.empty:
+        # A close above the high did not happen. Every measurement downstream reads the close as
+        # the session's price, so accepting one the same row says the session never reached
+        # publishes a multiple, a stop distance and an extension from a number nobody printed.
+        # Asked of the sessions `as_of` reached, and only those: a provider that hands back more
+        # than was requested does not get to invalidate the history that was.
+        if _impossible_range(completed).any():
+            raise ProviderUnavailable("yfinance", "daily_bars_impossible_session_range", operation="daily_bars")
     if completed.empty:
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")
 
@@ -195,3 +247,89 @@ def completed_daily_bars(
             stale=last_completed_bar != clock.date,
         ),
     )
+
+
+def next_earnings_snapshot(
+    symbol: str,
+    *,
+    as_of: str | date | None = None,
+    ticker: Any | None = None,
+    calendar: Any | None = None,
+    retrieved_at: datetime | None = None,
+) -> ProviderSnapshot[dict[str, Any]]:
+    """Fetch the next scheduled earnings report as a current, forward-looking snapshot only.
+
+    A calendar entry is mutable the way a sector label is mutable, and no feed can say what it
+    held on a past date. Dating today's answer to a past session would put a forecast nobody
+    made then inside a point-in-time verdict, so a historical request is refused rather than
+    answered.
+
+    Whether anybody confirmed the date travels with it. Two dates is the feed naming a window it
+    guessed at, and the earlier edge is the one published: a holder asking whether a report is
+    still ahead needs the first session it could land on, and the later edge would report a
+    position as clear on a day the company might already have reported.
+    """
+
+    observed_at = retrieved_at or datetime.now(timezone.utc)
+    requested_date = _current_date(as_of, observed_at)
+    if requested_date != _session_date(observed_at):
+        raise ProviderUnavailable("yfinance", "historical_earnings_calendar_unavailable", operation="next_earnings")
+
+    if calendar is None:
+        if ticker is None:
+            try:
+                import yfinance as yf
+            except Exception as error:
+                raise ProviderUnavailable("yfinance", "package_unavailable", operation="next_earnings") from error
+            ticker = yf.Ticker(symbol)
+        calendar = fetch_with_one_retry("yfinance", "next_earnings", lambda: ticker.calendar)
+
+    if not isinstance(calendar, Mapping):
+        raise ProviderUnavailable("yfinance", "invalid_earnings_calendar_response", operation="next_earnings")
+    entries = calendar.get("Earnings Date")
+    if isinstance(entries, (str, bytes)) or not isinstance(entries, (list, tuple)):
+        entries = [entries] if entries is not None else []
+    if not entries:
+        raise ProviderUnavailable("yfinance", "earnings_date_missing", operation="next_earnings")
+    dates = sorted(_calendar_date(entry) for entry in entries)
+    if dates[0] < _session_date(observed_at):
+        # A calendar still showing the last report is not answering the question that was
+        # asked. Publishing it would put a date behind the holder into a block whose whole
+        # meaning is whether a report is ahead of them.
+        raise ProviderUnavailable("yfinance", "earnings_date_not_ahead", operation="next_earnings")
+
+    return ProviderSnapshot(
+        data={
+            "symbol": symbol.upper(),
+            "earnings_date": dates[0].isoformat(),
+            "confirmation": "confirmed" if len(dates) == 1 else "estimated_range",
+            "window": None if len(dates) == 1 else [dates[0].isoformat(), dates[-1].isoformat()],
+        },
+        meta=SnapshotMeta(
+            provider="yfinance",
+            retrieved_at=observed_at,
+            as_of=_session_date(observed_at),
+            coverage={
+                "kind": "forward_looking_current_only",
+                "historical": False,
+                "source": "ticker.calendar",
+                "source_fields": {"earnings_date": "Earnings Date"},
+                "symbol": symbol.upper(),
+            },
+        ),
+    )
+
+
+def _calendar_date(value: Any) -> date:
+    """One calendar entry as a date, refusing anything the feed wrote as something else."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError as error:
+            raise ProviderUnavailable("yfinance", "invalid_earnings_date", operation="next_earnings") from error
+    raise ProviderUnavailable("yfinance", "invalid_earnings_date", operation="next_earnings")

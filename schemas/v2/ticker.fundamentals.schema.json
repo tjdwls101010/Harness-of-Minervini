@@ -25,7 +25,8 @@
     ],
     "examples": [
       "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL",
-      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL --as-of 2026-08-14 --cik 0000320193"
+      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals AAPL --as-of 2026-08-14 --cik 0000320193",
+      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker fundamentals PLTR --leader-category market_leader --market-regime bull --breakout-date 2026-02-20"
     ],
     "exit_codes": {
       "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
@@ -33,8 +34,24 @@
       "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
     },
     "inputs": {
+      "accounting_integrity": {
+        "choices": [
+          "clear",
+          "concern",
+          "restatement",
+          "adverse"
+        ],
+        "description": "What a reader of the filing's narrative found, in the same shape and for the same reason as --going-concern. The filed numbers answer a different integrity question on their own: amended filings are detected from the submissions index, and inventory and receivables are measured against sales.",
+        "required": false,
+        "type": "enum"
+      },
       "as_of": {
         "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "breakout_date": {
+        "description": "A completed session to measure the price-earnings expansion from. The multiple at that date is computed from what had been filed by then, not from today's filings, so a quarter published after the breakout is not credited to the buyer.",
         "required": false,
         "type": "date"
       },
@@ -53,6 +70,38 @@
         "required": false,
         "type": "enum"
       },
+      "going_concern": {
+        "choices": [
+          "clear",
+          "substantial_doubt"
+        ],
+        "description": "The auditor's going-concern opinion, which is prose in the filing and is not read by this harness. Undeclared, it reports as a boundary rather than as a gap in the filings; declared, substantial doubt contradicts convergence on its own.",
+        "required": false,
+        "type": "enum"
+      },
+      "leader_category": {
+        "choices": [
+          "market_leader",
+          "top_competitor",
+          "institutional_favorite",
+          "turnaround",
+          "cyclical",
+          "past_leader_or_laggard"
+        ],
+        "description": "What kind of company this is, which no filing states and which decides how the same earnings history reads. A turnaround is held to a bar a market leader is not, so only the declared category's claims are run; undeclared, none are.",
+        "required": false,
+        "type": "enum"
+      },
+      "market_regime": {
+        "choices": [
+          "bull",
+          "neutral",
+          "bear"
+        ],
+        "description": "The regime the bull-market growth range is read under. The source raises the bar in a bull market and only that reading needs the regime, so undeclared it is the one growth reading that goes unread.",
+        "required": false,
+        "type": "enum"
+      },
       "no_cache": {
         "default": false,
         "description": "Bypass both provider-cache reads and writes for this invocation.",
@@ -68,18 +117,25 @@
     "limitations": [
       "SEC facts are selected by filed_at, never period end alone.",
       "Current ticker-to-CIK lookup is not used for historical identity; provide --cik.",
-      "Power Play may waive only unavailable verified fundamentals, never integrity, dilution, market, setup, eligibility, or risk controls.",
-      "The current SEC adapter reads the recent submissions index and discloses that older index files were not fetched."
+      "This capability runs no Power Play waiver. The exception belongs to the setup surface, which is where the VCP quality it depends on is measured, so nothing here waives a fundamentals reading.",
+      "The current SEC adapter reads the recent submissions index and discloses that older index files were not fetched.",
+      "Every EPS figure here is as reported. Stripping a nonrecurring gain out is a footnote reading, and so are the repeated-one-time-charge and tax-disclosure red flags; all three are published as boundaries rather than run.",
+      "Peer evidence is not held here. The categories that are defined by a group -- top competitor, laggard -- and the peer halves of the low-multiple warning and of return on equity report what they needed instead of a reading computed from one company.",
+      "Three figures the corpus records are population or illustrative statistics rather than standards a ticker is measured against: that more than ninety percent of the biggest winners showed earnings acceleration, that big winners' multiples ran 30 to 40 times before their largest advance, and that a growth stock can trade at three to four times the market's multiple. None is compared with this ticker's measurement.",
+      "Analyst estimates are not fetched, so the estimate-revision and estimate-trend claims are unread.",
+      "No US filer publishes a fourth-quarter column -- the 10-K states the year in its place -- so a trailing year of four consecutive filed quarters exists for almost no ticker, and the rolled-forward route is the ordinary one rather than the fallback.",
+      "Filed per-share figures are not restated across a stock split. The split is a price-history fact and this capability holds filings, so a compound EPS rate spanning one reports a share base that moved rather than a business that did -- which is why every compound per-share rate travels with the total-earnings rate a split cannot touch and with what the filed diluted share count did over the same years.",
+      "The price is not filed evidence: a price provider that cannot answer leaves the valuation readings unavailable and does not stop the filings from reaching a verdict."
     ],
-    "output": "Filed-as-of growth and integrity evidence, leader category, discrepancies, missing facts, and fundamentals convergence state.",
+    "output": "Filed-as-of growth, earnings-quality, category, valuation and profitability readings, each naming the claim it came from, beside the leader category, discrepancies, missing facts and the fundamentals convergence state. Growth is read against the ranges the source gave as ranges and over the windows it named with them -- the minimum a growth manager requires across the most recent one to three quarters, the superperformance pace, and the bull-market pace when a regime is declared -- so a soft latest quarter behind two strong ones reads as all three. Code 33 is the one gate among them: three consecutive quarters where earnings growth, sales growth and the net margin all came in above the quarter before, ending at the latest filed quarter. Beside it travel the two-quarter smoothing, the deceleration reading with both rates and no invented tolerance, the margin move with the industry average named as unread, the company's own three- and five-year compound pace with the total-earnings rate and the filed share-count change beside it, and the three practitioners this corpus records reading the same quarter differently -- quoted rather than summarised. Earnings quality is inventory and receivables against sales, plus three checks that live in filing footnotes this harness does not read, named so their absence is a boundary rather than a silence. Valuation publishes the multiple from the last completed close over trailing filed earnings, refused by name when the trailing year was not positive, framed by the claim that the ratio alone ranks among the most useless statistics on Wall Street; given --breakout-date it also reports how far the multiple expanded and over how many completed months against the source's late-stage ranges. The trailing year names the route it came by: four consecutive filed quarters where they exist, otherwise the last closed fiscal year plus the quarters filed since it minus the quarters those replace -- three filed numbers, no reconstructed quarter. Profitability is return on equity against the 15-17 percent range with the industry comparison named as the half this capability does not hold. A registrant that files only annually reports one gap saying so rather than three that read like data yet to arrive.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {
-      "needs_input": "Historical identity or another required argument is missing.",
-      "ok": "Filed evidence supports or contradicts convergence, or a fully proven exception applies.",
-      "partial": "Filed evidence exists but required facts are incomplete.",
+      "needs_input": "Historical identity or another required argument is missing, or --breakout-date names a session after --as-of or a day the tape has no completed session for.",
+      "ok": "Filed evidence supports convergence or prompts review, and every reading it required was available.",
+      "partial": "Filed evidence exists but required facts are incomplete, or the price provider had nothing to give and only the valuation readings are short.",
       "unavailable": "SEC evidence could not be obtained after one retry."
     },
-    "summary": "Evaluate filed growth, revenue and margin confirmation, accounting integrity, dilution, leadership profile, and the narrow Power Play exception."
+    "summary": "Evaluate filed growth, revenue and margin confirmation, accounting integrity, dilution, leadership profile, and the category the filings are read under."
   }
 }

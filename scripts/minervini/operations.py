@@ -21,7 +21,7 @@ from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
-from .fundamentals import evaluate_fundamentals
+from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
@@ -32,7 +32,7 @@ from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
-from .providers.yfinance import completed_daily_bars, current_classification_snapshot
+from .providers.yfinance import completed_daily_bars, current_classification_snapshot, next_earnings_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
@@ -52,6 +52,7 @@ RankedRows = Callable[[str], ProviderSnapshot[list[dict[str, Any]]]]
 MarketLeaders = Callable[[str, int], ProviderSnapshot[list[dict[str, Any]]]]
 FinvizBreadth = Callable[[str], ProviderSnapshot[str]]
 CurrentClassification = Callable[[str], ProviderSnapshot[dict[str, str]]]
+EarningsCalendar = Callable[[str], ProviderSnapshot[dict[str, Any]]]
 IndustryTop = Callable[[str, str, int], ProviderSnapshot[list[dict[str, Any]]]]
 
 
@@ -152,6 +153,10 @@ def _default_current_classification(ticker: str) -> ProviderSnapshot[dict[str, s
     return current_classification_snapshot(ticker)
 
 
+def _default_earnings_calendar(ticker: str) -> ProviderSnapshot[dict[str, Any]]:
+    return next_earnings_snapshot(ticker)
+
+
 def _default_industry_top(industry: str, as_of: str, limit: int) -> ProviderSnapshot[list[dict[str, Any]]]:
     return industry_top_snapshot(industry, as_of, n=limit)
 
@@ -228,6 +233,7 @@ class Runtime:
     market_leaders: MarketLeaders = field(default_factory=lambda: _default_market_leaders)
     finviz_breadth: FinvizBreadth = field(default_factory=lambda: _default_finviz_breadth)
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
+    earnings_calendar: EarningsCalendar = field(default_factory=lambda: _default_earnings_calendar)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
     reachability_probes: Mapping[str, Callable[[], None]] = field(default_factory=_default_reachability_probes)
@@ -1130,6 +1136,24 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     cik = request.get("cik")
     if cik is not None and (not isinstance(cik, str) or not cik.isdigit() or len(cik) > 10):
         raise RequestError("cik must contain at most ten digits", "cik")
+    # What the filings do not carry and an analyst may. Refused here against the same
+    # vocabularies the evaluator holds, so a word it could only misread never reaches it.
+    declared: dict[str, str | None] = {}
+    for field, allowed in (("going_concern", FUNDAMENTALS_GOING_CONCERN), ("accounting_integrity", FUNDAMENTALS_ACCOUNTING_INTEGRITY), ("leader_category", FUNDAMENTALS_LEADER_CATEGORIES), ("market_regime", FUNDAMENTALS_MARKET_REGIMES)):
+        value = request.get(field)
+        if value is not None and (not isinstance(value, str) or value not in allowed):
+            raise RequestError(f"{field} must be one of {', '.join(allowed)}", field)
+        declared[field] = value
+    breakout_date = _request_date(request.get("breakout_date"), "breakout_date") if request.get("breakout_date") is not None else None
+    if breakout_date is not None and breakout_date > clock.date:
+        return envelope(
+            "ticker.fundamentals",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="needs_input",
+            data={"ticker": ticker, "fundamentals_state": "incomplete"},
+            missing=[{"id": "breakout_date", "reason": "breakout_date_after_as_of", "required": True}],
+        )
     if request.get("as_of") is not None and cik is None:
         return envelope(
             "ticker.fundamentals",
@@ -1159,10 +1183,69 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[_missing_provider(error)],
         )
-    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat())
-    missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
-    status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
-    doctrine_ids = ["scope.data_integrity"]
+    # The price is not filed evidence, so a provider that cannot answer does not stop the
+    # filings from reaching a verdict: the gap is reported where the multiple would have been
+    # and marked not required.
+    sources = [_source(snapshot.meta)]
+    provider_missing: list[dict[str, Any]] = []
+    closes: dict[str, float | None] = {"last_close": None, "breakout_close": None}
+    try:
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.fundamentals",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
+    except ProviderUnavailable as error:
+        provider_missing.append({**_missing_provider(error), "required": False})
+    else:
+        sources.append(_source(prices.meta))
+        if prices.meta.stale:
+            # A close from an earlier session published as the last completed one is a price
+            # nobody could have paid on the session this envelope is dated. The multiple is
+            # withheld rather than dated wrongly, and the gap says which session was reached.
+            provider_missing.append({"id": "stale_price_evidence", "provider": prices.meta.provider, "reason": "price_history_behind_requested_session", "through": prices.meta.as_of.isoformat() if prices.meta.as_of else None, "required": False})
+        else:
+            closes = _valuation_closes(prices.data, as_of=clock.date, breakout_date=breakout_date)
+        if breakout_date is not None and not prices.meta.stale and closes["breakout_close"] is None:
+            # The caller named a date the tape has no completed session for. Dropping it and
+            # carrying on left the envelope echoing the date in `request` while the reading
+            # beside it said no breakout date had been supplied.
+            return envelope(
+                "ticker.fundamentals",
+                request=_clean_request({**request, "ticker": ticker}),
+                as_of=_as_of(clock),
+                status="needs_input",
+                data={"ticker": ticker, "fundamentals_state": "incomplete"},
+                sources=sources,
+                missing=[{"id": "breakout_date", "reason": "no_completed_session_on_breakout_date", "required": True}],
+            )
+    result = evaluate_fundamentals(
+        snapshot.data,
+        as_of=clock.date.isoformat(),
+        # The date the caller gave, whether or not a close could be found for it. Dropping it
+        # made the reading name a missing breakout date beside a request that carried one.
+        breakout_date=breakout_date.isoformat() if breakout_date is not None else None,
+        breakout_close=closes["breakout_close"],
+        last_close=closes["last_close"],
+        **declared,
+    )
+    missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]] + provider_missing
+    # A gap of any kind is a partial answer. `status` describes contract completeness rather
+    # than verdict polarity, so a negative verdict a declaration settled is still an answer
+    # built on filings that never arrived -- and reading it as `ok` told the caller the
+    # evidence was whole while four required items sat in `missing` beside it.
+    status = "partial" if missing else "ok"
+    # Every reading in this evaluator names the claim it came from, so the citation list is
+    # read off the payload rather than kept beside it. A hand-maintained list of one said the
+    # result used one claim while its readings named two dozen, and the reader's index into
+    # them was the thing that went missing.
+    base = ["scope.data_integrity"]
+    doctrine_ids = base + sorted(_named_doctrine_ids(result) - set(base))
     return envelope(
         "ticker.fundamentals",
         request=_clean_request({**request, "ticker": ticker}),
@@ -1171,10 +1254,53 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         data={"ticker": ticker, **result},
         signals=result["signals"],
         missing=missing,
-        sources=[_source(snapshot.meta)],
+        sources=sources,
         doctrine_ids=doctrine_ids,
         next_capabilities=["ticker.peers", "ticker.risk"],
     )
+
+
+def _valuation_closes(frame: Any, *, as_of: date, breakout_date: date | None) -> dict[str, float | None]:
+    """The last completed close, and the close of the breakout session if the history holds one.
+
+    Same reading rules as every other consumer of these bars: one session printed twice keeps
+    its last print, sessions past ``as_of`` are not completed yet, and a price that is not a
+    finite positive number is not a price. A breakout date that names no completed session
+    returns nothing rather than the nearest bar -- the nearest bar is a different session, and
+    a multiple computed on it is a multiple nobody could have paid.
+    """
+
+    closes: dict[str, float | None] = {"last_close": None, "breakout_close": None}
+    if not isinstance(frame, pd.DataFrame) or frame.empty or "Close" not in frame.columns:
+        return closes
+    timestamps = pd.to_datetime(frame.index, errors="coerce")
+    if timestamps.isna().any():
+        return closes
+    if timestamps.tz is not None:
+        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    ordered = frame.copy()
+    ordered.index = timestamps
+    # Stable, so that two prints of one session stay in the order the provider sent them and
+    # `keep="last"` keeps the last one it actually sent. The default sort is free to reorder
+    # equal timestamps, which made "the last print wins" pick whichever it happened to move.
+    ordered = ordered.sort_index(kind="stable")
+    ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
+    by_date = {}
+    for timestamp, row in ordered.iterrows():
+        if timestamp.date() > as_of:
+            continue
+        try:
+            close = float(row["Close"])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(close) and close > 0:
+            by_date[timestamp.date()] = close
+    if not by_date:
+        return closes
+    closes["last_close"] = by_date[max(by_date)]
+    if breakout_date is not None:
+        closes["breakout_close"] = by_date.get(breakout_date)
+    return closes
 
 
 def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -2135,6 +2261,43 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         raise RequestError("base_top must be a finite positive number", "base_top")
     if evidence.get("earnings_date") is not None:
         evidence["earnings_date"] = _request_date(evidence["earnings_date"], "earnings_date").isoformat()
+        evidence["earnings_source"] = "declared"
+        evidence["earnings_confirmation"] = "declared_by_caller"
+    elif not (mode == "active" and has_position_anchors):
+        # Nothing to manage, so nothing to look up. Fetching a calendar for a request that
+        # declares no position spends a provider call and puts a gap in `missing` about a
+        # question the request never asked.
+        pass
+    elif clock.mode != "last_completed_session":
+        # A calendar entry is a forecast, and no feed can say what it forecast last March.
+        # Dating today's answer to an explicit past session would put a schedule nobody
+        # published then inside a point-in-time verdict.
+        evidence["earnings_unavailable_reason"] = "earnings_calendar_is_current_only"
+    else:
+        try:
+            calendar = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="ticker.risk",
+                provider="yfinance",
+                operation="next_earnings",
+                params={"ticker": ticker},
+                fetch=lambda: runtime.earnings_calendar(ticker),
+                # The same short life every mutable current snapshot gets. A schedule that
+                # moves is the normal case, and a day-old cached date would answer "still
+                # ahead" about a report that has already been released.
+                ttl_seconds=900,
+            )
+        except ProviderUnavailable as error:
+            provider_missing.append({**_missing_provider(error), "required": False})
+            evidence["earnings_unavailable_reason"] = error.reason
+        else:
+            sources.append(_source(calendar.meta))
+            evidence["earnings_date"] = calendar.data["earnings_date"]
+            evidence["earnings_source"] = "provider"
+            evidence["earnings_confirmation"] = calendar.data["confirmation"]
+            evidence["earnings_window"] = calendar.data["window"]
     raw_base_count = evidence.get("base_count")
     if raw_base_count is not None:
         if isinstance(raw_base_count, bool) or not isinstance(raw_base_count, int) or raw_base_count < 1:
@@ -2383,6 +2546,12 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
         if mode == "prospective"
         else ["risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"]
     )
+    return base + sorted(_named_doctrine_ids(data) - set(base))
+
+
+def _named_doctrine_ids(data: Mapping[str, Any]) -> set[str]:
+    """Every registered claim the payload names, anywhere in it."""
+
     named: set[str] = set()
 
     def collect(value: Any) -> None:
@@ -2412,7 +2581,7 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
                 collect(item)
 
     collect(data)
-    return base + sorted(named - set(base))
+    return named
 
 
 def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:

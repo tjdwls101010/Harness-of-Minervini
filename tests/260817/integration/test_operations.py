@@ -536,7 +536,19 @@ class OperationCompositionTests(unittest.TestCase):
                 coverage={"kind": "filed_facts"},
             ),
         )
-        runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot)
+        # The capability reads its own price now. Leaving the hook undeclared sends this test
+        # to the live provider, so it passes or fails on whether the machine has a network.
+        prices = pd.DataFrame(
+            {"Open": 100.0, "High": 100.0, "Low": 100.0, "Close": 100.0, "Volume": 1_000_000},
+            index=pd.bdate_range("2024-01-02", "2026-05-08"),
+        )
+        runtime = Runtime(
+            fundamentals_evidence=lambda ticker, as_of, cik: snapshot,
+            price_history=lambda ticker, as_of: ProviderSnapshot(
+                prices,
+                SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date(2026, 5, 8), coverage={"completed_only": True}),
+            ),
+        )
 
         payload = execute(
             "ticker.fundamentals",
@@ -546,7 +558,13 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["data"]["ticker"], "TEST")
-        self.assertEqual(payload["data"]["fundamentals_state"], "does_not_support_convergence")
+        # 28% year-over-year clears the 20-25 minimum the source names, decelerating from 60
+        # or not: how much of a slowdown matters is a judgement the source declined to bound.
+        self.assertEqual(payload["data"]["fundamentals_state"], "supports_convergence")
+        # 2025-Q4 was never filed, so the last two rates in this fixture are three quarters
+        # apart. "The one before it" means the quarter before it, and there is none here.
+        self.assertEqual(payload["data"]["growth"]["earnings_deceleration"]["reason"], "no_adjacent_quarter_to_compare")
+        self.assertIsNone(payload["data"]["growth"]["earnings_deceleration"]["decelerated"])
         self.assertEqual(payload["sources"][0]["provider"], "sec")
 
     def test_historical_fundamentals_requires_stable_cik_instead_of_current_ticker_identity(self) -> None:

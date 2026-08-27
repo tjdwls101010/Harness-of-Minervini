@@ -314,7 +314,10 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     }
     earnings_date = _iso_date(payload.get("earnings_date"))
     if earnings_date is None:
-        blocks["earnings"] = {"state": "unavailable", "reason": "earnings_date_not_declared"}
+        # Three different silences, and only one of them is the analyst's. A date the harness
+        # looked up and did not find is not the same gap as one it declined to look up, and a
+        # reader deciding whether to go and check the calendar themselves needs to know which.
+        blocks["earnings"] = {"state": "unavailable", "reason": payload.get("earnings_unavailable_reason") or "earnings_date_not_declared"}
     else:
         # A report dated on as_of belongs to a session that has completed, so it is not still
         # ahead; it is due on the session the request is asking about, which is its own state.
@@ -328,6 +331,12 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
             "ahead": ahead,
             "due_on_as_of": due_on_as_of,
             "days_until": (earnings_date - as_of).days if as_of is not None else None,
+            # Where the date came from and how firm it is. A REVIEW raised on a window the feed
+            # guessed at is a weaker thing than one raised on a confirmed date, and the action
+            # reads the same either way -- so the difference has to be here.
+            "source": payload.get("earnings_source") or "declared",
+            "confirmation": payload.get("earnings_confirmation") or "declared_by_caller",
+            "window": payload.get("earnings_window"),
             "contrast": {
                 "doctrine_id": _ZANGER_EARNINGS,
                 "binds": doctrine.binds(_ZANGER_EARNINGS),

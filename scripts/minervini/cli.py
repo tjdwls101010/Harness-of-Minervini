@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 from .capabilities import CAPABILITIES
+from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES
 from .contracts import RequestError, envelope, error_envelope
 from .operations import Runtime, execute
 from .setup import tactic_conditions
@@ -210,6 +211,11 @@ def build_parser() -> JsonArgumentParser:
     fundamentals = _capability_parser(ticker_sub, "fundamentals", "ticker.fundamentals")
     fundamentals.add_argument("ticker", help=_input_help("ticker.fundamentals", "ticker"))
     fundamentals.add_argument("--cik", help=_input_help("ticker.fundamentals", "cik"))
+    fundamentals.add_argument("--going-concern", choices=FUNDAMENTALS_GOING_CONCERN, help=_input_help("ticker.fundamentals", "going_concern"))
+    fundamentals.add_argument("--accounting-integrity", choices=FUNDAMENTALS_ACCOUNTING_INTEGRITY, help=_input_help("ticker.fundamentals", "accounting_integrity"))
+    fundamentals.add_argument("--leader-category", choices=FUNDAMENTALS_LEADER_CATEGORIES, help=_input_help("ticker.fundamentals", "leader_category"))
+    fundamentals.add_argument("--market-regime", choices=FUNDAMENTALS_MARKET_REGIMES, help=_input_help("ticker.fundamentals", "market_regime"))
+    fundamentals.add_argument("--breakout-date", metavar="YYYY-MM-DD", help=_input_help("ticker.fundamentals", "breakout_date"))
     _common(fundamentals, "ticker.fundamentals")
 
     peers = _capability_parser(ticker_sub, "peers", "ticker.peers")

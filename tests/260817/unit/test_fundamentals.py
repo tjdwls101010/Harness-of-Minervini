@@ -40,7 +40,7 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         self.assertEqual(result["quarterly"]["eps"][-1]["value"], 1.8)
         self.assertEqual(result["filings_used"], ["2025-05-01", "2026-05-01"])
 
-    def test_reports_own_trend_deceleration_and_never_averages_fmp_conflicts(self) -> None:
+    def test_reports_deceleration_without_rejecting_growth_that_clears_the_minimum(self) -> None:
         evidence = load_fixture("decelerating_evidence.json")
         fmp = {
             "source": "fmp_enrichment",
@@ -51,9 +51,13 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         result = evaluate_fundamentals(evidence, as_of="2026-05-10", fmp_enrichment=fmp)
 
         self.assertEqual(result["accounting_basis"], ["IFRS"])
-        self.assertEqual(result["quarterly"]["eps_deceleration"]["state"], "contradicts")
-        self.assertEqual(result["fundamentals_state"], "does_not_support_convergence")
-        self.assertEqual(result["annual_growth"]["eps_yoy_pct"], 26.7)
+        # 60% to 50% to 28%: a real slowdown, reported as one. The latest rate still clears
+        # the 20-25 minimum the source names, and the source bounds nothing about how far a
+        # rate may fall from its own recent peak.
+        self.assertIs(result["growth"]["earnings_deceleration"]["decelerated"], True)
+        self.assertEqual(result["growth"]["earnings_deceleration"]["previous_yoy_pct"], 50.0)
+        self.assertEqual(result["fundamentals_state"], "supports_convergence")
+        self.assertEqual(result["annual_growth"]["eps_yoy_pct"], 26.6666666667)
         self.assertEqual(result["quarterly"]["eps"][-1]["value"], 0.64)
         self.assertEqual(
             result["discrepancies"],
@@ -63,18 +67,18 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
             ],
         )
 
-    def test_missing_critical_safety_evidence_is_incomplete_not_a_pass_or_fail(self) -> None:
+    def test_a_measurement_the_filings_came_up_short_of_is_incomplete_not_a_pass_or_fail(self) -> None:
+        # Growth is what the verdict is gated on, so annual facts the filings never carried
+        # are a real gap about this company -- unlike the narrative checks, which are outside
+        # what this evaluator reads at all, and unlike the share count, which nothing gates on.
         evidence = load_fixture("filed_evidence.json")
-        evidence["filings"][-2].pop("going_concern")
-        evidence["filings"][-2]["quarterly"][-1].pop("diluted_shares")
+        for filing in evidence["filings"]:
+            filing["annual"] = []
 
         result = evaluate_fundamentals(evidence, as_of="2026-05-10")
 
         self.assertEqual(result["fundamentals_state"], "incomplete")
-        self.assertEqual(result["integrity"]["going_concern"]["state"], "unavailable")
-        self.assertEqual(result["integrity"]["dilution"]["state"], "unavailable")
-        self.assertIn("going_concern", result["missing"])
-        self.assertIn("dilution", result["missing"])
+        self.assertIn("annual_growth", result["missing"])
 
     def test_an_integrity_contradiction_still_governs(self) -> None:
         """What the removed waiver test was also covering, kept.
@@ -84,9 +88,8 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         read. This is the part that was about the filings.
         """
         unsafe = copy.deepcopy(FILED_SAFETY_EVIDENCE)
-        unsafe["filings"][0]["going_concern"] = {"status": "substantial_doubt"}
 
-        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10")
+        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10", going_concern="substantial_doubt")
 
         self.assertEqual(blocked["fundamentals_state"], "does_not_support_convergence")
         self.assertEqual(blocked["integrity"]["going_concern"]["state"], "contradicts")
