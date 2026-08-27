@@ -1121,6 +1121,22 @@
           "exact": true,
           "quote_index": 0,
           "comparator": ">="
+        },
+        "ema_length_sessions": {
+          "role": "reference",
+          "value": 21,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the swing-management average the source recommends. A reference: it selects which series exists and is never compared with a measurement."
+        },
+        "sma_length_sessions": {
+          "role": "reference",
+          "value": 50,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the position-trail average the source recommends; a reference for the same reason."
         }
       },
       "failure": {
@@ -1148,7 +1164,7 @@
             "assembled_from": "an inline icon glyph for '21 ema'/'50 sma' is extracted as a displaced token that also splits 'The' into fragments; ellipses mark exactly where the icon-splitting intrudes, and the quotation states '21 ema'/'50 sma' plainly rather than reproducing the scrambled extraction"
           }
         ],
-        "resolution": "exclusively TraderLion.db row 10-sourced; Minervini.db contains zero occurrences of '21 EMA' or '21-day' in any form, so this framework should not read as dual-sourced with the book"
+        "resolution": "exclusively TraderLion.db row 10-sourced; Minervini.db contains zero occurrences of '21 EMA' or '21-day' in any form, so this framework should not read as dual-sourced with the book; the two closes gate reaches ticker.risk only as contrast, and the average the trader declares as their own exit plan is what a breach can sell"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -1159,7 +1175,9 @@
       ],
       "tests": [
         "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
       ],
       "computability": "deterministic"
     },
@@ -1753,7 +1771,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.qualify"
+        "ticker.qualify",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -1942,7 +1961,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -2020,7 +2040,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -9746,7 +9767,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
@@ -9839,7 +9861,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
@@ -10862,6 +10885,1394 @@
         "tests/260826/unit/test_entry_tactics.py"
       ],
       "computability": "chart_assisted"
+    },
+    {
+      "id": "management.tl_stage12_half_at_five_percent",
+      "title": "TraderLion's Stage 1 and 2 default: at a 5% profit, sell half and move the balance's stop to breakeven",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_price",
+        "max_high_since_entry",
+        "management_profile"
+      ],
+      "rule": {
+        "summary": "For early-stage traders TraderLion prescribes a fixed first step: once the stock shows a 5% profit, sell half the position at once and raise the stop on the balance to breakeven. It is a practice-layer default the trader opts into, not a Minervini rule, so it reaches the management actions and never the verdict.",
+        "trigger": "the position has shown a 5% profit, measured from the furthest it got",
+        "actions": [
+          "sell half the position",
+          "raise the stop on the balance to breakeven"
+        ]
+      },
+      "thresholds": {
+        "half_sale_profit_pct": {
+          "role": "gate",
+          "value": 5,
+          "unit": "percent",
+          "comparator": ">=",
+          "exact": true,
+          "quote_index": 0,
+          "note": "Stated as a filter -- 'once your stock reaches a profit of 5%' -- so it is a gate. It belongs to TraderLion, so evaluate_gate stamps it contrast_pass or contrast_fail and no verdict reads it; the opted-in profile turns a contrast_pass into a REDUCE and a RAISE_STOP action under HOLD."
+        }
+      },
+      "parameters": {
+        "half_sale_fraction": {
+          "value": 0.5,
+          "unit": "fraction_of_position",
+          "affects_verdict": false,
+          "note": "The fraction the source names. A fraction of a position is a selling discipline, not an allocation; this harness still prescribes no position size."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A position past the 5% profit under this profile without the half sale and the breakeven stop has an unexecuted default; the trader reviews it, the harness does not sell for them."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the entry price and the furthest the position got, the 5% reading cannot be taken; without the opted-in profile there is no default to apply."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "Once your stock reaches a profit of 5%, immediately sell half your position and raise the stop on the balance of your position to breakeven.",
+            "supports": "the exact 5% trigger, the half sale, and the breakeven stop on the balance"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "From this point, if your stock ever breaches your maximum stop loss, the position should immediately be sold at the market, no ifs, ands, or buts.",
+            "supports": "the hard stop stays in force under this profile; the half sale does not replace it"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (SELL RULES FOR STAGE 1 AND 2 TRADERS); the chapter also lists progressions that split the sale into thirds, which are not encoded because the passage presents them as optional later steps"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_stop_and_r_rules.py",
+        "tests/260824/doctrine/test_registry_sourcing.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "management.tl_sell_into_strength_at_average_gain_and_r_multiples",
+      "title": "The first places to sell some into strength are the trader's rolling average gain and R multiples from entry",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_price",
+        "initial_stop_price",
+        "current_price",
+        "max_high_since_entry",
+        "average_gain_pct"
+      ],
+      "rule": {
+        "summary": "TraderLion names two reference points for selling part of a position into strength: the trader's own rolling average gain, and multiples of the initial risk (R). The passage names no multiple and no fraction, so the harness reports the position's return, its R multiple, and the distance to the trader's average gain, and prescribes nothing."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "These are reference points the source names without a filter; nothing passes or fails against them."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the trader's average gain the distance to it is unknown, and without the initial stop the R multiple is unknown; each is reported as unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "The first logical spots to sell some of your position into strength are at your ... rolling average gain and at multiples from your entry point. (An r multiple means a multiple of your initial stop loss. For example a profit of 9% when your original stop was 3% means you have a gain of 3 r multiples.)",
+            "supports": "both reference points and the definition of an R multiple from the initial stop",
+            "assembled_from": "an inline icon glyph for 'r multiple' is extracted as a stray 'r' token between 'your' and 'rolling'; the ellipsis marks exactly where it intrudes"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength at your average gain and R multiples); no multiple for the partial sale is given anywhere in the chapter, so none is registered"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_stop_and_r_rules.py",
+        "tests/260824/doctrine/test_registry_sourcing.py"
+      ],
+      "computability": "deterministic",
+      "unquantified": [
+        "the R multiple at which to sell part of the position -- the chapter names none"
+      ]
+    },
+    {
+      "id": "management.close_below_20_day_average_lowers_probability",
+      "title": "After a breakout, a close below the 20-day moving average lowers the odds and becomes a judgment call, subordinate to the stop",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "sma_20",
+        "stop_price"
+      ],
+      "rule": {
+        "summary": "Once a stock has broken out it should hold its 20-day moving average and in most cases not close below it; a close below lowers the probability of success and becomes a judgment call, sometimes a sale, while the hard stop stays the only automatic exit."
+      },
+      "thresholds": {
+        "average_length_sessions": {
+          "role": "reference",
+          "value": 20,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the average the source names. A reference: it selects which series exists and is never compared with a measurement."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A completed close below the 20-day average after entry is review evidence: the source calls it a judgment call and keeps the stop as the only automatic sale."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without twenty completed sessions the average does not exist and the reading is reported as unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Once the stock successfully breaks out, the stock price should hold its 20-day moving average and in most cases should not close below it. The pattern should not get wider (meaning up and down movements). Up is good, but wild swings back and forth are not.",
+            "supports": "the 20-day average as the post-breakout level to hold, and widening action as a warning"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Of course, if the reversal is large enough to trigger my stop, I sell. If the reversal causes the price to close below its 20-day moving average, it lowers the probability of success and it becomes a judgment call; sometimes I sell if this happens. However, as long as the price holds above my stop loss, I try to give the stock some room.",
+            "supports": "a close below the 20-day average is a judgment call, and only the stop is automatic"
+          }
+        ],
+        "resolution": "mined from Minervini.db row 3 (How Do You Know When a Breakout Has Failed?); 'in most cases' and 'judgment call' keep this an interpretation and not a gate"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.largest_decline_since_stage2_start",
+      "title": "The largest daily or weekly decline since the stage 2 advance began, on overwhelming volume, is a sell signal in most cases",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "stage2_start"
+      ],
+      "rule": {
+        "summary": "If the stock experiences its largest daily and/or weekly price decline since the beginning of the stage 2 advance, that is a sell signal in most cases, even on the heels of a good earnings report; the source gives no formula for 'largest' beyond the decline itself and no number for 'overwhelming volume', so the harness reports the decline, its date, and the session's volume ratio, and the signal stays chart-assisted."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "The latest completed session or week being the largest decline of the advance is review evidence the reader takes to the chart; 'in most cases' is not a filter."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the date the stage 2 advance began there is no window to find the largest decline in, and the reading is reported as unavailable rather than measured from an arbitrary start."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "Before it becomes apparent that the fundamentals have changed, a major break in the stock price often will occur on overwhelming volume. If your stock experiences its largest daily and/or weekly price decline since the beginning of the stage 2 advance, this is a sell signal in most cases even if it comes on the heels of a seemingly great earnings report.",
+            "supports": "the largest daily or weekly decline since the stage 2 advance began as a sell signal in most cases, on overwhelming volume"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "There is usually a major price break in the stock on an increase in volume. Often, it's the largest one-day decline since the beginning of the stage 2 advance.",
+            "supports": "the same measurement named among the stage 3 characteristics"
+          }
+        ],
+        "resolution": "mined from Minervini.db row 11; the stage 3 characteristics claim already carries the second passage as description, and this claim is the one ticker.risk measures against a declared stage 2 start"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "what 'overwhelming volume' is -- the volume ratio is reported beside the practice-layer high-volume marker, and no threshold is registered"
+      ]
+    },
+    {
+      "id": "management.tl_base_extension_pause_zone",
+      "title": "Stocks often pause 20 to 25 percent above the top of the base, where swing traders may take some or all off",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "base_top",
+        "current_price",
+        "max_high_since_entry"
+      ],
+      "rule": {
+        "summary": "After a breakout a stock often pauses around 20-25% above the top of its base before continuing; as it approaches that zone volatility can rise as participants take profits, and a swing trader may take some or all of the position off. The zone is where a pause is likely, not a filter, so it is a band the harness reports position against and a REVIEW action inside it."
+      },
+      "thresholds": {
+        "pause_zone_pct": {
+          "role": "band",
+          "range": [
+            20.0,
+            25.0
+          ],
+          "unit": "percent",
+          "direction": "inside_is_better",
+          "exact": true,
+          "quote_index": 0,
+          "note": "Stated as a range, so a band. 'inside' is the zone where the pause the source describes is likely -- the direction word names where the source's statement applies, not a quality ranking of the extension."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Evidence the source names as a reason to consider selling into strength goes to review; TraderLion is read for contrast and never rejects for this harness."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "Often, there is a pause around 20–25% from the top of the base where the stock may pause, consolidate, and then continue higher.",
+            "supports": "the 20-25% pause zone above the base top"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "As a stock approaches this level, it may increase in volatility, as different market participants take profits. For swing traders, you can also look to take some or all of your position off, having ridden a strong momentum move from the breakout.",
+            "supports": "taking some or all off as the zone is approached, for swing traders"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength at base extensions); the passage says 'may' and 'continue higher', so nothing here is a gate"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py",
+        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "management.tl_extension_measured_against_own_character",
+      "title": "How far a stock stretches from its moving averages is measured against its own habit, in percent or ATR",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "ema_21",
+        "sma_50",
+        "average_true_range"
+      ],
+      "rule": {
+        "summary": "A trending stock forms a habit of how far it stretches from its moving averages before pulling in; the trader notes that typical percent, or measures it in average true range, or eyeballs it, and expects the character to continue. The harness reports the current extension in percent and in ATR beside the stock's own history of extensions, and prescribes nothing -- the source's proprietary Relative Measured Extension indicator is mentioned without a formula and is not cloned."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A measurement against the stock's own habit has no pass or fail; it is read on the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "You will start to notice that it will form a habit of how far stretched it can be from the moving averages before pulling back in.",
+            "supports": "extension read against the stock's own habit"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "You can note the % it typically becomes extended from the moving average, ... or measure it in average true range ( ), or simply eyeball it. Regardless of your method, the stock will be likely to continue with this character.",
+            "supports": "percent or ATR as the two measurements, character expected to persist",
+            "assembled_from": "an inline icon glyph for 'atr' is extracted as a stray token and empty parentheses; the ellipsis marks where it intrudes"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength using moving averages); no percent or ATR multiple is given, so none is registered"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "the percent or ATR multiple at which the stock is 'extended' -- the source says to note the stock's own typical value"
+      ]
+    },
+    {
+      "id": "management.tl_key_reversal_criteria",
+      "title": "A key reversal is read from six criteria at an extended high; the source names them and no count",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "TraderLion lists six things to look for in a key reversal: visually extended from the moving averages at the high; a gap up quickly filled and reversed; a breach of a trend line of highs; abnormally high volume or the highest since the breakout; the widest range bar since the breakout; a reversal below the prior day's low closing low in the range. Three are computable from completed bars. Three are not: two are chart readings, and the sixth is conjunctive -- it asks for a reversal below the prior low AND a close low in the range, and the source draws no boundary for low in the range, so it is reported unresolved rather than counted."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A criterion vector has no pass or fail; the reader takes it to the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "At the high the stock was visually extended from the moving averages. The stock gaps up but quickly fills the gap and reverses downwards. The stock breaches a trend line of highs. The volume is abnormally high or the highest since the breakout. The stock forms the widest range bar since the breakout. The stock reverses below the prior day's low and closes low in the range.",
+            "supports": "the six criteria, verbatim, as a list",
+            "assembled_from": "the six criteria are separate lines of one list in the source; they are joined with spaces here"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "These reversals can mark a change in momentum and potentially the start of a new base. It may be prudent to use these reversals to lock in some profits so you can move the capital toward a fresh opportunity as the original stock consolidates.",
+            "supports": "the reversal as a reason to lock in some profits, not a rule to exit"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength on key reversals); the passage gives no required count, so the harness reports the vector"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "how many of the six make a key reversal -- the source names none",
+        "what 'abnormally high' volume is -- the highest since the breakout is the computable half"
+      ]
+    },
+    {
+      "id": "management.tl_late_gaps_fail_more_often",
+      "title": "Early gaps in a trend are the higher-probability ones; later gaps fail more often, and exhaustion gaps often close near their highs before reversing",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "TraderLion's chart notes count gaps within a trend: the first or second gap is the higher-probability setup, later gaps often fail and need a larger base before the next leg, and an exhaustion gap after a fast run often closes near its highs or reverses early. The harness counts gap-ups since the breakout, reports the run since then, whether the latest gap was filled, and its closing range, and prescribes nothing."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "Gap context has no pass or fail; it is read on the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 4,
+            "text": "guidance to count bases and gaps, focus on first or second gap for higher probability, later gaps often fail and require larger bases to set up the next leg up.",
+            "supports": "gap count within a trend as context, later gaps failing more often",
+            "assembled_from": "a chart annotation preserved in the extraction's figure description"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 4,
+            "text": "explanatory note that exhaustion gaps often close with highs or early reversals",
+            "supports": "exhaustion gaps closing near highs or reversing early",
+            "assembled_from": "a chart annotation preserved in the extraction's figure description"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 4 chart annotations; the examples ('100% run in 35 days', '6th gap') are illustrations and no count or run is registered as a threshold"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "the gap count or run size past which a gap is 'late' or 'exhaustion' -- only examples are given"
+      ]
+    },
+    {
+      "id": "management.climax_run_ends_the_advance",
+      "title": "A stage 2 advance can turn parabolic and end in a climax run or blow-off top; leaders churn, buckle, or accelerate ahead of the top",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "base_count"
+      ],
+      "rule": {
+        "summary": "Some stocks turn up in a parabolic fashion and end the advance in a climax run or blow-off top; leaders that churn, buckle, or accelerate over a number of weeks in a parabolic fashion are the ones that force a trader out ahead of the bear phase. The source gives no rate of ascent or volume figure, so the harness reports short-horizon returns, extension from the averages, recent gap-ups, the last session's volume percentile and closing range, and leaves the reading to the chart."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Acceleration late in an advance is review evidence for the chart; nothing here is a filter."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without enough completed sessions for the return windows the block is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "can turn up in a parabolic fashion and end in a climax run or blow-off top. By itself, base counting will not tell you if a stock has topped or is about to move substantially higher.",
+            "supports": "the climax run or blow-off top as one way an advance ends, beside the base-count disclaimer"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 2,
+            "text": "you will be forced out of the market—stock by stock— as many of the same issues start to churn, buckle, or accelerate their advance over a number of weeks in a parabolic fashion ahead of the inevitable bear phase or market correction.",
+            "supports": "churning, buckling, or parabolic acceleration among leaders ahead of a top"
+          }
+        ],
+        "resolution": "mined from Minervini.db rows 11 and 2; TraderLion row 1 corroborates ('accelerates upward in a euphoric last push') and is not quoted here because this claim is attributed to Minervini"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "the rate of ascent, number of weeks, or volume that makes a climax -- the source gives examples and no figures"
+      ]
+    },
+    {
+      "id": "management.low_volume_breakout_then_high_volume_selling",
+      "title": "A breakout on low volume followed by selling on high volume usually gets Minervini to sell or at least reduce",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "A low-volume breakout alone is not a sale -- volume can arrive over the next days -- but a breakout on low volume followed by selling on high volume usually gets Minervini to sell or at least reduce. The harness measures the breakout session's volume ratio and the heaviest down session since, and the event is a down session whose volume exceeded the breakout's; the source says 'sell or at least reduce', so the action is a REVIEW that names both and chooses neither."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Selling volume exceeding breakout volume is a reason to sell or reduce; which one is the trader's call, so it goes to review with both named."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the breakout session there is no breakout volume to compare with, and the block is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "I wouldn't sell a stock just because it broke out on low volume. Sometimes the volume comes in the next day or several days later. In that case, I would like to see the stock follow through on higher volume. On the other hand, if the breakout was on low volume and then the stock sold off on high volume, that would usually get me to sell or at least reduce my position.",
+            "supports": "the whole rule: a low-volume breakout is tolerated, low-volume breakout then high-volume selling is sell or reduce"
+          }
+        ],
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Minervini; 'low' and 'high' volume carry no number, so the encoded event is selling volume exceeding breakout volume, a comparison of the stock's own two sessions"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py",
+        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "what 'low' and 'high' volume are in ratio terms -- the practice-layer markers are reported beside the measurement for context"
+      ]
+    },
+    {
+      "id": "convention.average_true_range",
+      "title": "Average true range is the simple mean of the true range over fourteen sessions",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The sources say 'average true range (ATR)' and name no length. True range is the largest of high minus low, high minus the prior close, and the prior close minus low; the harness averages it over fourteen sessions with a simple mean. Fourteen is the conventional length and a harness choice, recorded here so it is read from one place."
+      },
+      "thresholds": {},
+      "parameters": {
+        "atr_length_sessions": {
+          "value": 14,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention; no source names a length. It changes a reported extension in ATR units and no verdict reads that."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "With fewer than fifteen completed sessions the range has no average and is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the ATR the sources mention is named without a length"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "convention.momentum_review_windows",
+      "title": "Short-horizon return and gap windows the harness reads a late-stage advance over",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The sources describe a climax run in words -- a rapid advance, gaps late in the move -- and name no measurement window. The harness reads the advance over five, ten and twenty completed sessions and counts gap-ups over the last ten, and records those lengths here so the numbers live in one place and travel with the block that used them."
+      },
+      "thresholds": {},
+      "parameters": {
+        "short_window_sessions": {
+          "value": 5,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention. It changes a reported return and no verdict reads that return."
+        },
+        "medium_window_sessions": {
+          "value": 10,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention, and the window the gap count also uses."
+        },
+        "long_window_sessions": {
+          "value": 20,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention, roughly a month of sessions."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "With fewer completed sessions than the longest window the returns have nothing to measure over and are reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the sources describe the climax qualitatively and name no window"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_missing_columns_and_ties.py",
+        "tests/260827/unit/test_structure_extension_evidence.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "management.market_defense_tightens_stops",
+      "title": "A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "market_state",
+        "entry_price",
+        "stop_price"
+      ],
+      "rule": {
+        "summary": "In a difficult market environment the source cuts losses at 5 to 6 percent instead of the usual 7 to 8 and takes smaller profits, and when he turns bearish while holding longs he tightens stops and lets the price action take him out one position at a time rather than selling everything on his opinion of the market."
+      },
+      "thresholds": {
+        "difficult_market_loss_pct": {
+          "role": "band",
+          "range": [
+            5,
+            6
+          ],
+          "unit": "percent",
+          "exact": true,
+          "direction": "inside_is_better",
+          "quote_index": 1,
+          "note": "The loss range the source cuts at when the environment is difficult, against 7 to 8 in a normal one. A band: it reports where a declared stop sits and never sells on its own."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 6,
+            "text": "In a difficult market environment, profits will be smaller than normal and losses will be larger; downside gaps will be more common, and you will most likely experience greater slippage.",
+            "supports": "the environment the tightened parameters belong to"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 6,
+            "text": "Tighten up stop losses. If you normally cut losses at 7 to 8 percent, cut them at 5 to 6 percent.",
+            "supports": "the tightened loss range the source names for a difficult market"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "Even if I turn bearish on the market while I’m holding longs, I will usually let the stocks stop me out. I don’t usually sell everything on my “opinion” of the market. I simply tighten my stops and let the price action take me out of the positions one by one.",
+            "supports": "market weakness tightens stops rather than liquidating a ticker by opinion"
+          }
+        ],
+        "resolution": "mined from Minervini row 6 (Chapter 13, Risk Management) and row 15 (interview). The sizing sentence in the same list -- reduce exposure with regard to position sizes and overall capital commitment -- is deliberately not registered: this harness never prescribes size."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.earnings_awareness_while_holding",
+      "title": "A held position's coming earnings report is something to be aware of, including reports from its industry group",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "earnings_date"
+      ],
+      "rule": {
+        "summary": "The source tells the holder to be aware of earnings reports and news from the companies whose stock they hold and from the same industry group, and notes that a preannouncement can arrive before the actual earnings date."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A held position's coming earnings report is something to be aware of, including reports from its industry group\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A held position's coming earnings report is something to be aware of, including reports from its industry group\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 13,
+            "text": "It’s not uncommon for a company to issue a preannouncement about its results before the actual earnings date. You should, in addition, be aware of earnings reports and news from companies that are in the same industry group as the stocks you hold.",
+            "supports": "awareness of a held position's coming report, and of its industry group's"
+          }
+        ],
+        "resolution": "mined from Minervini row 13 (Chapter 7, Fundamentals to Focus on). Awareness language, not filter language, so this is review evidence and never a sale."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.zanger_does_not_hold_through_earnings",
+      "title": "Zanger has not held a position through an earnings release in more than ten years",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "earnings_date"
+      ],
+      "rule": {
+        "summary": "A practitioner this harness reads for contrast states that he has not held any stock long or short through earnings in more than ten years, and that the few times he did he was short and got lucky."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"Zanger has not held a position through an earnings release in more than ten years\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"Zanger has not held a position through an earnings release in more than ten years\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "I should note that there have only been a few times I’ve held stocks through an earnings release, and I was short in each of those few times—and got very lucky. It’s been more than 10 years since I’ve held any stock long or short through earnings.",
+            "supports": "the practitioner's own standing practice of not holding through a report"
+          }
+        ],
+        "resolution": "mined from Minervini row 15 (interview, Zanger answering). A personal practice, not Minervini doctrine: it is reported beside the earnings measurement and can never carry a verdict."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Zanger"
+    },
+    {
+      "id": "management.zanger_first_two_days_out_of_the_base",
+      "title": "Zanger reads the first two sessions out of the base as the most important for volume and price behavior",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "A practitioner this harness reads for contrast calls the first two days out of the base the most important in regard to volume and price behavior, and says that after that period he keeps no preset time stop and responds only to volume and price."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"Zanger reads the first two sessions out of the base as the most important for volume and price behavior\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"Zanger reads the first two sessions out of the base as the most important for volume and price behavior\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "The first two days out of the base are the most important in regard to volume and price behavior. After that period, holding would depend on the depth of the volume dry-up followed by the price behavior when volume recedes. I have nothing preset in my mind like a time stop, since I only respond to volume and price behavior independent of time after those first two days.",
+            "supports": "the two-session window, and the refusal of a preset time stop after it"
+          }
+        ],
+        "resolution": "mined from Minervini row 15 (interview, Zanger answering). The window is his, so the sessions are reported as contrast and never become an action."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Zanger",
+      "parameters": {
+        "window_sessions": {
+          "value": 2,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "The window the practitioner names. It selects which sessions are reported and no verdict reads them."
+        }
+      }
+    },
+    {
+      "id": "management.tennis_ball_action_after_the_breakout",
+      "title": "A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "After a breakout the source watches the pullbacks: in a stock under accumulation they are brief and met with support that pushes it back to new highs within days, bouncing like a tennis ball rather than an egg, and there should not be much volatility during the initial rally and the first one or two normal reactions."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "If the stock is healthy and under accumulation, the pullbacks will be brief and will be met with support that pushes the stock to new highs within just days, bouncing back like a tennis ball. This is how you determine whether the stock is experiencing a natural reaction or abnormal activity that should raise concern.",
+            "supports": "brief pullbacks recovering to new highs within days as the healthy behavior"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "He said that price reactions and pullbacks allow you to determine whether your stock is a tennis ball or an egg. He wanted to own tennis balls.",
+            "supports": "the tennis ball and egg distinction the reading comes from"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "There should not be much volatility during the initial rally phase and during the first one or two normal reactions.",
+            "supports": "the expected quiet of the initial rally and the first reactions"
+          }
+        ],
+        "resolution": "mined from Minervini row 3 (Chapter 10). 'Within just days' is not a number, so the harness reports each reaction's depth, length and how long recovery took, and names no threshold."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.stock_that_does_not_act_as_expected",
+      "title": "A stock that has met elite criteria and then does not act as expected is a major red flag",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "entry_date"
+      ],
+      "rule": {
+        "summary": "The source says that once a candidate has met the criteria the risks become unambiguous, and a stock that does not act as expected is a major red flag; behaving poorly after being deemed a strong prospect suggests a problem."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A stock that has met elite criteria and then does not act as expected is a major red flag\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A stock that has met elite criteria and then does not act as expected is a major red flag\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "When one identifies the proper characteristics for a superperformance candidate, the risks become unambiguous. If a stock doesn’t act as expected, that’s a major red flag. After all, the stock has already met very elite criteria and has been deemed a strong prospect. If such a stock behaves poorly, that suggests a problem.",
+            "supports": "failure to act as expected as evidence in its own right"
+          }
+        ],
+        "resolution": "mined from Minervini row 3 (Chapter 10). It names no measurement, so the harness reports elapsed time and behavior beside it and lets the reading stay the analyst's."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "convention.long_average_slope_window",
+      "title": "The 200-session average's slope is read over twenty sessions",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "Minervini's stage 3 description says the 200-day average flattens out and rolls over and names no way to measure flattening. The harness reads the 200-session simple average against itself twenty sessions earlier and reports the percentage change; both lengths are harness choices recorded here so they are read from one place."
+      },
+      "thresholds": {},
+      "parameters": {
+        "long_average_sessions": {
+          "value": 200,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "The average the source names in sessions. It selects which series exists; no verdict reads the slope."
+        },
+        "slope_lookback_sessions": {
+          "value": 20,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention -- roughly a month of sessions -- for how far back the average is compared with itself."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the average plus the lookback the slope has nothing to compare and is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the source describes a flattening 200-day average and names no measurement"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "contract.declared_exit_plan_is_audited",
+      "title": "A plan the trader declares is audited on completed bars and executed without negotiation",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_date",
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The harness executes exit plans the trader declares -- a hard stop price, an invalidation condition, or a moving average opted into as the level they manage by -- by auditing completed bars against them and reporting the breach without negotiation. What makes such a breach a sale is the declaration, not the source the level came from: a practice-layer average carries no verdict of its own, and the same two closes below an average the trader did not declare are review evidence. Minervini's own rule that a breached stop is executed without negotiation is what this contract extends to the other levels a trader can declare."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "reject",
+        "meaning": "A declared plan whose level completed bars show breached ends the position; the request contract, not a mined threshold, is what makes it final."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "A declared plan the bars cannot audit leaves HOLD unestablished rather than assumed."
+      },
+      "precedence": {
+        "tier": "qualification_and_risk_hard_gates",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness contract about the caller's own declarations; the doctrine it rests on is risk.hard_stop_and_no_average_down, and the measurement it audits carries its own claim"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_actions.py",
+        "tests/260827/integration/test_stop_untouched_structure_deteriorating.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "convention.unexplained_price_discontinuity",
+      "title": "A split-sized jump with no corporate-action evidence is a gap, not a move",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The provider returns unadjusted prices with the split events beside them, and a window holding a split is refused because the declared level and the closes are in two coordinate systems. A history that carries no event column has not said there was no split -- absence of the column is absence of evidence. So when the column is missing and two consecutive completed closes differ by a split-sized ratio, the harness cannot tell a share-count change from a fall the market actually made, and reports the window unavailable instead of selling on it. The ratio bound is 5-for-4, the smallest ordinary split, so any change of a fifth or more of the prior close is treated as unexplained."
+      },
+      "thresholds": {},
+      "parameters": {
+        "smallest_recognized_split_ratio": {
+          "value": 1.25,
+          "unit": "ratio",
+          "affects_verdict": true,
+          "note": "A harness convention. A completed close-to-close ratio at or beyond this, or at or below its reciprocal, is split-sized. It withholds measurements rather than producing them, so it can only refuse a verdict, never reach one."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without closes there is nothing to compare and no discontinuity can be found or ruled out."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; no source describes what to do with a history that omits its corporate actions"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_missing_split_evidence.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

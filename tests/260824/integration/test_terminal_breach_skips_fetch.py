@@ -1,4 +1,12 @@
-"""A breach that is already terminal must not send the harness looking for prices."""
+"""A breach the request already settled cannot be downgraded by prices nobody could fetch.
+
+This file once held the stronger claim -- that a terminal breach must not send the harness
+looking for prices at all. A later round showed why that went too far: an assertion says
+the position ended without saying when, and the bars can hold an exit that happened first,
+so the record named the wrong level on the wrong day. The bars are consulted now. What a
+settled verdict still buys is what this file was really protecting: their absence is
+reported without turning a terminal SELL into a partial one.
+"""
 
 from __future__ import annotations
 
@@ -29,18 +37,19 @@ class TerminalBreachTests(unittest.TestCase):
     def run_risk(self, **request: object) -> dict:
         return execute("ticker.risk", {**POSITION, **request}, runtime=self.runtime)
 
-    def test_an_authorized_live_stop_breach_needs_no_daily_history(self) -> None:
+    def test_an_authorized_live_stop_breach_survives_a_history_nobody_could_fetch(self) -> None:
         payload = self.run_risk(stop_price=94.0, live_stop_check=True, live_stop={"state": "triggered", "partial_session": True})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
-        self.assertEqual(self.calls, [])
+        # Asked for -- the bars could have held an earlier exit -- and not depended on.
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["status"], "ok")
 
-    def test_an_asserted_invalidation_trigger_needs_no_daily_history(self) -> None:
+    def test_an_asserted_invalidation_trigger_survives_the_same(self) -> None:
         payload = self.run_risk(invalidation={"price": 94.0, "condition": "completed close below the base low", "state": "triggered"})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["status"], "ok")
 
     def test_an_unresolved_position_still_asks_the_provider(self) -> None:
@@ -86,7 +95,7 @@ class RoutingAgreesWithTheReducerTests(unittest.TestCase):
     def test_a_triggered_stop_event_is_a_settled_breach(self) -> None:
         payload = self.run_risk(stop_price=94.0, stop_event={"state": "triggered"})
 
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(payload["status"], "ok")
 
@@ -99,7 +108,11 @@ class RoutingAgreesWithTheReducerTests(unittest.TestCase):
 
 
 class SuppliedPathBreachTests(unittest.TestCase):
-    """A breach the caller already supplied must not be overwritten by a fresh fetch."""
+    """An audit the caller already ran must not be overwritten by a fresh fetch.
+
+    A state word on its own is not that audit. It carries no session and no level, so it
+    cannot be the record it is shaped like -- it is an assertion, and it meets the bars.
+    """
 
     def setUp(self) -> None:
         self.calls: list[str] = []
@@ -130,17 +143,28 @@ class SuppliedPathBreachTests(unittest.TestCase):
             runtime=Runtime(price_history=self.clear_history),
         )
 
+    RECORD = {"basis": "completed_daily_low", "governing_role": "stop", "checked_level": 94.0, "breach_date": "2025-12-15", "breach_low": 93.0}
+
     def test_a_padded_breach_state_is_still_a_breach(self) -> None:
-        payload = self.run_risk({"state": " breached "})
+        payload = self.run_risk({**self.RECORD, "state": " breached "})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(self.calls, [])
 
     def test_a_breach_reported_under_status_is_still_a_breach(self) -> None:
-        payload = self.run_risk({"status": "breached"})
+        payload = self.run_risk({**self.RECORD, "status": "breached"})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(self.calls, [])
+
+    def test_a_state_word_with_no_coordinates_is_an_assertion_and_meets_the_bars(self) -> None:
+        payload = self.run_risk({"state": "breached"})
+
+        self.assertEqual(self.calls, ["TEST"])
+        # The bars cleared every declared level over its whole window, which is the
+        # assertion's own request contradicting itself.
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertIn("asserted_breach_contradicted_by_completed_bars", payload["data"]["missing"])
 
 
 if __name__ == "__main__":

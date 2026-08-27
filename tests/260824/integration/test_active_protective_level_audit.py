@@ -63,9 +63,11 @@ class ProtectiveLevelAuditTests(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "HOLD")
 
     def test_a_stop_tighter_than_the_invalidation_remains_the_audit_level(self) -> None:
-        payload = run(stop_price=120.0, invalidation={"price": 94.0, "condition": "completed close below the base low"})
+        # Below the entry price, because a stop in force from the entry session that sits at
+        # or above it leaves the trade no risk for the stop to bound.
+        payload = run(stop_price=96.0, invalidation={"price": 94.0, "condition": "completed close below the base low"})
 
-        self.assertEqual(payload["data"]["completed_price_path"]["checked_level"], 120.0)
+        self.assertEqual(payload["data"]["completed_price_path"]["checked_level"], 96.0)
 
 
 if __name__ == "__main__":

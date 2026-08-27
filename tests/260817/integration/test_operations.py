@@ -432,7 +432,9 @@ class OperationCompositionTests(unittest.TestCase):
         common = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-10-01", "as_of": AS_OF}
 
         hold = execute("ticker.risk", {**common, "stop_price": 94.0}, runtime=runtime)
-        sell = execute("ticker.risk", {**common, "stop_price": 155.0}, runtime=runtime)
+        # Its own entry, because a stop in force from the entry session sits below the price
+        # the position was entered at.
+        sell = execute("ticker.risk", {**common, "entry_price": 200.0, "stop_price": 155.0}, runtime=runtime)
 
         self.assertEqual(hold["data"]["verdict"], "HOLD")
         self.assertEqual(hold["data"]["current_price"], 150.0)
