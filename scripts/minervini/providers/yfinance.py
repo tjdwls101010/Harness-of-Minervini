@@ -195,3 +195,89 @@ def completed_daily_bars(
             stale=last_completed_bar != clock.date,
         ),
     )
+
+
+def next_earnings_snapshot(
+    symbol: str,
+    *,
+    as_of: str | date | None = None,
+    ticker: Any | None = None,
+    calendar: Any | None = None,
+    retrieved_at: datetime | None = None,
+) -> ProviderSnapshot[dict[str, Any]]:
+    """Fetch the next scheduled earnings report as a current, forward-looking snapshot only.
+
+    A calendar entry is mutable the way a sector label is mutable, and no feed can say what it
+    held on a past date. Dating today's answer to a past session would put a forecast nobody
+    made then inside a point-in-time verdict, so a historical request is refused rather than
+    answered.
+
+    Whether anybody confirmed the date travels with it. Two dates is the feed naming a window it
+    guessed at, and the earlier edge is the one published: a holder asking whether a report is
+    still ahead needs the first session it could land on, and the later edge would report a
+    position as clear on a day the company might already have reported.
+    """
+
+    observed_at = retrieved_at or datetime.now(timezone.utc)
+    requested_date = _current_date(as_of, observed_at)
+    if requested_date != observed_at.date():
+        raise ProviderUnavailable("yfinance", "historical_earnings_calendar_unavailable", operation="next_earnings")
+
+    if calendar is None:
+        if ticker is None:
+            try:
+                import yfinance as yf
+            except Exception as error:
+                raise ProviderUnavailable("yfinance", "package_unavailable", operation="next_earnings") from error
+            ticker = yf.Ticker(symbol)
+        calendar = fetch_with_one_retry("yfinance", "next_earnings", lambda: ticker.calendar)
+
+    if not isinstance(calendar, Mapping):
+        raise ProviderUnavailable("yfinance", "invalid_earnings_calendar_response", operation="next_earnings")
+    entries = calendar.get("Earnings Date")
+    if isinstance(entries, (str, bytes)) or not isinstance(entries, (list, tuple)):
+        entries = [entries] if entries is not None else []
+    if not entries:
+        raise ProviderUnavailable("yfinance", "earnings_date_missing", operation="next_earnings")
+    dates = sorted(_calendar_date(entry) for entry in entries)
+    if dates[0] < observed_at.date():
+        # A calendar still showing the last report is not answering the question that was
+        # asked. Publishing it would put a date behind the holder into a block whose whole
+        # meaning is whether a report is ahead of them.
+        raise ProviderUnavailable("yfinance", "earnings_date_not_ahead", operation="next_earnings")
+
+    return ProviderSnapshot(
+        data={
+            "symbol": symbol.upper(),
+            "earnings_date": dates[0].isoformat(),
+            "confirmation": "confirmed" if len(dates) == 1 else "estimated_range",
+            "window": None if len(dates) == 1 else [dates[0].isoformat(), dates[-1].isoformat()],
+        },
+        meta=SnapshotMeta(
+            provider="yfinance",
+            retrieved_at=observed_at,
+            as_of=observed_at.date(),
+            coverage={
+                "kind": "forward_looking_current_only",
+                "historical": False,
+                "source": "ticker.calendar",
+                "source_fields": {"earnings_date": "Earnings Date"},
+                "symbol": symbol.upper(),
+            },
+        ),
+    )
+
+
+def _calendar_date(value: Any) -> date:
+    """One calendar entry as a date, refusing anything the feed wrote as something else."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError as error:
+            raise ProviderUnavailable("yfinance", "invalid_earnings_date", operation="next_earnings") from error
+    raise ProviderUnavailable("yfinance", "invalid_earnings_date", operation="next_earnings")

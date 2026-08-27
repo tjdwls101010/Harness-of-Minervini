@@ -32,7 +32,7 @@ from .providers.finviz import raw_snapshot as finviz_raw_snapshot
 from .providers.nasdaq import SecurityRecord, current_security_master, historical_security_master
 from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, industry_top_snapshot, rating_snapshot, sector_ranking_snapshot, top_snapshot
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
-from .providers.yfinance import completed_daily_bars, current_classification_snapshot
+from .providers.yfinance import completed_daily_bars, current_classification_snapshot, next_earnings_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
@@ -52,6 +52,7 @@ RankedRows = Callable[[str], ProviderSnapshot[list[dict[str, Any]]]]
 MarketLeaders = Callable[[str, int], ProviderSnapshot[list[dict[str, Any]]]]
 FinvizBreadth = Callable[[str], ProviderSnapshot[str]]
 CurrentClassification = Callable[[str], ProviderSnapshot[dict[str, str]]]
+EarningsCalendar = Callable[[str], ProviderSnapshot[dict[str, Any]]]
 IndustryTop = Callable[[str, str, int], ProviderSnapshot[list[dict[str, Any]]]]
 
 
@@ -152,6 +153,10 @@ def _default_current_classification(ticker: str) -> ProviderSnapshot[dict[str, s
     return current_classification_snapshot(ticker)
 
 
+def _default_earnings_calendar(ticker: str) -> ProviderSnapshot[dict[str, Any]]:
+    return next_earnings_snapshot(ticker)
+
+
 def _default_industry_top(industry: str, as_of: str, limit: int) -> ProviderSnapshot[list[dict[str, Any]]]:
     return industry_top_snapshot(industry, as_of, n=limit)
 
@@ -228,6 +233,7 @@ class Runtime:
     market_leaders: MarketLeaders = field(default_factory=lambda: _default_market_leaders)
     finviz_breadth: FinvizBreadth = field(default_factory=lambda: _default_finviz_breadth)
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
+    earnings_calendar: EarningsCalendar = field(default_factory=lambda: _default_earnings_calendar)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
     reachability_probes: Mapping[str, Callable[[], None]] = field(default_factory=_default_reachability_probes)
@@ -2229,6 +2235,43 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         raise RequestError("base_top must be a finite positive number", "base_top")
     if evidence.get("earnings_date") is not None:
         evidence["earnings_date"] = _request_date(evidence["earnings_date"], "earnings_date").isoformat()
+        evidence["earnings_source"] = "declared"
+        evidence["earnings_confirmation"] = "declared_by_caller"
+    elif not (mode == "active" and has_position_anchors):
+        # Nothing to manage, so nothing to look up. Fetching a calendar for a request that
+        # declares no position spends a provider call and puts a gap in `missing` about a
+        # question the request never asked.
+        pass
+    elif clock.mode != "last_completed_session":
+        # A calendar entry is a forecast, and no feed can say what it forecast last March.
+        # Dating today's answer to an explicit past session would put a schedule nobody
+        # published then inside a point-in-time verdict.
+        evidence["earnings_unavailable_reason"] = "earnings_calendar_is_current_only"
+    else:
+        try:
+            calendar = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="ticker.risk",
+                provider="yfinance",
+                operation="next_earnings",
+                params={"ticker": ticker},
+                fetch=lambda: runtime.earnings_calendar(ticker),
+                # The same short life every mutable current snapshot gets. A schedule that
+                # moves is the normal case, and a day-old cached date would answer "still
+                # ahead" about a report that has already been released.
+                ttl_seconds=900,
+            )
+        except ProviderUnavailable as error:
+            provider_missing.append({**_missing_provider(error), "required": False})
+            evidence["earnings_unavailable_reason"] = error.reason
+        else:
+            sources.append(_source(calendar.meta))
+            evidence["earnings_date"] = calendar.data["earnings_date"]
+            evidence["earnings_source"] = "provider"
+            evidence["earnings_confirmation"] = calendar.data["confirmation"]
+            evidence["earnings_window"] = calendar.data["window"]
     raw_base_count = evidence.get("base_count")
     if raw_base_count is not None:
         if isinstance(raw_base_count, bool) or not isinstance(raw_base_count, int) or raw_base_count < 1:
