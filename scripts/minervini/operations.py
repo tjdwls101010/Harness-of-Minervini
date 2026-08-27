@@ -21,7 +21,7 @@ from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
-from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, evaluate_fundamentals
+from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
@@ -1139,7 +1139,7 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     # What the filings do not carry and an analyst may. Refused here against the same
     # vocabularies the evaluator holds, so a word it could only misread never reaches it.
     declared: dict[str, str | None] = {}
-    for field, allowed in (("going_concern", FUNDAMENTALS_GOING_CONCERN), ("accounting_integrity", FUNDAMENTALS_ACCOUNTING_INTEGRITY), ("leader_category", FUNDAMENTALS_LEADER_CATEGORIES)):
+    for field, allowed in (("going_concern", FUNDAMENTALS_GOING_CONCERN), ("accounting_integrity", FUNDAMENTALS_ACCOUNTING_INTEGRITY), ("leader_category", FUNDAMENTALS_LEADER_CATEGORIES), ("market_regime", FUNDAMENTALS_MARKET_REGIMES)):
         value = request.get(field)
         if value is not None and (not isinstance(value, str) or value not in allowed):
             raise RequestError(f"{field} must be one of {', '.join(allowed)}", field)

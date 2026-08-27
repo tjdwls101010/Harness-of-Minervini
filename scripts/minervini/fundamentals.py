@@ -193,6 +193,15 @@ def _eligible_filings(value: Any, as_of: date) -> list[dict[str, Any]]:
 
 
 def _latest_periods(filings: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+    """Every period the filings speak about, with the latest word on each number.
+
+    Later-filed wins per field, not per period. A quarterly report carries last fiscal year's
+    balance sheet as a comparative and no income statement for that year, so replacing the whole
+    period left the latest year holding an equity figure and nothing to measure it against --
+    while every earlier year, whose quarterly reports had aged out of the eligible window, looked
+    complete. Superseding a number the later filing never mentioned is not what a restatement is.
+    """
+
     by_period: dict[str, dict[str, Any]] = {}
     for filing in filings:
         facts = filing.get(key, [])
@@ -201,7 +210,8 @@ def _latest_periods(filings: list[dict[str, Any]], key: str) -> list[dict[str, A
         for fact in facts:
             if not isinstance(fact, Mapping) or not isinstance(fact.get("period"), str):
                 raise ValueError(f"Each {key} fact must identify a period.")
-            by_period[fact["period"]] = {**fact, "accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"]}
+            merged = by_period.setdefault(fact["period"], {})
+            merged.update({**fact, "accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"]})
     return [by_period[period] for period in sorted(by_period, key=lambda period: _period_sort_key(by_period[period]))]
 
 

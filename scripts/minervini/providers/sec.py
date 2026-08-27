@@ -221,9 +221,10 @@ def normalize_filed_facts(
     submission_rows = _submission_rows(submissions)
     taxonomy, accounting_basis = _accounting_taxonomy(company_facts)
     filings: dict[str, dict[str, Any]] = {}
+    annual_ends = _annual_period_by_end(taxonomy)
     for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS), ("annual_instant", _ANNUAL_INSTANT_METRICS)):
         for metric, concepts in metrics.items():
-            for record in _metric_records(taxonomy, concepts, kind):
+            for record in _metric_records(taxonomy, concepts, kind, annual_ends):
                 accession = record["accn"]
                 submission = submission_rows.get(accession)
                 if submission is None or not _is_supported_form(submission["form"]):
@@ -327,7 +328,25 @@ def _accounting_taxonomy(company_facts: Mapping[str, Any]) -> tuple[Mapping[str,
     raise ValueError("SEC companyfacts must contain US-GAAP or IFRS facts.")
 
 
-def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind: str) -> Iterable[dict[str, Any]]:
+def _annual_period_by_end(taxonomy: Mapping[str, Any]) -> dict[str, str]:
+    """Each fiscal year's closing date, mapped to the year it closes.
+
+    A balance is dated, not spanned, so nothing in the fact itself says which fiscal year it
+    closes. The income statement for that year does: it ends on the same date. Requiring 31
+    December instead dropped every balance a September or January filer ever filed, silently,
+    because a dropped fact and a fact the company never filed look identical downstream.
+    """
+
+    ends: dict[str, str] = {}
+    for concepts in _ANNUAL_METRICS.values():
+        for record in _metric_records(taxonomy, concepts, "annual", {}):
+            end = record.get("end")
+            if isinstance(end, str):
+                ends.setdefault(end, record["period"])
+    return ends
+
+
+def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind: str, annual_ends: Mapping[str, str]) -> Iterable[dict[str, Any]]:
     found: set[tuple[str, str]] = set()
     for concept_name in concepts:
         concept = taxonomy.get(concept_name)
@@ -337,14 +356,14 @@ def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind
             if not isinstance(unit_records, list):
                 continue
             for raw in unit_records:
-                record = _normalized_metric_record(raw, kind)
+                record = _normalized_metric_record(raw, kind, annual_ends)
                 if record is None or (record["accn"], record["period"]) in found:
                     continue
                 found.add((record["accn"], record["period"]))
                 yield record
 
 
-def _normalized_metric_record(raw: Any, kind: str) -> dict[str, Any] | None:
+def _normalized_metric_record(raw: Any, kind: str, annual_ends: Mapping[str, str]) -> dict[str, Any] | None:
     if not isinstance(raw, Mapping) or not isinstance(raw.get("accn"), str) or not isinstance(raw.get("end"), str):
         return None
     if not isinstance(raw.get("val"), (int, float)) or isinstance(raw.get("val"), bool):
@@ -352,7 +371,7 @@ def _normalized_metric_record(raw: Any, kind: str) -> dict[str, Any] | None:
     form = raw.get("form")
     if not _is_supported_form(form) or not isinstance(raw.get("filed"), str):
         return None
-    period = _period_from_fact(raw, kind)
+    period = _period_from_fact(raw, kind, annual_ends)
     if period is None:
         return None
     return {"accn": raw["accn"], "form": form, "filed": raw["filed"], "period": period, "end": raw["end"], "val": raw["val"]}
@@ -362,15 +381,15 @@ def _is_supported_form(value: Any) -> bool:
     return isinstance(value, str) and value.split("/", 1)[0] in _FORM_TYPES
 
 
-def _period_from_fact(raw: Mapping[str, Any], kind: str) -> str | None:
+def _period_from_fact(raw: Mapping[str, Any], kind: str, annual_ends: Mapping[str, str]) -> str | None:
     if kind == "annual_instant":
-        # A balance sheet date is the period, full stop. `fy` names the report it was
-        # printed in, and a prior-year comparative column carries this year's -- reading it
-        # would file last year's inventory under this year and erase a year of growth.
+        # A balance sheet date is the period, and the fiscal year it belongs to is the one whose
+        # income statement closes on that same date. `fy` names the report it was printed in, and
+        # a prior-year comparative column carries this year's -- reading it would file last
+        # year's inventory under this year and erase a year of growth. A date matching no fiscal
+        # year end is a quarter's balance and is not this bucket's fact.
         end = raw.get("end")
-        if not isinstance(end, str) or not end.endswith("-12-31"):
-            return None
-        return end[:4]
+        return annual_ends.get(end) if isinstance(end, str) else None
     frame = raw.get("frame")
     if isinstance(frame, str):
         matched = re.fullmatch(r"CY(\d{4})(?:Q([1-4]))?", frame)

@@ -92,5 +92,65 @@ class TheProviderSendsTheEquity(unittest.TestCase):
         self.assertEqual(year["stockholders_equity"], 200.0)
 
 
+
+
+class AFiscalYearThatDoesNotEndInDecember(unittest.TestCase):
+    """The balance sheet closes on the company's year end, not on the calendar's.
+
+    Requiring a 31 December date to recognise a year-end balance dropped every balance a
+    September or January filer ever filed -- silently, because a dropped fact and a fact the
+    company never filed look identical downstream. The fiscal year an instant belongs to is the
+    one whose income statement closes on the same date, which the same taxonomy dump carries.
+    """
+
+    @staticmethod
+    def facts(year_end: str, prior_end: str) -> dict:
+        def duration(end: str, start: str, value: float, accession: str, filed: str) -> dict:
+            return {"start": start, "end": end, "val": value, "accn": accession, "filed": filed, "form": "10-K", "fy": int(end[:4]), "fp": "FY"}
+
+        def instant(end: str, value: float, accession: str, filed: str) -> dict:
+            return {"end": end, "val": value, "accn": accession, "filed": filed, "form": "10-K", "fy": 2025, "fp": "FY"}
+
+        return {
+            "us-gaap": {
+                "NetIncomeLoss": {"label": "n", "units": {"USD": [
+                    duration(prior_end, f"{int(prior_end[:4]) - 1}-10-01", 20.0, "a-0", "2025-11-01"),
+                    duration(year_end, f"{int(year_end[:4]) - 1}-10-01", 32.0, "a-1", "2026-02-19"),
+                ]}},
+                "StockholdersEquity": {"label": "e", "units": {"USD": [
+                    instant(prior_end, 180.0, "a-1", "2026-02-19"),
+                    instant(year_end, 200.0, "a-1", "2026-02-19"),
+                ]}},
+            }
+        }
+
+    def test_a_september_year_end_balance_reaches_the_evaluator(self) -> None:
+        submissions = {"cik": 42, "filings": {"recent": {
+            "accessionNumber": ["a-0", "a-1"],
+            "filingDate": ["2025-11-01", "2026-02-19"],
+            "reportDate": ["2025-09-27", "2025-09-27"],
+            "form": ["10-K", "10-K"],
+        }}}
+        normalized = normalize_filed_facts({"cik": 42, "entityName": "T", "facts": self.facts("2025-09-27", "2024-09-28")}, submissions, as_of="2026-05-08")
+
+        years = {year["period"]: year for filing in normalized["filings"] for year in filing["annual"]}
+        self.assertEqual(years["2025"]["stockholders_equity"], 200.0)
+        self.assertEqual(years["2024"]["stockholders_equity"], 180.0)
+
+    def test_the_comparative_column_still_lands_on_its_own_year(self) -> None:
+        submissions = {"cik": 42, "filings": {"recent": {
+            "accessionNumber": ["a-0", "a-1"],
+            "filingDate": ["2025-11-01", "2026-02-19"],
+            "reportDate": ["2025-09-27", "2025-09-27"],
+            "form": ["10-K", "10-K"],
+        }}}
+        normalized = normalize_filed_facts({"cik": 42, "entityName": "T", "facts": self.facts("2025-09-27", "2024-09-28")}, submissions, as_of="2026-05-08")
+
+        years = {year["period"]: year for filing in normalized["filings"] for year in filing["annual"]}
+        # Both instants carry fy 2025 because that is the report they were printed in. Reading
+        # that field would file last year's equity under this year and erase a year of change.
+        self.assertNotEqual(years["2024"]["stockholders_equity"], years["2025"]["stockholders_equity"])
+
+
 if __name__ == "__main__":
     unittest.main()
