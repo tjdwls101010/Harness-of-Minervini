@@ -56,6 +56,8 @@ _ROE_VIEWS = (
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
+_FOUR_FILED_QUARTERS = "four_consecutive_filed_quarters"
+_ROLLED_FORWARD = "annual_rolled_forward_by_filed_quarters"
 
 
 SEC_SOURCE = "sec_filed_facts"
@@ -111,7 +113,7 @@ def evaluate_fundamentals(
     }
     growth = _growth_read(quarterly, annual, market_regime=market_regime)
     classification = _leader_category(leader_category)
-    valuation = _valuation(filings, quarterly, as_of_date, last_close=last_close, breakout_close=breakout_close, breakout_date=breakout_date)
+    valuation = _valuation(filings, quarterly, annual, as_of_date, last_close=last_close, breakout_close=breakout_close, breakout_date=breakout_date)
     profitability = {"return_on_equity": _return_on_equity(annual), "practitioner_views": [_practitioner_view(claim_id) for claim_id in _ROE_VIEWS]}
     category_reading = _category_reading(classification, quarterly, annual)
     growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
@@ -695,7 +697,7 @@ def _category_reading(classification: Mapping[str, Any], quarterly: Mapping[str,
 
 def _turnaround_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
     growth = _turnaround_growth(quarterly)
-    return {"turnaround_growth_rate_threshold": growth, "turnaround_qualifying_criteria": _turnaround_criteria(quarterly, growth)}
+    return {"turnaround_growth_rate_threshold": growth, "turnaround_qualifying_criteria": _turnaround_criteria(quarterly, annual, growth)}
 
 
 def _turnaround_window() -> list[int]:
@@ -735,7 +737,7 @@ def _turnaround_growth(quarterly: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _turnaround_criteria(quarterly: Mapping[str, Any], growth: Mapping[str, Any]) -> dict[str, Any]:
+def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], growth: Mapping[str, Any]) -> dict[str, Any]:
     """Two strong quarters, or one big enough to carry the trailing year back to its old peak.
 
     The claim does not define "strong" and the registry says so, pointing at the hundred-percent
@@ -750,7 +752,7 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], growth: Mapping[str, Any]
 
     strong = growth["window_quarters_passing"]
     gate = doctrine.evaluate_gate(_TURNAROUND_CRITERIA, "turnaround_min_strong_quarters", strong)
-    trailing, peak = _trailing_twelve_months(quarterly["eps"])
+    trailing, peak, _ = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"))
     at_or_above = None if trailing is None or peak is None else trailing >= peak
     return {
         "doctrine_id": _TURNAROUND_CRITERIA,
@@ -767,8 +769,39 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], growth: Mapping[str, Any]
     }
 
 
-def _trailing_twelve_months(series: list[dict[str, Any]]) -> tuple[float | None, float | None]:
-    """The latest four filed quarters summed, and the highest any earlier four summed to.
+def _trailing_twelve_months(series: list[dict[str, Any]], annual: list[dict[str, Any]] | None = None) -> tuple[float | None, float | None, str | None]:
+    """Twelve months of filed earnings ending at the latest quarter, and the highest earlier one.
+
+    Four consecutive filed quarters is the direct route and almost never available: no US
+    filer publishes a fourth-quarter column, because the 10-K states the year instead. Every
+    ticker tried live came back naming four consecutive filed quarters as what it lacked.
+
+    The second route is the same twelve months from three filed numbers -- the last complete
+    fiscal year, plus the quarters filed since it closed, minus the quarters those replace.
+    Nothing is reconstructed: no quarter nobody filed is published, and the subtraction runs
+    on filed figures only. Which route produced the number travels with it, because a reader
+    comparing two tickers needs to know when one of them was rolled forward.
+    """
+
+    windows = _consecutive_quarter_windows(series)
+    route = _FOUR_FILED_QUARTERS
+    if not windows or windows[-1][0] != (series[-1]["period"] if series else None):
+        rolled = _rolled_forward_windows(series, annual or [])
+        if rolled:
+            windows, route = rolled, _ROLLED_FORWARD
+    if not windows:
+        return None, None, None
+    # The current trailing year has to end at the latest quarter the company filed. A window
+    # that ended four quarters ago is a historical figure, and publishing it as the current
+    # denominator put a two-year-old earnings base under today's price.
+    latest = series[-1]["period"] if series else None
+    current = windows[-1][1] if windows[-1][0] == latest else None
+    earlier = [total for period, total in windows if period != latest]
+    return current, max(earlier) if earlier else None, route if current is not None else None
+
+
+def _consecutive_quarter_windows(series: list[dict[str, Any]]) -> list[tuple[str, float]]:
+    """Every run of four consecutive filed quarters, summed.
 
     Quarters have to be consecutive for a sum of four to be a year. A window straddling a gap
     in the filings would add up whatever four rows happened to be adjacent in the list and
@@ -781,14 +814,44 @@ def _trailing_twelve_months(series: list[dict[str, Any]]) -> tuple[float | None,
         if any(_previous_quarter(later["period"]) != earlier["period"] for earlier, later in zip(span, span[1:])):
             continue
         windows.append((span[-1]["period"], _reported(sum(point["value"] for point in span))))
-    if not windows:
-        return None, None
-    # The current trailing year has to end at the latest quarter the company filed. A window
-    # that ended four quarters ago is a historical figure, and publishing it as the current
-    # denominator put a two-year-old earnings base under today's price.
-    current = windows[-1][1] if windows[-1][0] == series[-1]["period"] else None
-    earlier = [total for period, total in windows if total is not windows[-1][1] or period != windows[-1][0]]
-    return current, max(earlier) if earlier else None
+    return windows
+
+
+def _rolled_forward_windows(series: list[dict[str, Any]], annual: list[dict[str, Any]]) -> list[tuple[str, float]]:
+    """A trailing year at each quarter: the last closed fiscal year, rolled forward and back.
+
+    The fiscal year is found by its closing date rather than by its label, because a January
+    or September close makes the label say a year the quarters do not. The quarters since that
+    close have to be consecutive and to end at the quarter being measured -- otherwise the
+    window has a hole in it, and a hole makes the subtraction silently drop a quarter of
+    earnings from one side and not the other.
+    """
+
+    years = sorted((point for point in annual if isinstance(point.get("end"), str)), key=lambda point: point["end"])
+    by_ordinal = {_period_ordinal(point["period"]): point for point in series if _period_ordinal(point["period"]) is not None}
+    windows = []
+    for point in series:
+        end, ordinal = point.get("end"), _period_ordinal(point["period"])
+        if not isinstance(end, str) or ordinal is None:
+            continue
+        closed = next((year for year in reversed(years) if year["end"] < end), None)
+        if closed is None:
+            continue
+        since = sorted(
+            (other for other in series if isinstance(other.get("end"), str) and closed["end"] < other["end"] <= end and _period_ordinal(other["period"]) is not None),
+            key=lambda other: other["end"],
+        )
+        ordinals = [_period_ordinal(other["period"]) for other in since]
+        if not ordinals or len(ordinals) >= _QUARTERS_PER_YEAR or ordinals[-1] != ordinal:
+            continue
+        if ordinals != list(range(ordinals[0], ordinals[0] + len(ordinals))):
+            continue
+        replaced = [by_ordinal.get(position - _QUARTERS_PER_YEAR) for position in ordinals]
+        if any(quarter is None for quarter in replaced):
+            continue
+        total = closed["value"] + sum(other["value"] for other in since) - sum(quarter["value"] for quarter in replaced)
+        windows.append((point["period"], _reported(total)))
+    return windows
 
 
 def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
@@ -942,6 +1005,7 @@ _CATEGORY_READERS = {
 def _valuation(
     filings: list[dict[str, Any]],
     quarterly: Mapping[str, Any],
+    annual: list[dict[str, Any]],
     as_of: date,
     *,
     last_close: float | None,
@@ -955,9 +1019,9 @@ def _valuation(
     the number is published, and no state anywhere derives a verdict from it.
     """
 
-    trailing, _ = _trailing_twelve_months(quarterly["eps"])
+    trailing, _, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"))
     return {
-        "price_earnings_ratio": _price_earnings(last_close, trailing),
+        "price_earnings_ratio": _price_earnings(last_close, trailing, route),
         "anti_low_pe_bargain_trap": _unread_claim(
             _ANTI_LOW_PE,
             ["peer_group_pe_ratios", "eps_growth_comparison"],
@@ -968,7 +1032,7 @@ def _valuation(
     }
 
 
-def _price_earnings(last_close: float | None, trailing: float | None) -> dict[str, Any]:
+def _price_earnings(last_close: float | None, trailing: float | None, route: str | None = None) -> dict[str, Any]:
     """The close over the trailing twelve months of filed earnings.
 
     A company that lost money has no meaningful multiple, and the arithmetic would still return
@@ -982,6 +1046,7 @@ def _price_earnings(last_close: float | None, trailing: float | None) -> dict[st
         "doctrine_ids": [_PE_USELESS, _ANTI_LOW_PE],
         "last_close": _reported(last_close) if _is_number(last_close) else None,
         "trailing_12m_eps": trailing,
+        "trailing_12m_route": route,
     }
     if not _is_number(last_close):
         return {**reading, "state": "unavailable", "missing_inputs": ["last_close"], "pe_ratio": None}
@@ -1019,7 +1084,7 @@ def _pe_expansion(
     if breakout > as_of:
         raise ValueError("breakout_date must not be after as_of.")
     known = _eligible_filings(filings, breakout)
-    at_breakout, _ = _trailing_twelve_months(_metric_series(_latest_periods(known, "quarterly"), "eps"))
+    at_breakout, _, _ = _trailing_twelve_months(_metric_series(_latest_periods(known, "quarterly"), "eps"), _metric_series(_latest_periods(known, "annual"), "eps"))
     current = _price_earnings(last_close, trailing)
     # Both ratios are divided raw and rounded only on the way out. Dividing the two published
     # numbers instead put a measurement a hair under the source's two-times edge exactly on it,
