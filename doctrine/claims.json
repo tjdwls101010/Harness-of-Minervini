@@ -6349,15 +6349,15 @@
           "direction": "inside_is_better"
         },
         "pe_expansion_historical_average_multiple": {
-          "role": "band",
-          "range": [
+          "role": "reference",
+          "value": [
             2,
             3
           ],
           "unit": "multiple",
           "exact": false,
           "quote_index": 1,
-          "direction": "lower_is_better"
+          "note": "What a historical study found superperformance stocks averaged. A population statistic, so it is never compared with a ticker's own expansion; the conditional half of the same passage is the band."
         }
       },
       "failure": {

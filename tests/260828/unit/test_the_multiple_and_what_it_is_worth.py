@@ -94,7 +94,9 @@ class HowFarTheMultipleExpanded(unittest.TestCase):
         self.assertEqual(reading["expansion"]["measured"], 100.0)
         self.assertEqual(reading["expansion"]["source_range"], [100, 200])
         self.assertEqual(reading["expansion"]["state"], "within_source_range")
-        self.assertEqual(reading["multiple"]["measured"], 2.0)
+        # The study's average travels beside the measurement, never as a range it sits inside.
+        self.assertEqual(reading["multiple_measured"], 2.0)
+        self.assertEqual(reading["historical_average_multiple"], [2, 3])
         self.assertEqual(reading["elapsed"]["measured"], 13)
 
     def test_the_breakout_multiple_uses_only_what_had_been_filed_by_then(self) -> None:

@@ -693,8 +693,11 @@ def _acceleration_vs_history(quarterly: Mapping[str, Any], annual: list[dict[str
     exists, not what it has to clear.
     """
 
-    series = [(str(fact.get("period")), float(fact["eps"])) for fact in annual if _is_number(fact.get("eps"))]
-    income = [(str(fact.get("period")), float(fact["net_income"])) for fact in annual if _is_number(fact.get("net_income"))]
+    # Provenance travels with the endpoints. Stripping it before the compounding is the same
+    # defect decision 281 closed for the margin, one step further from the filings: a US-GAAP
+    # start compounded to an IFRS end reports a rate neither set of books contains.
+    series = [(str(fact.get("period")), float(fact["eps"]), _measured_under(fact, "eps")) for fact in annual if _is_number(fact.get("eps"))]
+    income = [(str(fact.get("period")), float(fact["net_income"]), _measured_under(fact, "net_income")) for fact in annual if _is_number(fact.get("net_income"))]
     three, three_reason, three_start = _compound_growth(series, 3)
     five, _, five_start = _compound_growth(series, 5)
     latest_period = series[-1][0] if series else None
@@ -739,7 +742,7 @@ def _share_change_between(annual: list[dict[str, Any]], start_period: str | None
     return _reported((shares[end_period] / shares[start_period] - 1) * 100)
 
 
-def _compound_growth(series: list[tuple[str, float]], years: int) -> tuple[float | None, str, str | None]:
+def _compound_growth(series: list[tuple[str, float, tuple[str | None, str | None]]], years: int) -> tuple[float | None, str, str | None]:
     """A compound annual rate over ``years`` calendar years, or the reason there isn't one.
 
     The span is counted in years, not in rows. Reading three rows back lands on 2020 when the
@@ -752,15 +755,17 @@ def _compound_growth(series: list[tuple[str, float]], years: int) -> tuple[float
 
     if not series:
         return None, f"insufficient_annual_periods_for_a_{years}_year_rate", None
-    by_period = {period: value for period, value in series}
-    latest_period, end = series[-1]
+    by_period = {period: (value, measured) for period, value, measured in series}
+    latest_period, end, end_measured = series[-1]
     latest = _period_ordinal(latest_period)
     if latest is None:
         return None, f"insufficient_annual_periods_for_a_{years}_year_rate", None
     start_period = str(latest - years)
     if start_period not in by_period:
         return None, f"insufficient_annual_periods_for_a_{years}_year_rate", None
-    start = by_period[start_period]
+    start, start_measured = by_period[start_period]
+    if start_measured != end_measured:
+        return None, "measured_under_different_accounting_bases", start_period
     if start <= 0 or end <= 0:
         return None, "compound_rate_requires_positive_endpoints", start_period
     return _reported(((end / start) ** (1 / years) - 1) * 100), "", start_period
@@ -1018,7 +1023,7 @@ def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, 
     reports unavailable when the filings do not reach back that far.
     """
 
-    series = [(str(fact.get("period")), float(fact["eps"])) for fact in annual if _is_number(fact.get("eps"))]
+    series = [(str(fact.get("period")), float(fact["eps"]), _measured_under(fact, "eps")) for fact in annual if _is_number(fact.get("eps"))]
     span, best, stretch_start, stretch_end = _best_stretch(series)
     reading = {
         "doctrine_id": _MARKET_LEADER,
@@ -1042,7 +1047,7 @@ def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, 
     }
 
 
-def _best_stretch(series: list[tuple[str, float]]) -> tuple[int | None, float | None, str | None, str | None]:
+def _best_stretch(series: list[tuple[str, float, tuple[str | None, str | None]]]) -> tuple[int | None, float | None, str | None, str | None]:
     """The highest compound annual rate over any stretch the source's span covers.
 
     Consecutive years only. A stretch spanning a year the company did not file would compound
@@ -1054,12 +1059,15 @@ def _best_stretch(series: list[tuple[str, float]]) -> tuple[int | None, float | 
     and periods published beside the rate are otherwise a field the reader cannot account for.
     """
 
-    lower, upper = doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years")
+    # "During their best 5- or 10-year stretch" names two lengths and none between them. Read
+    # as a range it let a six-year window win, and the rate published under the source's own
+    # 35-to-45 band was then measured over a span the source never mentioned.
+    spans = [int(value) for value in doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years")]
     best: tuple[int | None, float | None, str | None, str | None] = (None, None, None, None)
-    for span in range(int(lower), int(upper) + 1):
+    for span in sorted(spans):
         for position in range(len(series) - span):
             window = series[position:position + span + 1]
-            ordinals = [_period_ordinal(period) for period, _ in window]
+            ordinals = [_period_ordinal(point[0]) for point in window]
             if any(ordinal is None for ordinal in ordinals) or any(later - earlier != 1 for earlier, later in zip(ordinals, ordinals[1:])):
                 continue
             rate, _, _ = _compound_growth(window, span)
@@ -1297,7 +1305,12 @@ def _pe_expansion(
         "pe_ratio_at_breakout": _reported(then),
         "pe_ratio_current": current["pe_ratio"],
         "expansion": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_late_stage_signal_percent", None if expanded is None else _reported((expanded - 1) * 100)),
-        "multiple": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_historical_average_multiple", None if expanded is None else _reported(expanded)),
+        # The study's average, beside this stock's expansion and never compared with it. "On
+        # average (or two to three times)" describes what superperformance stocks did as a
+        # population, so a positional state against it said this ticker sat inside a range that
+        # was never a standard. The conditional half of the same passage is the band above.
+        "multiple_measured": None if expanded is None else _reported(expanded),
+        "historical_average_multiple": doctrine.threshold(_PE_EXPANSION, "pe_expansion_historical_average_multiple"),
         "elapsed": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_signal_window_months", months),
     }
 
@@ -1676,6 +1689,11 @@ def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, A
     if _consecutive_tail(annual, 2) is None:
         return {"doctrine_id": _EARNINGS_QUALITY, "state": "unavailable", "reason": "two_annual_periods_required"}
     previous, latest = annual[-2], annual[-1]
+    # The same rule decision 281 settled for the margin: three growth rates divided into each
+    # other mean nothing when the two years came from different books.
+    conflict = _provenance_conflict(previous, latest, ("revenue", "inventory", "accounts_receivable"))
+    if conflict:
+        return {"doctrine_id": _EARNINGS_QUALITY, "state": "unavailable", "reason": conflict, "periods": [previous.get("period"), latest.get("period")]}
     missing = [name for name in ("accounts_receivable", "inventory") if not (_is_number(previous.get(name)) and _is_number(latest.get(name)))]
     if not (_is_number(previous.get("revenue")) and _is_number(latest.get("revenue"))):
         missing.append("revenue")
@@ -1712,7 +1730,17 @@ def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, A
     # ordinary explanation far more often than two do.
     gates = {name: doctrine.evaluate_gate(_EARNINGS_QUALITY, "receivables_and_inventory_vs_sales_double_trouble_ratio", value) for name, value in ratios.items()}
     doubled = all(value is not None and gate["state"] == "fail" for value, gate in zip(both, gates.values()))
-    return {**reading, **ratios, "state": "double_trouble" if doubled else "reported", "gates": gates}
+    # "Twice or more without explanation" -- and the explanation is management's, written in
+    # prose this harness does not read. So the ratios say what they say and the source's own
+    # phrase for the finding is not put on them, the same way the three footnote claims in
+    # this evaluator publish the half they cannot reach rather than assuming it.
+    return {
+        **reading,
+        **ratios,
+        "state": "both_grew_at_least_twice_as_fast_as_sales" if doubled else "reported",
+        "gates": gates,
+        **({"missing_inputs": ["management_explanation_for_the_increase"]} if doubled else {}),
+    }
 
 
 def _growth_pct(previous: Any, latest: Any) -> float | None:

@@ -57,7 +57,7 @@ class BothGrowingAtTwiceTheSalesRateIsDoubleTrouble(unittest.TestCase):
         result = evaluate_fundamentals(evidence, as_of="2026-05-10")
 
         reading = result["earnings_quality"]["inventory_receivables_vs_sales"]
-        self.assertEqual(reading["state"], "double_trouble")
+        self.assertEqual(reading["state"], "both_grew_at_least_twice_as_fast_as_sales")
         self.assertEqual(reading["revenue_growth_pct"], 10.0)
         self.assertEqual(reading["accounts_receivable_growth_pct"], 30.0)
         self.assertEqual(reading["inventory_growth_pct"], 25.0)
@@ -75,7 +75,7 @@ class BothGrowingAtTwiceTheSalesRateIsDoubleTrouble(unittest.TestCase):
             this_year=annual("2025", 3.70, 110.0, inventory=44.0, accounts_receivable=22.0),
         ), as_of="2026-05-10")
 
-        self.assertEqual(flagged["earnings_quality"]["inventory_receivables_vs_sales"]["state"], "double_trouble")
+        self.assertEqual(flagged["earnings_quality"]["inventory_receivables_vs_sales"]["state"], "both_grew_at_least_twice_as_fast_as_sales")
         self.assertEqual(clean["earnings_quality"]["inventory_receivables_vs_sales"]["state"], "reported")
         self.assertEqual(flagged["fundamentals_state"], clean["fundamentals_state"])
 
