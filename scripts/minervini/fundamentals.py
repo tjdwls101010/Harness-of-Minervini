@@ -20,8 +20,14 @@ _DECELERATION = "fundamentals.earnings_deceleration_red_flag"
 _SMOOTHING = "fundamentals.two_quarter_rolling_average_smoothing"
 _ANNUAL_REQUIREMENT = "fundamentals.annual_earnings_requirement"
 _MARGIN_ANALYSIS = "fundamentals.margin_analysis"
+_CODE_33 = "fundamentals.code_33_triple_acceleration"
+_COST_CUTTING = "fundamentals.cost_cutting_unsustainable"
+_HISTORICAL_ACCELERATION = "fundamentals.earnings_acceleration_vs_historical_growth_rate"
+_ONE_TIME_INCOME = "fundamentals.one_time_income_exclusion"
+_HISTORY_LOOKBACK = "fundamentals.earnings_history_lookback_window"
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
+_QUARTERS_PER_YEAR = 4
 
 
 SEC_SOURCE = "sec_filed_facts"
@@ -64,8 +70,8 @@ def evaluate_fundamentals(
     quarterly = _quarterly_read(quarters)
     annual_growth = _annual_growth(annual)
     integrity, safety_missing = _integrity_read(quarters, going_concern=going_concern, accounting_integrity=accounting_integrity)
-    earnings_quality = {"inventory_receivables_vs_sales": _inventory_receivables_vs_sales(annual)}
-    growth = _growth_read(quarterly, market_regime=market_regime)
+    earnings_quality = {"inventory_receivables_vs_sales": _inventory_receivables_vs_sales(annual), "one_time_income_exclusion": _one_time_income_exclusion()}
+    growth = _growth_read(quarterly, annual, market_regime=market_regime)
     classification = _leader_category(leader_category)
     growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
@@ -299,7 +305,7 @@ def _dilution_reading(quarters: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _growth_read(quarterly: Mapping[str, Any], *, market_regime: str | None) -> dict[str, Any]:
+def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, market_regime: str | None) -> dict[str, Any]:
     """The latest year-over-year quarterly growth, against the ranges the source named.
 
     Ranges, not limits. "Many successful growth managers require a minimum of 20 to 25
@@ -316,14 +322,178 @@ def _growth_read(quarterly: Mapping[str, Any], *, market_regime: str | None) -> 
     series = quarterly["eps_yoy_growth"]
     latest = series[-1]["yoy_pct"] if series else None
     readings = {
-        "minimum_quarterly_earnings_growth": doctrine.evaluate_band(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", latest),
+        "minimum_quarterly_earnings_growth": _banded_window(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", "minimum_growth_window_quarters", series),
         "superperformance_quarterly_earnings_growth": doctrine.evaluate_band(_SUPERPERFORMANCE, "superperformance_yoy_earnings_growth_percent", latest),
-        "bull_market_quarterly_earnings_growth": _bull_market_read(latest, market_regime),
+        "bull_market_quarterly_earnings_growth": _bull_market_read(series, latest, market_regime),
         "earnings_deceleration": _deceleration_read(series),
         "two_quarter_rolling_average": _rolling_average(quarterly),
         "margin_trend": _margin_read(quarterly["margin_pct"]),
+        "code_33_triple_acceleration": _code_33(quarterly),
+        "earnings_without_sales_growth": _earnings_without_sales_growth(quarterly),
+        "acceleration_vs_historical_growth_rate": _acceleration_vs_history(quarterly, annual),
+        "earnings_history_lookback": _earnings_history_lookback(quarterly),
     }
     return readings
+
+
+def _code_33(quarterly: Mapping[str, Any]) -> dict[str, Any]:
+    """Three quarters where earnings growth, sales growth and the margin all improved at once.
+
+    The source named the count and declined to name a magnitude, so a quarter accelerates when
+    each of the three came in above the quarter before it -- any amount. That is the whole rule,
+    and inventing a minimum step would be a second gate the source never stated.
+
+    The run has to reach the latest filed quarter. "A Code 33 situation" is a condition the
+    stock is in now, so a run that ended two quarters ago describes a stock that no longer
+    qualifies, and reporting the longest run anywhere in the series would say otherwise.
+    """
+
+    required = int(doctrine.threshold(_CODE_33, "code_33_quarters_required"))
+    judged = _triple_acceleration(quarterly)
+    reading = {
+        "doctrine_id": _CODE_33,
+        "binds": doctrine.binds(_CODE_33),
+        "computability": doctrine.get_claim(_CODE_33)["claim"]["computability"],
+    }
+    if len(judged) < required:
+        return {**reading, "state": "unavailable", "reason": "insufficient_quarters_for_triple_acceleration", "judged_quarters": len(judged)}
+    run: list[str] = []
+    for period, accelerated in reversed(judged):
+        if not accelerated:
+            break
+        run.insert(0, period)
+    return {
+        **reading,
+        "consecutive_quarters": len(run),
+        "quarters": run,
+        "latest_judged_quarter": judged[-1][0],
+        "gate": doctrine.evaluate_gate(_CODE_33, "code_33_quarters_required", len(run)),
+    }
+
+
+def _triple_acceleration(quarterly: Mapping[str, Any]) -> list[tuple[str, bool]]:
+    """Per quarter, whether all three cylinders improved on the quarter immediately before it.
+
+    A quarter is judged only when every cylinder has a reading for it and for its predecessor.
+    Comparing across a gap in the filings would let a two-year-old margin stand in for last
+    quarter's, which is the one comparison that would make a stalled business look accelerating.
+    """
+
+    cylinders = (
+        {point["period"]: point["yoy_pct"] for point in quarterly["eps_yoy_growth"]},
+        {point["period"]: point["yoy_pct"] for point in quarterly["revenue_yoy_growth"]},
+        {point["period"]: point["value"] for point in quarterly["margin_pct"]},
+    )
+    judged = []
+    for point in quarterly["eps_yoy_growth"]:
+        period, before = point["period"], _previous_quarter(point["period"])
+        if any(period not in series or before not in series for series in cylinders):
+            continue
+        judged.append((period, all(series[period] > series[before] for series in cylinders)))
+    return judged
+
+
+def _previous_quarter(period: str) -> str:
+    if "-Q" not in period:
+        return ""
+    year, quarter = period.rsplit("-Q", 1)
+    try:
+        year, quarter = int(year), int(quarter)
+    except ValueError:
+        return ""
+    return f"{year - 1}-Q4" if quarter == 1 else f"{year}-Q{quarter - 1}"
+
+
+def _earnings_without_sales_growth(quarterly: Mapping[str, Any]) -> dict[str, Any]:
+    """Whether the latest quarter's earnings grew while its sales did not.
+
+    The source called cost-cutting-driven improvement short-legged and gave no window for how
+    long it can run, so this reports the pattern and stops. It also asks for an operating-margin
+    trend, which the filed facts this harness reads do not carry -- named as unread rather than
+    substituted with the net margin, which moves with taxes and one-time items too.
+    """
+
+    eps, revenue = quarterly["eps_yoy_growth"], quarterly["revenue_yoy_growth"]
+    reading = {
+        "doctrine_id": _COST_CUTTING,
+        "binds": doctrine.binds(_COST_CUTTING),
+        "computability": doctrine.get_claim(_COST_CUTTING)["claim"]["computability"],
+        "missing_inputs": ["operating_margin_trend"],
+    }
+    if not eps or not revenue or eps[-1]["period"] != revenue[-1]["period"]:
+        return {**reading, "reason": "matching_latest_earnings_and_sales_growth_required", "eps_yoy_pct": None, "revenue_yoy_pct": None, "earnings_grew_without_sales": None}
+    return {
+        **reading,
+        "period": eps[-1]["period"],
+        "eps_yoy_pct": eps[-1]["yoy_pct"],
+        "revenue_yoy_pct": revenue[-1]["yoy_pct"],
+        "earnings_grew_without_sales": eps[-1]["yoy_pct"] > 0 and revenue[-1]["yoy_pct"] <= 0,
+    }
+
+
+def _acceleration_vs_history(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """The company's own three- and five-year compound EPS pace, beside its latest quarter.
+
+    Acceleration in this claim is measured against the company's own history rather than any
+    standard, and the figures the source used to illustrate it -- growing twelve percent, then
+    forty, then a hundred -- are registered as references. A reference is never compared with a
+    ticker's measurement, so no reading here says a rate cleared or missed one of them.
+
+    Three years and five come from the claim's own required inputs, `trailing_3yr_eps_cagr`
+    and `trailing_5yr_eps_cagr`, rather than from a threshold: they say which measurement
+    exists, not what it has to clear.
+    """
+
+    series = [(str(fact.get("period")), float(fact["eps"])) for fact in annual if _is_number(fact.get("eps"))]
+    three, three_reason = _compound_growth(series, 3)
+    five, _ = _compound_growth(series, 5)
+    latest = quarterly["eps_yoy_growth"]
+    reading = {
+        "doctrine_id": _HISTORICAL_ACCELERATION,
+        "binds": doctrine.binds(_HISTORICAL_ACCELERATION),
+        "computability": doctrine.get_claim(_HISTORICAL_ACCELERATION)["claim"]["computability"],
+        "periods": [series[-4][0], series[-1][0]] if len(series) >= 4 else [fact[0] for fact in series[:1] + series[-1:]],
+        "trailing_3yr_eps_cagr_pct": three,
+        "trailing_5yr_eps_cagr_pct": five,
+        "latest_quarterly_eps_yoy_pct": latest[-1]["yoy_pct"] if latest else None,
+    }
+    return reading if three is not None else {**reading, "reason": three_reason}
+
+
+def _compound_growth(series: list[tuple[str, float]], years: int) -> tuple[float | None, str]:
+    """A compound annual rate over ``years``, or the reason there isn't one.
+
+    A negative or zero starting year is refused rather than computed. The arithmetic would
+    still return a number, and that number would describe a recovery from a loss as a growth
+    rate, which is the one case where the source's comparison says the opposite of the truth.
+    """
+
+    if len(series) < years + 1:
+        return None, f"insufficient_annual_periods_for_a_{years}_year_rate"
+    start, end = series[-(years + 1)][1], series[-1][1]
+    if start <= 0:
+        return None, "compound_rate_requires_a_positive_starting_year"
+    return _reported(((end / start) ** (1 / years) - 1) * 100), ""
+
+
+def _one_time_income_exclusion() -> dict[str, Any]:
+    """That every EPS figure here is as reported, with nothing stripped out.
+
+    The source's method is exact -- back the nonrecurring gain out and recompute -- and its
+    input is prose in a filing footnote, which this harness does not read. Publishing the
+    boundary keeps a reader from taking a reported figure for an adjusted one; it is not
+    counted as a per-request gap, because no filing was ever short of it.
+    """
+
+    return {
+        "doctrine_id": _ONE_TIME_INCOME,
+        "binds": doctrine.binds(_ONE_TIME_INCOME),
+        "computability": doctrine.get_claim(_ONE_TIME_INCOME)["claim"]["computability"],
+        "state": "not_evaluated",
+        "reason": "filing_footnotes_not_read_by_this_harness",
+        "missing_inputs": ["nonrecurring_items_per_share", "filing_footnotes"],
+        "reported_eps_is_unadjusted": True,
+    }
 
 
 def _margin_read(series: list[dict[str, Any]]) -> dict[str, Any]:
@@ -350,7 +520,7 @@ def _margin_read(series: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _bull_market_read(latest: float | None, market_regime: str | None) -> dict[str, Any]:
+def _bull_market_read(series: list[dict[str, Any]], latest: float | None, market_regime: str | None) -> dict[str, Any]:
     """The bull-market pace, which the claim asks for a regime classification to read at all."""
 
     if market_regime is None:
@@ -359,7 +529,68 @@ def _bull_market_read(latest: float | None, market_regime: str | None) -> dict[s
         raise ValueError(f"market_regime must be one of {', '.join(MARKET_REGIMES)}.")
     if market_regime != "bull":
         return {"doctrine_id": _BULL_MARKET, "state": "not_applicable", "market_regime": market_regime}
-    return {**doctrine.evaluate_band(_BULL_MARKET, "bull_market_yoy_earnings_growth_percent", latest), "market_regime": market_regime}
+    return {**_banded_window(_BULL_MARKET, "bull_market_yoy_earnings_growth_percent", "bull_market_growth_window_quarters", series), "market_regime": market_regime}
+
+
+def _banded_window(claim_id: str, band: str, window: str, series: list[dict[str, Any]]) -> dict[str, Any]:
+    """A band read on the latest quarter, with the quarters the source's own window covers beside it.
+
+    Both of these sentences name a window as well as a range -- "in the most recent one, two,
+    or three quarters", "in the most recent two to three quarters" -- and reading only the
+    latest quarter published a stock whose two prior quarters ran well above the range as
+    though they had never been filed.
+
+    The window is registered as a reference, so nothing is compared against it: it decides how
+    many quarters get reported and nothing else. The headline stays the latest quarter, because
+    that is the one quarter every length of the source's window contains, and because a single
+    owner for the reading keeps the count beside it from reading as a second verdict.
+    """
+
+    quarters = int(max(doctrine.threshold(claim_id, window)))
+    reading = doctrine.evaluate_band(claim_id, band, series[-1]["yoy_pct"] if series else None)
+    read = [{**doctrine.evaluate_band(claim_id, band, point["yoy_pct"]), "period": point["period"], "yoy_pct": point["yoy_pct"]} for point in series[-quarters:]]
+    return {
+        **reading,
+        "window_quarters": doctrine.threshold(claim_id, window),
+        "window": read,
+        "window_quarters_within_or_above": sum(1 for point in read if point["state"] in {"within_source_range", "above_source_range"}),
+    }
+
+
+def _earnings_history_lookback(quarterly: Mapping[str, Any]) -> dict[str, Any]:
+    """Whether the one-to-two years the source looks back over hold any acceleration at all.
+
+    "Some form of earnings and sales acceleration" is as far as the source quantified it, so
+    this names the quarters where both the earnings growth rate and the sales growth rate came
+    in above the quarter before, and stops. It is looser than Code 33 on purpose -- that one
+    counts a run and wants margins too -- and the two disagreeing is information, not a bug.
+
+    The lookback bounds year-over-year rates, not filings, and a rate needs the same quarter a
+    year earlier beside it. So two years of lookback reads across three years of filings, and
+    what is published is the periods actually examined rather than a count a reader would have
+    to reconcile against the filings list.
+    """
+
+    years = doctrine.threshold(_HISTORY_LOOKBACK, "earnings_trend_lookback_years")
+    eps = {point["period"]: point["yoy_pct"] for point in quarterly["eps_yoy_growth"]}
+    revenue = {point["period"]: point["yoy_pct"] for point in quarterly["revenue_yoy_growth"]}
+    read = quarterly["eps_yoy_growth"][-(int(max(years)) * _QUARTERS_PER_YEAR):]
+    accelerating = []
+    for point in read:
+        period, before = point["period"], _previous_quarter(point["period"])
+        if any(period not in series or before not in series for series in (eps, revenue)):
+            continue
+        if eps[period] > eps[before] and revenue[period] > revenue[before]:
+            accelerating.append(period)
+    return {
+        "doctrine_id": _HISTORY_LOOKBACK,
+        "binds": doctrine.binds(_HISTORY_LOOKBACK),
+        "computability": doctrine.get_claim(_HISTORY_LOOKBACK)["claim"]["computability"],
+        "lookback_years": years,
+        "periods_examined": [point["period"] for point in read],
+        "quarters_accelerating_in_both": accelerating,
+        "some_form_of_acceleration": bool(accelerating),
+    }
 
 
 def _deceleration_read(series: list[dict[str, Any]]) -> dict[str, Any]:
