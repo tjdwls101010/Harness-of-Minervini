@@ -167,11 +167,11 @@
 - **4-A 라이브 경로 수리.** `accounting_integrity`를 SEC가 실제로 주는 것으로 대체 — 정정공시 탐지(submissions의 `10-K/A`·`10-Q/A`)와 `fundamentals.inventory_receivables_vs_sales`(프로바이더에 Inventory·AccountsReceivable 메트릭 추가). `going_concern`은 서술 텍스트라 프로바이더 경계에서 **명시적 미구현**으로 타입드 처리하고 판정을 막지 않는다. `dilution`은 계산 경로를 유지하되 임계를 레지스트리에 결속. `leader_category`의 filing 유래 시임 제거 — 분석가 입력으로. 완료 판정: 실제 모양의 SEC 픽스처로 `supports_convergence`와 `does_not_support_convergence`가 **둘 다** 도달 가능함을 통합 테스트로 증명.
 - **4-B 성장 측정 재설계 + doctrine 결속.** Code 33, 최소 분기 성장(20-25%/슈퍼퍼포먼스 30-40%), 연간 요건, 감속 적신호, 2분기 롤링 평활, 마진 분석, 일회성 항목 배제, 원가절감 지속불가. 모든 판독이 claim을 인용하고 gate/band/marker를 CLAUDE.md의 역할 계약대로 보고한다. 완료 판정: 모듈에 발명된 수치 0, `verify_doctrine_quotations.py` exit 0.
 - **4-C 카테고리별 해석 + 상대 측정.** 6분류 해석 차이, ROE 동종업계 상대(marker), P/E 확장 배수, 저P/E 함정, 20-F 연간 주기.
-- **4-D 어닝스 캘린더 프로바이더.** 타입드 불가용성·메타데이터·캐싱·PIT. `ticker.setup` 어닝 근접 게이트와 `ticker.risk` `--earnings-date`가 소비.
+- **4-D 어닝스 캘린더 프로바이더.** 타입드 불가용성·메타데이터·캐싱·PIT. `ticker.risk`의 활성 포지션 경로가 소비한다. `ticker.setup` 어닝 근접 게이트는 근거 클레임이 없어 만들지 않는다 — 결정 270.
 - **4-E 인터페이스.** CLI 플래그, capabilities 프로즈, schema_sync, harness-spec.
 - **4-F 적대 리뷰 + 변이 스윕 + PR.** 결정 267에 따라 **렌즈를 고정**해서 돌린다 — 매 라운드 새 렌즈를 주면 종료 조건이 도달 불가능하다.
 
-진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 착수. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
+진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 완료 `98d0a44` · 4-E 착수. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
 
 ### Phase 5 — 시장/리더십 행동 증거
 
@@ -576,6 +576,10 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 265 — 기록은 자기가 한 일을 보여야 한다(16라운드 계약 렌즈).** `basis`를 선택 사항으로 둔 것(역할이 기준을 함의하므로)이 프로즈와 어긋났다. 바들이 만드는 기록은 항상 `basis`와 교차 가격을 싣는다 — 넘겨받은 기록도 같아야 한다. 그리고 날짜는 포지션이 아니라 **그 레벨이 유효했던 창** 안에 있어야 한다: 배치되기 5일 전에 깨진 스탑, 이미 올려서 시장에서 뺀 초기 스탑. `level_windows()`가 리듀서의 `protective_plan`과 이 검사의 공용 주인이다.
     - **결정 266 — 변이 스윕이 등가 변이를 드러내면 코드를 지운다.** `unreadable | ((events != 0) & (events != 1))`에서 앞 절은 아무 일도 안 했다(NaN은 두 비교를 모두 통과하므로 이미 표시된다). `both & (high < low)`도 마찬가지였다 — 종가가 있는 한 고가가 자기 저가 아래면 종가는 반드시 범위 밖이다. **테스트가 못 죽이는 변이는 테스트 구멍이거나 죽은 코드이고, 이 둘은 확인해서 갈라야 한다.**
     - **결정 267 — Phase 3-F의 종료 조건을 바꾼다.** "적대 리뷰 2명이 PRODUCTION DEFECT 0"은 매 라운드 **새 렌즈**를 주는 한 도달 불가능한 조건이었다. 렌즈는 무한하고, 16라운드에 이르러 한계 발견의 절반이 앞 라운드 수정의 회귀였다. 발견의 성격도 판정을 뒤집는 것(15라운드)에서 출력 정밀도·인용 범위(16라운드)로 옮겨갔다. `be4fab1`에서 머지하고, 남은 종류는 Phase 6(조합 무결성 + 인터페이스/프로즈 계층)이 이미 갖고 있는 스코프에서 한 번에 훑는다.
+    - **결정 268 — 밴드는 범위와 함께 창을 말한다.** "20-25 percent... in the most recent one, two, or three quarters"에서 앞 절만 읽고 있었다. 창은 `role: reference`(측정과 비교되지 않는 스캔 설정)이므로 몇 분기를 **보고할지**만 정한다. 헤드라인은 최신 분기로 남긴다 — 소스가 말한 모든 창 길이가 공통으로 포함하는 유일한 분기이고, 판독의 주인을 하나로 유지해야 옆에 실린 카운트가 두 번째 판정으로 읽히지 않는다.
+    - **결정 269 — judgment_only 클레임은 인용문으로 발행한다.** 내용 전부가 누군가 한 문장인 클레임을 요약하면 이 하네스의 말이 그 사람 이름 아래 놓인다. Ritchie의 "I never look at P/E"와 Minervini의 "I rarely concern myself with the P/E ratio"의 차이가 정확히 요점인 자리들이다.
+    - **결정 270 — `ticker.setup`의 어닝 근접 게이트는 만들지 않는다(계획 축소).** 계획서는 Phase 4-D에 그 게이트를 적었지만 레지스트리에 근거 클레임이 없다. 실적 관련 클레임 두 개(`management.earnings_awareness_while_holding`, `management.zanger_does_not_hold_through_earnings`)는 `context`가 `active_position`/`trade_management`이고 `consumers`가 `ticker.risk` 하나다. 진입 측 규칙을 새로 만드는 것은 이 Phase가 제거하고 있는 바로 그 발명이고, 선언된 컨텍스트 밖에서 클레임을 읽는 것도 같은 위반이다. 그래서 캘린더는 `ticker.risk`의 활성 포지션 경로에만 붙는다.
+    - **결정 271 — 예측은 시점 사실이 아니다.** 어닝 캘린더 스냅샷은 `current_classification_snapshot`과 같은 규율을 따른다 — 명시적 과거 `as_of`를 답하지 않고 거절한다. 오늘의 일정을 지난 3월에 붙이면 그때 아무도 발행하지 않은 예측이 시점 판정 안으로 들어간다. 두 날짜가 오면 이른 쪽을 발행한다: 늦은 쪽은 이미 발표했을 수도 있는 날에 무사하다고 말한다.
 
 - **Phase 4~7 — 미착수.**
 
