@@ -21,7 +21,15 @@ def frame(closes: list[float], *, end: str = FRIDAY, volumes: list[int] | None =
     for position, value in (lows or {}).items():
         low.iloc[position] = value
     return pd.DataFrame(
-        {"Open": close, "High": close * 1.01, "Low": low, "Close": close, "Volume": volumes if volumes is not None else np.full(len(close), 1_000_000)},
+        {
+            "Open": close,
+            "High": close * 1.01,
+            "Low": low,
+            "Close": close,
+            "Volume": volumes if volumes is not None else np.full(len(close), 1_000_000),
+            # The provider always hands the column over; a frame without it has its own tests.
+            "Stock Splits": np.zeros(len(close)),
+        },
         index=index,
     )
 

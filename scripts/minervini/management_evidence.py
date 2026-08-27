@@ -58,7 +58,8 @@ _ACTS_AS_EXPECTED = "management.stock_that_does_not_act_as_expected"
 _FIRST_SESSIONS = "management.zanger_first_two_days_out_of_the_base"
 _STAGE3 = "stage.stage3_characteristics"
 _SLOPE = "convention.long_average_slope_window"
-_SPLIT_COLUMN = "Stock Splits"
+_SPLIT_COLUMN = SPLIT_COLUMN = "Stock Splits"
+_DISCONTINUITY = "convention.unexplained_price_discontinuity"
 # Where this convention's numbers are published inside a canonical block, they carry their
 # own claim and their own non-binding stamp: the baseline length and the low/high ratios
 # are TraderLion's, not Minervini's, and a reader must be able to see whose they are.
@@ -334,6 +335,34 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
     }
 
 
+SMALLEST_RECOGNIZED_SPLIT_RATIO = float(doctrine.parameter(_DISCONTINUITY, "smallest_recognized_split_ratio"))
+
+
+def split_sized_discontinuities(closes: Any) -> Any:
+    """Which sessions moved too far from the session before them to be a move.
+
+    A split is a discontinuity, so a history that omits its corporate actions still shows
+    what one did: the close changes by the split ratio overnight. The harness cannot tell
+    that from a fall the market actually made, and the two call for opposite answers -- one
+    is arithmetic between two different shares, the other is a stop the tape took out. It
+    refuses the window rather than guessing, at the ratio of the smallest ordinary split.
+    """
+
+    if closes is None:
+        return None
+    values = pd.to_numeric(closes, errors="coerce").to_numpy(dtype=float)
+    if values.size < 2:
+        return np.zeros(values.size, dtype=bool)
+    previous, current = values[:-1], values[1:]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ratio = current / previous
+    usable = np.isfinite(ratio) & (previous > 0) & (current > 0)
+    jumped = usable & ((ratio >= SMALLEST_RECOGNIZED_SPLIT_RATIO) | (ratio <= 1.0 / SMALLEST_RECOGNIZED_SPLIT_RATIO))
+    # Marked on the session that printed the new coordinate system, the way a split event
+    # is stamped on the session it took effect.
+    return np.concatenate(([False], jumped))
+
+
 class _Readable:
     """Which sessions the harness can read, asked one window at a time.
 
@@ -346,6 +375,7 @@ class _Readable:
     """
 
     def __init__(self, bars: pd.DataFrame) -> None:
+        self._discontinuity_reason = "corporate_action_evidence_missing"
         self._bad: dict[str, Any] = {}
         for column, floor in (("Open", 0.0), ("High", 0.0), ("Low", 0.0), ("Close", 0.0), ("Volume", -1.0)):
             if column not in bars.columns:
@@ -354,10 +384,16 @@ class _Readable:
             self._bad[column] = ~np.isfinite(values) | (values <= floor)
         self._length = len(bars)
         self._bars = bars
-        self._splits = None
         if _SPLIT_COLUMN in bars.columns:
             events = pd.to_numeric(bars[_SPLIT_COLUMN], errors="coerce").fillna(0).to_numpy(dtype=float)
             self._splits = (events != 0) & (events != 1)
+            self._split_reason = "share_split_inside_window"
+        else:
+            # A history without the event column has not said there was no split. What a
+            # hidden split does to these measurements is print a discontinuity, so the
+            # closes are asked for one directly and the window is refused the same way.
+            self._splits = split_sized_discontinuities(bars.get("Close"))
+            self._split_reason = self._discontinuity_reason
 
     def split(self, start: int = 0, end: int | None = None) -> dict[str, Any] | None:
         """The unavailable block for a window a share split falls inside, or None.
@@ -376,7 +412,7 @@ class _Readable:
         if not bool(window.any()):
             return None
         position = max(0, start) + int(window.argmax())
-        return {"state": "unavailable", "reason": "share_split_inside_window", "date": self._bars.index[position].date().isoformat()}
+        return {"state": "unavailable", "reason": self._split_reason, "date": self._bars.index[position].date().isoformat()}
 
     def gap(self, start: int = 0, end: int | None = None, columns: tuple[str, ...] = ("Open", "High", "Low", "Close", "Volume")) -> dict[str, Any] | None:
         """The unavailable block for a window holding a session this reading cannot use, or None.
@@ -506,8 +542,13 @@ def _natural_reactions(bars: pd.DataFrame, *, window: list[int]) -> list[dict[st
 
 
 def _post_breakout_behavior(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
-    since = breakout_date or entry_date
-    basis = "breakout_date" if breakout_date is not None else "entry_date"
+    # Every claim in this block is about what happens after a breakout -- the tennis ball
+    # bouncing back to new highs, the first two sessions out of the base. Reading them from
+    # the entry session instead would apply post-breakout doctrine to an early or cheat
+    # entry that has not broken out yet, which is the same leak the 20-day rule had.
+    if breakout_date is None:
+        return {"state": "unavailable", "reason": "breakout_date_not_declared"}
+    since, basis = breakout_date, "breakout_date"
     window = _positions_since(bars, since)
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
@@ -666,8 +707,9 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
 
 
 def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
-    since = breakout_date or entry_date
-    basis = "breakout_date" if breakout_date is not None else "entry_date"
+    if breakout_date is None:
+        return {"state": "unavailable", "reason": "breakout_date_not_declared"}
+    since, basis = breakout_date, "breakout_date"
     window = _positions_since(bars, since)
     if len(bars) < 2 or not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
@@ -720,8 +762,9 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
 
 
 def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
-    since = breakout_date or entry_date
-    basis = "breakout_date" if breakout_date is not None else "entry_date"
+    if breakout_date is None:
+        return {"state": "unavailable", "reason": "breakout_date_not_declared"}
+    since, basis = breakout_date, "breakout_date"
     if "Open" not in bars.columns:
         return {"state": "unavailable", "reason": "open_history_unavailable"}
     window = _positions_since(bars, since)

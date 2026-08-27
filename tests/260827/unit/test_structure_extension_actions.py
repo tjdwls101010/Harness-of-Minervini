@@ -19,6 +19,7 @@ def held(management: dict) -> dict:
         "as_of": AS_OF,
         "entry_price": 100.0,
         "entry_date": "2026-08-10",
+        "breakout_date": "2026-08-10",
         "stop_price": 94.0,
         # Below 3R on purpose: profit protection has its own tests, and these assert the
         # whole action list so a stray RAISE_STOP would hide which rule fired.
@@ -46,6 +47,17 @@ class TheBaseExtensionPauseZone(unittest.TestCase):
         self.assertIs(review["binds"], False)
         self.assertEqual(review["source"], "[TL]")
         self.assertEqual(review["evidence"]["extension_pct"], 22.0)
+
+    def test_without_a_declared_breakout_the_review_is_withheld_by_name(self) -> None:
+        # The pause zone is an extension from the base measured after the breakout. Without a
+        # declared breakout the extension is still reported, but ordering a review off it would
+        # read post-breakout doctrine into a position that has not broken out.
+        payload = held({"base_extension": {"doctrine_id": PAUSE, "binds": False, "state": "reported", "base_top": 100.0, "extension_pct": 22.0, "max_extension_pct": 23.22, "band": band("within_source_range")}})
+        del payload["breakout_date"]
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["management_actions"], [])
+        self.assertEqual(result["management_evidence"]["base_extension"]["action_withheld_reason"], "breakout_date_not_declared")
 
     def test_past_the_zone_or_short_of_it_is_evidence_only(self) -> None:
         for state in ("above_source_range", "below_source_range"):

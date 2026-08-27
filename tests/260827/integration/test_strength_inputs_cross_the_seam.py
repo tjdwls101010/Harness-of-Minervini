@@ -53,7 +53,7 @@ class TheBaseTopTheTraderDeclares(unittest.TestCase):
         return {"entry_price": 101.0, "entry_date": bars.index[60].date().isoformat(), "stop_price": 95.0}
 
     def test_with_the_base_top_the_pause_zone_is_a_tagged_review(self) -> None:
-        payload = run(self.bars(), {**self.position(), "base_top": 100.0})
+        payload = run(self.bars(), {**self.position(), "base_top": 100.0, "breakout_date": self.position()["entry_date"]})
 
         block = payload["data"]["management_evidence"]["base_extension"]
         self.assertEqual(block["extension_pct"], 22.0)
@@ -103,13 +103,14 @@ class TheBreakoutSessionTheTraderDeclares(unittest.TestCase):
         self.assertEqual(payload["data"]["management_evidence"]["failed_volume_confirmation"], {"state": "unavailable", "reason": "breakout_date_not_declared"})
         self.assertNotIn("failed_volume_confirmation", reasons(payload))
 
-    def test_the_since_windows_fall_back_to_the_entry_session_and_say_so(self) -> None:
+    def test_without_it_the_post_breakout_blocks_are_withheld_by_name(self) -> None:
         payload = run(self.bars(), self.position())
 
         evidence = payload["data"]["management_evidence"]
-        self.assertEqual(evidence["key_reversal"]["since_basis"], "entry_date")
-        self.assertEqual(evidence["gaps_since_breakout"]["since_basis"], "entry_date")
-        self.assertEqual(evidence["gaps_since_breakout"]["since"], self.position()["entry_date"])
+        withheld = {"state": "unavailable", "reason": "breakout_date_not_declared"}
+        self.assertEqual(evidence["key_reversal"], withheld)
+        self.assertEqual(evidence["gaps_since_breakout"], withheld)
+        self.assertEqual(evidence["post_breakout_behavior"], withheld)
 
 
 class InputsThatDoNotSurviveValidation(unittest.TestCase):

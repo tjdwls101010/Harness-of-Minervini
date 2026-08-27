@@ -46,7 +46,7 @@ class ANewHighHasToBeHigher(unittest.TestCase):
             stamp, *_ = rows[offset]
             rows[offset] = (stamp, close, close * 1.01, close * 0.99, close, 1_000_000)
         bars = frame(rows)
-        result = build_management_evidence(bars, entry_date=bars.index[27].date(), as_of=bars.index[-1].date())
+        result = build_management_evidence(bars, entry_date=bars.index[27].date(), as_of=bars.index[-1].date(), breakout_date=bars.index[27].date())
 
         reaction = result["post_breakout_behavior"]["natural_reactions"][-1]
         self.assertIsNone(reaction["recovered_in_sessions"])

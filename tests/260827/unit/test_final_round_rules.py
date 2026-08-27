@@ -21,11 +21,12 @@ FAILED_VOLUME = "management.low_volume_breakout_then_high_volume_selling"
 def frame(rows: list[tuple[float, float, float, float, int]], *, splits: dict[int, float] | None = None) -> pd.DataFrame:
     index = pd.bdate_range(end=AS_OF, periods=len(rows))
     bars = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=index)
-    if splits is not None:
-        events = np.zeros(len(rows))
-        for position, factor in splits.items():
-            events[position] = factor
-        bars["Stock Splits"] = events
+    events = np.zeros(len(rows))
+    for position, factor in (splits or {}).items():
+        events[position] = factor
+    # The provider always hands over the event column, so the fixtures do too: a frame
+    # without it means something different, and has its own tests.
+    bars["Stock Splits"] = events
     return bars
 
 

@@ -20,7 +20,9 @@ def snapshot(bars: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
 
 def frame(rows: list[tuple[str, float, float]]) -> pd.DataFrame:
     index = pd.DatetimeIndex([pd.Timestamp(stamp) for stamp, _, _ in rows])
-    return pd.DataFrame({"Open": [close for _, _, close in rows], "High": [close * 1.01 for _, _, close in rows], "Low": [low for _, low, _ in rows], "Close": [close for _, _, close in rows], "Volume": [1_000_000] * len(rows)}, index=index)
+    # The provider always hands the event column over; a frame without it says something
+    # different, and the histories that omit it have their own tests.
+    return pd.DataFrame({"Open": [close for _, _, close in rows], "High": [close * 1.01 for _, _, close in rows], "Low": [low for _, low, _ in rows], "Close": [close for _, _, close in rows], "Volume": [1_000_000] * len(rows), "Stock Splits": [0.0] * len(rows)}, index=index)
 
 
 def run(bars: pd.DataFrame, **evidence: object) -> dict:

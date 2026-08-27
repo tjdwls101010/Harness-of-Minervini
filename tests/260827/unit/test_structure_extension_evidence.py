@@ -15,7 +15,9 @@ END = "2025-12-26"
 
 def frame(rows: list[tuple[float, float, float, float, int]], *, end: str = END) -> pd.DataFrame:
     index = pd.bdate_range(end=end, periods=len(rows))
-    return pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=index)
+    bars = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=index)
+    bars["Stock Splits"] = 0.0  # the provider always hands the column over; a frame without it has its own tests
+    return bars
 
 
 def flat(sessions: int, close: float = 100.0, volume: int = 1_000_000) -> list[tuple[float, float, float, float, int]]:
@@ -116,12 +118,14 @@ class KeyReversalCriteria(unittest.TestCase):
 
         self.assertEqual(result["key_reversal"]["computable_criteria_met"], 0)
 
-    def test_without_a_breakout_date_the_window_is_the_position_and_says_so(self) -> None:
+    def test_without_a_breakout_date_the_criteria_are_withheld(self) -> None:
+        # The criteria are read since the breakout. An early or cheat entry has not broken out yet,
+        # so measuring them from the entry session would apply post-breakout doctrine to a position
+        # the doctrine has nothing to say about.
         bars = frame(flat(30))
         result = build(bars, entry=20)
 
-        self.assertEqual(result["key_reversal"]["since"], bars.index[20].date().isoformat())
-        self.assertEqual(result["key_reversal"]["since_basis"], "entry_date")
+        self.assertEqual(result["key_reversal"], {"state": "unavailable", "reason": "breakout_date_not_declared"})
 
 
 class GapsSinceTheBreakout(unittest.TestCase):

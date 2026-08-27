@@ -11337,7 +11337,7 @@
         "breakout_date"
       ],
       "rule": {
-        "summary": "TraderLion lists six things to look for in a key reversal: visually extended from the moving averages at the high; a gap up quickly filled and reversed; a breach of a trend line of highs; abnormally high volume or the highest since the breakout; the widest range bar since the breakout; a reversal below the prior day's low closing low in the range. Four are computable from bars and two are read from the chart; the harness returns the vector and the count of computable criteria met, and never invents 'N of six'."
+        "summary": "TraderLion lists six things to look for in a key reversal: visually extended from the moving averages at the high; a gap up quickly filled and reversed; a breach of a trend line of highs; abnormally high volume or the highest since the breakout; the widest range bar since the breakout; a reversal below the prior day's low closing low in the range. Three are computable from completed bars. Three are not: two are chart readings, and the sixth is conjunctive -- it asks for a reversal below the prior low AND a close low in the range, and the source draws no boundary for low in the range, so it is reported unresolved rather than counted."
       },
       "thresholds": {},
       "failure": {
@@ -12210,6 +12210,62 @@
       "tests": [
         "tests/260827/unit/test_management_actions.py",
         "tests/260827/integration/test_stop_untouched_structure_deteriorating.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "convention.unexplained_price_discontinuity",
+      "title": "A split-sized jump with no corporate-action evidence is a gap, not a move",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The provider returns unadjusted prices with the split events beside them, and a window holding a split is refused because the declared level and the closes are in two coordinate systems. A history that carries no event column has not said there was no split -- absence of the column is absence of evidence. So when the column is missing and two consecutive completed closes differ by a split-sized ratio, the harness cannot tell a share-count change from a fall the market actually made, and reports the window unavailable instead of selling on it. The ratio bound is 5-for-4, the smallest ordinary split, so any change of a fifth or more of the prior close is treated as unexplained."
+      },
+      "thresholds": {},
+      "parameters": {
+        "smallest_recognized_split_ratio": {
+          "value": 1.25,
+          "unit": "ratio",
+          "affects_verdict": true,
+          "note": "A harness convention. A completed close-to-close ratio at or beyond this, or at or below its reciprocal, is split-sized. It withholds measurements rather than producing them, so it can only refuse a verdict, never reach one."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without closes there is nothing to compare and no discontinuity can be found or ruled out."
+      },
+      "precedence": {
+        "tier": "scope_safety_data_integrity",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; no source describes what to do with a history that omits its corporate actions"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_missing_split_evidence.py"
       ],
       "computability": "deterministic"
     }

@@ -645,7 +645,14 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                 }
             )
         base_extension = _mapping(management.get("base_extension"))
-        if _mapping(base_extension.get("band")).get("state") == "within_source_range":
+        inside_pause_zone = _mapping(base_extension.get("band")).get("state") == "within_source_range"
+        if inside_pause_zone and not breakout_declared:
+            # An extension over the base top is measurable the moment the top is declared, but
+            # the pause it describes is one a stock takes after it has broken out. Ordering a
+            # review off it without a declared breakout reads post-breakout doctrine into an
+            # entry that has not broken out yet, the same leak the 20-day rule had.
+            management_evidence["base_extension"] = {**base_extension, "action_withheld_reason": "breakout_date_not_declared"}
+        elif inside_pause_zone:
             # Inside the zone the source describes is where the pause is likely and where a
             # swing trader may take some or all off; past it the stock has continued.
             actions.append({"action": "REVIEW", "doctrine_id": _PAUSE_ZONE, "binds": doctrine.binds(_PAUSE_ZONE), "source": "[TL]", "reason": "base_extension_pause_zone", "evidence": base_extension})

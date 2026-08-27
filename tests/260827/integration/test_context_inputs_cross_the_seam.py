@@ -76,11 +76,11 @@ class TheCalendarAndTheBaseCount(unittest.TestCase):
 
 
 class TimeEvidenceTravelsWithTheHold(unittest.TestCase):
-    def test_the_post_breakout_block_counts_the_sessions_the_position_has_had(self) -> None:
-        payload = run()
+    def test_the_post_breakout_block_counts_the_sessions_since_the_declared_breakout(self) -> None:
+        payload = run(breakout_date="2025-11-03")
 
         block = payload["data"]["management_evidence"]["post_breakout_behavior"]
-        self.assertEqual(block["since_basis"], "entry_date")
+        self.assertEqual(block["since_basis"], "breakout_date")
         self.assertGreater(block["sessions_since_entry"], 0)
         self.assertEqual(block["first_sessions"]["source"], "Zanger")
         self.assertIs(block["first_sessions"]["binds"], False)

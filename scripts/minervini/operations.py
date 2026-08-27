@@ -35,7 +35,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
-from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, build_management_evidence
+from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, split_sized_discontinuities
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -1640,7 +1640,31 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float, str] | None:
+def _uncrossable_sessions(ordered: Any) -> tuple[str, list[date]]:
+    """Sessions no measurement may span, and the reason they cannot be spanned.
+
+    Two different findings share one shape. A declared split is an event the provider
+    handed over: the prices before and after it are two coordinate systems, and a level or
+    a percentage across it is arithmetic between two different shares. A history with no
+    event column has not said there was no split, so a split-sized jump in the closes is
+    the same refusal reached from the other side -- the harness cannot tell a share-count
+    change from a fall the market made, and the two call for opposite answers.
+    """
+
+    if _SPLIT_COLUMN in ordered.columns:
+        events = pd.to_numeric(ordered[_SPLIT_COLUMN], errors="coerce").fillna(0)
+        marked = [float(factor) not in (0.0, 1.0) for factor in events]
+        reason = "share_split"
+    else:
+        discontinuities = split_sized_discontinuities(ordered.get("Close"))
+        if discontinuities is None:
+            return "share_split", []
+        marked = list(discontinuities)
+        reason = "corporate_action_evidence_missing"
+    return reason, [timestamp.date() for timestamp, flagged in zip(ordered.index, marked) if flagged]
+
+
+def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> dict[str, Any]:
     """The highest completed High after the entry session through ``as_of``, and its date.
 
     Three R is measured from the furthest a position got. The last close only says where
@@ -1650,15 +1674,30 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     credited with a spike it never had -- profit protection would then raise a stop and cut
     a position on a gain that did not exist. The last completed close remains the floor of
     what was reached, so a position genuinely at three R today is still protected.
+
+    A window the harness cannot measure across -- a declared split, or a split-sized jump
+    in a history that carries no split column -- returns the reason instead of a peak. A
+    High from the other side of such an event is a different share, and three R measured
+    against it raises a stop on a gain the position never had.
     """
 
     if not isinstance(frame, pd.DataFrame) or frame.empty or "High" not in frame.columns:
-        return None
+        return {}
     timestamps = pd.to_datetime(frame.index, errors="coerce")
     if timestamps.isna().any():
-        return None
+        return {}
     if timestamps.tz is not None:
         timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    ordered = frame.copy()
+    ordered.index = timestamps
+    ordered = ordered.sort_index()
+    reason, uncrossable = _uncrossable_sessions(ordered)
+    # The highest High before a split is in the old coordinate system and the entry price
+    # three R is measured against is in whichever one the trader declared. Reading a peak
+    # across the event either invents a gain or hides one, and both raise a stop.
+    inside = [session for session in uncrossable if entry_date < session <= as_of]
+    if inside:
+        return {"max_high_withheld_reason": f"{reason}_inside_excursion_window", "max_high_withheld_date": inside[0].isoformat()}
     highs = pd.to_numeric(frame["High"], errors="coerce")
     highs.index = timestamps
     # Sorted before the last print wins, because "last" has to mean the latest session's
@@ -1675,11 +1714,11 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     held = highs[(dates > entry_date) & (dates <= as_of)]
     held = held[held.notna() & (held > 0) & (held != math.inf)]
     if held.empty:
-        return None
+        return {}
     # Positional, not by label: the provider layer permits a repeated session, and a label
     # lookup on a repeated index returns every bar under it rather than the one that was highest.
     position = int(held.to_numpy().argmax())
-    return float(held.iloc[position]), held.index[position].date().isoformat()
+    return {"max_high_since_entry": float(held.iloc[position]), "max_high_date": held.index[position].date().isoformat()}
 
 
 def _bars_that_spoke(path_rows: list[tuple[date, Any]]) -> dict[str, Any]:
@@ -1744,26 +1783,21 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    if "Stock Splits" in ordered.columns:
-        events = pd.to_numeric(ordered["Stock Splits"], errors="coerce").fillna(0)
-        inside = [
-            timestamp.date()
-            for timestamp, factor in events.items()
-            if float(factor) not in (0.0, 1.0) and effective_date <= timestamp.date() <= as_of and (end_before is None or timestamp.date() < end_before)
-        ]
-        if inside:
-            # The declared level is in the pre-split coordinate system and these closes are
-            # in the post-split one. Comparing them is arithmetic between two different
-            # shares, and it would sell a position the market never took out.
-            # The current price is withheld too: it is in the post-split coordinate system
-            # and the declared stop is not, so handing it back would sell on the same
-            # arithmetic this record refuses to perform.
-            return {
-                "state": "unavailable",
-                "reason": "share_split_inside_stop_window",
-                "date": inside[0].isoformat(),
-                "requested_from": effective_date.isoformat(),
-            }, None
+    split_reason, uncrossable = _uncrossable_sessions(ordered)
+    inside = [session for session in uncrossable if effective_date <= session <= as_of and (end_before is None or session < end_before)]
+    if inside:
+        # The declared level is in the pre-split coordinate system and these closes are
+        # in the post-split one. Comparing them is arithmetic between two different
+        # shares, and it would sell a position the market never took out.
+        # The current price is withheld too: it is in the post-split coordinate system
+        # and the declared stop is not, so handing it back would sell on the same
+        # arithmetic this record refuses to perform.
+        return {
+            "state": "unavailable",
+            "reason": "share_split_inside_stop_window" if split_reason == "share_split" else split_reason,
+            "date": inside[0].isoformat(),
+            "requested_from": effective_date.isoformat(),
+        }, None
     if require_session and not any(bar_date == effective_date for bar_date, _ in dated_rows):
         # The position existed inside its entry session, so a frame that skips that bar is
         # missing a session this level had to survive. Starting at the next bar would let a
@@ -2013,9 +2047,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             # so this is measured before staleness is weighed; the reducer only acts on
             # it under a HOLD the audit has established.
             if entry_date is not None:
-                excursion = _max_high_since(prices.data, entry_date=entry_date, as_of=clock.date)
-                if excursion is not None:
-                    evidence["max_high_since_entry"], evidence["max_high_date"] = excursion
+                evidence.update(_max_high_since(prices.data, entry_date=entry_date, as_of=clock.date))
                 evidence["management"] = build_management_evidence(
                     prices.data,
                     entry_date=entry_date,
@@ -2076,6 +2108,8 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         "current_price": evidence.get("current_price"),
         "max_high_since_entry": evidence.get("max_high_since_entry"),
         "max_high_date": evidence.get("max_high_date"),
+        "max_high_withheld_reason": evidence.get("max_high_withheld_reason"),
+        "max_high_withheld_date": evidence.get("max_high_withheld_date"),
     }
     return envelope(
         "ticker.risk",

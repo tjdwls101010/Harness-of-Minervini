@@ -72,7 +72,7 @@ class AReportDueTodayIsNotAheadOfToday(unittest.TestCase):
 class EqualityIsNeitherAPullbackNorANewHigh(unittest.TestCase):
     def test_a_flat_stretch_has_no_reaction_and_no_new_high(self) -> None:
         bars = frame([100.0] * 30)
-        result = build_management_evidence(bars, entry_date=bars.index[26].date(), as_of=bars.index[-1].date())
+        result = build_management_evidence(bars, entry_date=bars.index[26].date(), as_of=bars.index[-1].date(), breakout_date=bars.index[26].date())
 
         block = result["post_breakout_behavior"]
         self.assertEqual(block["natural_reactions"], [])
@@ -102,7 +102,7 @@ class ABlockReadsOnlyItsOwnColumns(unittest.TestCase):
 class TheFirstSessionsNameTheirGaps(unittest.TestCase):
     def test_a_breakout_too_early_for_a_volume_baseline_says_so(self) -> None:
         bars = frame([100.0] * 10)
-        result = build_management_evidence(bars, entry_date=bars.index[0].date(), as_of=bars.index[-1].date())
+        result = build_management_evidence(bars, entry_date=bars.index[0].date(), as_of=bars.index[-1].date(), breakout_date=bars.index[0].date())
 
         block = result["post_breakout_behavior"]["first_sessions"]
         self.assertEqual(block["volume_baseline_reason"], "insufficient_history_for_volume_baseline")

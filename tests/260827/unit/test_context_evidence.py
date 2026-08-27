@@ -82,7 +82,7 @@ class TimeSinceTheStockLastActed(unittest.TestCase):
     def test_the_block_counts_sessions_since_entry_and_since_the_last_new_high(self) -> None:
         rows = flat(50) + [bar(102.0), bar(110.0)] + [bar(105.0)] * 4
         bars = frame(rows)
-        result = build(bars, entry=50)
+        result = build(bars, entry=50, breakout_date=bars.index[50].date())
 
         block = result["post_breakout_behavior"]
         self.assertEqual(block["sessions_since_entry"], 5)
