@@ -4,7 +4,6 @@ from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 import math
-import re
 from typing import Any, Callable, Iterable, Mapping
 
 from . import ProviderSnapshot, ProviderUnavailable, RequestThrottle, SnapshotMeta, fetch_with_one_retry
@@ -17,6 +16,11 @@ SEC_PROVIDER = "sec"
 MIN_REQUEST_INTERVAL_SECONDS = 0.15
 _THROTTLE = RequestThrottle(MIN_REQUEST_INTERVAL_SECONDS)
 _FORM_TYPES = {"10-Q", "10-K", "20-F"}
+# What a duration fact has to span to be one. Thirteen weeks is 91 days and a fourteen-week
+# quarter is 98; a 52/53-week year is 364 or 371 and a calendar one 365 or 366. These are
+# shapes of the document, not doctrine -- nothing here is a threshold a source stated.
+_QUARTER_LENGTH_DAYS = (80, 100)
+_FISCAL_YEAR_LENGTH_DAYS = (340, 380)
 _QUARTERLY_METRICS = {
     "eps": ("EarningsPerShareDiluted", "BasicAndDilutedEarningsLossPerShare"),
     "revenue": ("RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet", "Revenues", "Revenue"),
@@ -408,19 +412,26 @@ def _period_from_fact(raw: Mapping[str, Any], kind: str, annual_ends: Mapping[st
         # year end is a quarter's balance and is not this bucket's fact.
         end = raw.get("end")
         return annual_ends.get(end) if isinstance(end, str) else None
-    frame = raw.get("frame")
-    if isinstance(frame, str):
-        matched = re.fullmatch(r"CY(\d{4})(?:Q([1-4]))?", frame)
-        if matched:
-            year, quarter = matched.groups()
-            if kind == "annual" and quarter is None:
-                return year
-            if kind == "quarterly" and quarter is not None:
-                return f"{year}-Q{quarter}"
-    fiscal_year, fiscal_period = raw.get("fy"), raw.get("fp")
-    if isinstance(fiscal_year, int) and isinstance(fiscal_period, str):
-        if kind == "annual" and fiscal_period == "FY":
-            return str(fiscal_year)
-        if kind == "quarterly" and fiscal_period in {"Q1", "Q2", "Q3", "Q4"}:
-            return f"{fiscal_year}-{fiscal_period}"
-    return None
+    span = _duration(raw)
+    if span is None:
+        return None
+    start, end = span
+    days = (end - start).days
+    lower, upper = _QUARTER_LENGTH_DAYS if kind == "quarterly" else _FISCAL_YEAR_LENGTH_DAYS
+    # A quarter's fact spans a quarter. Every 10-Q also carries the year-to-date run-up to the
+    # same closing date, and reading that as one quarter published a nine-month cumulative
+    # figure as three months of earnings -- above every growth band it was then measured
+    # against. Length is what tells the two apart; nothing else in the fact does.
+    if not lower <= days <= upper:
+        return None
+    middle = start + (end - start) / 2
+    if kind == "annual":
+        return str(middle.year)
+    return f"{middle.year}-Q{(middle.month - 1) // 3 + 1}"
+
+
+def _duration(raw: Mapping[str, Any]) -> tuple[date, date] | None:
+    try:
+        return date.fromisoformat(str(raw["start"])), date.fromisoformat(str(raw["end"]))
+    except (KeyError, TypeError, ValueError):
+        return None
