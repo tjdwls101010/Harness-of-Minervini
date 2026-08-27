@@ -102,6 +102,21 @@ class AWeekWithNoFridayIsNamedRatherThanDropped(unittest.TestCase):
         self.assertIs(block["latest_completed_week_is_largest"], False)
 
 
+class ADeclineNamesTheVolumeItCouldNotRead(unittest.TestCase):
+    def test_a_history_without_volume_says_so_beside_the_decline(self) -> None:
+        # The block reports the session's volume against a fifty-session baseline. A frame
+        # with no volume column publishes the decline and names the half it never had,
+        # rather than a null that reads like a quiet session.
+        index = pd.bdate_range(end=AS_OF, periods=60)
+        closes = [100.0] * 59 + [90.0]
+        bars = pd.DataFrame({"Open": closes, "High": [close * 1.01 for close in closes], "Low": [close * 0.99 for close in closes], "Close": closes, "Stock Splits": [0.0] * len(closes)}, index=index)
+        block = build_management_evidence(bars, entry_date=index[50].date(), as_of=index[-1].date(), stage2_start=index[5].date())["largest_decline_since_stage2_start"]["daily"]
+
+        self.assertEqual(block["missing_inputs"], ["volume_history"])
+        self.assertIsNone(block["volume_ratio"])
+        self.assertAlmostEqual(block["largest_pct"], -10.0)
+
+
 class TheFailedVolumeEventNamesWhatItCouldNotSettle(unittest.TestCase):
     """The source's "low volume" and "high volume" have no boundary, so the bars do not claim them."""
 
