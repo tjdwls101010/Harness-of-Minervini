@@ -70,7 +70,9 @@ class TheDeclineBelongsToTheAdvance(unittest.TestCase):
         # The fall from 100 to 80 happened on the session before the declared start.
         rows = flat(40, 100.0) + [(100.0, 100.0, 80.0, 80.0, 1_000_000)] + flat(9, 80.0)
         bars = frame(rows)
-        result = build_management_evidence(bars, entry_date=bars.index[45].date(), as_of=bars.index[-1].date(), stage2_start=bars.index[41].date())
+        # The advance is declared to begin on the session that fell: its change is measured
+        # from the session before, which is outside the advance.
+        result = build_management_evidence(bars, entry_date=bars.index[45].date(), as_of=bars.index[-1].date(), stage2_start=bars.index[40].date())
 
         daily = result["largest_decline_since_stage2_start"]["daily"]
         self.assertIsNone(daily["largest_pct"])
