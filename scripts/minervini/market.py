@@ -14,6 +14,10 @@ from . import doctrine
 
 
 _LEADING_GROUP_COUNT = "market.industry_groups_leading_bull_count"
+# What the harness measures against doctrine, and what only stands beside it. The order is the
+# order both lists are published in.
+_VERDICT_SIGNALS = ("leader_traction", "trade_traction")
+_CONTEXT_SIGNALS = ("qqq_21ema_switch", "market_breadth")
 _SIGNAL_STATES = frozenset(
     {
         "supports",
@@ -65,17 +69,13 @@ def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
     vector.extend(_group_summary_signal("industry_leadership", industry_ranks))
 
     by_id = {signal["id"]: signal["state"] for signal in vector}
-    judgment = _regime_judgment(by_id, missing)
+    judgment = _regime_judgment(by_id)
     quality = _evidence_quality(vector, missing)
-    regime_evidence = [
-        {"signal_id": signal["id"], "state": signal["state"]}
-        for signal in vector
-        if signal["id"] in {"market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction"}
-    ]
     return {
         "regime": {
             "judgment": judgment,
-            "evidence": regime_evidence,
+            "evidence": [_regime_row(vector, identifier) for identifier in _VERDICT_SIGNALS],
+            "context": [_regime_row(vector, identifier) for identifier in _CONTEXT_SIGNALS],
             "qqq_switch_is_context_only": True,
             # Finviz publishes only a live page, so breadth is a current
             # observation standing in for the completed session, never a
@@ -240,21 +240,34 @@ def _reading_state(group: Mapping[str, Any], metric: str) -> str:
     return next((item["state"] for item in group["signal_vector"] if item["metric"] == metric), "unavailable")
 
 
-def _regime_judgment(states: Mapping[str, str], missing: list[dict[str, str]]) -> str:
-    required = ("market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction")
-    if all(states.get(identifier) == "supports" for identifier in required):
-        return "favorable"
+def _regime_judgment(states: Mapping[str, str]) -> str:
+    """The regime word, from the signals the harness measures against doctrine.
+
+    Two signals can carry it: the ranked leaders read from their own bars, and the trader's
+    own realized traction. The index switch is a real measurement and refuses a favorable
+    call when it has gone off, but a practice-layer switch does not authorize one on its own.
+    Breadth is scraped from a live page against no registered threshold, so it never gates --
+    a gap there is reported by evidence quality, which is where completeness belongs.
+    """
+
+    if all(states.get(identifier) == "supports" for identifier in _VERDICT_SIGNALS):
+        return "favorable" if states.get("qqq_21ema_switch") != "contradicts" else "cautious"
     if states.get("trade_traction") == "contradicts" and (
-        states.get("market_breadth") == "contradicts" or states.get("leader_traction") == "contradicts"
+        states.get("leader_traction") == "contradicts" or states.get("qqq_21ema_switch") == "contradicts"
     ):
         return "defensive"
-    if missing or any(states.get(identifier) in {"unavailable", "needs_input"} for identifier in required):
+    if any(states.get(identifier) in {"unavailable", "needs_input", None} for identifier in _VERDICT_SIGNALS):
         return "incomplete"
     return "cautious"
 
 
+def _regime_row(vector: list[dict[str, Any]], identifier: str) -> dict[str, Any]:
+    state = next((signal["state"] for signal in vector if signal["id"] == identifier), "unavailable")
+    return {"signal_id": identifier, "state": state}
+
+
 def _evidence_quality(vector: list[dict[str, Any]], missing: list[dict[str, str]]) -> dict[str, Any]:
-    core = {"market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction"}
+    core = {*_VERDICT_SIGNALS, *_CONTEXT_SIGNALS}
     core_states = {signal["id"]: signal["state"] for signal in vector if signal["id"] in core}
     if not core_states or all(state == "unavailable" for state in core_states.values()):
         status = "insufficient"

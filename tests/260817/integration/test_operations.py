@@ -167,7 +167,8 @@ class OperationCompositionTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["status"], "partial")
-        self.assertEqual(payload["data"]["regime"]["judgment"], "cautious")
+        # Leaders measured from their own bars, traction supplied, index switch on.
+        self.assertEqual(payload["data"]["regime"]["judgment"], "favorable")
         self.assertEqual(payload["data"]["group_ranks"]["sectors"][0]["name"], "Zeta Technology")
         self.assertEqual(payload["data"]["leaders"][0]["ticker"], "LEAD")
         self.assertEqual({source["provider"] for source in payload["sources"]}, {"fixture-prices", "finviz", "ibd-rs-rating"})
