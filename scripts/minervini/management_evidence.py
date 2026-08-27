@@ -461,7 +461,7 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
     # refuses the whole block. Which closes each reading opens is the readings' own
     # question, asked below -- the daily one starts at the advance's first session and the
     # weekly one at the last session of its first week, and neither is the other's window.
-    gap = readable.split(max(0, (anchored[0] if anchored else 0) - 1))
+    gap = readable.split(anchored[0] if anchored else 0)
     if gap is not None:
         return {**gap, "doctrine_id": _LARGEST_DECLINE}
     first_available = bars.index[0].date()
@@ -550,8 +550,9 @@ def impossible_bar_relations(bars: pd.DataFrame) -> Any:
     # numbers that cannot all be true of one session.
     usable = {name: (np.isfinite(value) & (value > 0)) for name, value in columns.items()}
     high, low = columns["High"], columns["Low"]
-    both = usable["High"] & usable["Low"]
-    broken = both & (high < low)
+    broken = np.zeros(len(bars), dtype=bool)
+    # A high beneath its own low needs no separate test: any close inside the frame is then
+    # either above that high or below that low, so the containment test below catches it.
     for name in ("Open", "Close"):
         value = columns.get(name)
         if value is None:
@@ -588,12 +589,14 @@ class _Readable:
         self._bars = bars
         if _SPLIT_COLUMN in bars.columns:
             events = pd.to_numeric(bars[_SPLIT_COLUMN], errors="coerce").to_numpy(dtype=float)
-            unreadable = ~np.isfinite(events)
-            # A blank event cell has not said there was no split. Filling it with a zero
-            # would turn missing evidence into an assertion of absence, and the session
-            # beside it can carry a split-sized fall the window would then measure across.
-            self._splits = unreadable | ((events != 0) & (events != 1))
-            self._unreadable_events = unreadable
+            # A blank event cell has not said there was no split. Left as NaN it fails both
+            # comparisons below and so is uncrossable already; filling it with a zero would
+            # turn missing evidence into an assertion of absence, and the session beside it
+            # can carry a split-sized fall the window would then measure across. Which of
+            # the two it was is kept separately, because they are refused under different
+            # reasons -- a declared event, or evidence the provider never gave.
+            self._splits = (events != 0) & (events != 1)
+            self._unreadable_events = ~np.isfinite(events)
             self._split_reason = "share_split_inside_window"
         else:
             # A history without the event column has not said there was no split. What a
@@ -922,17 +925,27 @@ def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | N
     # Two readings, two windows: the extension is the latest close against the base top, and
     # the furthest the position got is the highest High since entry. No close between them
     # is opened, so a hole in one is not this block's business.
+    # Three windows, not one. The extension opens the latest close; the peak opens the Highs
+    # after entry; and the coordinate system is the one the base top was declared in, which
+    # is the entry session's -- so the split question is asked from there. An event on the
+    # entry session is the system the position was opened in and crosses nothing, while one
+    # the session after it sits between the declared base top and every close since.
+    declared = _positions_since(bars, entry_date)
     gap = (
         readable.gap(len(bars) - 1, columns=("Close",))
         or readable.gap(held[0] if held else 0, columns=("High",))
-        or readable.split(held[0] if held else 0)
+        or readable.split(declared[0] if declared else 0)
     )
     if gap is not None:
         return {**gap, "doctrine_id": _PAUSE_ZONE}
     closes = bars["Close"].astype(float)
     highs = bars["High"].astype(float)
     last_close = _finite(closes.iloc[-1])
-    max_high = _finite(highs.iloc[held].max()) if held else None
+    # With no session after entry there is no High to read, and the last completed close is
+    # the floor of what the position reached -- which is the rule the stop side already
+    # applies. Falling silent here would publish a null beside an excursion measured from
+    # that same close, and the reader would have two answers to how far the position got.
+    max_high = _finite(highs.iloc[held].max()) if held else last_close
     if last_close is None or base_top <= 0:
         return {"state": "unavailable", "reason": "invalid_close_or_base_top"}
     extension_pct = (last_close / base_top - 1) * 100
@@ -1126,7 +1139,10 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
         "state": "reported",
         "since": since.isoformat(),
         "since_basis": basis,
-        "claim_inputs_not_read": _unread_claim_inputs((_LATE_GAPS, _CLOSING_RANGE), ("price_history", "breakout_date", "daily_bar")),
+        # The session bar is opened only by the latest gap's closing range. With no gap since
+        # the breakout there is no such session, and citing the formula while naming nothing
+        # unread would say this reading covered a claim it never reached.
+        "claim_inputs_not_read": _unread_claim_inputs((_LATE_GAPS, _CLOSING_RANGE), ("price_history", "breakout_date", *(("daily_bar",) if latest is not None else ()))),
         "gap_up_count": len(gap_positions),
         "gap_dates": [bars.index[position].date().isoformat() for position in gap_positions],
         "run_pct_since_breakout": _reported((max(float(highs.iloc[position]) for position in window) / breakout_close - 1) * 100 if breakout_close > 0 else None),
@@ -1176,13 +1192,19 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         volume_population_complete = last_volume is not None and all(value is not None for value in prior) and readable.split_position(0) is None
         if volume_population_complete and prior:
             percentile = sum(1 for value in prior if value <= last_volume) / len(prior) * 100
+    # Its own reading of the latest session, so the range and the marker beside it come from
+    # one computation, and the values it could not use are named rather than left as a null
+    # with nothing to explain it. The other climax measurements are unaffected: this session
+    # opens the range only.
+    last_range = _closing_range(bars.iloc[-1])
     return {
         "doctrine_id": _CLIMAX,
         "doctrine_ids": [_CLIMAX, _WINDOWS, _CLOSING_RANGE],
         "binds": doctrine.binds(_CLIMAX),
         "state": "reported",
         "windows": {**{f"return_{window}_pct": window for window in lengths}, "gap_ups_last_10_sessions": gap_window},
-        "missing_inputs": [name for name, present in (("open_history", opens is not None), ("volume_history", "Volume" in bars.columns and volume_population_complete)) if not present],
+        "missing_inputs": [name for name, present in (("open_history", opens is not None), ("volume_history", "Volume" in bars.columns and volume_population_complete)) if not present]
+        + [f"last_{name}" for name in last_range["closing_range_missing_inputs"]],
         # The claim asks for the base count as well -- a climax run is read against how far
         # into the advance the stock is -- and nothing in this block reads it. That is not
         # the same as an input that was wanted and absent, so it is named separately: a
@@ -1191,8 +1213,8 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         **returns,
         "gap_ups_last_10_sessions": gap_ups,
         "last_volume_percentile": _reported(percentile),
-        "last_closing_range_pct": _reported(_closing_range_pct(bars.iloc[-1])),
-        "last_closing_range_marker": doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", _closing_range_pct(bars.iloc[-1])),
+        "last_closing_range_pct": last_range["closing_range_pct"],
+        "last_closing_range_marker": last_range["closing_range_marker"],
         "needs_chart": True,
     }
 

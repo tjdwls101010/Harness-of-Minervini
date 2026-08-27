@@ -231,13 +231,23 @@ class AReducerReadsALevelTheWayItsOwnAuditDoes(unittest.TestCase):
 
 class APriceTooSmallToPublishIsNotAPrice(unittest.TestCase):
     def test_a_measurement_that_overflows_is_withheld_rather_than_printed_as_infinite(self) -> None:
-        payload = run(entry_price=1e-10, stop_price=1e-11, current_price=1e300, average_gain_pct=20.0)
+        # At the reducer's own seam: the operation refuses this scale before it gets here,
+        # and the rule that no infinity reaches the page is the reducer's regardless.
+        result = reduce_risk({
+            "mode": "active",
+            "as_of": AS_OF,
+            "entry_price": 1e-300,
+            "entry_date": "2025-12-01",
+            "stop_price": 5e-301,
+            "current_price": 1e300,
+            "average_gain_pct": 20.0,
+            "completed_price_path": {"state": "clear", "audits": [{"role": "stop", "level": 5e-301, "basis": "completed_daily_low", "state": "clear", "effective_from": "2025-12-01", "through": AS_OF, "bars_checked": 23}]},
+        })
 
-        strength = payload["data"]["management_evidence"]["strength_references"]
+        strength = result["management_evidence"]["strength_references"]
         self.assertIsNone(strength["return_pct"])
         self.assertIsNone(strength["r_multiple"])
 
-class APriceTooSmallToPublishIsNotAPrice(unittest.TestCase):
     def test_a_price_that_rounds_away_at_the_reported_precision_is_refused(self) -> None:
         # Every field built from it -- the loss percent, the R multiple, the excursion --
         # divides by a risk that publishes as zero, and the quotients come back infinite.

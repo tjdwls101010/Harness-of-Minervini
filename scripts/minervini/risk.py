@@ -124,7 +124,10 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     controls: dict[str, Any] = {
         "initial_stop_pct": None,
         "initial_stop_cap_pct": stop_ceiling,
-        "half_average_gain_cap_pct": round(average_gain * average_gain_multiple, 4) if average_gain else None,
+        # At the precision every other figure here is printed at. Tidied to four places, a
+        # cap prints below a stop it actually admits, and the reader is handed a failure the
+        # verdict beside it did not reach.
+        "half_average_gain_cap_pct": _reported(average_gain * average_gain_multiple) if average_gain else None,
         "loss_target": None,
         "reward_to_risk": None,
         "minimum_reward_to_risk": doctrine.threshold(_ENTRY_RISK, "reward_to_risk_minimum"),
@@ -500,6 +503,39 @@ def triggered_state(record: Any) -> bool:
     return _triggered(record)
 
 
+def level_windows(evidence: Mapping[str, Any]) -> list[tuple[str, float, date | None, date | None]]:
+    """Each declared level with the first and last session it was in force over.
+
+    A stop raised later governs only from its own date, and the initial stop governs only
+    until the eve of the raise -- unless the later stop is looser, since a stop is never
+    widened and the initial one then never stopped governing. The structural invalidation
+    has stood since entry. One owner, because both readers of these windows -- the audit
+    that has to cover them, and the check that a handed-in record falls inside one -- would
+    otherwise each have their own copy to drift from.
+    """
+
+    payload = _mapping(evidence)
+    as_of = _iso_date(payload.get("as_of"))
+    entry_date = _iso_date(payload.get("entry_date"))
+    stop = _number(payload.get("stop_price"))
+    initial_stop = _number(payload.get("initial_stop_price"))
+    invalidation_price, _ = _exit_plan(payload)
+    stop_effective_date = _iso_date(payload.get("stop_effective_date"))
+    stop_from = stop_effective_date or entry_date
+    windows = [
+        (role, level, required_from, as_of)
+        for role, level, required_from in (("stop", stop, stop_from), ("invalidation", invalidation_price, entry_date))
+        if level is not None
+    ]
+    if initial_stop is not None and stop is not None and initial_stop != stop and entry_date is not None and stop_effective_date is not None:
+        if stop > initial_stop:
+            if stop_effective_date > entry_date:
+                windows.append(("initial_stop", initial_stop, entry_date, stop_effective_date - timedelta(days=1)))
+        else:
+            windows.append(("initial_stop", initial_stop, entry_date, as_of))
+    return windows
+
+
 def supplied_price_path(evidence: Mapping[str, Any]) -> bool:
     """Whether the caller handed in the completed-bar audit itself.
 
@@ -532,15 +568,18 @@ def supplied_price_path(evidence: Mapping[str, Any]) -> bool:
     # price that never reached the level is a record of nothing having happened, wearing a
     # breached state word. Either one, taken on trust, skips the audit that would have
     # found the position still open.
-    stated_basis = path.get("basis")
-    if isinstance(stated_basis, str) and stated_basis != AUDIT_BASIS[role]:
+    if path.get("basis") != AUDIT_BASIS[role]:
         return False
     found = _number(path.get("breach_low" if AUDIT_BASIS[role] == "completed_daily_low" else "breach_close"))
-    if found is not None and not crosses(role, found, checked_level):
+    if found is None or not crosses(role, found, checked_level):
         return False
-    entry_date = _iso_date(payload.get("entry_date"))
-    as_of = _iso_date(payload.get("as_of"))
-    return entry_date is not None and as_of is not None and entry_date <= breach_date <= as_of
+    # Inside the window that level itself was in force over, not merely inside the position.
+    # A stop cannot have been broken five days before it was placed, and an initial stop
+    # cannot have been broken after a raise took it out of the market.
+    for windowed_role, level, required_from, required_to in level_windows(payload):
+        if windowed_role == role and level == checked_level:
+            return required_from is not None and required_to is not None and required_from <= breach_date <= required_to
+    return False
 
 
 _POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
@@ -582,19 +621,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # invalidation has stood since entry.
     stop_effective_date = _iso_date(payload.get("stop_effective_date"))
     stop_from = stop_effective_date or entry_date
-    protective_plan = [
-        (role, level, required_from, as_of)
-        for role, level, required_from in (("stop", stop, stop_from), ("invalidation", invalidation_price, entry_date))
-        if level is not None
-    ]
-    if initial_stop is not None and stop is not None and initial_stop != stop and entry_date is not None and stop_effective_date is not None:
-        if stop > initial_stop:
-            # The initial stop governed every completed session before the raise took effect.
-            if stop_effective_date > entry_date:
-                protective_plan.append(("initial_stop", initial_stop, entry_date, stop_effective_date - timedelta(days=1)))
-        else:
-            # A stop is never widened; a lower later stop does not relieve the initial one.
-            protective_plan.append(("initial_stop", initial_stop, entry_date, as_of))
+    protective_plan = level_windows(payload)
 
     # Anchors describe whether the request is a coherent position at all. A breach
     # outranks evidence nobody gathered, but never a request that contradicts itself.

@@ -85,7 +85,7 @@ class AStateWordIsNotAnAudit(unittest.TestCase):
         self.assertNotEqual(payload["data"]["verdict"], "SELL")
 
     def test_a_path_with_its_coordinates_is_the_record_and_is_not_re_derived(self) -> None:
-        payload = run(stop_price=94.0, completed_price_path={"state": "breached", "governing_role": "stop", "checked_level": 94.0, "breach_date": "2025-12-10"})
+        payload = run(stop_price=94.0, completed_price_path={"state": "breached", "basis": "completed_daily_low", "governing_role": "stop", "checked_level": 94.0, "breach_date": "2025-12-10", "breach_low": 93.0})
 
         self.assertEqual(payload["_calls"], [])
         self.assertEqual(payload["data"]["verdict"], "SELL")
