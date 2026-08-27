@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
+import math
 import re
 from typing import Any, Callable, Iterable, Mapping
 
@@ -221,7 +222,7 @@ def normalize_filed_facts(
     submission_rows = _submission_rows(submissions)
     taxonomy, accounting_basis = _accounting_taxonomy(company_facts)
     filings: dict[str, dict[str, Any]] = {}
-    annual_ends = _annual_period_by_end(taxonomy)
+    annual_ends = _annual_period_by_end(taxonomy, submission_rows, boundary)
     for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS), ("annual_instant", _ANNUAL_INSTANT_METRICS)):
         for metric, concepts in metrics.items():
             for record in _metric_records(taxonomy, concepts, kind, annual_ends):
@@ -328,22 +329,36 @@ def _accounting_taxonomy(company_facts: Mapping[str, Any]) -> tuple[Mapping[str,
     raise ValueError("SEC companyfacts must contain US-GAAP or IFRS facts.")
 
 
-def _annual_period_by_end(taxonomy: Mapping[str, Any]) -> dict[str, str]:
-    """Each fiscal year's closing date, mapped to the year it closes.
+def _annual_period_by_end(taxonomy: Mapping[str, Any], submission_rows: Mapping[str, Any], boundary: date) -> dict[str, str]:
+    """Each fiscal year's closing date, mapped to the year it closes, as of the request's boundary.
 
     A balance is dated, not spanned, so nothing in the fact itself says which fiscal year it
     closes. The income statement for that year does: it ends on the same date. Requiring 31
     December instead dropped every balance a September or January filer ever filed, silently,
     because a dropped fact and a fact the company never filed look identical downstream.
+
+    The map is built from the same filings the request can see. Reading the whole taxonomy let a
+    filing three weeks past `as_of` decide which fiscal year an earlier balance belonged to,
+    which is a future document reaching into a point-in-time answer. And a closing date two
+    filings disagree about is left out rather than resolved by input order: the balance is then
+    a balance nobody can place, which is what it is.
     """
 
     ends: dict[str, str] = {}
+    conflicts: set[str] = set()
     for concepts in _ANNUAL_METRICS.values():
         for record in _metric_records(taxonomy, concepts, "annual", {}):
+            submission = submission_rows.get(record["accn"])
+            if submission is None or not _is_supported_form(submission["form"]) or record.get("form") != submission["form"]:
+                continue
+            if _filed_date(submission["filed_at"]) > boundary:
+                continue
             end = record.get("end")
-            if isinstance(end, str):
-                ends.setdefault(end, record["period"])
-    return ends
+            if not isinstance(end, str):
+                continue
+            if ends.setdefault(end, record["period"]) != record["period"]:
+                conflicts.add(end)
+    return {end: period for end, period in ends.items() if end not in conflicts}
 
 
 def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind: str, annual_ends: Mapping[str, str]) -> Iterable[dict[str, Any]]:
@@ -366,7 +381,10 @@ def _metric_records(taxonomy: Mapping[str, Any], concepts: tuple[str, ...], kind
 def _normalized_metric_record(raw: Any, kind: str, annual_ends: Mapping[str, str]) -> dict[str, Any] | None:
     if not isinstance(raw, Mapping) or not isinstance(raw.get("accn"), str) or not isinstance(raw.get("end"), str):
         return None
-    if not isinstance(raw.get("val"), (int, float)) or isinstance(raw.get("val"), bool):
+    value = raw.get("val")
+    # A boundary that admits a value the arithmetic cannot use is not a boundary. `nan` reached
+    # a published return-on-equity and then broke strict JSON encoding at the envelope.
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
         return None
     form = raw.get("form")
     if not _is_supported_form(form) or not isinstance(raw.get("filed"), str):

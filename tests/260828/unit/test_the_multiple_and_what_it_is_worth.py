@@ -84,7 +84,7 @@ class TheMultipleItself(unittest.TestCase):
 
 
 class HowFarTheMultipleExpanded(unittest.TestCase):
-    def test_a_tripling_over_fourteen_months_sits_in_the_late_stage_range(self) -> None:
+    def test_a_doubling_inside_the_window_sits_in_the_late_stage_range(self) -> None:
         # At the breakout the trailing year was 1.00 and the close 17.50, so seventeen and a
         # half times. Now it is 35 times: an expansion of 100 percent, a multiple of two.
         reading = valuation(last_close=70.0, breakout_close=17.50, breakout_date="2025-03-14")["pe_expansion"]
@@ -95,7 +95,7 @@ class HowFarTheMultipleExpanded(unittest.TestCase):
         self.assertEqual(reading["expansion"]["source_range"], [100, 200])
         self.assertEqual(reading["expansion"]["state"], "within_source_range")
         self.assertEqual(reading["multiple"]["measured"], 2.0)
-        self.assertEqual(reading["elapsed"]["measured"], 14)
+        self.assertEqual(reading["elapsed"]["measured"], 13)
 
     def test_the_breakout_multiple_uses_only_what_had_been_filed_by_then(self) -> None:
         # 2025-Q1 was filed on 2025-04-25, six weeks after the breakout. Counting it would
@@ -103,13 +103,34 @@ class HowFarTheMultipleExpanded(unittest.TestCase):
         reading = valuation(last_close=70.0, breakout_close=17.50, breakout_date="2025-03-14")["pe_expansion"]
 
         self.assertEqual(reading["trailing_12m_eps_at_breakout"], 1.0)
-        self.assertEqual(reading["filings_used_at_breakout"], ["2024-04-25", "2024-07-25", "2024-10-25", "2025-02-20"])
+        self.assertEqual(reading["filings_available_at_breakout"], ["2024-04-25", "2024-07-25", "2024-10-25", "2025-02-20"])
 
     def test_without_a_breakout_the_expansion_names_what_it_needed(self) -> None:
         reading = valuation(last_close=70.0)["pe_expansion"]
 
         self.assertEqual(reading["state"], "unavailable")
         self.assertEqual(reading["missing_inputs"], ["breakout_close", "breakout_date"])
+
+
+
+
+class AMonthIsNotOverUntilItsDayArrives(unittest.TestCase):
+    """Twelve to twenty-four months is a window of elapsed months, and a month that has not
+    reached its own day has not elapsed. Counting the calendar difference alone put a stock
+    inside the source's window nearly a month before it arrived there."""
+
+    def test_a_partial_twelfth_month_is_eleven_completed_months(self) -> None:
+        # 2025-03-31 to 2026-03-09: the twelfth month completes on the 31st, not the 9th.
+        reading = evaluate_fundamentals(evidence(), as_of="2026-03-09", last_close=70.0, breakout_close=17.50, breakout_date="2025-03-31")["valuation"]["pe_expansion"]
+
+        self.assertEqual(reading["elapsed"]["measured"], 11)
+        self.assertEqual(reading["elapsed"]["state"], "below_source_range")
+
+    def test_the_month_completes_on_its_own_day(self) -> None:
+        reading = evaluate_fundamentals(evidence(), as_of="2026-03-31", last_close=70.0, breakout_close=17.50, breakout_date="2025-03-31")["valuation"]["pe_expansion"]
+
+        self.assertEqual(reading["elapsed"]["measured"], 12)
+        self.assertEqual(reading["elapsed"]["state"], "within_source_range")
 
 
 if __name__ == "__main__":

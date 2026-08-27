@@ -7,6 +7,7 @@ optional FMP enrichment. Narrative is not a numeric evidence input.
 from __future__ import annotations
 
 from datetime import date
+import math
 from typing import Any, Mapping
 
 from . import doctrine
@@ -210,8 +211,14 @@ def _latest_periods(filings: list[dict[str, Any]], key: str) -> list[dict[str, A
         for fact in facts:
             if not isinstance(fact, Mapping) or not isinstance(fact.get("period"), str):
                 raise ValueError(f"Each {key} fact must identify a period.")
-            merged = by_period.setdefault(fact["period"], {})
-            merged.update({**fact, "accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"]})
+            merged = by_period.setdefault(fact["period"], {"_sources": {}})
+            # Provenance is per number. Stamping the whole period with the later filing's date
+            # and accounting basis said a US-GAAP revenue had been filed under IFRS, and the
+            # margin built from it divided one regime's earnings by another's sales.
+            for name in fact:
+                if name not in {"period", "end"}:
+                    merged["_sources"][name] = {"accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"]}
+            merged.update({**fact, "accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"], "_sources": merged["_sources"]})
     return [by_period[period] for period in sorted(by_period, key=lambda period: _period_sort_key(by_period[period]))]
 
 
@@ -229,8 +236,16 @@ def _quarterly_read(quarters: list[dict[str, Any]]) -> dict[str, Any]:
     margin = []
     for quarter in quarters:
         income, sales = quarter.get("net_income"), quarter.get("revenue")
-        if _is_number(income) and _is_number(sales) and sales != 0:
-            margin.append(_point(quarter, _reported(float(income) / float(sales) * 100)))
+        if not (_is_number(income) and _is_number(sales) and sales != 0):
+            continue
+        sources = quarter.get("_sources") or {}
+        earnings_from = (sources.get("net_income") or {}).get("accounting_basis", quarter["accounting_basis"])
+        sales_from = (sources.get("revenue") or {}).get("accounting_basis", quarter["accounting_basis"])
+        # A ratio of two accounting regimes is not a margin. The two halves have to have been
+        # measured the same way before their quotient means anything.
+        if earnings_from != sales_from:
+            continue
+        margin.append(_point(quarter, _reported(float(income) / float(sales) * 100), "net_income"))
     return {
         "eps": eps,
         "revenue": revenue,
@@ -297,16 +312,17 @@ def _consecutive_tail(points: list[dict[str, Any]], count: int) -> list[dict[str
 
 
 def _metric_series(facts: list[dict[str, Any]], metric: str) -> list[dict[str, Any]]:
-    return [_point(fact, float(fact[metric])) for fact in facts if _is_number(fact.get(metric))]
+    return [_point(fact, float(fact[metric]), metric) for fact in facts if _is_number(fact.get(metric))]
 
 
-def _point(fact: Mapping[str, Any], value: float) -> dict[str, Any]:
+def _point(fact: Mapping[str, Any], value: float, metric: str) -> dict[str, Any]:
+    source = (fact.get("_sources") or {}).get(metric) or {"accounting_basis": fact["accounting_basis"], "filed_at": fact["filed_at"]}
     return {
         "period": fact["period"],
         "end": fact.get("end"),
         "value": value,
-        "accounting_basis": fact["accounting_basis"],
-        "filed_at": fact["filed_at"],
+        "accounting_basis": source["accounting_basis"],
+        "filed_at": source["filed_at"],
     }
 
 
@@ -1005,20 +1021,36 @@ def _pe_expansion(
     known = _eligible_filings(filings, breakout)
     at_breakout, _ = _trailing_twelve_months(_metric_series(_latest_periods(known, "quarterly"), "eps"))
     current = _price_earnings(last_close, trailing)
-    then = None if at_breakout is None or at_breakout <= 0 else _reported(float(breakout_close) / at_breakout)
-    months = (as_of.year - breakout.year) * _MONTHS_PER_YEAR + (as_of.month - breakout.month)
-    expanded = None if then is None or not then > 0 or current["pe_ratio"] is None else current["pe_ratio"] / then
+    # Both ratios are divided raw and rounded only on the way out. Dividing the two published
+    # numbers instead put a measurement a hair under the source's two-times edge exactly on it,
+    # and the band then read as inside a range the stock had not reached.
+    now = None if trailing is None or trailing <= 0 or not _is_number(last_close) else float(last_close) / trailing
+    then = None if at_breakout is None or at_breakout <= 0 else float(breakout_close) / at_breakout
+    months = _completed_months(breakout, as_of)
+    expanded = None if then is None or not then > 0 or now is None else now / then
     return {
         **reading,
         "breakout_date": breakout.isoformat(),
         "trailing_12m_eps_at_breakout": at_breakout,
-        "filings_used_at_breakout": [filing["filed_at"] for filing in known],
-        "pe_ratio_at_breakout": then,
+        "filings_available_at_breakout": [filing["filed_at"] for filing in known],
+        "pe_ratio_at_breakout": _reported(then),
         "pe_ratio_current": current["pe_ratio"],
         "expansion": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_late_stage_signal_percent", None if expanded is None else _reported((expanded - 1) * 100)),
         "multiple": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_historical_average_multiple", None if expanded is None else _reported(expanded)),
         "elapsed": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_signal_window_months", months),
     }
+
+
+def _completed_months(start: date, end: date) -> int:
+    """Months that have finished between two dates, not the calendar months they span.
+
+    A window the source gave in months counts elapsed ones, and a month that has not reached
+    its own day has not elapsed: the difference put a stock inside the twelve-to-twenty-four
+    window as much as thirty days before it arrived there.
+    """
+
+    months = (end.year - start.year) * _MONTHS_PER_YEAR + (end.month - start.month)
+    return months - 1 if end.day < start.day else months
 
 
 def _return_on_equity(annual: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1340,6 +1372,11 @@ def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, A
         f"{name}_vs_sales_ratio": _reported(reading[f"{name}_growth_pct"] / sales_growth) if reading[f"{name}_growth_pct"] is not None else None
         for name in ("inventory", "accounts_receivable")
     }
+    if any(value is None for value in ratios.values()):
+        # Both balances were filed, so nothing is missing -- but a line that started at zero
+        # has no growth rate, and the reading cannot call itself reported with its own ratios
+        # empty beside it.
+        return {**reading, **ratios, "state": "not_meaningful", "reason": "a_balance_that_started_at_zero_has_no_growth_rate"}
     both = [ratios["inventory_vs_sales_ratio"], ratios["accounts_receivable_vs_sales_ratio"]]
     # The source's finding is about both at once: one line running ahead of sales has an
     # ordinary explanation far more often than two do.
@@ -1355,7 +1392,9 @@ def _growth_pct(previous: Any, latest: Any) -> float | None:
 
 
 def _reported(value: float | None) -> float | None:
-    return None if value is None else round(value, _REPORTED_PRECISION)
+    """Rounded for the reader, never for the comparison -- and never a value JSON cannot carry."""
+
+    return None if value is None or not _is_number(value) else round(value, _REPORTED_PRECISION)
 
 
 def _leader_category(declared: str | None) -> dict[str, Any]:
@@ -1474,7 +1513,14 @@ def _fundamentals_state(*, integrity: Mapping[str, Any], growth_quality: Mapping
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A value the arithmetic here can use, which excludes the two floats that are not numbers.
+
+    `nan` and the infinities pass every isinstance check, survive every comparison as False,
+    and then break strict JSON encoding at the envelope -- after a reading has already been
+    published beside them saying it was measured.
+    """
+
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _dedupe(values: list[str]) -> list[str]:

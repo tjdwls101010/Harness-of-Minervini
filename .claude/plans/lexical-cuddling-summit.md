@@ -171,7 +171,7 @@
 - **4-E 인터페이스.** CLI 플래그, capabilities 프로즈, schema_sync, harness-spec.
 - **4-F 적대 리뷰 + 변이 스윕 + PR.** 결정 267에 따라 **렌즈를 고정**해서 돌린다 — 매 라운드 새 렌즈를 주면 종료 조건이 도달 불가능하다.
 
-진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 완료 `98d0a44` · 4-E 완료 `11f5f13`+분할 컨텍스트 · 4-F 착수. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
+진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 완료 `98d0a44` · 4-E 완료 `11f5f13`+`4a30f38` · 4-F 진행 중 — 고정 렌즈 4개(p4f1) 21건 중 F1 밴드 판정 `9db4889` · F2 기간 정체성 `91cb3fd` · F3 프로바이더 경계·봉투 진행 중. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
 
 ### Phase 5 — 시장/리더십 행동 증거
 
@@ -583,6 +583,8 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 272 — 나중 제출이 이기는 단위는 기간이 아니라 항목이다.** `_latest_periods`가 기간 단위로 통째 교체하고 있었다. 10-Q가 지난 회계연도 대차대조표를 비교표로 싣고 그 해 손익계산서는 안 실으므로, 최신 연도가 자기자본만 들고 나왔다. 그리고 그 결함은 **최신 연도에서만** 나타난다 — 오래된 해는 그 해의 10-Q들이 이미 유효 창 밖이라 멀쩡해 보였다. 라이브 스모크 전까지 안 보인 이유다.
     - **결정 273 — 주당 지표는 주식 수가 움직인 구간을 건너 복리로 묶을 수 없다.** AAPL의 제출 연간 EPS는 FY2017 9.21에서 FY2018 2.98로 떨어진다 — 2020년 4:1 분할이 이후 모든 빈티지의 과거 연도를 4배 주식 수 기준으로 재기술했기 때문이다. 분할은 가격 이력의 사실이고 이 평가기는 제출서류를 들므로 **탐지도 조정도 하지 않는다.** 대신 주당 복리율 옆에 분할이 건드리지 못하는 순이익 복리율과 제출된 희석주식수 변화를 같이 싣는다. 임계값을 발명하지 않고도 독자가 무슨 일이 있었는지 볼 수 있는 유일한 방법이다.
     - **결정 274 — 결정론 스위트가 초록이어도 라이브 스모크는 따로 돌린다.** Phase 4의 마지막 세 결함(12월 결산 가정, 기간 단위 교체, 분할 횡단)은 1553개 테스트가 모두 통과한 뒤 실제 SEC 응답에서만 드러났다. 셋 다 픽스처가 재현하지 못하는 종류다 — 픽스처는 내가 상상한 모양이고, 이 셋은 상상하지 못한 모양이었다.
+    - **결정 275 — 출처는 기간이 아니라 필드마다 붙는다.** 20-F 제출자가 US-GAAP 매출과 IFRS 자기자본을 같은 기간에 실을 때, 기간 단위 출처는 둘 중 하나의 회계 기준을 다른 쪽에 덧씌운다. 그래서 `_sources`는 필드마다 `accounting_basis`와 `filed_at`을 들고, 마진처럼 두 필드를 나누는 측정은 기준이 다르면 계산 자체를 거절한다. 결정 272가 "나중 제출이 이기는 단위"를 항목으로 내린 것과 같은 축의 후속이다.
+    - **결정 276 — 경과 개월은 달력 차이가 아니라 끝난 달의 수다.** 원전의 창은 12~24개월이고, 자기 날짜에 도달하지 않은 달은 지나지 않았다. 3월 31일 돌파를 이듬해 3월 9일에 12개월로 세면 최대 30일 먼저 후반 국면 창 안으로 들어간다. 같은 자리에서 확장률을 **발행된(반올림된)** P/E 두 개로 나누던 것도 원시 몫으로 바꿨다 — 실측 차이는 10자리 정밀도 아래라 관측되지 않지만, `_reported`가 자기 독스트링에 "독자를 위한 반올림이지 비교를 위한 것이 아니다"라고 적어 둔 계약을 코드가 어기고 있었다.
 
 - **Phase 4~7 — 미착수.**
 

@@ -1204,9 +1204,26 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         provider_missing.append({**_missing_provider(error), "required": False})
     else:
         sources.append(_source(prices.meta))
-        closes = _valuation_closes(prices.data, as_of=clock.date, breakout_date=breakout_date)
-        if breakout_date is not None and closes["breakout_close"] is None:
-            provider_missing.append({"id": "breakout_close", "reason": "no_completed_session_on_breakout_date", "required": False})
+        if prices.meta.stale:
+            # A close from an earlier session published as the last completed one is a price
+            # nobody could have paid on the session this envelope is dated. The multiple is
+            # withheld rather than dated wrongly, and the gap says which session was reached.
+            provider_missing.append({"id": "stale_price_evidence", "provider": prices.meta.provider, "reason": "price_history_behind_requested_session", "through": prices.meta.as_of.isoformat() if prices.meta.as_of else None, "required": False})
+        else:
+            closes = _valuation_closes(prices.data, as_of=clock.date, breakout_date=breakout_date)
+        if breakout_date is not None and not prices.meta.stale and closes["breakout_close"] is None:
+            # The caller named a date the tape has no completed session for. Dropping it and
+            # carrying on left the envelope echoing the date in `request` while the reading
+            # beside it said no breakout date had been supplied.
+            return envelope(
+                "ticker.fundamentals",
+                request=_clean_request({**request, "ticker": ticker}),
+                as_of=_as_of(clock),
+                status="needs_input",
+                data={"ticker": ticker, "fundamentals_state": "incomplete"},
+                sources=sources,
+                missing=[{"id": "breakout_date", "reason": "no_completed_session_on_breakout_date", "required": True}],
+            )
     result = evaluate_fundamentals(
         snapshot.data,
         as_of=clock.date.isoformat(),
@@ -1216,7 +1233,9 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         **declared,
     )
     missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]] + provider_missing
-    status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
+    # A gap of any kind is a partial answer. The prose already promised this for the price
+    # provider, and the status word said `ok` beside a valuation block reporting unavailable.
+    status = "partial" if result["fundamentals_state"] == "incomplete" or provider_missing else "ok"
     # Every reading in this evaluator names the claim it came from, so the citation list is
     # read off the payload rather than kept beside it. A hand-maintained list of one said the
     # result used one claim while its readings named two dozen, and the reader's index into

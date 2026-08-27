@@ -12,6 +12,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 import unittest
 
+import pandas as pd
+
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 from scripts.minervini.providers.sec import normalize_filed_facts
@@ -87,10 +89,22 @@ def submissions() -> dict:
     }
 
 
+def bars(start: str, end: str, close: float) -> pd.DataFrame:
+    index = pd.bdate_range(start, end)
+    return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": [close + n * 0.01 for n in range(len(index))], "Volume": 1_000_000}, index=index)
+
+
+def price_snapshot() -> ProviderSnapshot:
+    return ProviderSnapshot(bars("2024-01-02", AS_OF, 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+
+
 def run(**request) -> dict:
     normalized = normalize_filed_facts(company_facts(), submissions(), as_of=AS_OF)
     snapshot = ProviderSnapshot(normalized, SnapshotMeta(provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True}))
-    return execute("ticker.fundamentals", {"ticker": "TEST", "cik": CIK, "as_of": AS_OF, **request}, runtime=Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot))
+    # The capability reads its own price now, so a fixture that leaves the hook undeclared
+    # reaches the live provider -- a unit-speed test making a network call nobody asked for.
+    runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot, price_history=lambda ticker, as_of: price_snapshot())
+    return execute("ticker.fundamentals", {"ticker": "TEST", "cik": CIK, "as_of": AS_OF, **request}, runtime=runtime)
 
 
 class TheProviderSendsEnoughToDecide(unittest.TestCase):

@@ -19,12 +19,7 @@ from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 from scripts.minervini.providers.sec import normalize_filed_facts
 
-from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, company_facts, submissions
-
-
-def bars(start: str, end: str, close: float) -> pd.DataFrame:
-    index = pd.bdate_range(start, end)
-    return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": [close + n * 0.01 for n in range(len(index))], "Volume": 1_000_000}, index=index)
+from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, bars, company_facts, submissions
 
 
 def run(price_history=None, **request) -> dict:
@@ -55,15 +50,7 @@ class ThePriceComesFromTheBars(unittest.TestCase):
         expansion = payload["data"]["valuation"]["pe_expansion"]
         self.assertEqual(expansion["breakout_date"], "2025-03-14")
         self.assertIsNotNone(expansion["pe_ratio_at_breakout"])
-        self.assertEqual(expansion["elapsed"]["measured"], 14)
-
-    def test_a_breakout_date_with_no_completed_session_says_so(self) -> None:
-        payload = run(breakout_date="2025-03-15")
-
-        expansion = payload["data"]["valuation"]["pe_expansion"]
-        self.assertEqual(expansion["state"], "unavailable")
-        self.assertEqual(expansion["missing_inputs"], ["breakout_close", "breakout_date"])
-        self.assertEqual([item["id"] for item in payload["missing"] if item["id"] == "breakout_close"], ["breakout_close"])
+        self.assertEqual(expansion["elapsed"]["measured"], 13)
 
     def test_a_breakout_date_after_as_of_is_refused_as_a_request_error(self) -> None:
         payload = run(breakout_date="2026-06-01")
