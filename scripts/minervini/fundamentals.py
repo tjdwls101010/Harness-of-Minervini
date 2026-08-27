@@ -13,6 +13,14 @@ from . import doctrine
 
 
 _EARNINGS_QUALITY = "fundamentals.inventory_receivables_vs_sales"
+_MINIMUM_GROWTH = "fundamentals.minimum_quarterly_earnings_growth"
+_SUPERPERFORMANCE = "fundamentals.superperformance_quarterly_earnings_growth"
+_BULL_MARKET = "fundamentals.bull_market_quarterly_earnings_growth"
+_DECELERATION = "fundamentals.earnings_deceleration_red_flag"
+_SMOOTHING = "fundamentals.two_quarter_rolling_average_smoothing"
+_ANNUAL_REQUIREMENT = "fundamentals.annual_earnings_requirement"
+_MARGIN_ANALYSIS = "fundamentals.margin_analysis"
+MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 
 
@@ -37,6 +45,7 @@ def evaluate_fundamentals(
     going_concern: str | None = None,
     accounting_integrity: str | None = None,
     leader_category: str | None = None,
+    market_regime: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate normalized SEC filings available on ``as_of``.
 
@@ -56,8 +65,9 @@ def evaluate_fundamentals(
     annual_growth = _annual_growth(annual)
     integrity, safety_missing = _integrity_read(quarters, going_concern=going_concern, accounting_integrity=accounting_integrity)
     earnings_quality = {"inventory_receivables_vs_sales": _inventory_receivables_vs_sales(annual)}
+    growth = _growth_read(quarterly, market_regime=market_regime)
     classification = _leader_category(leader_category)
-    growth_quality, growth_missing = _growth_quality(quarterly, annual_growth)
+    growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
 
     # The classification is not counted here. A reading the harness never derives is a
@@ -85,6 +95,7 @@ def evaluate_fundamentals(
         ],
         "accounting_basis": basis,
         "quarterly": quarterly,
+        "growth": growth,
         "annual_growth": annual_growth,
         "quality": growth_quality,
         "integrity": integrity,
@@ -159,15 +170,30 @@ def _quarterly_read(quarters: list[dict[str, Any]]) -> dict[str, Any]:
     for quarter in quarters:
         income, sales = quarter.get("net_income"), quarter.get("revenue")
         if _is_number(income) and _is_number(sales) and sales != 0:
-            margin.append(_point(quarter, round(float(income) / float(sales) * 100, 2)))
+            margin.append(_point(quarter, _reported(float(income) / float(sales) * 100)))
     return {
         "eps": eps,
         "revenue": revenue,
         "margin_pct": margin,
-        "eps_deceleration": _own_trend(eps),
-        "revenue_deceleration": _own_trend(revenue),
-        "margin_trend": _margin_trend(margin),
+        "eps_yoy_growth": _yoy_growth(eps),
+        "revenue_yoy_growth": _yoy_growth(revenue),
     }
+
+
+def _yoy_growth(series: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each quarter against the same quarter a year earlier, which is the comparison the source makes.
+
+    Quarter on quarter would report a seasonal business as accelerating and decelerating on
+    a calendar rather than on its own progress.
+    """
+
+    year_ago = {point["period"]: point["value"] for point in series}
+    growth = []
+    for point in series:
+        previous = year_ago.get(_previous_year_quarter(point["period"]))
+        if previous not in (None, 0):
+            growth.append({"period": point["period"], "yoy_pct": _reported((point["value"] / previous - 1) * 100)})
+    return growth
 
 
 def _metric_series(facts: list[dict[str, Any]], metric: str) -> list[dict[str, Any]]:
@@ -184,30 +210,6 @@ def _point(fact: Mapping[str, Any], value: float) -> dict[str, Any]:
     }
 
 
-def _own_trend(series: list[dict[str, Any]]) -> dict[str, Any]:
-    year_ago = {_quarter_identity(point["period"]): point["value"] for point in series}
-    growth = []
-    for point in series:
-        previous_period = _previous_year_quarter(point["period"])
-        previous = year_ago.get(previous_period)
-        if previous not in (None, 0):
-            growth.append({"period": point["period"], "yoy_pct": round((point["value"] / previous - 1) * 100, 1)})
-    if len(growth) < 3:
-        return {"state": "unavailable", "yoy_growth": growth}
-    prior_peak = max(item["yoy_pct"] for item in growth[-3:-1])
-    latest = growth[-1]["yoy_pct"]
-    decline = round(prior_peak - latest, 1)
-    if decline >= 15:
-        state = "contradicts"
-    elif decline >= 5:
-        state = "mixed"
-    else:
-        state = "supports"
-    return {"state": state, "yoy_growth": growth, "slowdown_from_recent_peak_pct_points": decline}
-
-
-def _quarter_identity(period: str) -> str:
-    return period
 
 
 def _previous_year_quarter(period: str) -> str:
@@ -220,20 +222,23 @@ def _previous_year_quarter(period: str) -> str:
         return ""
 
 
-def _margin_trend(series: list[dict[str, Any]]) -> dict[str, Any]:
-    if len(series) < 2:
-        return {"state": "unavailable"}
-    change = round(series[-1]["value"] - series[-2]["value"], 2)
-    return {"state": "supports" if change > 0 else "contradicts" if change < 0 else "mixed", "latest_change_pct_points": change}
-
 
 def _annual_growth(annual: list[dict[str, Any]]) -> dict[str, Any]:
-    eps = _annual_metric_growth(annual, "eps")
-    revenue = _annual_metric_growth(annual, "revenue")
+    """Annual earnings and sales growth, reported against a requirement nobody quantified.
+
+    The claim is a constitution-level one -- quarterly strength has to translate into annual
+    results, a quarter or two being insufficient -- and it is registered judgment_only with
+    no threshold, because the source never says how strong. What used to be here compared
+    the annual rise against twenty percent, a number the source stated about quarters.
+    """
+
     return {
-        "eps_yoy_pct": eps,
-        "revenue_yoy_pct": revenue,
-        "state": "unavailable" if eps is None or revenue is None else "supports" if eps >= 20 and revenue > 0 else "mixed",
+        "doctrine_id": _ANNUAL_REQUIREMENT,
+        "binds": doctrine.binds(_ANNUAL_REQUIREMENT),
+        "computability": doctrine.get_claim(_ANNUAL_REQUIREMENT)["claim"]["computability"],
+        "periods": [fact.get("period") for fact in annual[-2:]],
+        "eps_yoy_pct": _annual_metric_growth(annual, "eps"),
+        "revenue_yoy_pct": _annual_metric_growth(annual, "revenue"),
     }
 
 
@@ -241,7 +246,7 @@ def _annual_metric_growth(annual: list[dict[str, Any]], metric: str) -> float | 
     values = [float(fact[metric]) for fact in annual if _is_number(fact.get(metric))]
     if len(values) < 2 or values[-2] == 0:
         return None
-    return round((values[-1] / values[-2] - 1) * 100, 1)
+    return _reported((values[-1] / values[-2] - 1) * 100)
 
 
 def _integrity_read(quarters: list[dict[str, Any]], *, going_concern: str | None, accounting_integrity: str | None) -> tuple[dict[str, Any], list[str]]:
@@ -291,6 +296,116 @@ def _dilution_reading(quarters: list[dict[str, Any]]) -> dict[str, Any]:
         "state": "reported",
         "periods": [quarters[-2].get("period"), quarters[-1].get("period")],
         "quarterly_share_change_pct": _reported((current / previous - 1) * 100),
+    }
+
+
+def _growth_read(quarterly: Mapping[str, Any], *, market_regime: str | None) -> dict[str, Any]:
+    """The latest year-over-year quarterly growth, against the ranges the source named.
+
+    Ranges, not limits. "Many successful growth managers require a minimum of 20 to 25
+    percent" is a range the source gave as a range, so each reading says where the
+    measurement sat and which edge is the good one, and none of them carries a verdict
+    alone -- every fundamentals claim in the registry prompts review rather than deciding.
+
+    Three bars are read from one number because they are three different ambitions for the
+    same measurement: a minimum a growth manager would accept, the pace that shows up in
+    superperformance, and what the source looks for in a bull market. Only the last needs
+    the regime declared, so only the last can go unread for want of it.
+    """
+
+    series = quarterly["eps_yoy_growth"]
+    latest = series[-1]["yoy_pct"] if series else None
+    readings = {
+        "minimum_quarterly_earnings_growth": doctrine.evaluate_band(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", latest),
+        "superperformance_quarterly_earnings_growth": doctrine.evaluate_band(_SUPERPERFORMANCE, "superperformance_yoy_earnings_growth_percent", latest),
+        "bull_market_quarterly_earnings_growth": _bull_market_read(latest, market_regime),
+        "earnings_deceleration": _deceleration_read(series),
+        "two_quarter_rolling_average": _rolling_average(quarterly),
+        "margin_trend": _margin_read(quarterly["margin_pct"]),
+    }
+    return readings
+
+
+def _margin_read(series: list[dict[str, Any]]) -> dict[str, Any]:
+    """How the net margin moved between the two latest filed quarters.
+
+    Reported, not endorsed. This used to call any rise `supports` and any fall
+    `contradicts`, which made a margin one hundredth of a point better than last quarter an
+    argument for the trade. The claim it belongs to asks for an industry average this
+    harness has no source for, so that input is named as unread rather than worked around.
+    """
+
+    reading = {
+        "doctrine_id": _MARGIN_ANALYSIS,
+        "binds": doctrine.binds(_MARGIN_ANALYSIS),
+        "missing_inputs": ["industry_avg_net_margin"],
+    }
+    if len(series) < 2:
+        return {**reading, "reason": "two_filed_quarters_required", "latest_change_pct_points": None}
+    return {
+        **reading,
+        "periods": [series[-2]["period"], series[-1]["period"]],
+        "latest_net_margin_pct": series[-1]["value"],
+        "latest_change_pct_points": _reported(series[-1]["value"] - series[-2]["value"]),
+    }
+
+
+def _bull_market_read(latest: float | None, market_regime: str | None) -> dict[str, Any]:
+    """The bull-market pace, which the claim asks for a regime classification to read at all."""
+
+    if market_regime is None:
+        return {"doctrine_id": _BULL_MARKET, "state": "unavailable", "missing_inputs": ["market_regime_classification"]}
+    if market_regime not in MARKET_REGIMES:
+        raise ValueError(f"market_regime must be one of {', '.join(MARKET_REGIMES)}.")
+    if market_regime != "bull":
+        return {"doctrine_id": _BULL_MARKET, "state": "not_applicable", "market_regime": market_regime}
+    return {**doctrine.evaluate_band(_BULL_MARKET, "bull_market_yoy_earnings_growth_percent", latest), "market_regime": market_regime}
+
+
+def _deceleration_read(series: list[dict[str, Any]]) -> dict[str, Any]:
+    """Whether the latest growth rate came in under the one before it.
+
+    The source illustrated the shape with sixty percent falling to twenty-five, and the
+    registry records both figures as references, which are never compared with a ticker's
+    measurement at all -- they describe the shape the source was pointing at. So this
+    publishes the two rates and whether the later one was lower, and nothing that reads as a
+    limit having been crossed. How much of a slowdown matters is a judgement the source
+    declined to bound, and inventing one here is how the previous reading came to reject a
+    candidate whose growth fell fifteen points from its own recent peak.
+    """
+
+    if len(series) < 2:
+        return {"doctrine_id": _DECELERATION, "reason": "two_year_over_year_rates_required", "latest_yoy_pct": series[-1]["yoy_pct"] if series else None, "previous_yoy_pct": None, "decelerated": None}
+    latest, previous = series[-1]["yoy_pct"], series[-2]["yoy_pct"]
+    return {
+        "doctrine_id": _DECELERATION,
+        "binds": doctrine.binds(_DECELERATION),
+        "periods": [series[-2]["period"], series[-1]["period"]],
+        "latest_yoy_pct": latest,
+        "previous_yoy_pct": previous,
+        "change_pct_points": _reported(latest - previous),
+        "decelerated": latest < previous,
+    }
+
+
+def _rolling_average(quarterly: Mapping[str, Any]) -> dict[str, Any]:
+    """Two quarters averaged, the way the tactic smooths a lumpy pair.
+
+    It travels beside the raw rate rather than replacing it: a practice-layer tactic does not
+    bind, and a reader deciding on the smoothed number should be able to see the two it came
+    from.
+    """
+
+    window = int(doctrine.threshold(_SMOOTHING, "rolling_average_window_quarters"))
+    averages = {}
+    for name in ("eps", "revenue"):
+        series = quarterly[f"{name}_yoy_growth"]
+        averages[f"{name}_yoy_pct"] = _reported(sum(point["yoy_pct"] for point in series[-window:]) / window) if len(series) >= window else None
+    return {
+        "doctrine_id": _SMOOTHING,
+        "binds": doctrine.binds(_SMOOTHING),
+        "window_quarters": window,
+        **averages,
     }
 
 
@@ -370,34 +485,42 @@ def _leader_category(declared: str | None) -> dict[str, Any]:
     return {"state": "declared", "category": declared}
 
 
-def _growth_quality(quarterly: Mapping[str, Any], annual: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+def _growth_quality(growth: Mapping[str, Any], quarterly: Mapping[str, Any], annual: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Whether the filed growth supports convergence, read from the band beside it.
+
+    One owner. This used to answer the question a second time, from slowdown thresholds that
+    appear in neither corpus -- fifteen points off a stock's own recent peak was a
+    contradiction, five was mixed -- and a reader comparing the verdict with the readings
+    published next to it could find them disagreeing.
+
+    The band that decides is the minimum the source names, because that is what it is: "many
+    successful growth managers require a minimum of 20 to 25 percent". Inside that range is
+    at the minimum and supports; short of it does not. The higher bars are read from the same
+    number and reported as context, since a candidate can support convergence without being
+    a superperformer.
+    """
+
     missing = []
     if not quarterly["eps"]:
         missing.append("quarterly_eps")
     if not quarterly["revenue"]:
         missing.append("quarterly_revenue")
-    if not quarterly["margin_pct"]:
-        missing.append("quarterly_margin")
-    if quarterly["eps_deceleration"]["state"] == "unavailable":
-        missing.append("eps_deceleration")
-    if quarterly["revenue_deceleration"]["state"] == "unavailable":
-        missing.append("revenue_deceleration")
-    if quarterly["margin_trend"]["state"] == "unavailable":
-        missing.append("margin_trend")
+    if not quarterly["eps_yoy_growth"]:
+        # No quarter with the same quarter a year earlier beside it. Growth against the
+        # previous quarter would report a seasonal business on a calendar rather than on its
+        # own progress, so there is nothing to read instead.
+        missing.append("quarterly_eps_yoy_growth")
     if annual["eps_yoy_pct"] is None or annual["revenue_yoy_pct"] is None:
         missing.append("annual_growth")
-    if missing:
-        return {"state": "unavailable"}, missing
-    component_states = [quarterly["eps_deceleration"]["state"], quarterly["revenue_deceleration"]["state"], quarterly["margin_trend"]["state"], annual["state"]]
-    if "contradicts" in component_states:
-        state = "contradicts"
-    elif "unavailable" in component_states:
-        state = "mixed"
-    elif "mixed" in component_states:
-        state = "mixed"
-    else:
-        state = "supports"
-    return {"state": state, "components": component_states}, missing
+    minimum = growth["minimum_quarterly_earnings_growth"]
+    if missing or minimum["state"] == "unavailable":
+        return {"state": "unavailable", "minimum_growth_state": minimum["state"]}, missing
+    return {
+        "state": "supports" if minimum["state"] in {"within_source_range", "above_source_range"} else "contradicts",
+        "minimum_growth_state": minimum["state"],
+        "measured_yoy_pct": minimum["measured"],
+        "decided_by": _MINIMUM_GROWTH,
+    }, missing
 
 
 def _fmp_discrepancies(quarters: list[dict[str, Any]], enrichment: Mapping[str, Any] | None, as_of: date) -> list[dict[str, Any]]:
@@ -418,7 +541,7 @@ def _fmp_discrepancies(quarters: list[dict[str, Any]], enrichment: Mapping[str, 
             continue
         for metric in ("eps", "revenue"):
             if _is_number(sec.get(metric)) and _is_number(fmp.get(metric)) and float(sec[metric]) != float(fmp[metric]):
-                discrepancies.append({"period": sec["period"], "metric": metric, "sec_value": float(sec[metric]), "fmp_value": float(fmp[metric]), "delta": round(float(sec[metric]) - float(fmp[metric]), 4)})
+                discrepancies.append({"period": sec["period"], "metric": metric, "sec_value": float(sec[metric]), "fmp_value": float(fmp[metric]), "delta": _reported(float(sec[metric]) - float(fmp[metric]))})
     return discrepancies
 
 

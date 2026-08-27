@@ -40,7 +40,7 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         self.assertEqual(result["quarterly"]["eps"][-1]["value"], 1.8)
         self.assertEqual(result["filings_used"], ["2025-05-01", "2026-05-01"])
 
-    def test_reports_own_trend_deceleration_and_never_averages_fmp_conflicts(self) -> None:
+    def test_reports_deceleration_without_rejecting_growth_that_clears_the_minimum(self) -> None:
         evidence = load_fixture("decelerating_evidence.json")
         fmp = {
             "source": "fmp_enrichment",
@@ -51,9 +51,13 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         result = evaluate_fundamentals(evidence, as_of="2026-05-10", fmp_enrichment=fmp)
 
         self.assertEqual(result["accounting_basis"], ["IFRS"])
-        self.assertEqual(result["quarterly"]["eps_deceleration"]["state"], "contradicts")
-        self.assertEqual(result["fundamentals_state"], "does_not_support_convergence")
-        self.assertEqual(result["annual_growth"]["eps_yoy_pct"], 26.7)
+        # 60% to 50% to 28%: a real slowdown, reported as one. The latest rate still clears
+        # the 20-25 minimum the source names, and the source bounds nothing about how far a
+        # rate may fall from its own recent peak.
+        self.assertIs(result["growth"]["earnings_deceleration"]["decelerated"], True)
+        self.assertEqual(result["growth"]["earnings_deceleration"]["previous_yoy_pct"], 50.0)
+        self.assertEqual(result["fundamentals_state"], "supports_convergence")
+        self.assertEqual(result["annual_growth"]["eps_yoy_pct"], 26.6666666667)
         self.assertEqual(result["quarterly"]["eps"][-1]["value"], 0.64)
         self.assertEqual(
             result["discrepancies"],

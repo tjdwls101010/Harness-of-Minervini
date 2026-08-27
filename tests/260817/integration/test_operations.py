@@ -546,7 +546,10 @@ class OperationCompositionTests(unittest.TestCase):
 
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["data"]["ticker"], "TEST")
-        self.assertEqual(payload["data"]["fundamentals_state"], "does_not_support_convergence")
+        # 28% year-over-year clears the 20-25 minimum the source names, decelerating from 60
+        # or not: how much of a slowdown matters is a judgement the source declined to bound.
+        self.assertEqual(payload["data"]["fundamentals_state"], "supports_convergence")
+        self.assertIs(payload["data"]["growth"]["earnings_deceleration"]["decelerated"], True)
         self.assertEqual(payload["sources"][0]["provider"], "sec")
 
     def test_historical_fundamentals_requires_stable_cik_instead_of_current_ticker_identity(self) -> None:
