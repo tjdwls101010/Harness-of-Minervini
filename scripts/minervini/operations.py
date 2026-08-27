@@ -1235,9 +1235,11 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         **declared,
     )
     missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]] + provider_missing
-    # A gap of any kind is a partial answer. The prose already promised this for the price
-    # provider, and the status word said `ok` beside a valuation block reporting unavailable.
-    status = "partial" if result["fundamentals_state"] == "incomplete" or provider_missing else "ok"
+    # A gap of any kind is a partial answer. `status` describes contract completeness rather
+    # than verdict polarity, so a negative verdict a declaration settled is still an answer
+    # built on filings that never arrived -- and reading it as `ok` told the caller the
+    # evidence was whole while four required items sat in `missing` beside it.
+    status = "partial" if missing else "ok"
     # Every reading in this evaluator names the claim it came from, so the citation list is
     # read off the payload rather than kept beside it. A hand-maintained list of one said the
     # result used one claim while its readings named two dozen, and the reader's index into

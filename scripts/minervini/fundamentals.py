@@ -167,7 +167,10 @@ def evaluate_fundamentals(
             {"id": name, "state": item["state"]}
             for name, item in {**integrity, "quality": growth_quality}.items()
         ],
-        "declared_inputs": {"going_concern": going_concern, "accounting_integrity": accounting_integrity, "leader_category": leader_category},
+        # Every declaration the payload acts on, including the regime: the bull-market band is
+        # read only when one was declared, so leaving it out of this list had the envelope
+        # disagreeing with the reading beside it about what the caller supplied.
+        "declared_inputs": {"going_concern": going_concern, "accounting_integrity": accounting_integrity, "leader_category": leader_category, "market_regime": market_regime},
         "fundamentals_state": fundamentals_state,
         "missing": _dedupe(missing),
     }
