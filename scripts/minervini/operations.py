@@ -35,7 +35,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
-from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, build_management_evidence
+from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, build_management_evidence
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -1641,11 +1641,15 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float, str] | None:
-    """The highest completed High from the entry session through ``as_of``, and its date.
+    """The highest completed High after the entry session through ``as_of``, and its date.
 
     Three R is measured from the furthest a position got. The last close only says where
-    it is now, and a position that reached three R and gave some back is the one the
-    rule is for. The entry session's own bar counts: the position existed inside it.
+    it is now, and a position that reached three R and gave some back is the one the rule
+    is for. The entry session itself is excluded: a daily bar cannot say whether its High
+    printed before or after the fill, and a fill at that session's close would otherwise be
+    credited with a spike it never had -- profit protection would then raise a stop and cut
+    a position on a gain that did not exist. The last completed close remains the floor of
+    what was reached, so a position genuinely at three R today is still protected.
     """
 
     if not isinstance(frame, pd.DataFrame) or frame.empty or "High" not in frame.columns:
@@ -1663,7 +1667,12 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     highs = highs.sort_index()
     highs = highs[~highs.index.normalize().duplicated(keep="last")]
     dates = pd.Index([timestamp.date() for timestamp in highs.index])
-    held = highs[(dates >= entry_date) & (dates <= as_of)]
+    # From the session after entry. A daily bar cannot say whether its High printed before
+    # or after the fill, and crediting the entry session's own High to the position invents
+    # a gain it may never have had -- which here would raise a stop and cut a position on a
+    # move that never happened. The stop audit reads the entry session because that error
+    # runs the other way: it can only find a breach earlier, never later.
+    held = highs[(dates > entry_date) & (dates <= as_of)]
     held = held[held.notna() & (held > 0) & (held != math.inf)]
     if held.empty:
         return None
@@ -1735,6 +1744,26 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
+    if "Stock Splits" in ordered.columns:
+        events = pd.to_numeric(ordered["Stock Splits"], errors="coerce").fillna(0)
+        inside = [
+            timestamp.date()
+            for timestamp, factor in events.items()
+            if float(factor) not in (0.0, 1.0) and effective_date <= timestamp.date() <= as_of and (end_before is None or timestamp.date() < end_before)
+        ]
+        if inside:
+            # The declared level is in the pre-split coordinate system and these closes are
+            # in the post-split one. Comparing them is arithmetic between two different
+            # shares, and it would sell a position the market never took out.
+            # The current price is withheld too: it is in the post-split coordinate system
+            # and the declared stop is not, so handing it back would sell on the same
+            # arithmetic this record refuses to perform.
+            return {
+                "state": "unavailable",
+                "reason": "share_split_inside_stop_window",
+                "date": inside[0].isoformat(),
+                "requested_from": effective_date.isoformat(),
+            }, None
     if require_session and not any(bar_date == effective_date for bar_date, _ in dated_rows):
         # The position existed inside its entry session, so a frame that skips that bar is
         # missing a session this level had to survive. Starting at the next bar would let a
@@ -1953,6 +1982,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         }
     # A breach that already settles the verdict needs no price history, and a
     # provider failure fetched for nothing would downgrade a terminal SELL to partial.
+    # The structural blocks still travel with the SELL, saying why they are empty: a block
+    # that vanishes reads as a measurement with nothing to report, which is not what happened.
+    if mode == "active" and has_position_anchors and settled_breach(evidence):
+        evidence["management"] = {
+            key: {"state": "unavailable", "reason": "price_history_not_fetched_after_asserted_breach"}
+            for key in MANAGEMENT_BLOCKS
+        }
     if mode == "active" and has_position_anchors and not settled_breach(evidence):
         try:
             prices = _cached_provider(

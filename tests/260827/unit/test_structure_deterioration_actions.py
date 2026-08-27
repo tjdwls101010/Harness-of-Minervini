@@ -39,6 +39,9 @@ def held(**overrides: object) -> dict:
         "as_of": AS_OF,
         "entry_price": 100.0,
         "entry_date": "2026-08-10",
+        # The 20-day rule the source states begins "Once the stock successfully breaks out",
+        # so these fixtures declare the breakout the position was entered on.
+        "breakout_date": "2026-08-10",
         "stop_price": 94.0,
         "current_price": 101.0,
         "completed_price_path": {"state": "clear", "checked_level": 94.0, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
@@ -69,6 +72,16 @@ class TheGoldenCase(unittest.TestCase):
         self.assertEqual(review["evidence"]["quality"]["closing_range_pct"], 50.0)
         self.assertIs(result["management_actions"][1]["binds"], True)
         self.assertEqual(result["management_evidence"]["twenty_day_average"]["close_distance_pct"], -1.9417475728)
+
+    def test_without_a_declared_breakout_the_twenty_day_rule_is_withheld_and_says_so(self) -> None:
+        payload = held(management=measured(ema21="clear", twenty="below"))
+        payload.pop("breakout_date")
+        result = reduce_risk(payload)
+
+        self.assertEqual(actions(result), [])
+        block = result["management_evidence"]["twenty_day_average"]
+        self.assertEqual(block["state"], "below")
+        self.assertEqual(block["action_withheld_reason"], "breakout_date_not_declared")
 
     def test_the_same_structure_with_the_ema_declared_as_the_exit_plan_is_a_sell(self) -> None:
         result = reduce_risk(held(management_average="ema21", management=measured(selected="ema21", ema21="breached", twenty="below")))

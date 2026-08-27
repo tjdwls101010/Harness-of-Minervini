@@ -79,7 +79,7 @@ _MINIMUM_QUOTATION_LENGTH = 20
 # The one rule whose rejection is about this harness's own request contract rather than a
 # market judgment: an early entry without its confirmation debt is a malformed setup, not a
 # stock that failed somebody's standard.
-_HARNESS_CONTRACT_REJECTIONS = frozenset({"tactic.early_entry_confirmation_debt"})
+_HARNESS_CONTRACT_REJECTIONS = frozenset({"tactic.early_entry_confirmation_debt", "contract.declared_exit_plan_is_audited"})
 
 
 @lru_cache(maxsize=1)

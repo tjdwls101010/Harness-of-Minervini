@@ -13,7 +13,7 @@ from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
 
 AS_OF = "2025-12-31"
-POSITION = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-11-03", "stop_price": 90.0, "as_of": AS_OF}
+POSITION = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-11-03", "breakout_date": "2025-11-03", "stop_price": 90.0, "as_of": AS_OF}
 
 
 def bars(closes: list[float]) -> ProviderSnapshot[pd.DataFrame]:

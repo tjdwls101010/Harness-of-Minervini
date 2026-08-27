@@ -30,6 +30,7 @@ _EARNINGS = "management.earnings_awareness_while_holding"
 _ZANGER_EARNINGS = "management.zanger_does_not_hold_through_earnings"
 _BASE_COUNT = "basecount.typical_top_after_3_to_5_bases"
 _BASE_COUNT_DISCLAIMER = "basecount.role_and_disclaimer"
+_DECLARED_PLAN = "contract.declared_exit_plan_is_audited"
 _DIFFICULT_MARKET = ("cautious", "defensive")
 _TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
 _LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
@@ -523,6 +524,20 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         if key in management
     }
     management_evidence.update(_context_blocks(payload, as_of=as_of, entry=entry))
+    if management_average in _AVERAGES:
+        # The average is TraderLion's; what makes two closes below it end the position is the
+        # trader having declared it as their exit plan, which is a contract of this harness
+        # rather than a mined gate. The measurement keeps its own claim beside it so a reader
+        # can see whose number was measured and whose rule executed.
+        management_evidence["declared_exit_plan"] = {
+            "doctrine_id": _DECLARED_PLAN,
+            "binds": doctrine.binds(_DECLARED_PLAN),
+            "declared": management_average,
+            "measurement_doctrine_id": _ROLES,
+            "measurement_binds": doctrine.binds(_ROLES),
+            "measurement_source": "[TL]",
+            "state": _status_word(selected_trail) or "unavailable",
+        }
     # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
     # established that there is a position to manage, so only HOLD fills this.
     actions: list[dict[str, Any]] = []
@@ -602,8 +617,17 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             if name != management_average and _status_word(record) == "breached":
                 actions.append({"action": "REVIEW", "doctrine_id": _ROLES, "binds": doctrine.binds(_ROLES), "source": "[TL]", "reason": f"two_closes_below_{name}", "evidence": record})
         twenty = _mapping(management.get("twenty_day_average"))
+        # The source's sentence begins "Once the stock successfully breaks out", so the rule
+        # belongs to a position that broke out. Without a declared breakout the measurement
+        # is published and nothing acts: an early or cheat entry has not reached this rule yet.
+        breakout_declared = payload.get("breakout_date") is not None
         if _status_word(twenty) == "below":
-            actions.append({"action": "REVIEW", "doctrine_id": _TWENTY_DAY, "binds": doctrine.binds(_TWENTY_DAY), "reason": "close_below_20_day_average", "evidence": twenty})
+            if breakout_declared:
+                actions.append({"action": "REVIEW", "doctrine_id": _TWENTY_DAY, "binds": doctrine.binds(_TWENTY_DAY), "reason": "close_below_20_day_average", "evidence": twenty})
+            else:
+                # Withheld, and said so: a reader must be able to see that the measurement is
+                # below the average and that the rule about it has not been applied.
+                management_evidence["twenty_day_average"] = {**twenty, "action_withheld_reason": "breakout_date_not_declared"}
         largest = _mapping(management.get("largest_decline_since_stage2_start"))
         daily = _mapping(largest.get("daily"))
         weekly = _mapping(largest.get("weekly"))
@@ -627,9 +651,12 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             actions.append({"action": "REVIEW", "doctrine_id": _PAUSE_ZONE, "binds": doctrine.binds(_PAUSE_ZONE), "source": "[TL]", "reason": "base_extension_pause_zone", "evidence": base_extension})
         failed_volume = _mapping(management.get("failed_volume_confirmation"))
         if failed_volume.get("selling_volume_exceeded_breakout_volume") is True:
-            # The source says "sell or at least reduce", so the action names both and
-            # chooses neither.
-            actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "evidence": failed_volume})
+            # The source says "sell or at least reduce", so the action names both and chooses
+            # neither. What the bars settled is only that the selling session traded heavier
+            # than the breakout session against one baseline; whether either was "low" or
+            # "high" volume is a boundary the source never drew, so the action carries both
+            # unresolved qualities and asks for the chart rather than claiming the sentence.
+            actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "needs_chart": True, "unresolved_criteria": failed_volume.get("qualitative_conditions_unresolved"), "evidence": failed_volume})
         defense = _mapping(management_evidence.get("market_defense"))
         tightened = _mapping(defense.get("difficult_market_band")).get("state")
         if defense.get("market_state") in _DIFFICULT_MARKET and defense.get("tighten_to_is_placeable") and tightened == "above_source_range":

@@ -12162,6 +12162,56 @@
         "tests/260827/unit/test_context_evidence.py"
       ],
       "computability": "deterministic"
+    },
+    {
+      "id": "contract.declared_exit_plan_is_audited",
+      "title": "A plan the trader declares is audited on completed bars and executed without negotiation",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_date",
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The harness executes exit plans the trader declares -- a hard stop price, an invalidation condition, or a moving average opted into as the level they manage by -- by auditing completed bars against them and reporting the breach without negotiation. What makes such a breach a sale is the declaration, not the source the level came from: a practice-layer average carries no verdict of its own, and the same two closes below an average the trader did not declare are review evidence. Minervini's own rule that a breached stop is executed without negotiation is what this contract extends to the other levels a trader can declare."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "reject",
+        "meaning": "A declared plan whose level completed bars show breached ends the position; the request contract, not a mined threshold, is what makes it final."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "A declared plan the bars cannot audit leaves HOLD unestablished rather than assumed."
+      },
+      "precedence": {
+        "tier": "qualification_and_risk_hard_gates",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness contract about the caller's own declarations; the doctrine it rests on is risk.hard_stop_and_no_average_down, and the measurement it audits carries its own claim"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_actions.py",
+        "tests/260827/integration/test_stop_untouched_structure_deteriorating.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

@@ -85,7 +85,7 @@ class ExtensionFromTheAverages(unittest.TestCase):
 
 
 class KeyReversalCriteria(unittest.TestCase):
-    def test_the_four_computable_criteria_are_read_off_the_last_bar(self) -> None:
+    def test_the_three_computable_criteria_are_read_off_the_last_bar(self) -> None:
         # Flat at 100 (high 101, low 99), then a bar that gaps to 103, trades down to 98 and
         # closes 98.5 on triple volume: the widest bar and the heaviest since the breakout.
         bars = frame(flat(29) + [(103.0, 104.0, 98.0, 98.5, 3_000_000)])
@@ -102,7 +102,11 @@ class KeyReversalCriteria(unittest.TestCase):
         self.assertAlmostEqual(features["closing_range_pct"], 8.3333333333)
         self.assertIsNone(features["visually_extended"])
         self.assertIsNone(features["trend_line_of_highs_breached"])
-        self.assertEqual(block["computable_criteria_met"], 4)
+        # Three, not four: the source's sixth item asks for a reversal below the prior low
+        # AND a close low in the range, and the second half has no boundary in the source.
+        self.assertEqual(block["computable_criteria_met"], 3)
+        self.assertIsNone(block["features"]["reversed_below_prior_low_and_closed_low_in_range"])
+        self.assertIn("reversed_below_prior_low_and_closed_low_in_range", block["unresolved_criteria"])
         self.assertIs(block["needs_chart"], True)
 
     def test_an_ordinary_bar_meets_none(self) -> None:

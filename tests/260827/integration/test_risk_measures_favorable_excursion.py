@@ -95,3 +95,25 @@ class WhatTheReviewerOfSliceAFound(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "HOLD")
         self.assertIsNone(payload["data"]["risk_controls"]["r_multiple_reached"])
         self.assertEqual(protection(payload), [])
+
+
+class TheEntrySessionIsNotCreditedToThePosition(unittest.TestCase):
+    """A daily High cannot say whether it printed before or after the fill."""
+
+    def spiking_entry(self) -> ProviderSnapshot[pd.DataFrame]:
+        closes = [100.0] * 70
+        index = pd.bdate_range(end=AS_OF, periods=len(closes))
+        close = pd.Series(closes, index=index, dtype=float)
+        high = close * 1.01
+        entry_position = list(index.date).index(date.fromisoformat("2025-10-01"))
+        high.iloc[entry_position] = 130.0
+        frame = pd.DataFrame({"Open": close, "High": high, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
+        return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+
+    def test_a_spike_inside_the_entry_session_does_not_create_a_reached_gain(self) -> None:
+        payload = execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: self.spiking_entry()))
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "HOLD")
+        self.assertNotEqual(data.get("max_high_since_entry"), 130.0)
+        self.assertEqual(protection(payload), [])

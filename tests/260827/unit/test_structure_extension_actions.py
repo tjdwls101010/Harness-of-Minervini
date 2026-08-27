@@ -57,7 +57,7 @@ class TheBaseExtensionPauseZone(unittest.TestCase):
 
 class FailedVolumeConfirmation(unittest.TestCase):
     def test_selling_heavier_than_the_breakout_is_a_review_that_names_sell_or_reduce(self) -> None:
-        block = {"doctrine_id": FAILED_VOLUME, "binds": True, "state": "reported", "breakout_date": "2026-08-10", "breakout_volume_ratio": 0.8, "heaviest_down_session": {"date": "2026-08-14", "volume_ratio": 2.0}, "selling_volume_exceeded_breakout_volume": True}
+        block = {"doctrine_id": FAILED_VOLUME, "binds": True, "state": "reported", "breakout_date": "2026-08-10", "breakout_volume_ratio": 0.8, "heaviest_down_session": {"date": "2026-08-14", "volume_ratio": 2.0}, "selling_volume_exceeded_breakout_volume": True, "qualitative_conditions_unresolved": ["breakout_was_on_low_volume", "selling_was_on_high_volume"]}
         result = reduce_risk(held({"failed_volume_confirmation": block}))
 
         self.assertEqual(result["verdict"], "HOLD")
@@ -77,7 +77,7 @@ class FailedVolumeConfirmation(unittest.TestCase):
 
 class MeasurementsThatStayMeasurements(unittest.TestCase):
     def test_a_key_reversal_vector_is_carried_and_never_acted_on(self) -> None:
-        block = {"doctrine_id": KEY_REVERSAL, "binds": False, "since": "2026-08-10", "date": AS_OF, "features": {"gap_up_filled_and_reversed": True, "highest_volume_since": True, "widest_range_since": True, "closed_below_prior_low": True, "closing_range_pct": 8.3, "visually_extended": None, "trend_line_of_highs_breached": None}, "computable_criteria_met": 4, "needs_chart": True}
+        block = {"doctrine_id": KEY_REVERSAL, "binds": False, "since": "2026-08-10", "date": AS_OF, "features": {"gap_up_filled_and_reversed": True, "highest_volume_since": True, "widest_range_since": True, "closed_below_prior_low": True, "closing_range_pct": 8.3, "visually_extended": None, "trend_line_of_highs_breached": None}, "computable_criteria_met": 3, "needs_chart": True}
         result = reduce_risk(held({"key_reversal": block, "gaps_since_breakout": {"state": "reported"}, "climax": {"state": "reported"}, "moving_average_extension": {"state": "reported"}}))
 
         self.assertEqual(result["management_actions"], [])
