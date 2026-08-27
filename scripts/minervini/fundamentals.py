@@ -1007,6 +1007,11 @@ def _best_stretch(series: list[tuple[str, float]]) -> tuple[int | None, float | 
 
     Consecutive years only. A stretch spanning a year the company did not file would compound
     across a gap and report the average of two eras as one company's best run.
+
+    A company that grew at one rate for a decade ties with itself at every span the source's
+    range covers, and the band reads the same whichever window wins. The tie goes to the fewest
+    years the rate actually held -- the smallest claim the filings support -- because the span
+    and periods published beside the rate are otherwise a field the reader cannot account for.
     """
 
     lower, upper = doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years")

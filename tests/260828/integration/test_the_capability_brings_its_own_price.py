@@ -57,6 +57,20 @@ class ThePriceComesFromTheBars(unittest.TestCase):
 
         self.assertEqual(payload["status"], "needs_input")
         self.assertEqual([item["id"] for item in payload["missing"]], ["breakout_date"])
+        # Which refusal it is decides what the analyst does next. Falling through to the price
+        # lookup reaches the same `needs_input` by a different road and reports the session as
+        # one the bars do not carry -- a data gap, for a date `as_of` has not arrived at.
+        self.assertEqual(payload["missing"][0]["reason"], "breakout_date_after_as_of")
+
+    def test_a_session_past_as_of_is_not_the_last_completed_close(self) -> None:
+        # A provider that hands back more than was asked for does not move the point-in-time
+        # answer. The multiple is priced at the last session `as_of` reached, and the later
+        # bars are simply not read.
+        beyond = lambda ticker, as_of: ProviderSnapshot(bars("2024-01-02", "2026-06-30", 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+        payload = run(price_history=beyond)
+
+        reading = payload["data"]["valuation"]["price_earnings_ratio"]
+        self.assertEqual(reading["last_close"], round(100.0 + (len(pd.bdate_range("2024-01-02", AS_OF)) - 1) * 0.01, 10))
 
 
 class TheFilingsStillDecideWithoutAPrice(unittest.TestCase):
