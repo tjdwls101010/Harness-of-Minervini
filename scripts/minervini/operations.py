@@ -1691,6 +1691,11 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> dict[str, A
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()
+    # Deduplicated before the question is asked, because two prints of one session are one
+    # session: the superseded print sitting beside the one that completed is a jump between
+    # two prices the same day had, and reading it as a discontinuity would withhold a peak
+    # over a session the stop audit -- which deduplicates first -- reads as continuous.
+    ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
     reason, uncrossable = _uncrossable_sessions(ordered)
     # The highest High before a split is in the old coordinate system and the entry price
     # three R is measured against is in whichever one the trader declared. Reading a peak

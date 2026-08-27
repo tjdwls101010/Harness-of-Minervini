@@ -82,6 +82,25 @@ class TheExcursionAsksTheSameQuestion(unittest.TestCase):
         self.assertEqual(payload["data"]["max_high_withheld_reason"], "corporate_action_evidence_missing_inside_excursion_window")
 
 
+class ARepeatedSessionIsNotADiscontinuity(unittest.TestCase):
+    def test_a_superseded_print_does_not_withhold_the_highest_high(self) -> None:
+        # The morning print and the closing print of one session are one session's two
+        # prices, not two sessions a third of the way apart. The stop audit deduplicates
+        # before it looks, and the excursion has to reach the same reading of the frame.
+        index = pd.bdate_range(end=AS_OF, periods=10).tolist()
+        index[-1] = pd.Timestamp(f"{index[-1].date()} 16:00")
+        index.insert(len(index) - 1, pd.Timestamp(f"{index[-1].date()} 09:30"))
+        closes = [100.0] * 9 + [70.0, 105.0]
+        close = pd.Series(closes, index=pd.DatetimeIndex(index), dtype=float)
+        bars = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=close.index)
+        payload = run(bars, entry_date=close.index[0].date().isoformat())
+
+        data = payload["data"]
+        self.assertIsNone(data["max_high_withheld_reason"])
+        self.assertAlmostEqual(data["max_high_since_entry"], 106.05)
+        self.assertEqual(data["completed_price_path"]["state"], "clear")
+
+
 class TheMeasurementsRefuseTheSameWindow(unittest.TestCase):
     def test_the_management_average_does_not_read_two_coordinate_systems(self) -> None:
         bars = frame(halved(60, at=40), events=False)

@@ -493,6 +493,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 202 — 이벤트 컬럼이 없는 히스토리는 "분할 없음"을 말한 적이 없다(p3f2-a4e7①).** 2:1 불연속을 담은 프레임에 `Stock Splits` 컬럼이 아예 없으면 분할 가드가 조용히 통과해 50% 폭락으로 읽고 SELL이 나갔다. Power Play가 이미 같은 판단을 하고 있다("absence of evidence") — 그 어휘 `corporate_action_evidence_missing`을 그대로 쓴다. 컬럼이 없을 때는 종가 자체에 불연속을 묻고(5-for-4 = 1.25 이상 또는 그 역수 이하), 걸리면 스탑 감사·최고가·측정 블록을 모두 unavailable로 돌린다. 임계는 `convention.unexplained_price_discontinuity`(harness)에 등록했다. 컬럼이 있고 0이면 그것은 증거이므로 같은 50% 하락은 정상적으로 SELL한다.
     - **결정 203 — 최고가도 이벤트를 건너뛰지 않는다(p3f2 양쪽 ①).** `_max_high_since`가 분할 창을 그대로 통과시켜 분할 이전 좌표계의 High로 3R을 재고 있었다. 스탑 감사와 같은 헬퍼(`_uncrossable_sessions`)를 읽게 하고, 걸리면 값을 내지 않고 `max_high_withheld_reason`으로 이유를 발표한다. 두 창의 시작이 한 세션 다르다는 점(진입 세션은 스탑 감사에만 포함)은 경계 테스트로 고정했다.
     - **결정 204 — claim 요약문도 런타임과 같은 수를 말해야 한다(p3f2-b8ad③).** `management.tl_key_reversal_criteria`의 요약이 "Four are computable"인 채로 런타임은 `computable_criteria: 3`을 발표하고 있었다. 인용문은 그대로 두고 하네스가 쓴 요약만 셋/셋으로 고쳤다.
+    - **결정 205 — 불연속을 묻기 전에 세션을 먼저 합친다(자체 발견).** `_max_high_since`가 정렬만 하고 중복 제거 전에 `_uncrossable_sessions`를 부르고 있었다. 한 세션의 09:30 프린트와 16:00 프린트는 하루가 가진 두 가격이지 1/3 떨어진 두 세션이 아니므로, 스탑 감사(먼저 합친다)와 최고가가 같은 프레임을 다르게 읽게 된다 — 여덟 라운드 내내 반복된 바로 그 형태다. 중복 제거를 앞으로 옮기고 재현 테스트를 먼저 실패시킨 뒤 고쳤다.
 
 - **Phase 4~7 — 미착수.**
 
