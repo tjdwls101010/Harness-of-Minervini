@@ -20,6 +20,7 @@ from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, S
 
 TODAY = resolve_as_of().date
 LOOKBACK = 20
+WINDOW = 260
 
 
 def _frame(values: np.ndarray) -> pd.DataFrame:
@@ -33,14 +34,14 @@ def _frame(values: np.ndarray) -> pd.DataFrame:
 def _breaking_out() -> np.ndarray:
     """Flat for a year, dipping through the lookback window, and a new high on the last bar."""
 
-    values = np.full(300, 100.0)
-    values[300 - LOOKBACK - 1 : 299] = 90.0
+    values = np.full(WINDOW + LOOKBACK + 20, 100.0)
+    values[-LOOKBACK - 1 : -1] = 90.0
     values[-1] = 120.0
     return values
 
 
 def _held_its_high() -> np.ndarray:
-    return np.array([100.0 + index * 0.1 for index in range(300)])
+    return np.array([100.0 + index * 0.1 for index in range(WINDOW + LOOKBACK + 20)])
 
 
 def _price(frame: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
@@ -65,7 +66,7 @@ def _rows(rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, obje
 def _classification(symbol: str) -> ProviderSnapshot[dict[str, str]]:
     groups = {
         "BREAK": {"symbol": "BREAK", "sector": "Technology", "industry": "Semiconductors"},
-        "HELD": {"symbol": "HELD", "sector": "Technology", "industry": "Software"},
+        "HELD": {"symbol": "HELD", "sector": "Technology", "industry": "Semiconductors"},
     }
     if symbol not in groups:
         raise ProviderUnavailable("yfinance", "classification_missing", operation="current_classification")
@@ -88,10 +89,13 @@ def _runtime() -> Runtime:
         finviz_breadth=lambda as_of: (_ for _ in ()).throw(
             ProviderUnavailable("finviz", "fixture_withholds_breadth", operation="raw_snapshot")
         ),
-        sector_ranking=lambda as_of: _rows(
-            [{"sector": "Technology", "avg_rs": 92.0, "count": 20}, {"sector": "Energy", "avg_rs": 61.0, "count": 12}]
+        sector_ranking=lambda as_of: _rows([{"sector": "Technology", "avg_rs": 92.0, "count": 20}]),
+        industry_ranking=lambda as_of: _rows(
+            [
+                {"industry": "Semiconductors", "sector": "Technology", "avg_rs": 95.0, "count": 8},
+                {"industry": "Chemicals", "sector": "Materials", "avg_rs": 61.0, "count": 12},
+            ]
         ),
-        industry_ranking=lambda as_of: _rows([{"industry": "Semiconductors", "sector": "Technology", "avg_rs": 95.0, "count": 8}]),
         market_leaders=lambda as_of, limit: _rows(
             [{"ticker": "BREAK", "rs_rating": 99, "rs_raw": 4.2}, {"ticker": "HELD", "rs_rating": 97, "rs_raw": 3.9}]
         ),
@@ -99,24 +103,24 @@ def _runtime() -> Runtime:
 
 
 class GroupMembershipTests(unittest.TestCase):
-    def test_a_sector_counts_the_ranked_leaders_the_classification_placed_inside_it(self) -> None:
+    def test_an_industry_counts_the_ranked_leaders_the_classification_placed_inside_it(self) -> None:
         payload = execute("market.snapshot", {"trade_traction": "supports", "leader_limit": 10}, runtime=_runtime())
 
-        sectors = {group["name"]: group for group in payload["data"]["group_ranks"]["sectors"]}
+        industries = {group["name"]: group for group in payload["data"]["group_ranks"]["industries"]}
 
-        self.assertEqual(sectors["Technology"]["member_sample"]["ranked_leaders_in_group"], ["BREAK", "HELD"])
-        reading = next(item for item in sectors["Technology"]["signal_vector"] if item["metric"] == "new_highs")
+        self.assertEqual(industries["Semiconductors"]["member_sample"]["ranked_leaders_in_group"], ["BREAK", "HELD"])
+        reading = next(item for item in industries["Semiconductors"]["signal_vector"] if item["metric"] == "new_highs")
         self.assertEqual(reading["state"], "supports")
         self.assertEqual(reading["value"]["measured"], {"now": 2, "earlier": 1, "of_names_read": 2, "lookback_sessions": LOOKBACK})
-        self.assertEqual(sectors["Energy"]["member_sample"]["reason"], "no_ranked_leader_in_this_group")
+        self.assertEqual(industries["Chemicals"]["member_sample"]["reason"], "no_ranked_leader_in_this_group")
 
     def test_the_group_summary_counts_the_advancing_groups_against_the_source_range(self) -> None:
         payload = execute("market.snapshot", {"trade_traction": "supports", "leader_limit": 10}, runtime=_runtime())
 
-        summary = next(signal for signal in payload["signals"] if signal["id"] == "sector_leadership")
+        summary = next(signal for signal in payload["signals"] if signal["id"] == "industry_leadership")
 
         self.assertEqual(summary["state"], "observed")
-        self.assertEqual(summary["value"]["groups_showing_a_group_advance"], ["Technology"])
+        self.assertEqual(summary["value"]["groups_showing_a_group_advance"], ["Semiconductors"])
         self.assertEqual(summary["value"]["count"]["doctrine_id"], "market.industry_groups_leading_bull_count")
         self.assertEqual(summary["value"]["count"]["measured"], 1)
 
@@ -125,9 +129,9 @@ class GroupMembershipTests(unittest.TestCase):
             "market.snapshot", {"as_of": "2025-12-31", "trade_traction": "supports", "leader_limit": 10}, runtime=_runtime()
         )
 
-        sectors = {group["name"]: group for group in payload["data"]["group_ranks"]["sectors"]}
+        industries = {group["name"]: group for group in payload["data"]["group_ranks"]["industries"]}
 
-        self.assertEqual(sectors["Technology"]["member_sample"]["reason"], "leader_classification_not_read")
+        self.assertEqual(industries["Semiconductors"]["member_sample"]["reason"], "leader_classification_not_read")
         self.assertIn(
             "historical_session_has_no_current_classification",
             {item["reason"] for item in payload["missing"] if item["id"] == "leader_classification"},

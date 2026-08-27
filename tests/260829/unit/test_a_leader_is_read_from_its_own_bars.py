@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import unittest
 
+from scripts.minervini import doctrine
 from scripts.minervini.market_evidence import build_market_evidence
+
+
+# A full 52-week window of completed sessions, converted the way the module converts it.
+WINDOW = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
 
 
 def bars(closes: list[float], *, start: str = "2025-01-02") -> list[dict]:
@@ -47,7 +52,7 @@ class HowFarFromANewHigh(unittest.TestCase):
     """
 
     def test_a_leader_eight_percent_off_its_high_sits_inside_the_range(self) -> None:
-        history = {"AAA": bars([100.0] * 200 + [92.0])}
+        history = {"AAA": bars([100.0] * (WINDOW - 1) + [92.0])}
         leader = evidence(history)["leaders"][0]
 
         self.assertEqual(leader["distance_from_52w_high"]["measured"], 8.0)
@@ -55,7 +60,7 @@ class HowFarFromANewHigh(unittest.TestCase):
         self.assertEqual(leader["distance_from_52w_high"]["state"], "within_source_range")
 
     def test_a_leader_at_its_high_is_nearer_than_the_range(self) -> None:
-        history = {"AAA": bars([90.0] * 200 + [100.0])}
+        history = {"AAA": bars([90.0] * (WINDOW - 1) + [100.0])}
         leader = evidence(history)["leaders"][0]
 
         self.assertEqual(leader["distance_from_52w_high"]["measured"], 0.0)
@@ -65,17 +70,17 @@ class HowFarFromANewHigh(unittest.TestCase):
 class TheListToStayAwayFrom(unittest.TestCase):
     """"Every day there is a list of stocks to avoid: the 52-week-low list."
 
-    The claim carries no threshold, so what is published is whether this ticker's last completed
-    close is the lowest of its own 52 weeks -- which is what putting it on that list means.
+    The claim carries no threshold, so what is published is whether this completed session
+    printed the lowest low of the ticker's own 52 weeks -- which is what puts it on that list.
     """
 
     def test_a_leader_closing_at_its_own_52_week_low_is_on_the_list(self) -> None:
-        leader = evidence({"AAA": bars([100.0] * 200 + [40.0])})["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * (WINDOW - 1) + [40.0])})["leaders"][0]
 
         self.assertIs(leader["on_52w_low_list"]["measured"], True)
 
     def test_a_leader_off_its_low_is_not(self) -> None:
-        leader = evidence({"AAA": bars([40.0] + [100.0] * 200)})["leaders"][0]
+        leader = evidence({"AAA": bars([40.0] + [100.0] * (WINDOW - 1))})["leaders"][0]
 
         self.assertIs(leader["on_52w_low_list"]["measured"], False)
 
@@ -88,14 +93,14 @@ class HowDeepTheCorrectionRan(unittest.TestCase):
     """
 
     def test_a_thirty_percent_correction_sits_inside_the_healthy_range(self) -> None:
-        leader = evidence({"AAA": bars([100.0] * 100 + [70.0] + [75.0] * 100)})["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * 130 + [70.0] + [75.0] * 130)})["leaders"][0]
 
         self.assertEqual(leader["correction_depth"]["measured"], 30.0)
         self.assertEqual(leader["correction_depth"]["state"], "within_source_range")
         self.assertEqual(leader["correction_gate"]["state"], "pass")
 
     def test_a_correction_past_fifty_percent_fails_the_gate(self) -> None:
-        leader = evidence({"AAA": bars([100.0] * 100 + [40.0] + [45.0] * 100)})["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * 130 + [40.0] + [45.0] * 130)})["leaders"][0]
 
         self.assertEqual(leader["correction_depth"]["measured"], 60.0)
         self.assertEqual(leader["correction_gate"]["state"], "fail")
@@ -110,13 +115,13 @@ class TheBehaviorWordIsNoLongerSomethingACallerCanType(unittest.TestCase):
     """
 
     def test_a_leader_near_its_high_with_a_shallow_correction_supports(self) -> None:
-        leader = evidence({"AAA": bars([100.0] * 100 + [80.0] + [92.0] * 100)})["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * 130 + [80.0] + [92.0] * 130)})["leaders"][0]
 
         self.assertEqual(leader["behavior"]["state"], "supports")
 
     def test_a_leader_on_the_low_list_contradicts_whatever_the_caller_typed(self) -> None:
         rows = [{"ticker": "AAA", "rs_rating": 99, "behavior": "positive"}]
-        leader = evidence({"AAA": bars([100.0] * 200 + [40.0])}, rows)["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * (WINDOW - 1) + [40.0])}, rows)["leaders"][0]
 
         self.assertEqual(leader["behavior"]["state"], "contradicts")
 
@@ -129,7 +134,7 @@ class TheBehaviorWordIsNoLongerSomethingACallerCanType(unittest.TestCase):
 
 class EveryReadingNamesTheClaimItCameFrom(unittest.TestCase):
     def test_the_three_deterministic_leader_claims_are_cited(self) -> None:
-        leader = evidence({"AAA": bars([100.0] * 200 + [92.0])})["leaders"][0]
+        leader = evidence({"AAA": bars([100.0] * (WINDOW - 1) + [92.0])})["leaders"][0]
 
         self.assertEqual(leader["distance_from_52w_high"]["doctrine_id"], "market.striking_distance_52w_high")
         self.assertEqual(leader["on_52w_low_list"]["doctrine_id"], "market.avoid_52w_low_list")

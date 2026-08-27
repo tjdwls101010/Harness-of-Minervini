@@ -110,7 +110,8 @@ class SnapshotCitationTests(unittest.TestCase):
 
         payload = execute("market.snapshot", {"trade_traction": "supports"}, runtime=runtime)
 
-        self.assertEqual(payload["doctrine_ids"], ["scope.data_integrity"])
+        # The leader signal names the claim it was withheld under, and nothing else was read.
+        self.assertEqual(payload["doctrine_ids"], ["scope.data_integrity", "market.bottoming_signal_checklist"])
 
 
 if __name__ == "__main__":

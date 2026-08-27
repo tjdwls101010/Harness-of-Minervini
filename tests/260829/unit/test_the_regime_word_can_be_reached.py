@@ -6,8 +6,8 @@ registry holds no breadth threshold to compare it against -- so the favorable wo
 unreachable from any snapshot, and the defensive rule's breadth arm was dead code.
 
 What can carry a verdict is what the harness measures against doctrine: the ranked leaders'
-own bars, and the trader's own realized traction. The index switch is a real measurement that
-can refuse but cannot authorize; breadth stands beside both as context.
+own bars, and the trader's own realized traction. The index switch and breadth stand beside
+both as context -- see test_the_doctrine_round_findings for why the switch cannot even refuse.
 """
 
 from __future__ import annotations
@@ -53,11 +53,6 @@ class RegimeReachabilityTests(unittest.TestCase):
             ["qqq_21ema_switch", "market_breadth"],
         )
 
-    def test_an_index_switch_that_has_gone_off_refuses_the_favorable_word_without_carrying_it(self) -> None:
-        snapshot = evaluate_market_snapshot(_evidence(qqq_21ema={"state": "off"}))
-
-        self.assertEqual(snapshot["regime"]["judgment"], "cautious")
-
     def test_traction_and_leaders_both_contradicting_reach_defensive(self) -> None:
         snapshot = evaluate_market_snapshot(
             _evidence(
@@ -65,11 +60,6 @@ class RegimeReachabilityTests(unittest.TestCase):
                 trade_traction={"state": "contradicts"},
             )
         )
-
-        self.assertEqual(snapshot["regime"]["judgment"], "defensive")
-
-    def test_traction_contradicting_under_a_switched_off_index_reaches_defensive(self) -> None:
-        snapshot = evaluate_market_snapshot(_evidence(qqq_21ema={"state": "off"}, trade_traction={"state": "contradicts"}))
 
         self.assertEqual(snapshot["regime"]["judgment"], "defensive")
 

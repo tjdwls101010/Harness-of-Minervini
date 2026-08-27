@@ -23,7 +23,7 @@ from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .ledger import Ledger
-from .market import build_market_candidates, evaluate_market_snapshot
+from .market import build_market_candidates, evaluate_market_snapshot, evidence_quality
 from .market_evidence import build_market_evidence
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
@@ -1557,18 +1557,33 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     )
 
 
-def _leader_symbols(rows: list[dict[str, Any]] | None) -> list[str]:
-    """Each ranked leader once, in rank order, skipping rows that name no ticker."""
+def _leader_symbols(rows: list[dict[str, Any]] | None, limit: int) -> list[str]:
+    """Each ranked leader once, in rank order, no more of them than the caller asked for.
+
+    The limit is passed to the provider, and a provider that answers with more rows than it
+    was asked for would otherwise decide how many external calls this snapshot makes -- two
+    per name. The seen-set is a set because the fan-out is the one place in this capability
+    where the list can be long enough for a scan per row to matter.
+    """
 
     symbols: list[str] = []
+    seen: set[str] = set()
     for row in rows or []:
         symbol = row.get("ticker") if isinstance(row, Mapping) else None
-        if isinstance(symbol, str) and symbol not in symbols:
-            symbols.append(symbol)
+        if not isinstance(symbol, str) or symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+        if len(symbols) >= limit:
+            break
     return symbols
 
 
 def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
+    """Completed rows from a provider frame, or none at all from anything that is not one."""
+
+    if not hasattr(frame, "iterrows"):
+        return []
     rows: list[dict[str, Any]] = []
     for index, row in frame.iterrows():
         timestamp = index.date().isoformat() if hasattr(index, "date") else str(index)
@@ -1609,6 +1624,59 @@ def _ranked_leaders(rows: list[dict[str, Any]], as_of: str) -> list[dict[str, An
         }
         for rank, row in enumerate(rows, start=1)
     ]
+
+
+def _optional_leader_read(
+    runtime: Runtime,
+    request: Mapping[str, Any],
+    clock: AnalysisClock,
+    symbol: str,
+    operation: str,
+    fetch: Callable[[], ProviderSnapshot[Any]],
+    provider_missing: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+    *,
+    ttl_seconds: int | None = None,
+) -> ProviderSnapshot[Any] | None:
+    """One leader's optional read, or that leader's gap -- never the whole snapshot's.
+
+    Reading each leader's own bars and taxonomy turned one provider call into two per name,
+    and every one of them is optional evidence. A boundary is contracted to raise
+    ProviderUnavailable, so anything else escaping is a bug rather than a gap; the bug still
+    belongs to the one leader it happened under, and its type is named in the reason so it
+    stays findable instead of being smoothed into an ordinary unavailability.
+    """
+
+    try:
+        snapshot = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="yfinance",
+            operation=operation,
+            params={"ticker": symbol},
+            fetch=fetch,
+            ttl_seconds=ttl_seconds,
+        )
+    except ProviderUnavailable as error:
+        withheld = _missing_provider(error, required=False)
+        withheld["ticker"] = symbol
+        provider_missing.append(withheld)
+        return None
+    except Exception as error:
+        provider_missing.append(
+            {
+                "id": f"leader_{operation}",
+                "ticker": symbol,
+                "reason": f"provider_raised_outside_its_contract:{type(error).__name__}",
+                "required": False,
+                "retryable": False,
+            }
+        )
+        return None
+    sources.append(_source(snapshot.meta))
+    return snapshot
 
 
 def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -1714,52 +1782,47 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     # membership is left unread instead, and every group reports that it was.
     reads_membership = clock.date == resolve_as_of().date
     leader_groups: dict[str, Any] = {}
-    for symbol in _leader_symbols(leader_rows):
-        try:
-            history = _cached_provider(
-                runtime,
-                request,
-                clock,
-                capability="market.snapshot",
-                provider="yfinance",
-                operation="daily_bars",
-                params={"ticker": symbol},
-                fetch=lambda symbol=symbol: runtime.price_history(symbol, as_of),
-            )
-        except ProviderUnavailable as error:
-            withheld = _missing_provider(error, required=False)
-            withheld["ticker"] = symbol
-            provider_missing.append(withheld)
-        else:
-            sources.append(_source(history.meta))
+    for symbol in _leader_symbols(leader_rows, leader_limit):
+        history = _optional_leader_read(
+            runtime, request, clock, symbol, "daily_bars", lambda: runtime.price_history(symbol, as_of), provider_missing, sources
+        )
+        if history is not None:
             stale_price = _stale_price_gap(history.meta)
             if stale_price is not None:
                 stale_price["ticker"] = symbol
                 stale_price["required"] = False
                 provider_missing.append(stale_price)
             else:
-                leader_history[symbol] = _ohlcv_rows(history.data)
+                rows = _ohlcv_rows(history.data)
+                if rows:
+                    leader_history[symbol] = rows
+                else:
+                    # A snapshot that arrived and carried nothing readable is a gap the
+                    # payload already shows; without this the envelope counts it as read.
+                    provider_missing.append(
+                        {"id": "leader_price_history", "ticker": symbol, "reason": "daily_bars_unreadable", "required": False}
+                    )
         if not reads_membership:
             continue
-        try:
-            classification = _cached_provider(
-                runtime,
-                request,
-                clock,
-                capability="market.snapshot",
-                provider="yfinance",
-                operation="current_classification",
-                params={"ticker": symbol},
-                fetch=lambda symbol=symbol: runtime.current_classification(symbol),
-                ttl_seconds=900,
-            )
-        except ProviderUnavailable as error:
-            withheld = _missing_provider(error, required=False)
-            withheld["ticker"] = symbol
-            provider_missing.append(withheld)
+        classification = _optional_leader_read(
+            runtime,
+            request,
+            clock,
+            symbol,
+            "current_classification",
+            lambda: runtime.current_classification(symbol),
+            provider_missing,
+            sources,
+            ttl_seconds=900,
+        )
+        if classification is None:
             continue
-        sources.append(_source(classification.meta))
-        leader_groups[symbol] = dict(classification.data)
+        if isinstance(classification.data, Mapping):
+            leader_groups[symbol] = dict(classification.data)
+        else:
+            provider_missing.append(
+                {"id": "leader_classification", "ticker": symbol, "reason": "classification_not_a_record", "required": False}
+            )
     if not reads_membership and leader_rows:
         provider_missing.append(
             {"id": "leader_classification", "reason": "historical_session_has_no_current_classification", "required": False}
@@ -1796,7 +1859,16 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         status = "partial"
     else:
         status = "ok"
-    data = {**result, "leaders": evidence["leaders"] or []}
+    # The reducer graded completeness over the gaps it was handed; the envelope's list also
+    # holds every provider, classification and breadth-section gap collected here. Restating
+    # the grade over the merged list keeps one answer to one question -- before this, a
+    # response could carry status "partial" beside evidence_quality "complete".
+    data = {
+        **result,
+        "leaders": evidence["leaders"] or [],
+        "missing": missing,
+        "evidence_quality": evidence_quality(result["signal_vector"], missing),
+    }
     return envelope(
         "market.snapshot",
         request=_clean_request(request),

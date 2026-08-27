@@ -28,9 +28,10 @@ _TRADING_WEEK = "convention.trading_week"
 _STRIKING_DISTANCE = "market.striking_distance_52w_high"
 _LOW_LIST = "market.avoid_52w_low_list"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
-# Fifty-two weeks of completed US sessions. A count of sessions rather than a calendar window,
-# because the window this measures is the one the phrase "52-week high" names on a price screen.
-_SESSIONS_PER_YEAR = 252
+# The 52 is the sources' own word -- "52-week high", "the 52-week-low list" -- and the sessions
+# a week holds is the registry's, so the harness converts through it rather than writing down a
+# year in sessions of its own.
+_WEEKS_IN_THE_YEAR_THE_SOURCES_NAME = 52
 _PCT_COUNT = re.compile(r"(?P<pct>\d+(?:\.\d+)?)%\s*\(\s*(?P<count>[\d,]+)\s*\)")
 _COUNT_PCT = re.compile(r"\(\s*(?P<count>[\d,]+)\s*\)\s*(?P<pct>\d+(?:\.\d+)?)%")
 
@@ -294,7 +295,7 @@ def _group_evidence(
                 "name": name,
                 "basis": _basis(row),
                 "member_sample": sample,
-                "new_highs": _group_new_highs(sample, history),
+                "new_highs": _group_new_highs(sample, history, group_type),
                 "striking_distance_names": _group_striking_distance(sample, leaders),
                 "source_row": dict(row),
             }
@@ -316,17 +317,16 @@ def _group_member_sample(
     reported as different reasons.
     """
 
-    empty = {"ranked_leaders_in_group": [], "not_counted": []}
+    empty: dict[str, Any] = {"ranked_leaders_in_group": [], "not_counted": [], "unclassified": []}
     if groups_read is None:
         return {"state": "unavailable", "reason": "leader_classification_not_read", **empty}
     members: list[str] = []
     not_counted: list[dict[str, str]] = []
-    for leader in leaders or []:
-        ticker = leader.get("ticker")
-        if not isinstance(ticker, str):
-            continue
+    unclassified: list[str] = []
+    for ticker in _unique_tickers(leaders):
         classification = groups_read.get(ticker)
         if not isinstance(classification, Mapping):
+            unclassified.append(ticker)
             continue
         if str(classification.get(group_type, "")).casefold() != name.casefold():
             continue
@@ -334,11 +334,28 @@ def _group_member_sample(
         if _countable_window(history.get(ticker)) is None:
             not_counted.append({"ticker": ticker, "reason": "completed_sessions_insufficient"})
     if not members:
-        return {"state": "unavailable", "reason": "no_ranked_leader_in_this_group", **empty}
-    return {"state": "reported", "ranked_leaders_in_group": members, "not_counted": not_counted}
+        # A leader nobody could classify may well belong here, so "no member" is only an
+        # answer when every ranked leader was placed. Otherwise the group has a gap, and a
+        # gap reported as an absence is missing evidence published as negative evidence.
+        reason = "no_ranked_leader_in_this_group" if not unclassified else "classification_incomplete_for_the_ranked_leaders"
+        return {"state": "unavailable", "reason": reason, **{**empty, "unclassified": unclassified}}
+    return {"state": "reported", "ranked_leaders_in_group": members, "not_counted": not_counted, "unclassified": unclassified}
 
 
-def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any]) -> dict[str, Any]:
+def _unique_tickers(leaders: list[dict[str, Any]] | None) -> list[str]:
+    """Each ranked ticker once. A source that prints one name twice must not count it twice."""
+
+    seen: set[str] = set()
+    tickers: list[str] = []
+    for leader in leaders or []:
+        ticker = leader.get("ticker")
+        if isinstance(ticker, str) and ticker not in seen:
+            seen.add(ticker)
+            tickers.append(ticker)
+    return tickers
+
+
+def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any], group_type: str) -> dict[str, Any]:
     """How many of the group's ranked names print a new 52-week high now against one window ago.
 
     The source states the signal as a direction -- a growing number of names making new highs
@@ -353,6 +370,11 @@ def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any]) -> d
         # over, and a reader following the citation needs all three to arrive at this count.
         "window_doctrine_ids": [_GROUP_MEMBER_READING, _TRADING_WEEK],
     }
+    if group_type != "industry":
+        # "a growing number of names in a particular industry" -- the source scoped this
+        # signal to an industry, and a sector is not one. Publishing the same count for a
+        # sector would put the claim's name on a measurement it never described.
+        return {**reading, "state": "not_applicable", "reason": "the_source_states_this_signal_for_an_industry"}
     lookback = _growth_lookback_sessions()
     countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker)) is not None]
     if not countable:
@@ -373,7 +395,13 @@ def _group_striking_distance(sample: Mapping[str, Any], leaders: list[dict[str, 
     and the sample it came from and never a pass.
     """
 
-    reading = {"doctrine_id": _STRIKING_DISTANCE, "binds": doctrine.binds(_STRIKING_DISTANCE)}
+    reading = {
+        "doctrine_id": _STRIKING_DISTANCE,
+        "binds": doctrine.binds(_STRIKING_DISTANCE),
+        # The claim states a per-stock distance. What licenses counting it across a group is
+        # the convention that defined the sample, so the count cites both or neither.
+        "sample_doctrine_ids": [_GROUP_MEMBER_READING],
+    }
     members = set(sample.get("ranked_leaders_in_group", []))
     if not members:
         return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_in_this_group"}
@@ -394,7 +422,15 @@ def _group_striking_distance(sample: Mapping[str, Any], leaders: list[dict[str, 
 
 def _growth_lookback_sessions() -> int:
     weeks = doctrine.parameter(_GROUP_MEMBER_READING, "new_high_growth_lookback_weeks")
-    return int(weeks) * int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
+    return int(weeks) * _sessions_per_week()
+
+
+def _sessions_per_year() -> int:
+    return _WEEKS_IN_THE_YEAR_THE_SOURCES_NAME * _sessions_per_week()
+
+
+def _sessions_per_week() -> int:
+    return int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
 
 
 def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]] | None:
@@ -403,7 +439,7 @@ def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]]
     closes, highs, lows = _leader_series(bars)
     if closes is None:
         return None
-    return (closes, highs, lows) if len(highs) >= _SESSIONS_PER_YEAR + _growth_lookback_sessions() else None
+    return (closes, highs, lows) if len(highs) >= _sessions_per_year() + _growth_lookback_sessions() else None
 
 
 def _at_new_high(bars: Any, sessions_ago: int) -> bool:
@@ -414,7 +450,7 @@ def _at_new_high(bars: Any, sessions_ago: int) -> bool:
         return False
     _, highs, _ = window
     index = len(highs) - 1 - sessions_ago
-    return highs[index] >= max(highs[index - _SESSIONS_PER_YEAR + 1 : index + 1])
+    return highs[index] >= max(highs[index - _sessions_per_year() + 1 : index + 1])
 
 
 def _leader_evidence(
@@ -437,11 +473,16 @@ def _leader_evidence(
     if isinstance(rows, (str, bytes, Mapping)):
         return None
     leaders: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for row in rows:
         if not isinstance(row, Mapping):
             continue
         basis = _basis(row)
         ticker = row.get("ticker")
+        if isinstance(ticker, str):
+            if ticker in seen:
+                continue
+            seen.add(ticker)
         classification = (groups_read or {}).get(ticker) if isinstance(ticker, str) else None
         leaders.append(
             {
@@ -459,27 +500,28 @@ def _leader_price_behavior(bars: Any) -> dict[str, Any]:
     """The three deterministic things this corpus says about a leader's own price.
 
     How far it sits from a new 52-week high, whether it is printing on the 52-week-low list, and
-    how deep its correction from the last peak has run. The band never carries the state alone:
-    the depth's own gate is the only reading here that can refuse, and the source's instruction
-    about the low list is a filter it stated outright.
+    how deep its correction has run. The band never carries the state alone: the depth's own
+    gate is the only reading here that can refuse, and the source's instruction about the low
+    list is a filter it stated outright.
+
+    Nothing is published until a full 52-week window has completed. A high taken over two bars
+    is not a 52-week high, and reporting one is the shape of fabrication this harness exists to
+    refuse -- the reader cannot tell a measured 3% from a 3% measured over a fortnight.
     """
 
+    window_length = _sessions_per_year()
     closes, highs, lows = _leader_series(bars)
     if closes is None:
-        return {
-            "behavior": {"state": "unavailable", "reason": "leader_price_history_not_read"},
-            "distance_from_52w_high": doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", None),
-            "on_52w_low_list": {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "unavailable", "measured": None},
-            "correction_depth": doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", None),
-            "correction_gate": doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", None),
-        }
-    window = slice(-_SESSIONS_PER_YEAR, None)
-    last, high_52w, low_52w = closes[-1], max(highs[window]), min(lows[window])
+        return _unreadable_leader("leader_price_history_not_read")
+    if len(closes) < window_length:
+        return _unreadable_leader("completed_sessions_short_of_a_52_week_window")
+    window = slice(-window_length, None)
+    last, high_52w = closes[-1], max(highs[window])
     distance = doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", _reported((high_52w - last) / high_52w * 100) if high_52w > 0 else None)
-    # The list is the 52-week-low list, so what puts a ticker on it is its own low being made
-    # now. Reported as the measurement it is; the source's instruction about the list is what
-    # the behavior state below reads it for.
-    on_low_list = {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "reported", "measured": bool(last <= low_52w)}
+    # What puts a ticker on the 52-week-low list is its own low being made now, so the reading
+    # is whether this session printed the lowest low of the window. Comparing the close with
+    # that low instead answered yes only when the close happened to equal the session's low.
+    on_low_list = {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "reported", "measured": bool(lows[-1] <= min(lows[window]))}
     depth = _correction_depth(highs[window], lows[window])
     correction = doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", depth)
     gate = doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", depth)
@@ -489,6 +531,16 @@ def _leader_price_behavior(bars: Any) -> dict[str, Any]:
         "on_52w_low_list": on_low_list,
         "correction_depth": correction,
         "correction_gate": gate,
+    }
+
+
+def _unreadable_leader(reason: str) -> dict[str, Any]:
+    return {
+        "behavior": {"state": "unavailable", "reason": reason},
+        "distance_from_52w_high": doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", None),
+        "on_52w_low_list": {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "unavailable", "measured": None},
+        "correction_depth": doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", None),
+        "correction_gate": doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", None),
     }
 
 
@@ -517,7 +569,10 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[flo
 
     A history with one unreadable row is not a history with a hole to work around: every
     measurement below reads the whole window, so a partial read would report a 52-week high the
-    ticker may never have printed.
+    ticker may never have printed. Order is checked because every index here assumes oldest to
+    newest, and a newest-first frame would report the oldest close as today's -- the same check
+    the index block a few lines up has always made. A non-positive price is refused rather than
+    divided by: a low of zero reports a hundred-percent correction on a stock that never moved.
     """
 
     if bars is None:
@@ -529,6 +584,7 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[flo
     closes: list[float] = []
     highs: list[float] = []
     lows: list[float] = []
+    dates: list[str] = []
     for row in rows:
         if not isinstance(row, Mapping) or row.get("completed") is False:
             return None, [], []
@@ -537,6 +593,14 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[flo
         low = _finite_number(row.get("low", row.get("Low")))
         if close is None or high is None or low is None:
             return None, [], []
+        if min(close, high, low) <= 0:
+            return None, [], []
+        date_value = row.get("date", row.get("Date"))
+        if date_value is not None:
+            date_text = str(date_value)
+            if dates and date_text <= dates[-1]:
+                return None, [], []
+            dates.append(date_text)
         closes.append(close)
         highs.append(high)
         lows.append(low)
@@ -544,19 +608,24 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[flo
 
 
 def _correction_depth(highs: list[float], lows: list[float]) -> float | None:
-    """Peak to low, from the highest high in the window to the lowest low after it.
+    """The deepest decline from a peak to a low that came after it, anywhere in the window.
 
-    Measured forward from the peak rather than across the whole window, because a decline that
-    happened before the peak is not this peak's correction -- reading the window's own low
-    against its own high reports a recovery as a drawdown.
+    Measuring from the window's highest high erased the very correction the claim is about:
+    the source's ceiling decides whether a stock is buyable "on the next new high", so a stock
+    that just made one reported a depth of zero and the reading became unreachable exactly
+    where it was needed. Running the peak forward also settles what an argmax could not --
+    which of two tied peaks to anchor on, and whether a low printed before its own peak.
     """
 
     if not highs or not lows:
         return None
-    peak_index = max(range(len(highs)), key=lambda index: highs[index])
-    trough = min(lows[peak_index:])
-    peak = highs[peak_index]
-    return _reported((peak - trough) / peak * 100) if peak > 0 else None
+    peak = highs[0]
+    deepest = 0.0
+    for high, low in zip(highs, lows):
+        peak = max(peak, high)
+        if peak > 0:
+            deepest = max(deepest, (peak - low) / peak * 100)
+    return _reported(deepest)
 
 
 def _reported(value: float | None) -> float | None:

@@ -87,8 +87,9 @@ class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
 
     def test_each_leader_is_measured_from_the_history_the_runtime_returns_for_it(self) -> None:
         rising = _frame(np.linspace(50, 150, 300))
-        # A peak at 200 followed by a slide to 100 is a 50% correction: past the source ceiling.
-        broken = _frame(np.concatenate([np.linspace(80, 200, 150), np.linspace(200, 100, 150)]))
+        # A peak at 200, a slide to 90, and a partial recovery: past the source's 50% ceiling
+        # without printing this session's low, so the ceiling is what decides the state.
+        broken = _frame(np.concatenate([np.linspace(80, 200, 150), np.linspace(200, 90, 140), np.linspace(90, 110, 10)]))
 
         def prices(ticker: str, as_of: str) -> ProviderSnapshot[pd.DataFrame]:
             return _snapshot({"QQQ": rising, "NEARHIGH": rising, "BROKEN": broken}[ticker])
@@ -103,8 +104,8 @@ class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
         self.assertEqual(leaders["NEARHIGH"]["behavior"]["state"], "supports")
         self.assertEqual(leaders["BROKEN"]["behavior"]["state"], "contradicts")
         self.assertEqual(leaders["BROKEN"]["behavior"]["reason"], "correction_deeper_than_the_source_ceiling")
-        # The fixture's peak high is 200 x 1.002 and its trough low is 100 x 0.998.
-        self.assertAlmostEqual(leaders["BROKEN"]["correction_depth"]["measured"], 50.1996, places=3)
+        # The fixture's peak high is 200 x 1.002 and its trough low is 90 x 0.998.
+        self.assertAlmostEqual(leaders["BROKEN"]["correction_depth"]["measured"], 55.1796, places=3)
 
     def test_a_leader_whose_history_is_unavailable_is_named_in_missing_and_measured_by_nobody(self) -> None:
         rising = _frame(np.linspace(50, 150, 300))
