@@ -112,7 +112,6 @@ class CandidateUniverseTests(unittest.TestCase):
             "next_cursor": "offset:1",
             "returned_count": 1,
             "candidate_count": 2,
-            "recommendation_count": 1,
             "exclusion_count": 6,
         })
         self.assertEqual(second_page["candidates"][0]["ticker"], "BABA")
@@ -133,7 +132,6 @@ class CandidateUniverseTests(unittest.TestCase):
 
         self.assertEqual(page["candidates"], [])
         self.assertEqual(page["page"]["candidate_count"], 0)
-        self.assertEqual(page["page"]["recommendation_count"], 0)
 
     def test_exclusion_evidence_is_bounded_even_for_a_large_provider_universe(self) -> None:
         instruments = [

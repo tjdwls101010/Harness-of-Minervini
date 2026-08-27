@@ -1509,7 +1509,6 @@ def _candidate_row(record: SecurityRecord) -> dict[str, Any]:
         "instrument_type": record.instrument_type,
         "is_adr": record.is_adr,
         "origins": ["nasdaq_security_master"],
-        "recommendation_state": "not_recommended",
     }
 
 

@@ -69,9 +69,9 @@
     "limitations": [
       "Nasdaq Trader supplies a current security master, not historical constituents; unsupported historical requests are unavailable.",
       "ETF, SPAC, shell, OTC, preferred, warrant, and unsupported instruments are excluded; complete reason counts and at most min(limit, 20) representative records keep the response dense.",
-      "Candidate eligibility is not itself a buy recommendation."
+      "Candidate eligibility is not itself a buy recommendation; ticker.qualify is where a name earns a word."
     ],
-    "output": "Eligible instruments, a bounded exclusion summary, and pagination metadata including universe-wide recommendation count.",
+    "output": "Eligible instruments, a bounded exclusion summary, and pagination metadata. Nothing here is graded: no price is read on this path, so no name carries a recommendation word and the page counts only what the filter kept and dropped.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {

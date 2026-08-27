@@ -92,11 +92,13 @@ def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
 def build_market_candidates(
     instruments: Iterable[Mapping[str, Any]], *, limit: int = 50, cursor: str | None = None
 ) -> dict[str, Any]:
-    """Filter a security-master universe and paginate it without selecting a quota.
+    """Filter a security-master universe and paginate it without grading any of it.
 
-    ``recommendation_state`` is optional upstream judgment.  It is counted across
-    the complete filtered universe, never set by this function and never capped
-    by the page size.
+    Nothing on this path looks at a price, so nothing on it can recommend. The
+    ``recommendation_state`` this used to stamp on every row was the same constant every
+    time, and the count beside it was always zero -- a reader takes "not recommended" for a
+    name the harness weighed and declined, when no name here has been weighed at all.
+    ``ticker.qualify`` is where a name earns a word.
     """
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise ValueError("limit must be a positive integer")
@@ -139,7 +141,6 @@ def build_market_candidates(
     page = universe[offset : offset + limit]
     next_offset = offset + len(page)
     next_cursor = f"offset:{next_offset}" if next_offset < len(universe) else None
-    recommendation_count = sum(item["recommendation_state"] == "recommended" for item in universe)
     return {
         "candidates": page,
         "exclusions": {
@@ -154,7 +155,6 @@ def build_market_candidates(
             "next_cursor": next_cursor,
             "returned_count": len(page),
             "candidate_count": len(universe),
-            "recommendation_count": recommendation_count,
             "exclusion_count": exclusion_total,
         },
     }
@@ -349,7 +349,6 @@ def _candidate_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "instrument_type": row.get("instrument_type", row.get("security_type")),
         "is_adr": bool(row.get("is_adr")) or str(row.get("instrument_type", "")).lower() == "adr",
         "origins": _origins(row),
-        "recommendation_state": row.get("recommendation_state", "not_recommended"),
     }
 
 
