@@ -103,9 +103,9 @@ class MarketEvidenceTests(unittest.TestCase):
         snapshot = evaluate_market_snapshot(evidence)
 
         self.assertEqual(technology["basis"], {"as_of": "2026-08-14", "rating": 91, "rank": 1})
-        self.assertEqual(technology["price_momentum"]["state"], "supports")
-        self.assertEqual(technology["rs_concentration"]["state"], "observed")
-        self.assertEqual(technology["breadth"]["state"], "unavailable")
+        # No classification was handed in, so no name could be placed inside the group.
+        self.assertEqual(technology["new_highs"]["reason"], "leader_classification_not_read")
+        self.assertEqual(technology["striking_distance_names"]["state"], "unavailable")
         # No history was handed in, so no behavior word is invented from the RS rank.
         self.assertEqual(avgo["behavior"], {"state": "unavailable", "reason": "leader_price_history_not_read"})
         self.assertEqual(avgo["basis"], {"as_of": "2026-08-14", "rating": 97, "rank": 2})

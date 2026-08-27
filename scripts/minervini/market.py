@@ -10,7 +10,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from . import doctrine
 
+
+_LEADING_GROUP_COUNT = "market.industry_groups_leading_bull_count"
 _SIGNAL_STATES = frozenset(
     {
         "supports",
@@ -25,8 +28,8 @@ _SIGNAL_STATES = frozenset(
 )
 _POSITIVE = frozenset({"on", "positive", "constructive", "favorable", "pass", "passed", "supports"})
 _NEGATIVE = frozenset({"off", "negative", "destructive", "unfavorable", "fail", "failed", "contradicts"})
-_GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
-_GROUP_RANK_BASIS = (*_GROUP_METRICS, "provider_source_rank_tiebreaker")
+_GROUP_READINGS = ("new_highs", "striking_distance_names")
+_GROUP_RANK_BASIS = (*_GROUP_READINGS, "new_high_count", "provider_source_rank_tiebreaker")
 _US_EXCHANGES = frozenset({"NASDAQ", "NYSE", "NYSEAMERICAN", "NYSE ARCA", "CBOE", "IEX", "MEMX"})
 _ELIGIBLE_TYPES = frozenset({"common", "common_stock", "common stock", "adr"})
 
@@ -186,9 +189,17 @@ def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) ->
         if not isinstance(group, Mapping):
             continue
         name = group.get("name") or group.get("id") or f"{group_type}-{index + 1}"
-        signals = [{"metric": metric, "state": _state(group.get(metric)), "value": group.get(metric)} for metric in _GROUP_METRICS]
+        signals = [{"metric": metric, "state": _state(group.get(metric)), "value": group.get(metric)} for metric in _GROUP_READINGS]
         source_basis = dict(group["basis"]) if isinstance(group.get("basis"), Mapping) else {}
-        ranked.append({"name": name, "signal_vector": signals, "source_basis": source_basis, "rank_basis": list(_GROUP_RANK_BASIS)})
+        ranked.append(
+            {
+                "name": name,
+                "signal_vector": signals,
+                "member_sample": group.get("member_sample"),
+                "source_basis": source_basis,
+                "rank_basis": list(_GROUP_RANK_BASIS),
+            }
+        )
 
     ranked.sort(key=_group_rank_key)
     for rank, group in enumerate(ranked, start=1):
@@ -197,10 +208,36 @@ def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) ->
 
 
 def _group_summary_signal(identifier: str, ranks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """How many groups show the advance signal, and which one ranks first.
+
+    The count is read against the range the source gave for how many groups lead a new bull
+    market, and a range cannot decide, so this signal reports and never supports. Reading only
+    the top-ranked group's own states -- what this replaces -- called the whole market's group
+    leadership by one row of a list the same function had just sorted.
+    """
+
     if not ranks:
         return [{"id": identifier, "state": "unavailable", "value": []}]
-    states = [item["state"] for item in ranks[0]["signal_vector"]]
-    return [{"id": identifier, "state": _aggregate_states(states), "value": {"leading_group": ranks[0]["name"]}}]
+    advancing = [group["name"] for group in ranks if _reading_state(group, "new_highs") == "supports"]
+    read = [group for group in ranks if _reading_state(group, "new_highs") != "unavailable"]
+    if not read:
+        return [{"id": identifier, "state": "unavailable", "value": {"leading_group": ranks[0]["name"], "reason": "no_group_reading_available"}}]
+    return [
+        {
+            "id": identifier,
+            "state": "observed",
+            "value": {
+                "leading_group": ranks[0]["name"],
+                "groups_showing_a_group_advance": advancing,
+                "count": doctrine.evaluate_band(_LEADING_GROUP_COUNT, "leading_industry_group_count", len(advancing)),
+                "of_groups_read": len(read),
+            },
+        }
+    ]
+
+
+def _reading_state(group: Mapping[str, Any], metric: str) -> str:
+    return next((item["state"] for item in group["signal_vector"] if item["metric"] == metric), "unavailable")
 
 
 def _regime_judgment(states: Mapping[str, str], missing: list[dict[str, str]]) -> str:
@@ -259,8 +296,9 @@ def _aggregate_states(states: list[str]) -> str:
 def _group_rank_key(group: Mapping[str, Any]) -> tuple[Any, ...]:
     order = {"supports": 0, "observed": 1, "mixed": 2, "not_applicable": 3, "needs_chart": 4, "unavailable": 5, "needs_input": 6, "contradicts": 7}
     states = tuple(order[item["state"]] for item in group["signal_vector"])
-    stage_count = next(item["value"] for item in group["signal_vector"] if item["metric"] == "stage2_candidates")
-    stage_tiebreak = -stage_count if isinstance(stage_count, (int, float)) and not isinstance(stage_count, bool) else 0
+    measured = next((item["value"] for item in group["signal_vector"] if item["metric"] == "new_highs"), None)
+    now = measured.get("measured", {}).get("now") if isinstance(measured, Mapping) else None
+    stage_tiebreak = -now if isinstance(now, (int, float)) and not isinstance(now, bool) else 0
     source_rank = group.get("source_basis", {}).get("rank")
     source_tiebreak = source_rank if isinstance(source_rank, (int, float)) and not isinstance(source_rank, bool) else float("inf")
     return (*states, stage_tiebreak, source_tiebreak, str(group["name"]))

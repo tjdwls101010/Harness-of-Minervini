@@ -2,12 +2,12 @@
   "breadth": {"state": "supports", "advance_decline_ratio": 2.4},
   "qqq_21ema": {"state": "on", "definition": "one completed close above 21 EMA"},
   "sectors": [
-    {"name": "Technology", "price_momentum": "supports", "breadth": "supports", "high_proximity": "supports", "rs_concentration": "supports", "stage2_candidates": 11, "leader_behavior": "supports"},
-    {"name": "Energy", "price_momentum": "supports", "breadth": "mixed", "high_proximity": "mixed", "rs_concentration": "mixed", "stage2_candidates": 4, "leader_behavior": "mixed"}
+    {"name": "Technology", "basis": {"rank": 1}, "member_sample": {"state": "reported", "ranked_leaders_in_group": ["NVDA", "AVGO"], "not_counted": []}, "new_highs": {"doctrine_id": "market.group_new_highs_signal", "state": "supports", "measured": {"now": 2, "earlier": 0, "of_names_read": 2, "lookback_sessions": 20}}, "striking_distance_names": {"doctrine_id": "market.striking_distance_52w_high", "state": "reported", "measured": {"within_source_range": 1, "of_names_read": 2}}},
+    {"name": "Energy", "basis": {"rank": 2}, "member_sample": {"state": "unavailable", "reason": "no_ranked_leader_in_this_group", "ranked_leaders_in_group": [], "not_counted": []}, "new_highs": {"doctrine_id": "market.group_new_highs_signal", "state": "unavailable", "reason": "no_ranked_leader_in_this_group"}, "striking_distance_names": {"doctrine_id": "market.striking_distance_52w_high", "state": "unavailable", "reason": "no_ranked_leader_in_this_group"}}
   ],
   "industries": [
-    {"name": "Semiconductors", "price_momentum": "supports", "breadth": "supports", "high_proximity": "supports", "rs_concentration": "supports", "stage2_candidates": 8, "leader_behavior": "supports"}
+    {"name": "Semiconductors", "basis": {"rank": 1}, "member_sample": {"state": "reported", "ranked_leaders_in_group": ["NVDA"], "not_counted": []}, "new_highs": {"doctrine_id": "market.group_new_highs_signal", "state": "supports", "measured": {"now": 1, "earlier": 0, "of_names_read": 1, "lookback_sessions": 20}}, "striking_distance_names": {"doctrine_id": "market.striking_distance_52w_high", "state": "reported", "measured": {"within_source_range": 0, "of_names_read": 1}}}
   ],
-  "leaders": [{"ticker": "NVDA", "behavior": "supports"}, {"ticker": "AVGO", "behavior": "supports"}],
+  "leaders": [{"ticker": "NVDA", "behavior": {"state": "supports"}}, {"ticker": "AVGO", "behavior": {"state": "supports"}}],
   "trade_traction": {"state": "positive", "closed_pilot_outcomes": "constructive"}
 }

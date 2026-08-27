@@ -15,11 +15,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
 
 
 AS_OF = "2025-12-31"
+
+
+def _classification(symbol: str) -> ProviderSnapshot[dict[str, str]]:
+    """The market snapshot reads membership; every fixture runtime must answer for it."""
+
+    raise ProviderUnavailable("yfinance", "fixture_withholds_classification", operation="current_classification")
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures"
 
 
@@ -64,6 +71,7 @@ class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
     def _runtime(self, price_history) -> Runtime:
         return Runtime(
             price_history=price_history,
+            current_classification=_classification,
             finviz_breadth=lambda as_of: (_ for _ in ()).throw(
                 ProviderUnavailable("finviz", "fixture_withholds_breadth", operation="raw_snapshot")
             ),

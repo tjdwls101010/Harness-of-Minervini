@@ -22,7 +22,9 @@ _FINVIZ_SECTIONS = (
     ("sma50", "above", "below"),
     ("sma200", "above", "below"),
 )
-_GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
+_GROUP_NEW_HIGHS = "market.group_new_highs_signal"
+_GROUP_MEMBER_READING = "convention.group_member_reading"
+_TRADING_WEEK = "convention.trading_week"
 _STRIKING_DISTANCE = "market.striking_distance_52w_high"
 _LOW_LIST = "market.avoid_52w_low_list"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
@@ -79,18 +81,21 @@ def build_market_evidence(
     leader_rows: Iterable[Mapping[str, Any]] | None,
     trade_traction: Any,
     leader_history: Mapping[str, Any] | None = None,
+    leader_groups: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Convert completed source snapshots to ``evaluate_market_snapshot`` input.
 
     ``trade_traction`` intentionally has no default: it is user feedback, never
     an inference from market, Finviz, or RS data.
     """
+    history = leader_history or {}
+    leaders = _leader_evidence(leader_rows, history, leader_groups)
     return {
         "breadth": _finviz_breadth(finviz_html),
         "qqq_21ema": _qqq_21ema_switch(qqq_daily_ohlcv),
-        "sectors": _group_evidence(sector_rows, "sector"),
-        "industries": _group_evidence(industry_rows, "industry"),
-        "leaders": _leader_evidence(leader_rows, leader_history or {}),
+        "sectors": _group_evidence(sector_rows, "sector", leaders, history, leader_groups),
+        "industries": _group_evidence(industry_rows, "industry", leaders, history, leader_groups),
+        "leaders": leaders,
         "trade_traction": trade_traction,
     }
 
@@ -255,7 +260,25 @@ def _finite_number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _group_evidence(rows: Iterable[Mapping[str, Any]] | None, group_type: str) -> list[dict[str, Any]] | None:
+def _group_evidence(
+    rows: Iterable[Mapping[str, Any]] | None,
+    group_type: str,
+    leaders: list[dict[str, Any]] | None,
+    history: Mapping[str, Any],
+    groups_read: Mapping[str, Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Each ranked group, read through the market's ranked leaders that fall inside it.
+
+    The RS source publishes a group average and a member count, and no membership at all, so
+    the names a group can be read through are the leaders the snapshot already fetched. That
+    is a sample and never a census, which is why every count here is published beside the
+    names it was taken over.
+
+    A word the caller put in the source row is no longer read. Five of the six slots this
+    replaces were permanently unavailable and the sixth reported `observed` off the presence
+    of a rating -- a placeholder that made a leaderless group and a measured one look alike.
+    """
+
     if rows is None:
         return None
     if isinstance(rows, (str, bytes, Mapping)):
@@ -264,28 +287,133 @@ def _group_evidence(rows: Iterable[Mapping[str, Any]] | None, group_type: str) -
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             continue
-        basis = _basis(row)
-        name = row.get("name") or row.get(group_type) or row.get("id") or f"{group_type}-{index + 1}"
-        group = {
-            "name": str(name),
-            "basis": basis,
-            "source_row": dict(row),
-        }
-        for metric in _GROUP_METRICS:
-            explicit = row.get(metric)
-            if explicit is not None:
-                group[metric] = explicit
-            elif metric == "rs_concentration" and basis:
-                group[metric] = _observed(basis)
-            elif metric == "leader_behavior" and row.get("leader_tickers"):
-                group[metric] = _observed(basis)
-            else:
-                group[metric] = _unavailable("not_supplied_by_rs_source")
-        result.append(group)
+        name = str(row.get("name") or row.get(group_type) or row.get("id") or f"{group_type}-{index + 1}")
+        sample = _group_member_sample(name, group_type, leaders, history, groups_read)
+        result.append(
+            {
+                "name": name,
+                "basis": _basis(row),
+                "member_sample": sample,
+                "new_highs": _group_new_highs(sample, history),
+                "striking_distance_names": _group_striking_distance(sample, leaders),
+                "source_row": dict(row),
+            }
+        )
     return result
 
 
-def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None, history: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+def _group_member_sample(
+    name: str,
+    group_type: str,
+    leaders: list[dict[str, Any]] | None,
+    history: Mapping[str, Any],
+    groups_read: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Which ranked leaders sit in this group, and which of them have a window to count over.
+
+    Classification is a current snapshot the provider refuses for a past session, so "nobody
+    was classified" and "this group holds none of the leaders" are different answers and are
+    reported as different reasons.
+    """
+
+    empty = {"ranked_leaders_in_group": [], "not_counted": []}
+    if groups_read is None:
+        return {"state": "unavailable", "reason": "leader_classification_not_read", **empty}
+    members: list[str] = []
+    not_counted: list[dict[str, str]] = []
+    for leader in leaders or []:
+        ticker = leader.get("ticker")
+        if not isinstance(ticker, str):
+            continue
+        classification = groups_read.get(ticker)
+        if not isinstance(classification, Mapping):
+            continue
+        if str(classification.get(group_type, "")).casefold() != name.casefold():
+            continue
+        members.append(ticker)
+        if _countable_window(history.get(ticker)) is None:
+            not_counted.append({"ticker": ticker, "reason": "completed_sessions_insufficient"})
+    if not members:
+        return {"state": "unavailable", "reason": "no_ranked_leader_in_this_group", **empty}
+    return {"state": "reported", "ranked_leaders_in_group": members, "not_counted": not_counted}
+
+
+def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any]) -> dict[str, Any]:
+    """How many of the group's ranked names print a new 52-week high now against one window ago.
+
+    The source states the signal as a direction -- a growing number of names making new highs
+    -- and names no window to measure the growth over, so the length comes from the registry
+    rather than from this module.
+    """
+
+    reading = {"doctrine_id": _GROUP_NEW_HIGHS, "binds": doctrine.binds(_GROUP_NEW_HIGHS)}
+    lookback = _growth_lookback_sessions()
+    countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker)) is not None]
+    if not countable:
+        return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_with_a_full_window"}
+    now = sum(1 for ticker in countable if _at_new_high(history[ticker], 0))
+    earlier = sum(1 for ticker in countable if _at_new_high(history[ticker], lookback))
+    return {
+        **reading,
+        "state": "supports" if now > earlier else "observed",
+        "measured": {"now": now, "earlier": earlier, "of_names_read": len(countable), "lookback_sessions": lookback},
+    }
+
+
+def _group_striking_distance(sample: Mapping[str, Any], leaders: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """How many of the group's ranked names sit inside the source's striking-distance range.
+
+    A count of names inside a range is not itself a range reading, so this reports the count
+    and the sample it came from and never a pass.
+    """
+
+    reading = {"doctrine_id": _STRIKING_DISTANCE, "binds": doctrine.binds(_STRIKING_DISTANCE)}
+    members = set(sample.get("ranked_leaders_in_group", []))
+    if not members:
+        return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_in_this_group"}
+    states = [
+        leader.get("distance_from_52w_high", {}).get("state")
+        for leader in leaders or []
+        if leader.get("ticker") in members
+    ]
+    read = [state for state in states if state not in {None, "unavailable"}]
+    if not read:
+        return {**reading, "state": "unavailable", "reason": "leader_price_history_not_read"}
+    return {
+        **reading,
+        "state": "reported",
+        "measured": {"within_source_range": sum(1 for state in read if state == "within_source_range"), "of_names_read": len(read)},
+    }
+
+
+def _growth_lookback_sessions() -> int:
+    weeks = doctrine.parameter(_GROUP_MEMBER_READING, "new_high_growth_lookback_weeks")
+    return int(weeks) * int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
+
+
+def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]] | None:
+    """The name's series, but only when it reaches back a full year before the earlier count."""
+
+    closes, highs, lows = _leader_series(bars)
+    if closes is None:
+        return None
+    return (closes, highs, lows) if len(highs) >= _SESSIONS_PER_YEAR + _growth_lookback_sessions() else None
+
+
+def _at_new_high(bars: Any, sessions_ago: int) -> bool:
+    """Was this name's high, that many completed sessions back, the highest of its trailing year?"""
+
+    window = _countable_window(bars)
+    if window is None:
+        return False
+    _, highs, _ = window
+    index = len(highs) - 1 - sessions_ago
+    return highs[index] >= max(highs[index - _SESSIONS_PER_YEAR + 1 : index + 1])
+
+
+def _leader_evidence(
+    rows: Iterable[Mapping[str, Any]] | None, history: Mapping[str, Any], groups_read: Mapping[str, Any] | None = None
+) -> list[dict[str, Any]] | None:
     """Each ranked leader, with what its own completed bars say about how it is behaving.
 
     The RS source ranks tickers and says nothing about behavior, so this used to stand a
@@ -308,10 +436,12 @@ def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None, history: Mapping[
             continue
         basis = _basis(row)
         ticker = row.get("ticker")
+        classification = (groups_read or {}).get(ticker) if isinstance(ticker, str) else None
         leaders.append(
             {
                 "ticker": ticker,
                 **_leader_price_behavior(history.get(ticker) if isinstance(ticker, str) else None),
+                "group": dict(classification) if isinstance(classification, Mapping) else None,
                 "basis": basis,
                 "source_row": dict(row),
             }

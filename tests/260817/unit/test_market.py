@@ -19,12 +19,8 @@ class MarketSnapshotTests(unittest.TestCase):
                 "sectors": [
                     {
                         "name": "Technology",
-                        "price_momentum": "supports",
-                        "breadth": "supports",
-                        "high_proximity": "supports",
-                        "rs_concentration": "supports",
-                        "stage2_candidates": 8,
-                        "leader_behavior": "supports",
+                        "new_highs": {"state": "supports", "measured": {"now": 3, "earlier": 1}},
+                        "striking_distance_names": {"state": "reported", "measured": {"within_source_range": 2, "of_names_read": 3}},
                     }
                 ],
                 "industries": [],
@@ -49,11 +45,11 @@ class MarketSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["evidence_quality"]["status"], "complete")
         self.assertEqual(snapshot["group_ranks"]["sectors"][0]["name"], "Technology")
         top_sector = snapshot["group_ranks"]["sectors"][0]
-        self.assertEqual(top_sector["rank_basis"], ["price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior", "provider_source_rank_tiebreaker"])
+        self.assertEqual(top_sector["rank_basis"], ["new_highs", "striking_distance_names", "new_high_count", "provider_source_rank_tiebreaker"])
         self.assertNotIn("score", top_sector)
         self.assertEqual(
             {signal["metric"] for signal in top_sector["signal_vector"]},
-            set(top_sector["rank_basis"][:-1]),
+            set(top_sector["rank_basis"][:2]),
         )
 
     def test_equal_signal_vectors_preserve_the_provider_source_rank(self) -> None:
@@ -63,12 +59,8 @@ class MarketSnapshotTests(unittest.TestCase):
                 {
                     "name": name,
                     "basis": {"rank": source_rank, "as_of": "2026-08-14"},
-                    "price_momentum": "unavailable",
-                    "breadth": "unavailable",
-                    "high_proximity": "unavailable",
-                    "rs_concentration": "observed",
-                    "stage2_candidates": "unavailable",
-                    "leader_behavior": "unavailable",
+                    "new_highs": {"state": "unavailable", "reason": "no_ranked_leader_in_this_group"},
+                    "striking_distance_names": {"state": "unavailable", "reason": "no_ranked_leader_in_this_group"},
                 }
             )
 

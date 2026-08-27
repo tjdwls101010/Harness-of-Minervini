@@ -1709,6 +1709,12 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     # reading has to come from the leader's own completed bars. Withheld or session-behind
     # history is left withheld: the evidence adapter reports the gap rather than a word.
     leader_history: dict[str, Any] = {}
+    # Group membership comes from a mutable current classification, so it can only be read for
+    # the current session. Asking for it against a past `as_of` would attach today's taxonomy
+    # to a historical snapshot, which is the one thing the classification rule forbids -- the
+    # membership is left unread instead, and every group reports that it was.
+    reads_membership = clock.date == resolve_as_of().date
+    leader_groups: dict[str, Any] = {}
     for symbol in _leader_symbols(leader_rows):
         try:
             history = _cached_provider(
@@ -1725,15 +1731,40 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
             withheld = _missing_provider(error, required=False)
             withheld["ticker"] = symbol
             provider_missing.append(withheld)
+        else:
+            sources.append(_source(history.meta))
+            stale_price = _stale_price_gap(history.meta)
+            if stale_price is not None:
+                stale_price["ticker"] = symbol
+                stale_price["required"] = False
+                provider_missing.append(stale_price)
+            else:
+                leader_history[symbol] = _ohlcv_rows(history.data)
+        if not reads_membership:
             continue
-        sources.append(_source(history.meta))
-        stale_price = _stale_price_gap(history.meta)
-        if stale_price is not None:
-            stale_price["ticker"] = symbol
-            stale_price["required"] = False
-            provider_missing.append(stale_price)
+        try:
+            classification = _cached_provider(
+                runtime,
+                request,
+                clock,
+                capability="market.snapshot",
+                provider="yfinance",
+                operation="current_classification",
+                params={"ticker": symbol},
+                fetch=lambda symbol=symbol: runtime.current_classification(symbol),
+                ttl_seconds=900,
+            )
+        except ProviderUnavailable as error:
+            withheld = _missing_provider(error, required=False)
+            withheld["ticker"] = symbol
+            provider_missing.append(withheld)
             continue
-        leader_history[symbol] = _ohlcv_rows(history.data)
+        sources.append(_source(classification.meta))
+        leader_groups[symbol] = dict(classification.data)
+    if not reads_membership and leader_rows:
+        provider_missing.append(
+            {"id": "leader_classification", "reason": "historical_session_has_no_current_classification", "required": False}
+        )
     evidence = build_market_evidence(
         qqq_daily_ohlcv=_ohlcv_rows(qqq.data) if qqq is not None else None,
         finviz_html=finviz.data if finviz is not None else None,
@@ -1742,6 +1773,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         leader_rows=leader_rows,
         trade_traction={"state": trade_traction} if trade_traction is not None else None,
         leader_history=leader_history,
+        leader_groups=leader_groups or None,
     )
     result = evaluate_market_snapshot(evidence)
     section_missing = [
