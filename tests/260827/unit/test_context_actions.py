@@ -176,5 +176,32 @@ class TheDefenseMeasuresTheLevelThatIsActuallyInForce(unittest.TestCase):
         self.assertEqual(result["risk_controls"]["breakeven_protection_not_placeable"]["current_price"], 100.0)
 
 
+class AnAssertedBreachIsAboutTheDeclaredStop(unittest.TestCase):
+    def test_asserting_a_stop_breach_with_no_stop_declared_asserts_nothing(self) -> None:
+        # "The stop was hit" names a level. With none declared it names nothing, and an
+        # invalidation plan cannot stand in for it.
+        payload = {
+            "mode": "active",
+            "as_of": AS_OF,
+            "entry_price": 100.0,
+            "entry_date": "2026-08-10",
+            "invalidation": {"price": 95.0, "condition": "close below base low"},
+            "completed_stop": {"state": "triggered"},
+        }
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "INCOMPLETE")
+        self.assertEqual(result["failed"], [])
+        # And the bars are still owed: nothing was settled, so the price path is missing.
+        self.assertIn("completed_price_path", result["missing"])
+
+    def test_the_same_assertion_with_a_declared_stop_sells(self) -> None:
+        payload = {"mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": "2026-08-10", "stop_price": 90.0, "completed_stop": {"state": "triggered"}}
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "SELL")
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
+
 if __name__ == "__main__":
     unittest.main()

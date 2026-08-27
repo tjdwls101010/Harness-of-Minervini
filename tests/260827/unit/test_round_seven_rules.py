@@ -132,6 +132,18 @@ class ABlockIsVoidedOnlyByWhatItReads(unittest.TestCase):
         self.assertEqual(result["stage3_transition"]["state"], "reported")
         self.assertEqual(result["moving_average_extension"]["atr"]["value"], 2.0)
 
+    def test_a_low_inside_the_average_but_outside_the_true_range_is_not_read(self) -> None:
+        # The two windows differ here: fifty sessions plus fourteen reaches back to position
+        # 35, and the true range's own window starts at 85. A bad Low at 50 is inside the
+        # first and outside the second, and the true range is what reads High and Low.
+        bars = self.bars(100)
+        bars.iloc[50, bars.columns.get_loc("Low")] = float("nan")
+        result = build_management_evidence(bars, entry_date=bars.index[90].date(), as_of=bars.index[-1].date())
+
+        block = result["moving_average_extension"]
+        self.assertEqual(block["atr"]["value"], 2.0)
+        self.assertEqual(block["ema21"]["extension_pct"], 0.0)
+
     def test_a_broken_low_inside_the_true_range_window_still_voids_it(self) -> None:
         bars = self.bars(224)
         bars.iloc[-3, bars.columns.get_loc("Low")] = float("nan")
