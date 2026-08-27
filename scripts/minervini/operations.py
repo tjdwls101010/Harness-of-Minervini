@@ -36,7 +36,7 @@ from .providers.yfinance import completed_daily_bars, current_classification_sna
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, split_sized_discontinuities
-from .risk import declares_exit_plan, reduce_risk, settled_breach, supplied_price_path
+from .risk import declares_exit_plan, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
@@ -1618,6 +1618,11 @@ def _positive(value: Any) -> float | None:
     return float(value) if value > 0 and math.isfinite(value) else None
 
 
+# Whether a price crossed a level, asked the way that level's own audit asks it.
+_CROSSES = {
+    "completed_daily_low": lambda price, level: price <= level,
+    "completed_daily_close": lambda price, level: price < level,
+}
 # A window whose refusal is a coordinate-system break rather than a missing bar.
 _UNCROSSABLE_REASONS = frozenset({"share_split_inside_stop_window", "corporate_action_evidence_missing"})
 _COVERAGE_FIELDS = frozenset({"first_bar_checked", "last_bar_checked", "bars_checked"})
@@ -1639,10 +1644,12 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
         # Earliest breach first. Inside one session the order is not the levels' order but
         # the prices': a stop resting in the market is taken out the moment the Low reaches
         # it, and the close prints afterwards, so a session that took out a stop intraday and
-        # invalidated at the close ended at the stop. Among levels read from the same price
-        # the highest wins -- price falls from above, so that is the line it crossed first,
+        # invalidated at the close ended at the stop. The role decides that, not the record's
+        # own basis: a completed close handed in below a resting stop proves the session
+        # traded at least that low, which is an intraday fill. Among levels read from the
+        # same price the highest wins -- price falls from above, so that is the line it crossed first,
         # and picking the lower one publishes a record under a line reached second.
-        governing = min(breaches, key=lambda audit: (audit["breach_date"], 0 if audit.get("basis") == "completed_daily_low" else 1, -audit["level"]))
+        governing = min(breaches, key=lambda audit: (audit["breach_date"], 0 if _AUDIT_BASIS.get(audit.get("role"), audit.get("basis")) == "completed_daily_low" else 1, -audit["level"]))
     else:
         unresolved = [audit for audit in audits if audit["state"] != "clear"]
         governing = unresolved[0] if unresolved else max(audits, key=lambda audit: audit["level"])
@@ -1827,7 +1834,12 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "through": latest_date.isoformat(),
         }, current_price
     split_reason, uncrossable = _uncrossable_sessions(ordered)
-    inside = [session for session in uncrossable if effective_date <= session <= as_of and (end_before is None or session < end_before)]
+    # Strictly after the window opens. The event is stamped on the session that printed the
+    # new coordinate system, so a window starting there is entirely inside that system -- the
+    # position was opened in it and the declared level is in it. Refusing that window would
+    # call a coordinate change a crossing when nothing crossed. The excursion reads its own
+    # window the same way, and the two must not disagree about one frame.
+    inside = [session for session in uncrossable if effective_date < session <= as_of and (end_before is None or session < end_before)]
     # The declared level is in the pre-split coordinate system and the closes after the
     # event are in the post-split one. Comparing them is arithmetic between two different
     # shares, and it would sell a position the market never took out. But the sessions
@@ -2071,7 +2083,15 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             protective_plan.append(("initial_stop", initial_stop_price, entry_date, None))
 
     explicit_current = evidence.get("current_price")
-    explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
+    explicit_declared = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool)
+    # Each level is read the way its own audit reads it: a stop is a price the position
+    # transacts at, an invalidation a threshold the close has to be carried through.
+    explicit_crossed = (
+        [(role, level, effective) for role, level, effective, _end in protective_plan if _CROSSES[_AUDIT_BASIS[role]](float(explicit_current), level)]
+        if explicit_declared
+        else []
+    )
+    explicit_completed_breach = bool(explicit_crossed)
     explicit_path: dict[str, Any] | None = None
     explicit_audits: list[dict[str, Any]] = []
     if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
@@ -2080,12 +2100,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # cleared -- no bar was read, and a session last week could have taken it out -- so
         # it is unaudited rather than clear. The record is about the level the price actually
         # crossed, named by role, because a breached invalidation is not a breached stop.
-        # The highest level crossed is the one the price passed first on its way down -- and
+        # A completed close below a resting stop proves the session traded at least that low,
+        # so that stop was taken out intraday, before the close could invalidate anything.
+        # Among levels read from the same price the highest is the one crossed first -- and
         # that is also why no expired-window filter is needed here: a window only ends when a
         # raise replaced it, so the level that expired is always below the one that replaced
         # it, and this comparison never reaches it. The audits below check the window itself.
-        crossed = [(role, level, effective) for role, level, effective, _end in protective_plan if price <= level]
-        governing_role, governing_level, governing_from = max(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
+        governing_role, governing_level, governing_from = min(explicit_crossed, key=lambda item: (0 if _AUDIT_BASIS[item[0]] == "completed_daily_low" else 1, -item[1]))
         explicit_audits = [
             {
                 "role": role,
@@ -2093,7 +2114,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 "effective_from": effective.isoformat(),
                 **(
                     {"through": clock.date.isoformat(), "state": "breached", "basis": "explicit_completed_price", "breach_date": clock.date.isoformat(), "breach_price": price}
-                    if price <= level and (end_before is None or clock.date < end_before)
+                    if _CROSSES[_AUDIT_BASIS[role]](price, level) and (end_before is None or clock.date < end_before)
                     else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
                 ),
             }
@@ -2117,6 +2138,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # The one exception is a price path the caller handed in, which is the same record the
     # bars would produce; re-deriving it would discard what they supplied.
     settled = settled_breach(evidence)
+    if mode == "active" and has_position_anchors and not supplied_price_path(evidence) and _triggered_state(evidence.get("completed_price_path")):
+        # Not a record, so it does not stand in for one. It is still what the caller said,
+        # and a verdict that quietly drops it is a payload the caller cannot reconcile with
+        # their own request -- so it travels as the assertion it is and meets the bars.
+        evidence["asserted_price_path"] = evidence.pop("completed_price_path")
     if mode == "active" and has_position_anchors and supplied_price_path(evidence):
         # The structural blocks still travel with the SELL, saying why they are empty: a
         # block that vanishes reads as a measurement with nothing to report.
@@ -2207,6 +2233,9 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 # ended at a price the payload denies.
                 if price_path.get("basis") == "explicit_completed_price":
                     current_price = float(explicit_current)
+                    # The history stopping a session short is what the price was handed in
+                    # for. It is still reported, as evidence this reading did without.
+                    provider_missing = [item if item["id"] != "completed_price_evidence" else {**item, "required": False} for item in provider_missing]
                 elif price_path.get("reason") in _UNCROSSABLE_REASONS:
                     current_price = None
                     evidence.pop("current_price", None)

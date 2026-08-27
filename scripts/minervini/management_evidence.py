@@ -290,9 +290,17 @@ def _twenty_day_average(bars: pd.DataFrame, *, readable: _Readable) -> dict[str,
 
 
 def _latest_tie(series: pd.Series, value: float) -> Any:
-    """The index label of the last element equal to ``value``."""
+    """The index label of the last element that publishes as ``value``.
 
-    positions = [position for position, element in enumerate(series) if float(element) == value]
+    Equality is asked of the reported figure rather than the raw binary one. Two declines
+    that are the same decline can land on adjacent floats -- the same ratio reached by
+    different multiplications -- and both print as the same percentage. Dating the finding
+    at the earlier of them because their last bits differ is a tie the reader can see and
+    the code could not.
+    """
+
+    reported = _reported(value)
+    positions = [position for position, element in enumerate(series) if _reported(float(element)) == reported]
     return series.index[positions[-1]]
 
 
@@ -764,11 +772,11 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
     )
     if gap is not None:
         return {**gap, "doctrine_id": _STAGE3}
-    recent = _average_true_range(bars)
-    earlier = _average_true_range(bars.iloc[: len(bars) - length]) if len(bars) > 2 * length + 1 else {"state": "unavailable", "reason": "insufficient_history_for_comparison"}
-    ratio: float | None = None
-    if recent.get("value") and earlier.get("value"):
-        ratio = float(recent["value"]) / float(earlier["value"])
+    recent, recent_value = _average_true_range(bars)
+    # The earlier average reads its own length of ranges plus the session the first range is
+    # measured from, and it starts where the recent one leaves off: two lengths and one bar.
+    earlier, earlier_value = _average_true_range(bars.iloc[: len(bars) - length]) if len(bars) >= 2 * length + 1 else ({"state": "unavailable", "reason": "insufficient_history_for_comparison"}, None)
+    ratio = recent_value / earlier_value if recent_value and earlier_value else None
     closes = bars["Close"].astype(float)
     slope: float | None = None
     state = "unavailable"
@@ -844,19 +852,27 @@ def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | N
     }
 
 
-def _average_true_range(bars: pd.DataFrame) -> dict[str, Any]:
+def _average_true_range(bars: pd.DataFrame) -> tuple[dict[str, Any], float | None]:
+    """The record to publish, and the measurement to keep computing with.
+
+    They are not the same number. The record is rounded so a reader is not handed the last
+    bits of a binary float; feeding that rounded figure back in as a divisor makes the next
+    measurement wrong in its tenth decimal place, which is a number nobody can reproduce
+    from the definition.
+    """
+
     length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
     highs = bars["High"].astype(float)
     lows = bars["Low"].astype(float)
     closes = bars["Close"].astype(float)
     if len(bars) < length + 1:
-        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "insufficient_history_for_average_true_range", "length_sessions": length}
+        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "insufficient_history_for_average_true_range", "length_sessions": length}, None
     previous_close = closes.shift(1)
     true_range = pd.concat([highs - lows, (highs - previous_close).abs(), (previous_close - lows).abs()], axis=1).max(axis=1)
     value = float(true_range.iloc[-length:].mean())
     if not math.isfinite(value) or value <= 0:
-        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "invalid_true_range", "length_sessions": length}
-    return {"doctrine_id": _ATR, "length_sessions": length, "value": _reported(value)}
+        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "invalid_true_range", "length_sessions": length}, None
+    return {"doctrine_id": _ATR, "length_sessions": length, "value": _reported(value)}, value
 
 
 def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
@@ -869,8 +885,7 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
     if gap is not None:
         return {**gap, "doctrine_id": _OWN_CHARACTER}
     closes = bars["Close"].astype(float)
-    atr = _average_true_range(bars)
-    atr_value = atr.get("value")
+    atr, atr_value = _average_true_range(bars)
     # No warm-up mask here: the length guard below already refuses a history shorter than
     # the average, and every position this block reads starts at the average's own warm-up.
     # A mutation probe proved a mask changes nothing, which makes it a line that looks like

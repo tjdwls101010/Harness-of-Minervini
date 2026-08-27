@@ -103,7 +103,8 @@ class ANumberNeverRoundsAcrossItsOwnGate(unittest.TestCase):
 
 class ActionsBelongToAHeldPosition(unittest.TestCase):
     def test_a_sell_carries_no_management_actions(self) -> None:
-        result = reduce_risk(held(max_high_since_entry=130.0, completed_stop={"state": "triggered"}))
+        # The bars found the breach, rather than a caller asserting one the same bars cleared.
+        result = reduce_risk(held(max_high_since_entry=130.0, completed_price_path={"state": "breached", "basis": "completed_daily_low", "checked_level": 94.0, "governing_role": "stop", "from": "2026-08-10", "through": "2026-08-14", "breach_date": "2026-08-14", "breach_low": 93.0}))
 
         self.assertEqual(result["verdict"], "SELL")
         self.assertEqual(result["management_actions"], [])

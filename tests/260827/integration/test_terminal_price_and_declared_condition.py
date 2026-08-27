@@ -117,13 +117,22 @@ class WithNoBarsThePriceIsTheWholeRecord(unittest.TestCase):
         self.assertEqual(audits["stop"]["state"], "unavailable")
         self.assertEqual(audits["stop"]["reason"], "not_audited_after_explicit_breach")
 
-    def test_the_record_is_about_the_highest_level_the_price_crossed(self) -> None:
+    def test_the_record_is_about_the_level_the_price_crossed_first(self) -> None:
+        # Two levels, one price under both. The stop is a resting order, so a close that low
+        # means the session already filled it; the invalidation is read from the close.
         payload = self.refused(stop_price=90.0, invalidation={"price": 95.0}, current_price=88.0)
+
+        path = payload["data"]["completed_price_path"]
+        self.assertEqual(path["governing_role"], "stop")
+        self.assertEqual(path["checked_level"], 90.0)
+        self.assertEqual(payload["data"]["failed"], ["completed_stop_breach"])
+
+    def test_two_close_read_levels_are_named_by_the_higher(self) -> None:
+        payload = self.refused(stop_price=80.0, invalidation={"price": 95.0}, current_price=88.0)
 
         path = payload["data"]["completed_price_path"]
         self.assertEqual(path["governing_role"], "invalidation")
         self.assertEqual(path["checked_level"], 95.0)
-        self.assertEqual(payload["data"]["failed"], ["invalidation_breach"])
 
 
 class AnInvalidationIsAboutWhereTheSessionFinished(unittest.TestCase):

@@ -438,15 +438,31 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
     )
 
 
+def triggered_state(record: Any) -> bool:
+    """Whether a record's state word says the thing it is about happened."""
+
+    return _triggered(record)
+
+
 def supplied_price_path(evidence: Mapping[str, Any]) -> bool:
     """Whether the caller handed in the completed-bar audit itself.
 
-    This is the one settled breach the bars cannot improve on, because it is the same
-    record they would produce. Every other assertion says the position ended without saying
-    when, and the bars can still hold an exit that happened first.
+    This is the one settled breach the bars cannot improve on, because it is the same record
+    they would produce -- but only if it is one. A record carries the coordinates that make
+    it auditable: which session, and which level. A state word on its own is an assertion
+    wearing the shape of an audit, and it goes to the bars like any other assertion. So does
+    a record naming a role for a level this request never declared, because a path about an
+    invalidation nobody declared is about nothing.
     """
 
-    return _triggered(_mapping(evidence).get("completed_price_path"))
+    payload = _mapping(evidence)
+    path = _mapping(payload.get("completed_price_path"))
+    if not _triggered(path) or path.get("breach_date") is None or _number(path.get("checked_level")) is None:
+        return False
+    invalidation_price, _ = _exit_plan(payload)
+    declared = {"stop": _number(payload.get("stop_price")), "initial_stop": _number(payload.get("initial_stop_price")), "invalidation": invalidation_price}
+    role = path.get("governing_role")
+    return role is None or declared.get(role) is not None
 
 
 _POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
@@ -538,6 +554,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # be asserted about a level the caller declared: "the stop was hit" with no stop declared
     # names no level, and an invalidation plan cannot stand in for one.
     asserted_stop = (_triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event"))) and stop is not None
+    # A path handed in without the coordinates that make it an audit was moved here: it says
+    # the position ended and nothing more, which is what an assertion is.
+    asserted_path = _triggered(payload.get("asserted_price_path"))
+    asserted_stop = asserted_stop or asserted_path
     completed_stop = asserted_stop or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = (current is not None and invalidation_price is not None and current <= invalidation_price) or (
         _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
@@ -547,6 +567,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # that trader's own exit plan breached, audited over completed bars like a stop.
     trail_breached = _status_word(selected_trail) == "breached"
     breached = live_triggered or completed_stop or invalidation_triggered or trail_breached
+
+    # An assertion outranks evidence nobody gathered. It does not outrank evidence that was
+    # gathered about the same levels and says the opposite: a completed breach asserted
+    # beside an audit that cleared every declared level over its whole window is a request
+    # contradicting itself, and neither half of it can be published as a verdict.
+    if asserted_stop and protective_plan:
+        records = _audit_records(completed_price_path, path_state)
+        if path_state == "clear" and all(_audited(records, level, required_from, required_to) for level, required_from, required_to in protective_plan):
+            anchors.append("asserted_breach_contradicted_by_completed_bars")
 
     gaps: list[str] = []
     if not breached:
@@ -654,23 +683,27 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         # still in progress; a close below an average, and a level read from the close, are
         # settled at the bell. So each dated exit carries when inside the session it
         # happened, and the word is the last tiebreak rather than the first.
-        intraday, at_the_close = 0, 1
+        # And within one moment, what the bars measured names it before what the caller
+        # asserted about the same session: the assertion says a level was hit, the audit
+        # says which session's price hit which level.
+        intraday, at_the_close, measured, asserted = 0, 1, 0, 1
         dated = [
-            (day, moment, word)
-            for day, moment, word in (
+            (day, moment, source, word)
+            for day, moment, source, word in (
                 (
                     _iso_date(completed_price_path.get("breach_date")),
                     intraday if completed_price_path.get("basis") == "completed_daily_low" else at_the_close,
+                    measured,
                     "invalidation_breach" if path_names_invalidation else "completed_stop_breach",
                 ),
-                (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, at_the_close, "management_average_exit"),
+                (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, at_the_close, measured, "management_average_exit"),
                 # A live breach is a partial session, which is today, and it is happening
                 # while the session runs rather than at its close.
-                (as_of if live_triggered else None, intraday, "live_stop_breach"),
+                (as_of if live_triggered else None, intraday, asserted, "live_stop_breach"),
             )
             if day is not None
         ]
-        reasons = [min(dated)[2] if len(dated) > 1 else default]
+        reasons = [min(dated)[3] if len(dated) > 1 else default]
     elif gaps:
         verdict = "INCOMPLETE"
         missing = gaps

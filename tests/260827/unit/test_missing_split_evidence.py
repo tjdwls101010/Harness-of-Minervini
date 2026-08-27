@@ -276,14 +276,16 @@ class WhichEventFactorsCountAsSplits(unittest.TestCase):
         self.assertEqual(payload["data"]["completed_price_path"]["state"], "clear")
         self.assertEqual(payload["data"]["max_high_since_entry"], 101.0)
 
-    def test_a_split_on_the_entry_session_is_inside_the_stop_window_and_not_the_excursion(self) -> None:
-        # The two windows begin one session apart on purpose, and the boundary is where
-        # that shows: the stop audit reads the entry session, the excursion starts after it.
+    def test_a_split_on_the_entry_session_leaves_the_whole_window_on_one_side(self) -> None:
+        # The event is stamped on the session that printed the new prices, so a position
+        # opened there was opened in the new coordinate system and so was its stop. Nothing
+        # in either window crosses, and both read normally.
         bars = frame([100.0] * 15 + [50.0] * 15, splits={15: 2.0})
-        payload = run(bars, entry_date=bars.index[15].date().isoformat())
+        payload = run(bars, entry_date=bars.index[15].date().isoformat(), entry_price=50.0, stop_price=45.0)
 
-        self.assertEqual(payload["data"]["completed_price_path"]["reason"], "share_split_inside_stop_window")
+        self.assertEqual(payload["data"]["completed_price_path"]["state"], "clear")
         self.assertIsNone(payload["data"]["max_high_withheld_reason"])
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
 
     def test_a_split_on_the_as_of_session_is_still_inside_both_windows(self) -> None:
         bars = frame([100.0] * 29 + [50.0], splits={29: 2.0})

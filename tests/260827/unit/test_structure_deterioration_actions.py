@@ -225,6 +225,25 @@ class TwoExitsOnOneSessionDidNotHappenAtOneMoment(unittest.TestCase):
 
         self.assertEqual(result["failed"], ["completed_stop_breach"])
 
+    def test_a_stop_the_bars_measured_names_it_before_the_same_session_s_assertion(self) -> None:
+        result = reduce_risk(self.payload(
+            live_stop_check=True,
+            live_stop={"state": "triggered", "partial_session": True},
+            completed_price_path={"state": "breached", "basis": "completed_daily_low", "breach_date": "2025-12-31", "governing_role": "stop"},
+        ))
+
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
+    def test_a_level_read_from_the_close_yields_to_a_live_breach_the_same_day(self) -> None:
+        result = reduce_risk(self.payload(
+            invalidation={"price": 95.0},
+            live_stop_check=True,
+            live_stop={"state": "triggered", "partial_session": True},
+            completed_price_path={"state": "breached", "basis": "completed_daily_close", "breach_date": "2025-12-31", "governing_role": "invalidation"},
+        ))
+
+        self.assertEqual(result["failed"], ["live_stop_breach"])
+
     def test_an_average_that_closed_first_still_owns_an_earlier_day(self) -> None:
         result = reduce_risk(self.payload(
             live_stop_check=True,

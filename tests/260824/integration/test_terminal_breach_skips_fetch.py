@@ -108,7 +108,11 @@ class RoutingAgreesWithTheReducerTests(unittest.TestCase):
 
 
 class SuppliedPathBreachTests(unittest.TestCase):
-    """A breach the caller already supplied must not be overwritten by a fresh fetch."""
+    """An audit the caller already ran must not be overwritten by a fresh fetch.
+
+    A state word on its own is not that audit. It carries no session and no level, so it
+    cannot be the record it is shaped like -- it is an assertion, and it meets the bars.
+    """
 
     def setUp(self) -> None:
         self.calls: list[str] = []
@@ -139,17 +143,28 @@ class SuppliedPathBreachTests(unittest.TestCase):
             runtime=Runtime(price_history=self.clear_history),
         )
 
+    RECORD = {"basis": "completed_daily_low", "governing_role": "stop", "checked_level": 94.0, "breach_date": "2025-12-15", "breach_low": 93.0}
+
     def test_a_padded_breach_state_is_still_a_breach(self) -> None:
-        payload = self.run_risk({"state": " breached "})
+        payload = self.run_risk({**self.RECORD, "state": " breached "})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(self.calls, [])
 
     def test_a_breach_reported_under_status_is_still_a_breach(self) -> None:
-        payload = self.run_risk({"status": "breached"})
+        payload = self.run_risk({**self.RECORD, "status": "breached"})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(self.calls, [])
+
+    def test_a_state_word_with_no_coordinates_is_an_assertion_and_meets_the_bars(self) -> None:
+        payload = self.run_risk({"state": "breached"})
+
+        self.assertEqual(self.calls, ["TEST"])
+        # The bars cleared every declared level over its whole window, which is the
+        # assertion's own request contradicting itself.
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertIn("asserted_breach_contradicted_by_completed_bars", payload["data"]["missing"])
 
 
 if __name__ == "__main__":

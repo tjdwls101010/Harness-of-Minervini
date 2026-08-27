@@ -73,7 +73,7 @@ class TheTraderLionProfileIsOptIn(unittest.TestCase):
         self.assertEqual(result["management_actions"], [])
 
     def test_the_profile_never_touches_the_verdict(self) -> None:
-        breached = reduce_risk(held(max_high_since_entry=106.0, management_profile="tl_stage12", completed_stop={"state": "triggered"}))
+        breached = reduce_risk(held(max_high_since_entry=106.0, management_profile="tl_stage12", completed_price_path={"state": "breached", "basis": "completed_daily_low", "checked_level": 94.0, "governing_role": "stop", "from": "2026-08-10", "through": "2026-08-14", "breach_date": "2026-08-14", "breach_low": 93.0}))
 
         self.assertEqual(breached["verdict"], "SELL")
         self.assertEqual(breached["management_actions"], [])

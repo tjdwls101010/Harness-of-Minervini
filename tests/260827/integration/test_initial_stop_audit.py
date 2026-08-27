@@ -139,15 +139,16 @@ class ABreachNamesTheLevelItCrossed(unittest.TestCase):
         self.assertEqual(stop_audit["basis"], "completed_daily_low")
 
     def test_a_price_under_both_levels_is_named_by_the_one_it_crossed_first(self) -> None:
-        # Price falls from above, so 95 was crossed before 90. Naming the lower level would
-        # report the trade as ending at a line the market reached second.
+        # A completed close of 88 proves the session traded at least that low, so the stop
+        # resting at 90 was filled intraday -- before the close could invalidate anything.
+        # The invalidation is read from that same close, which comes after.
         payload = run(quiet(40), stop_price=90.0, invalidation={"price": 95.0, "condition": "close at or below 95"}, current_price=88.0)
 
         data = payload["data"]
-        self.assertEqual(data["failed"], ["invalidation_breach"])
+        self.assertEqual(data["failed"], ["completed_stop_breach"])
         path = data["completed_price_path"]
-        self.assertEqual(path["governing_role"], "invalidation")
-        self.assertEqual(path["checked_level"], 95.0)
+        self.assertEqual(path["governing_role"], "stop")
+        self.assertEqual(path["checked_level"], 90.0)
         self.assertEqual({audit["role"]: audit["state"] for audit in path["audits"]}, {"stop": "breached", "invalidation": "breached"})
 
     def test_an_expired_initial_stop_is_not_audited_by_a_price_printed_since(self) -> None:
