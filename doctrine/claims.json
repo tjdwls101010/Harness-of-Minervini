@@ -11645,6 +11645,75 @@
         "tests/260827/unit/test_structure_extension_actions.py"
       ],
       "computability": "deterministic"
+    },
+    {
+      "id": "convention.momentum_review_windows",
+      "title": "Short-horizon return and gap windows the harness reads a late-stage advance over",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The sources describe a climax run in words -- a rapid advance, gaps late in the move -- and name no measurement window. The harness reads the advance over five, ten and twenty completed sessions and counts gap-ups over the last ten, and records those lengths here so the numbers live in one place and travel with the block that used them."
+      },
+      "thresholds": {},
+      "parameters": {
+        "short_window_sessions": {
+          "value": 5,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention. It changes a reported return and no verdict reads that return."
+        },
+        "medium_window_sessions": {
+          "value": 10,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention, and the window the gap count also uses."
+        },
+        "long_window_sessions": {
+          "value": 20,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention, roughly a month of sessions."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "With fewer completed sessions than the longest window the returns have nothing to measure over and are reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the sources describe the climax qualitatively and name no window"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_missing_columns_and_ties.py",
+        "tests/260827/unit/test_structure_extension_evidence.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

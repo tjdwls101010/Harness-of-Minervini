@@ -451,6 +451,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     if anchors:
         verdict = "INCOMPLETE"
         missing = anchors + gaps
+        # The measurements are keyed to a position the request never established -- windows
+        # from an entry date that is missing or impossible. A SELL keeps its evidence,
+        # because there the position was real and the structure explains the exit.
+        management_evidence = {}
     elif breached:
         verdict = "SELL"
         missing = []

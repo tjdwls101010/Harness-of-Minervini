@@ -2061,6 +2061,11 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
             # claim only if the registry holds it: an id nobody can look up cites nothing.
             if isinstance(claim, str) and has_claim(claim):
                 named.add(claim)
+            # A block that reads more than one claim -- a measurement plus the convention
+            # that sized its window -- names them all, and each is checked the same way.
+            for extra in value.get("doctrine_ids") or []:
+                if isinstance(extra, str) and has_claim(extra):
+                    named.add(extra)
             for item in value.values():
                 collect(item)
         elif isinstance(value, list):

@@ -106,7 +106,8 @@ class KeyReversalCriteria(unittest.TestCase):
         self.assertIs(block["needs_chart"], True)
 
     def test_an_ordinary_bar_meets_none(self) -> None:
-        bars = frame(flat(30))
+        # Narrower and quieter than the sessions before it: nothing about it is a maximum.
+        bars = frame(flat(29) + [(100.0, 100.5, 99.5, 100.0, 500_000)])
         result = build(bars, entry=20, breakout_date=bars.index[20].date())
 
         self.assertEqual(result["key_reversal"]["computable_criteria_met"], 0)
@@ -124,7 +125,7 @@ class GapsSinceTheBreakout(unittest.TestCase):
         rows = flat(22)
         rows += [(102.0, 103.0, 101.5, 102.5, 1_000_000)]  # gap over the prior high of 101
         rows += [(102.5, 103.5, 101.5, 102.5, 1_000_000)] * 5
-        rows += [(104.5, 105.5, 103.5, 105.0, 1_000_000)]  # gap over 103.5
+        rows += [(104.5, 106.0, 104.0, 105.5, 1_000_000)]  # gap over 103.5, and it never traded back through
         rows += [(105.0, 106.0, 104.0, 105.0, 1_000_000)] * 2
         bars = frame(rows)
         result = build(bars, entry=20, breakout_date=bars.index[20].date())

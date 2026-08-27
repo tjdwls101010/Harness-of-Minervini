@@ -49,6 +49,8 @@ _LATE_GAPS = "management.tl_late_gaps_fail_more_often"
 _CLIMAX = "management.climax_run_ends_the_advance"
 _FAILED_VOLUME = "management.low_volume_breakout_then_high_volume_selling"
 _ATR = "convention.average_true_range"
+_WINDOWS = "convention.momentum_review_windows"
+_CLOSING_RANGE = "setup.closing_range_formula"
 _CLOSING_RANGE = "setup.closing_range_formula"
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
@@ -347,13 +349,13 @@ def _average_true_range(bars: pd.DataFrame) -> dict[str, Any]:
     lows = bars["Low"].astype(float)
     closes = bars["Close"].astype(float)
     if len(bars) < length + 1:
-        return {"state": "unavailable", "reason": "insufficient_history_for_average_true_range", "length_sessions": length}
+        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "insufficient_history_for_average_true_range", "length_sessions": length}
     previous_close = closes.shift(1)
     true_range = pd.concat([highs - lows, (highs - previous_close).abs(), (previous_close - lows).abs()], axis=1).max(axis=1)
     value = float(true_range.iloc[-length:].mean())
     if not math.isfinite(value) or value <= 0:
-        return {"state": "unavailable", "reason": "invalid_true_range", "length_sessions": length}
-    return {"length_sessions": length, "value": _reported(value)}
+        return {"doctrine_id": _ATR, "state": "unavailable", "reason": "invalid_true_range", "length_sessions": length}
+    return {"doctrine_id": _ATR, "length_sessions": length, "value": _reported(value)}
 
 
 def _moving_average_extension(bars: pd.DataFrame) -> dict[str, Any]:
@@ -409,19 +411,24 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
         "gap_up_filled_and_reversed": bool(gap_up and float(lows.iloc[last]) <= float(highs.iloc[previous]) and float(closes.iloc[last]) < float(opens.iloc[last])) if opens is not None else None,
         # With no other session inside the window there is nothing to be highest or widest
         # than, and answering false there would read as a criterion checked and missed.
-        "highest_volume_since": None if (volumes is None or not others) else bool(float(volumes.iloc[last]) > max(float(volumes.iloc[position]) for position in others)),
-        "widest_range_since": None if not others else bool((float(highs.iloc[last]) - float(lows.iloc[last])) > max(float(highs.iloc[position]) - float(lows.iloc[position]) for position in others)),
+        # A tied maximum is still the maximum: the session traded as heavily, and as widely,
+        # as anything since the window opened.
+        "highest_volume_since": None if (volumes is None or not others) else bool(float(volumes.iloc[last]) >= max(float(volumes.iloc[position]) for position in others)),
+        "widest_range_since": None if not others else bool((float(highs.iloc[last]) - float(lows.iloc[last])) >= max(float(highs.iloc[position]) - float(lows.iloc[position]) for position in others)),
         "closed_below_prior_low": bool(float(closes.iloc[last]) < float(lows.iloc[previous])),
         "closing_range_pct": _reported(_closing_range_pct(bars.iloc[last])),
         "visually_extended": None,
         "trend_line_of_highs_breached": None,
     }
     computable = sum(1 for name in ("gap_up_filled_and_reversed", "highest_volume_since", "widest_range_since", "closed_below_prior_low") if features[name] is True)
+    missing_inputs = [name for name, present in (("open_history", opens is not None), ("volume_history", volumes is not None)) if not present]
     return {
         "doctrine_id": _KEY_REVERSAL,
+        "doctrine_ids": [_KEY_REVERSAL, _CLOSING_RANGE],
         "binds": doctrine.binds(_KEY_REVERSAL),
         "since": since.isoformat(),
         "since_basis": basis,
+        "missing_inputs": missing_inputs,
         "date": bars.index[last].date().isoformat(),
         "features": features,
         "computable_criteria_met": computable,
@@ -432,8 +439,10 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
 def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None) -> dict[str, Any]:
     since = breakout_date or entry_date
     basis = "breakout_date" if breakout_date is not None else "entry_date"
+    if "Open" not in bars.columns:
+        return {"state": "unavailable", "reason": "open_history_unavailable"}
     window = _positions_since(bars, since)
-    if not window or "Open" not in bars.columns:
+    if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
     opens = bars["Open"].astype(float)
     highs = bars["High"].astype(float)
@@ -444,11 +453,14 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
     if gap_positions:
         gap = gap_positions[-1]
         prior_high = float(highs.iloc[gap - 1])
-        filled = any(float(lows.iloc[position]) <= prior_high for position in range(gap + 1, len(bars)))
+        # The gap session itself can close its own gap: it opened above the prior high and
+        # traded back down through it before the bell.
+        filled = any(float(lows.iloc[position]) <= prior_high for position in range(gap, len(bars)))
         latest = {"date": bars.index[gap].date().isoformat(), "filled": filled, "closing_range_pct": _reported(_closing_range_pct(bars.iloc[gap]))}
     breakout_close = float(closes.iloc[window[0]])
     return {
         "doctrine_id": _LATE_GAPS,
+        "doctrine_ids": [_LATE_GAPS, _CLOSING_RANGE],
         "binds": doctrine.binds(_LATE_GAPS),
         "state": "reported",
         "since": since.isoformat(),
@@ -463,13 +475,15 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
 
 def _climax(bars: pd.DataFrame) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
-    if len(bars) < 21:
-        return {"state": "unavailable", "reason": "insufficient_history_for_return_windows"}
-    returns = {f"return_{window}_pct": _reported((float(closes.iloc[-1]) / float(closes.iloc[-1 - window]) - 1) * 100) for window in (5, 10, 20)}
+    lengths = [int(doctrine.parameter(_WINDOWS, name)) for name in ("short_window_sessions", "medium_window_sessions", "long_window_sessions")]
+    gap_window = int(doctrine.parameter(_WINDOWS, "medium_window_sessions"))
+    if len(bars) <= max(lengths):
+        return {"state": "unavailable", "reason": "insufficient_history_for_return_windows", "sessions_required": max(lengths) + 1}
+    returns = {f"return_{window}_pct": _reported((float(closes.iloc[-1]) / float(closes.iloc[-1 - window]) - 1) * 100) for window in lengths}
     opens = bars["Open"].astype(float) if "Open" in bars.columns else None
     highs = bars["High"].astype(float)
     gap_ups = (
-        sum(1 for position in range(len(bars) - 10, len(bars)) if position >= 1 and float(opens.iloc[position]) > float(highs.iloc[position - 1]))
+        sum(1 for position in range(len(bars) - gap_window, len(bars)) if position >= 1 and float(opens.iloc[position]) > float(highs.iloc[position - 1]))
         if opens is not None
         else None
     )
@@ -480,8 +494,11 @@ def _climax(bars: pd.DataFrame) -> dict[str, Any]:
         percentile = (sum(1 for value in prior if value <= float(volumes.iloc[-1])) / len(prior) * 100) if prior else None
     return {
         "doctrine_id": _CLIMAX,
+        "doctrine_ids": [_CLIMAX, _WINDOWS, _CLOSING_RANGE],
         "binds": doctrine.binds(_CLIMAX),
         "state": "reported",
+        "windows": {**{f"return_{window}_pct": window for window in lengths}, "gap_ups_last_10_sessions": gap_window},
+        "missing_inputs": [name for name, present in (("open_history", opens is not None), ("volume_history", "Volume" in bars.columns)) if not present],
         **returns,
         "gap_ups_last_10_sessions": gap_ups,
         "last_volume_percentile": _reported(percentile),
@@ -493,10 +510,10 @@ def _climax(bars: pd.DataFrame) -> dict[str, Any]:
 def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | None, sessions: set[date], first_session: date) -> dict[str, Any]:
     if breakout_date is None:
         return {"state": "unavailable", "reason": "breakout_date_not_declared"}
-    if breakout_date not in sessions:
-        return {"state": "unavailable", "reason": "history_starts_after_breakout_date" if first_session > breakout_date else "no_completed_bar_on_breakout_date"}
     if "Volume" not in bars.columns:
         return {"state": "unavailable", "reason": "volume_history_unavailable"}
+    if breakout_date not in sessions:
+        return {"state": "unavailable", "reason": "history_starts_after_breakout_date" if first_session > breakout_date else "no_completed_bar_on_breakout_date"}
     window = _positions_since(bars, breakout_date)
     if not window:
         return {"state": "unavailable", "reason": "no_completed_bar_on_or_after_breakout_date"}
