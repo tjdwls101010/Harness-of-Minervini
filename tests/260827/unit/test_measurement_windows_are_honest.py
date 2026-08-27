@@ -19,6 +19,9 @@ def frame(rows: int, *, end: str = "2025-12-26", close: float = 100.0) -> pd.Dat
 
 
 def build(bars: pd.DataFrame, **kwargs: object) -> dict:
+    entry = kwargs.pop("entry", None)
+    if entry is not None:
+        kwargs["entry_date"] = bars.index[int(entry)].date()
     kwargs.setdefault("entry_date", bars.index[max(0, len(bars) - 5)].date())
     return build_management_evidence(bars, as_of=bars.index[-1].date(), **kwargs)
 
@@ -103,3 +106,56 @@ class WhatCannotBeCompared(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ABadBarOnlySpoilsWhatReadsIt(unittest.TestCase):
+    def test_an_ancient_broken_session_does_not_void_this_week_s_measurements(self) -> None:
+        bars = frame(120)
+        bars.iloc[0, bars.columns.get_loc("Open")] = float("nan")
+        result = build(bars, entry=110, base_top=100.0, breakout_date=bars.index[110].date())
+
+        for key in ("base_extension", "key_reversal", "gaps_since_breakout", "climax", "twenty_day_average", "post_breakout_behavior"):
+            self.assertNotEqual(result[key].get("reason"), "invalid_ohlc_history", key)
+
+    def test_a_broken_session_inside_the_window_still_voids_that_block(self) -> None:
+        bars = frame(120)
+        bars.iloc[115, bars.columns.get_loc("Close")] = 0.0
+        result = build(bars, entry=110, base_top=100.0)
+
+        self.assertEqual(result["base_extension"]["reason"], "invalid_ohlc_history")
+        self.assertEqual(result["base_extension"]["date"], bars.index[115].date().isoformat())
+
+
+class TheWeekendAnchorAdvancesToTheNextSession(unittest.TestCase):
+    def test_sunday_advances_one_day_and_saturday_two(self) -> None:
+        from datetime import timedelta
+
+        bars = frame(60)
+        monday = bars.index[0].date()
+        self.assertEqual(monday.weekday(), 0, "fixture must start on a Monday")
+        for back, label in ((1, "Sunday"), (2, "Saturday")):
+            result = build_management_evidence(bars, entry_date=bars.index[40].date(), as_of=bars.index[-1].date(), stage2_start=monday - timedelta(days=back))
+
+            block = result["largest_decline_since_stage2_start"]
+            self.assertEqual(block["measured_from"], monday.isoformat(), label)
+
+
+class TheWindowsComeFromTheRegistry(unittest.TestCase):
+    def test_changing_the_registered_window_changes_the_measurement(self) -> None:
+        from unittest import mock
+
+        from scripts.minervini import doctrine as doctrine_module
+        from scripts.minervini import management_evidence
+
+        bars = frame(80)
+        real = doctrine_module.parameter
+
+        def shorter(claim_id: str, name: str) -> float:
+            if claim_id == "convention.momentum_review_windows":
+                return {"short_window_sessions": 3, "medium_window_sessions": 4, "long_window_sessions": 6}[name]
+            return real(claim_id, name)
+
+        with mock.patch.object(management_evidence.doctrine, "parameter", side_effect=shorter):
+            climax = build(bars, entry=70)["climax"]
+
+        self.assertEqual(climax["windows"], {"return_3_pct": 3, "return_4_pct": 4, "return_6_pct": 6, "gap_ups_last_10_sessions": 4})

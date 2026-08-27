@@ -11714,6 +11714,392 @@
         "tests/260827/unit/test_structure_extension_evidence.py"
       ],
       "computability": "deterministic"
+    },
+    {
+      "id": "management.market_defense_tightens_stops",
+      "title": "A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "market_state",
+        "entry_price",
+        "stop_price"
+      ],
+      "rule": {
+        "summary": "In a difficult market environment the source cuts losses at 5 to 6 percent instead of the usual 7 to 8 and takes smaller profits, and when he turns bearish while holding longs he tightens stops and lets the price action take him out one position at a time rather than selling everything on his opinion of the market."
+      },
+      "thresholds": {
+        "difficult_market_loss_pct": {
+          "role": "band",
+          "range": [
+            5,
+            6
+          ],
+          "unit": "percent",
+          "exact": true,
+          "direction": "inside_is_better",
+          "quote_index": 1,
+          "note": "The loss range the source cuts at when the environment is difficult, against 7 to 8 in a normal one. A band: it reports where a declared stop sits and never sells on its own."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A deteriorating market tightens stops and shrinks targets; it does not sell a position on an opinion\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 6,
+            "text": "In a difficult market environment, profits will be smaller than normal and losses will be larger; downside gaps will be more common, and you will most likely experience greater slippage.",
+            "supports": "the environment the tightened parameters belong to"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 6,
+            "text": "Tighten up stop losses. If you normally cut losses at 7 to 8 percent, cut them at 5 to 6 percent.",
+            "supports": "the tightened loss range the source names for a difficult market"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "Even if I turn bearish on the market while I’m holding longs, I will usually let the stocks stop me out. I don’t usually sell everything on my “opinion” of the market. I simply tighten my stops and let the price action take me out of the positions one by one.",
+            "supports": "market weakness tightens stops rather than liquidating a ticker by opinion"
+          }
+        ],
+        "resolution": "mined from Minervini row 6 (Chapter 13, Risk Management) and row 15 (interview). The sizing sentence in the same list -- reduce exposure with regard to position sizes and overall capital commitment -- is deliberately not registered: this harness never prescribes size."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.earnings_awareness_while_holding",
+      "title": "A held position's coming earnings report is something to be aware of, including reports from its industry group",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "earnings_date"
+      ],
+      "rule": {
+        "summary": "The source tells the holder to be aware of earnings reports and news from the companies whose stock they hold and from the same industry group, and notes that a preannouncement can arrive before the actual earnings date."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A held position's coming earnings report is something to be aware of, including reports from its industry group\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A held position's coming earnings report is something to be aware of, including reports from its industry group\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 13,
+            "text": "It’s not uncommon for a company to issue a preannouncement about its results before the actual earnings date. You should, in addition, be aware of earnings reports and news from companies that are in the same industry group as the stocks you hold.",
+            "supports": "awareness of a held position's coming report, and of its industry group's"
+          }
+        ],
+        "resolution": "mined from Minervini row 13 (Chapter 7, Fundamentals to Focus on). Awareness language, not filter language, so this is review evidence and never a sale."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.zanger_does_not_hold_through_earnings",
+      "title": "Zanger has not held a position through an earnings release in more than ten years",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "earnings_date"
+      ],
+      "rule": {
+        "summary": "A practitioner this harness reads for contrast states that he has not held any stock long or short through earnings in more than ten years, and that the few times he did he was short and got lucky."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"Zanger has not held a position through an earnings release in more than ten years\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"Zanger has not held a position through an earnings release in more than ten years\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "I should note that there have only been a few times I’ve held stocks through an earnings release, and I was short in each of those few times—and got very lucky. It’s been more than 10 years since I’ve held any stock long or short through earnings.",
+            "supports": "the practitioner's own standing practice of not holding through a report"
+          }
+        ],
+        "resolution": "mined from Minervini row 15 (interview, Zanger answering). A personal practice, not Minervini doctrine: it is reported beside the earnings measurement and can never carry a verdict."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Zanger"
+    },
+    {
+      "id": "management.zanger_first_two_days_out_of_the_base",
+      "title": "Zanger reads the first two sessions out of the base as the most important for volume and price behavior",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "A practitioner this harness reads for contrast calls the first two days out of the base the most important in regard to volume and price behavior, and says that after that period he keeps no preset time stop and responds only to volume and price."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"Zanger reads the first two sessions out of the base as the most important for volume and price behavior\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"Zanger reads the first two sessions out of the base as the most important for volume and price behavior\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "The first two days out of the base are the most important in regard to volume and price behavior. After that period, holding would depend on the depth of the volume dry-up followed by the price behavior when volume recedes. I have nothing preset in my mind like a time stop, since I only respond to volume and price behavior independent of time after those first two days.",
+            "supports": "the two-session window, and the refusal of a preset time stop after it"
+          }
+        ],
+        "resolution": "mined from Minervini row 15 (interview, Zanger answering). The window is his, so the sessions are reported as contrast and never become an action."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Zanger",
+      "parameters": {
+        "window_sessions": {
+          "value": 2,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "The window the practitioner names. It selects which sessions are reported and no verdict reads them."
+        }
+      }
+    },
+    {
+      "id": "management.tennis_ball_action_after_the_breakout",
+      "title": "A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "After a breakout the source watches the pullbacks: in a stock under accumulation they are brief and met with support that pushes it back to new highs within days, bouncing like a tennis ball rather than an egg, and there should not be much volatility during the initial rally and the first one or two normal reactions."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A healthy stock's pullbacks are brief and bounce back to new highs within days; the alternative is abnormal action that raises concern\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "If the stock is healthy and under accumulation, the pullbacks will be brief and will be met with support that pushes the stock to new highs within just days, bouncing back like a tennis ball. This is how you determine whether the stock is experiencing a natural reaction or abnormal activity that should raise concern.",
+            "supports": "brief pullbacks recovering to new highs within days as the healthy behavior"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "He said that price reactions and pullbacks allow you to determine whether your stock is a tennis ball or an egg. He wanted to own tennis balls.",
+            "supports": "the tennis ball and egg distinction the reading comes from"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "There should not be much volatility during the initial rally phase and during the first one or two normal reactions.",
+            "supports": "the expected quiet of the initial rally and the first reactions"
+          }
+        ],
+        "resolution": "mined from Minervini row 3 (Chapter 10). 'Within just days' is not a number, so the harness reports each reaction's depth, length and how long recovery took, and names no threshold."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.stock_that_does_not_act_as_expected",
+      "title": "A stock that has met elite criteria and then does not act as expected is a major red flag",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "entry_date"
+      ],
+      "rule": {
+        "summary": "The source says that once a candidate has met the criteria the risks become unambiguous, and a stock that does not act as expected is a major red flag; behaving poorly after being deemed a strong prospect suggests a problem."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A finding that conflicts with \"A stock that has met elite criteria and then does not act as expected is a major red flag\" prompts review rather than an automatic verdict."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Missing evidence for \"A stock that has met elite criteria and then does not act as expected is a major red flag\" remains an explicit gap rather than an assumed pass or fail."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "When one identifies the proper characteristics for a superperformance candidate, the risks become unambiguous. If a stock doesn’t act as expected, that’s a major red flag. After all, the stock has already met very elite criteria and has been deemed a strong prospect. If such a stock behaves poorly, that suggests a problem.",
+            "supports": "failure to act as expected as evidence in its own right"
+          }
+        ],
+        "resolution": "mined from Minervini row 3 (Chapter 10). It names no measurement, so the harness reports elapsed time and behavior beside it and lets the reading stay the analyst's."
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_context_evidence.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
     }
   ]
 }

@@ -25,6 +25,12 @@ _PROFILES = {"tl_stage12": _TL_HALF_AT_FIVE}
 _ROLES = "management.ema21_sma50_roles"
 _PAUSE_ZONE = "management.tl_base_extension_pause_zone"
 _FAILED_VOLUME = "management.low_volume_breakout_then_high_volume_selling"
+_MARKET_DEFENSE = "management.market_defense_tightens_stops"
+_EARNINGS = "management.earnings_awareness_while_holding"
+_ZANGER_EARNINGS = "management.zanger_does_not_hold_through_earnings"
+_BASE_COUNT = "basecount.typical_top_after_3_to_5_bases"
+_BASE_COUNT_DISCLAIMER = "basecount.role_and_disclaimer"
+_DIFFICULT_MARKET = ("cautious", "defensive")
 _TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
 _LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
 # The averages the harness measures a held position against. One of them may be the
@@ -245,6 +251,64 @@ def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, A
     ]
 
 
+def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: float | None) -> dict[str, Any]:
+    """Context the caller declares rather than the bars carry: the tape, the calendar, the base count.
+
+    None of it can sell. A deteriorating market tightens the stop the trader already has,
+    a coming report is a review, and the base count is perspective the source explicitly
+    refuses to let predict a top.
+    """
+
+    blocks: dict[str, Any] = {}
+    market_state = _status_word(payload.get("market")) or None
+    stop = _number(payload.get("stop_price"))
+    band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", (entry - stop) / entry * 100 if entry and stop is not None else None)
+    low, high = doctrine.get_claim(_MARKET_DEFENSE)["claim"]["thresholds"]["difficult_market_loss_pct"]["range"]
+    blocks["market_defense"] = {
+        "doctrine_id": _MARKET_DEFENSE,
+        "binds": doctrine.binds(_MARKET_DEFENSE),
+        "state": "reported" if market_state is not None else "unavailable",
+        "market_state": market_state,
+        "stop_pct": band.get("measured"),
+        "difficult_market_band": band,
+        "tighten_to": _reported(entry * (1 - high / 100)) if entry else None,
+        "never_sells_on_market_opinion": True,
+    }
+    earnings_date = _iso_date(payload.get("earnings_date"))
+    if earnings_date is None:
+        blocks["earnings"] = {"state": "unavailable", "reason": "earnings_date_not_declared"}
+    else:
+        ahead = as_of is not None and earnings_date >= as_of
+        blocks["earnings"] = {
+            "doctrine_id": _EARNINGS,
+            "binds": doctrine.binds(_EARNINGS),
+            "state": "reported",
+            "earnings_date": earnings_date.isoformat(),
+            "ahead": ahead,
+            "days_until": (earnings_date - as_of).days if as_of is not None else None,
+            "contrast": {
+                "doctrine_id": _ZANGER_EARNINGS,
+                "binds": doctrine.binds(_ZANGER_EARNINGS),
+                "source": "Zanger",
+                "practice": "has not held a position through an earnings release in more than ten years",
+            },
+        }
+    base_count = payload.get("base_count")
+    if isinstance(base_count, bool) or not isinstance(base_count, int) or base_count < 1:
+        blocks["base_count_context"] = {"state": "unavailable", "reason": "base_count_not_declared"}
+    else:
+        blocks["base_count_context"] = {
+            "doctrine_id": _BASE_COUNT,
+            "binds": doctrine.binds(_BASE_COUNT),
+            "state": "reported",
+            "base_count": base_count,
+            "band": doctrine.evaluate_band(_BASE_COUNT, "typical_base_count_before_top", base_count),
+            "disclaimer_doctrine_id": _BASE_COUNT_DISCLAIMER,
+            "disclaimer": "Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.",
+        }
+    return blocks
+
+
 def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None, required_to: date | None) -> bool:
     """Whether some record cleared ``level`` over every session from ``required_from`` to ``required_to``.
 
@@ -441,9 +505,12 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             "gaps_since_breakout",
             "climax",
             "failed_volume_confirmation",
+            "post_breakout_behavior",
+            "stage3_transition",
         )
         if key in management
     }
+    management_evidence.update(_context_blocks(payload, as_of=as_of, entry=entry))
     # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
     # established that there is a position to manage, so only HOLD fills this.
     actions: list[dict[str, Any]] = []
@@ -451,10 +518,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     if anchors:
         verdict = "INCOMPLETE"
         missing = anchors + gaps
-        # The measurements are keyed to a position the request never established -- windows
-        # from an entry date that is missing or impossible. A SELL keeps its evidence,
-        # because there the position was real and the structure explains the exit.
-        management_evidence = {}
+
     elif breached:
         verdict = "SELL"
         missing = []
@@ -554,6 +618,33 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             # The source says "sell or at least reduce", so the action names both and
             # chooses neither.
             actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "evidence": failed_volume})
+        defense = _mapping(management_evidence.get("market_defense"))
+        tightened = _mapping(defense.get("difficult_market_band")).get("state")
+        if defense.get("market_state") in _DIFFICULT_MARKET and defense.get("tighten_to") is not None and tightened == "above_source_range":
+            # The source's answer to a difficult tape is a tighter stop and smaller targets,
+            # not a sale: "I don't usually sell everything on my opinion of the market."
+            # A stop already inside the tightened range needs nothing, and this can never sell.
+            actions.append(
+                {
+                    "action": "RAISE_STOP",
+                    "doctrine_id": _MARKET_DEFENSE,
+                    "binds": doctrine.binds(_MARKET_DEFENSE),
+                    "reason": "market_defense_tightens_stops",
+                    "to_at_least": defense["tighten_to"],
+                    "evidence": defense,
+                }
+            )
+        earnings = _mapping(management_evidence.get("earnings"))
+        if earnings.get("ahead") is True:
+            actions.append(
+                {
+                    "action": "REVIEW",
+                    "doctrine_id": _EARNINGS,
+                    "binds": doctrine.binds(_EARNINGS),
+                    "reason": "earnings_ahead",
+                    "evidence": earnings,
+                }
+            )
         # Reference points for selling into strength. The source names the trader's own
         # average gain and R multiples and gives neither a multiple nor a fraction, so this
         # reports distances and prescribes nothing.
@@ -575,7 +666,11 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         "verdict": verdict,
         "risk_controls": controls,
         "management_actions": actions,
-        "management_evidence": management_evidence,
+        # The measurements are keyed to a position the request never established -- windows
+        # from an entry date that is missing, impossible, or unaudited. Every INCOMPLETE
+        # drops them, not only the one the anchors caught. A SELL keeps its evidence,
+        # because there the position was real and the structure explains the exit.
+        "management_evidence": {} if verdict == "INCOMPLETE" else management_evidence,
         "completed_price_path": completed_price_path or None,
         "failed": reasons,
         "missing": missing,

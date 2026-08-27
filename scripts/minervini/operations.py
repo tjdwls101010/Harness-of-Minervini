@@ -1657,6 +1657,10 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
         timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
     highs = pd.to_numeric(frame["High"], errors="coerce")
     highs.index = timestamps
+    # Sorted before the last print wins, because "last" has to mean the latest session's
+    # latest print and not the last row the provider happened to hand over. The stop audit
+    # sorts first for the same reason, and the two must choose the same bar.
+    highs = highs.sort_index()
     highs = highs[~highs.index.normalize().duplicated(keep="last")]
     dates = pd.Index([timestamp.date() for timestamp in highs.index])
     held = highs[(dates >= entry_date) & (dates <= as_of)]
@@ -1795,7 +1799,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "requested_from": effective_date.isoformat(),
             "last_available": latest_date.isoformat(),
             "requested_through": (end_before - timedelta(days=1)).isoformat(),
-            "bars_checked": len(path_rows),
+            **_bars_that_spoke(path_rows),
         }, current_price
     if latest_date < as_of:
         # No breach in the bars that exist. A later missing bar cannot prove HOLD,
@@ -1806,7 +1810,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "requested_from": effective_date.isoformat(),
             "last_available": latest_date.isoformat(),
             "requested_through": as_of.isoformat(),
-            "bars_checked": len(path_rows),
+            **_bars_that_spoke(path_rows),
         }, current_price
     return {
         "state": "clear",
@@ -1887,6 +1891,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     base_top = _positive(raw_base_top)
     if raw_base_top is not None and base_top is None:
         raise RequestError("base_top must be a finite positive number", "base_top")
+    if evidence.get("earnings_date") is not None:
+        try:
+            earnings_date = date.fromisoformat(str(evidence["earnings_date"]))
+        except ValueError as error:
+            raise RequestError("earnings_date must be an ISO date", "earnings_date") from error
+        evidence["earnings_date"] = earnings_date.isoformat()
+    raw_base_count = evidence.get("base_count")
+    if raw_base_count is not None:
+        if isinstance(raw_base_count, bool) or not isinstance(raw_base_count, int) or raw_base_count < 1:
+            raise RequestError("base_count must be a whole number of bases, at least 1", "base_count")
     breakout_date: date | None = None
     if evidence.get("breakout_date") is not None:
         try:

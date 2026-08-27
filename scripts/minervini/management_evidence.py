@@ -30,7 +30,7 @@ _ROLES = "management.ema21_sma50_roles"
 _TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
 _LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
 _VOLUME_STATE = "setup.volume_state_convention"
-_SINCE_ENTRY = ("base_extension", "key_reversal", "gaps_since_breakout")
+_SINCE_ENTRY = ("base_extension", "key_reversal", "gaps_since_breakout", "post_breakout_behavior")
 _BLOCKS = (
     "moving_average_trail",
     "twenty_day_average",
@@ -41,6 +41,8 @@ _BLOCKS = (
     "gaps_since_breakout",
     "climax",
     "failed_volume_confirmation",
+    "post_breakout_behavior",
+    "stage3_transition",
 )
 _PAUSE_ZONE = "management.tl_base_extension_pause_zone"
 _OWN_CHARACTER = "management.tl_extension_measured_against_own_character"
@@ -51,6 +53,10 @@ _FAILED_VOLUME = "management.low_volume_breakout_then_high_volume_selling"
 _ATR = "convention.average_true_range"
 _WINDOWS = "convention.momentum_review_windows"
 _CLOSING_RANGE = "setup.closing_range_formula"
+_TENNIS_BALL = "management.tennis_ball_action_after_the_breakout"
+_ACTS_AS_EXPECTED = "management.stock_that_does_not_act_as_expected"
+_FIRST_SESSIONS = "management.zanger_first_two_days_out_of_the_base"
+_STAGE3 = "stage.stage3_characteristics"
 _CLOSING_RANGE = "setup.closing_range_formula"
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
@@ -157,7 +163,12 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
     }
 
 
-def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, selected: str | None) -> dict[str, Any]:
+def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, selected: str | None, readable: _Readable) -> dict[str, Any]:
+    sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
+    entry_positions = _positions_since(bars, entry_date)
+    gap = readable.gap(max(0, (entry_positions[0] if entry_positions else 0) - sma_length))
+    if gap is not None:
+        return {**gap, "selected": selected}
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
     sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
     closes = bars["Close"].astype(float)
@@ -175,8 +186,11 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
     }
 
 
-def _twenty_day_average(bars: pd.DataFrame) -> dict[str, Any]:
+def _twenty_day_average(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     length = int(doctrine.threshold(_TWENTY_DAY, "average_length_sessions"))
+    gap = readable.gap(len(bars) - length)
+    if gap is not None:
+        return {**gap, "doctrine_id": _TWENTY_DAY}
     closes = bars["Close"].astype(float)
     if len(closes) < length:
         return {"doctrine_id": _TWENTY_DAY, "state": "unavailable", "reason": "insufficient_history_for_average", "sessions_required": length}
@@ -258,6 +272,7 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
             ratio = volume / baseline
     return {
         "state": "reported",
+        "missing_inputs": [] if "Volume" in bars.columns else ["volume_history"],
         "largest_pct": _reported(largest),
         "date": stamp.date().isoformat(),
         "last_session_is_largest": stamp == bars.index[-1],
@@ -267,7 +282,7 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     }
 
 
-def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[str, Any]:
+def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable: _Readable) -> dict[str, Any]:
     if stage2_start is None:
         return {"state": "unavailable", "reason": "stage2_start_not_declared"}
     declared = stage2_start
@@ -277,6 +292,10 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[s
         # after it. Comparing the raw Saturday with a Monday history would report the
         # sessions before it as missing when none of them exist.
         stage2_start = stage2_start + timedelta(days=7 - stage2_start.weekday())
+    anchored = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= stage2_start]
+    gap = readable.gap(max(0, (anchored[0] if anchored else 0) - 1))
+    if gap is not None:
+        return {**gap, "doctrine_id": _LARGEST_DECLINE}
     first_available = bars.index[0].date()
     if first_available > stage2_start:
         # A larger decline in the sessions the provider never returned is unknowable, so a
@@ -298,32 +317,207 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[s
     }
 
 
-def _unreadable(bars: pd.DataFrame) -> str | None:
-    """The first session the harness cannot read, if there is one.
+class _Readable:
+    """Which sessions the harness can read, asked one window at a time.
 
     A price of zero or NaN is not a cheap stock or a quiet session -- it is a bar the
-    provider could not fill. Measuring structure through it produces percentages divided
-    by nothing and comparisons that silently answer false, so the blocks that would have
-    read it say unavailable and name the session instead.
+    provider could not fill, and a measurement computed through it divides by nothing or
+    silently compares false. But a bad bar only spoils the measurements that read it: a
+    broken session from two years ago has nothing to do with the twenty-day average or
+    with a position opened last week, and voiding those would hide evidence that is fine.
+    So every block asks about its own lookback and no other.
     """
 
-    for column, floor in (("Open", 0.0), ("High", 0.0), ("Low", 0.0), ("Close", 0.0), ("Volume", -1.0)):
-        if column not in bars.columns:
-            continue
-        values = pd.to_numeric(bars[column], errors="coerce").to_numpy(dtype=float)
-        bad = ~np.isfinite(values) | (values <= floor)
-        if bool(bad.any()):
-            return bars.index[int(bad.argmax())].date().isoformat()
-    return None
+    def __init__(self, bars: pd.DataFrame) -> None:
+        bad = np.zeros(len(bars), dtype=bool)
+        for column, floor in (("Open", 0.0), ("High", 0.0), ("Low", 0.0), ("Close", 0.0), ("Volume", -1.0)):
+            if column not in bars.columns:
+                continue
+            values = pd.to_numeric(bars[column], errors="coerce").to_numpy(dtype=float)
+            bad |= ~np.isfinite(values) | (values <= floor)
+        self._bad = bad
+        self._bars = bars
+
+    def gap(self, start: int = 0, end: int | None = None) -> dict[str, Any] | None:
+        """The unavailable block for a window holding an unreadable session, or None."""
+
+        window = self._bad[max(0, start) : len(self._bad) if end is None else end]
+        if not bool(window.any()):
+            return None
+        position = max(0, start) + int(window.argmax())
+        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[position].date().isoformat()}
+
+    def clean_positions(self, positions: list[int]) -> list[int]:
+        return [position for position in positions if not self._bad[position]]
 
 
 def _positions_since(bars: pd.DataFrame, since: date) -> list[int]:
     return [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= since]
 
 
-def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | None) -> dict[str, Any]:
+def _first_sessions(bars: pd.DataFrame, *, window: list[int]) -> dict[str, Any]:
+    """The sessions the practitioner reads first, reported and never acted on."""
+
+    length = int(doctrine.parameter(_FIRST_SESSIONS, "window_sessions"))
+    start = window[0]
+    baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
+    baseline: float | None = None
+    if "Volume" in bars.columns and start >= baseline_sessions:
+        mean = float(bars["Volume"].iloc[start - baseline_sessions : start].mean())
+        baseline = mean if math.isfinite(mean) and mean > 0 else None
+    first_close = float(bars["Close"].iloc[start])
+    sessions = []
+    for position in window[:length]:
+        close = float(bars["Close"].iloc[position])
+        volume = _finite(bars["Volume"].iloc[position]) if "Volume" in bars.columns else None
+        sessions.append(
+            {
+                "date": bars.index[position].date().isoformat(),
+                "close": _reported(close),
+                "close_vs_first_session_pct": _reported((close / first_close - 1) * 100 if first_close > 0 else None),
+                "closing_range_pct": _reported(_closing_range_pct(bars.iloc[position])),
+                "volume_ratio": _reported(volume / baseline if baseline and volume is not None else None),
+            }
+        )
+    return {
+        "doctrine_id": _FIRST_SESSIONS,
+        "binds": doctrine.binds(_FIRST_SESSIONS),
+        "source": "Zanger",
+        "window_sessions": length,
+        "sessions_available": min(len(window), length),
+        "volume_baseline_sessions": baseline_sessions if baseline is not None else None,
+        "sessions": sessions,
+    }
+
+
+def _natural_reactions(bars: pd.DataFrame, *, window: list[int]) -> list[dict[str, Any]]:
+    """Every pullback from a closing high since the window opened, and how it ended.
+
+    A reaction runs from the session that made a closing high to the lowest close before
+    the next one. "Within just days" is the source's whole measurement, so each reaction
+    carries its depth, how long it took to bottom, and how long recovery took -- or that
+    it has not recovered -- and no threshold decides anything.
+    """
+
+    closes = bars["Close"].astype(float)
+    reactions: list[dict[str, Any]] = []
+    peak_position = window[0]
+    peak = float(closes.iloc[peak_position])
+    trough_position: int | None = None
+    for position in window[1:]:
+        close = float(closes.iloc[position])
+        if close > peak:
+            if trough_position is not None:
+                trough = float(closes.iloc[trough_position])
+                reactions.append(
+                    {
+                        "peak_date": bars.index[peak_position].date().isoformat(),
+                        "peak_close": _reported(peak),
+                        "low_date": bars.index[trough_position].date().isoformat(),
+                        "low_close": _reported(trough),
+                        "depth_pct": _reported((trough / peak - 1) * 100),
+                        "sessions_to_low": trough_position - peak_position,
+                        "recovered_in_sessions": position - peak_position,
+                        "sessions_since_peak": position - peak_position,
+                    }
+                )
+            peak_position, peak, trough_position = position, close, None
+            continue
+        if trough_position is None or close < float(closes.iloc[trough_position]):
+            trough_position = position
+    if trough_position is not None:
+        trough = float(closes.iloc[trough_position])
+        reactions.append(
+            {
+                "peak_date": bars.index[peak_position].date().isoformat(),
+                "peak_close": _reported(peak),
+                "low_date": bars.index[trough_position].date().isoformat(),
+                "low_close": _reported(trough),
+                "depth_pct": _reported((trough / peak - 1) * 100),
+                "sessions_to_low": trough_position - peak_position,
+                "recovered_in_sessions": None,
+                "sessions_since_peak": (len(bars) - 1) - peak_position,
+            }
+        )
+    return reactions
+
+
+def _post_breakout_behavior(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
+    since = breakout_date or entry_date
+    basis = "breakout_date" if breakout_date is not None else "entry_date"
+    window = _positions_since(bars, since)
+    if not window:
+        return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
+    baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
+    gap = readable.gap(max(0, window[0] - baseline_sessions))
+    if gap is not None:
+        return {**gap, "doctrine_id": _TENNIS_BALL}
+    closes = bars["Close"].astype(float)
+    first_close = float(closes.iloc[window[0]])
+    last_close = float(closes.iloc[-1])
+    highs = [position for position in window if float(closes.iloc[position]) >= max(float(closes.iloc[other]) for other in window if other <= position)]
+    last_high = highs[-1] if highs else window[0]
+    return {
+        "doctrine_id": _TENNIS_BALL,
+        "doctrine_ids": [_TENNIS_BALL, _ACTS_AS_EXPECTED, _FIRST_SESSIONS],
+        "binds": doctrine.binds(_TENNIS_BALL),
+        "state": "reported",
+        "since": since.isoformat(),
+        "since_basis": basis,
+        "sessions_since_entry": len(_positions_since(bars, entry_date)) - 1,
+        "sessions_since_new_high": (len(bars) - 1) - last_high,
+        "last_new_closing_high": bars.index[last_high].date().isoformat(),
+        "gain_since_first_session_pct": _reported((last_close / first_close - 1) * 100 if first_close > 0 else None),
+        "first_sessions": _first_sessions(bars, window=window),
+        "natural_reactions": _natural_reactions(bars, window=window),
+        "needs_chart": True,
+    }
+
+
+def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
+    """Rising volatility and a flattening long average, measured; the reading stays the analyst's."""
+
+    length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
+    gap = readable.gap(len(bars) - (200 + 20))
+    if gap is not None:
+        return {**gap, "doctrine_id": _STAGE3}
+    recent = _average_true_range(bars)
+    earlier = _average_true_range(bars.iloc[: len(bars) - length]) if len(bars) > 2 * length + 1 else {"state": "unavailable", "reason": "insufficient_history_for_comparison"}
+    ratio: float | None = None
+    if recent.get("value") and earlier.get("value"):
+        ratio = float(recent["value"]) / float(earlier["value"])
+    closes = bars["Close"].astype(float)
+    sma_length, lookback = 200, 20
+    slope: float | None = None
+    state = "unavailable"
+    if len(bars) >= sma_length + lookback:
+        average = closes.rolling(sma_length).mean()
+        now, before = float(average.iloc[-1]), float(average.iloc[-1 - lookback])
+        if math.isfinite(now) and math.isfinite(before) and before > 0:
+            slope = (now / before - 1) * 100
+            state = "reported"
+    return {
+        "doctrine_id": _STAGE3,
+        "doctrine_ids": [_STAGE3, _ATR],
+        "binds": doctrine.binds(_STAGE3),
+        "state": "reported",
+        "average_true_range": recent,
+        "earlier_average_true_range": earlier,
+        "volatility_ratio": _reported(ratio),
+        "sma200_slope_pct": _reported(slope),
+        "sma200_lookback_sessions": lookback,
+        "sma200_state": state,
+        "needs_chart": True,
+    }
+
+
+def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | None, readable: _Readable) -> dict[str, Any]:
     if base_top is None:
         return {"state": "unavailable", "reason": "base_top_not_declared"}
+    held_positions = _positions_since(bars, entry_date)
+    gap = readable.gap(held_positions[0] if held_positions else 0)
+    if gap is not None:
+        return {**gap, "doctrine_id": _PAUSE_ZONE}
     closes = bars["Close"].astype(float)
     highs = bars["High"].astype(float)
     last_close = _finite(closes.iloc[-1])
@@ -358,9 +552,13 @@ def _average_true_range(bars: pd.DataFrame) -> dict[str, Any]:
     return {"doctrine_id": _ATR, "length_sessions": length, "value": _reported(value)}
 
 
-def _moving_average_extension(bars: pd.DataFrame) -> dict[str, Any]:
+def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
     sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
+    atr_length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
+    gap = readable.gap(len(bars) - (sma_length + atr_length + 1))
+    if gap is not None:
+        return {**gap, "doctrine_id": _OWN_CHARACTER}
     closes = bars["Close"].astype(float)
     atr = _average_true_range(bars)
     atr_value = atr.get("value")
@@ -379,8 +577,8 @@ def _moving_average_extension(bars: pd.DataFrame) -> dict[str, Any]:
         # whose average existed. The last session is excluded from its own ranking.
         prior = [
             (float(closes.iloc[position]) - float(series.iloc[position])) / float(series.iloc[position]) * 100
-            for position in range(length - 1, len(bars) - 1)
-            if math.isfinite(float(series.iloc[position]))
+            for position in readable.clean_positions(list(range(length - 1, len(bars) - 1)))
+            if math.isfinite(float(series.iloc[position])) and float(series.iloc[position]) > 0
         ]
         percentile = (sum(1 for value in prior if value <= extension_pct) / len(prior) * 100) if prior else None
         block[name] = {
@@ -392,12 +590,16 @@ def _moving_average_extension(bars: pd.DataFrame) -> dict[str, Any]:
     return block
 
 
-def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None) -> dict[str, Any]:
+def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
     since = breakout_date or entry_date
     basis = "breakout_date" if breakout_date is not None else "entry_date"
     window = _positions_since(bars, since)
     if len(bars) < 2 or not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
+    # The prior session is part of the reading: the gap and the prior low come from it.
+    gap = readable.gap(max(0, window[0] - 1))
+    if gap is not None:
+        return {**gap, "doctrine_id": _KEY_REVERSAL}
     last = len(bars) - 1
     previous = last - 1
     opens = bars["Open"].astype(float) if "Open" in bars.columns else None
@@ -436,7 +638,7 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
     }
 
 
-def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None) -> dict[str, Any]:
+def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date: date | None, readable: _Readable) -> dict[str, Any]:
     since = breakout_date or entry_date
     basis = "breakout_date" if breakout_date is not None else "entry_date"
     if "Open" not in bars.columns:
@@ -444,6 +646,9 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
     window = _positions_since(bars, since)
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
+    gap = readable.gap(max(0, window[0] - 1))
+    if gap is not None:
+        return {**gap, "doctrine_id": _LATE_GAPS}
     opens = bars["Open"].astype(float)
     highs = bars["High"].astype(float)
     lows = bars["Low"].astype(float)
@@ -473,10 +678,13 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
     }
 
 
-def _climax(bars: pd.DataFrame) -> dict[str, Any]:
+def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
     lengths = [int(doctrine.parameter(_WINDOWS, name)) for name in ("short_window_sessions", "medium_window_sessions", "long_window_sessions")]
     gap_window = int(doctrine.parameter(_WINDOWS, "medium_window_sessions"))
+    gap = readable.gap(len(bars) - (max(lengths) + 1))
+    if gap is not None:
+        return {**gap, "doctrine_id": _CLIMAX}
     if len(bars) <= max(lengths):
         return {"state": "unavailable", "reason": "insufficient_history_for_return_windows", "sessions_required": max(lengths) + 1}
     returns = {f"return_{window}_pct": _reported((float(closes.iloc[-1]) / float(closes.iloc[-1 - window]) - 1) * 100) for window in lengths}
@@ -507,7 +715,7 @@ def _climax(bars: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | None, sessions: set[date], first_session: date) -> dict[str, Any]:
+def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | None, sessions: set[date], first_session: date, readable: _Readable) -> dict[str, Any]:
     if breakout_date is None:
         return {"state": "unavailable", "reason": "breakout_date_not_declared"}
     if "Volume" not in bars.columns:
@@ -519,6 +727,9 @@ def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | Non
         return {"state": "unavailable", "reason": "no_completed_bar_on_or_after_breakout_date"}
     breakout = window[0]
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
+    gap = readable.gap(max(0, breakout - baseline_sessions))
+    if gap is not None:
+        return {**gap, "doctrine_id": _FAILED_VOLUME}
     if breakout < baseline_sessions:
         return {"state": "unavailable", "reason": "insufficient_history_for_volume_baseline", "sessions_required": baseline_sessions}
     volumes = bars["Volume"].astype(float)
@@ -580,11 +791,7 @@ def build_management_evidence(
             "climax": unavailable,
             "failed_volume_confirmation": unavailable,
         }
-    unreadable = _unreadable(bars)
-    if unreadable is not None:
-        broken = {"state": "unavailable", "reason": "invalid_ohlc_history", "date": unreadable}
-        return {key: dict(broken) for key in _BLOCKS}
-
+    readable = _Readable(bars)
     sessions = {timestamp.date() for timestamp in bars.index}
     first_session = bars.index[0].date()
     # A window anchored on a session the frame never printed is not a window. Whether the
@@ -600,26 +807,29 @@ def build_management_evidence(
             return {key: dict(entry_gap) for key in _BLOCKS}
         return {
             "moving_average_trail": {**entry_gap, "selected": management_average},
-            "twenty_day_average": _twenty_day_average(bars),
-            "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start),
+            "twenty_day_average": _twenty_day_average(bars, readable=readable),
+            "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start, readable=readable),
             **held_blocks,
-            "moving_average_extension": _moving_average_extension(bars),
-            "climax": _climax(bars),
-            "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session),
+            "moving_average_extension": _moving_average_extension(bars, readable=readable),
+            "climax": _climax(bars, readable=readable),
+            "stage3_transition": _stage3_transition(bars, readable=readable),
+            "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session, readable=readable),
         }
     breakout_gap: dict[str, Any] | None = None
     if breakout_date is not None and breakout_date not in sessions:
         breakout_gap = {"state": "unavailable", "reason": "history_starts_after_breakout_date" if first_session > breakout_date else "no_completed_bar_on_breakout_date"}
     return {
-        "moving_average_trail": _moving_average_trail(bars, entry_date=entry_date, as_of=as_of, selected=management_average),
-        "twenty_day_average": _twenty_day_average(bars),
-        "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start),
-        "base_extension": _base_extension(bars, entry_date=entry_date, base_top=base_top),
-        "moving_average_extension": _moving_average_extension(bars),
-        "key_reversal": dict(breakout_gap) if breakout_gap else _key_reversal(bars, entry_date=entry_date, breakout_date=breakout_date),
-        "gaps_since_breakout": dict(breakout_gap) if breakout_gap else _gaps_since_breakout(bars, entry_date=entry_date, breakout_date=breakout_date),
-        "climax": _climax(bars),
-        "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session),
+        "moving_average_trail": _moving_average_trail(bars, entry_date=entry_date, as_of=as_of, selected=management_average, readable=readable),
+        "twenty_day_average": _twenty_day_average(bars, readable=readable),
+        "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start, readable=readable),
+        "base_extension": _base_extension(bars, entry_date=entry_date, base_top=base_top, readable=readable),
+        "moving_average_extension": _moving_average_extension(bars, readable=readable),
+        "key_reversal": dict(breakout_gap) if breakout_gap else _key_reversal(bars, entry_date=entry_date, breakout_date=breakout_date, readable=readable),
+        "gaps_since_breakout": dict(breakout_gap) if breakout_gap else _gaps_since_breakout(bars, entry_date=entry_date, breakout_date=breakout_date, readable=readable),
+        "climax": _climax(bars, readable=readable),
+        "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session, readable=readable),
+        "post_breakout_behavior": dict(breakout_gap) if breakout_gap else _post_breakout_behavior(bars, entry_date=entry_date, breakout_date=breakout_date, readable=readable),
+        "stage3_transition": _stage3_transition(bars, readable=readable),
     }
 
 
