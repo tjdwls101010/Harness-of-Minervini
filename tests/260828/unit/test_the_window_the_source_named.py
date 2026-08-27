@@ -49,7 +49,8 @@ class TheMinimumIsRequiredOverAWindow(unittest.TestCase):
 
         self.assertEqual(result["growth"]["minimum_quarterly_earnings_growth"]["measured"], 18.0)
         self.assertEqual(result["quality"]["measured_yoy_pct"], 18.0)
-        self.assertEqual(result["quality"]["state"], "contradicts")
+        self.assertEqual(result["quality"]["state"], "review")
+        self.assertIn("quarterly_earnings_growth_below_source_range", result["quality"]["review_reasons"])
 
     def test_a_shorter_history_reports_the_quarters_it_has(self) -> None:
         rows = eight_quarters([10.0, 30.0, 40.0, 18.0])[:6]

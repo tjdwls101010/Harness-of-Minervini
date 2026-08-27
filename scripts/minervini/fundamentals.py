@@ -1259,18 +1259,20 @@ def _leader_category(declared: str | None) -> dict[str, Any]:
 
 
 def _growth_quality(growth: Mapping[str, Any], quarterly: Mapping[str, Any], annual: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    """Whether the filed growth supports convergence, read from the band beside it.
+    """Whether the filed growth supports convergence, read from every reading that bears on it.
 
-    One owner. This used to answer the question a second time, from slowdown thresholds that
-    appear in neither corpus -- fifteen points off a stock's own recent peak was a
-    contradiction, five was mixed -- and a reader comparing the verdict with the readings
-    published next to it could find them disagreeing.
+    A band contributes to convergence and never carries it alone -- the governing contract says
+    so, and this used to break it in the one place it mattered: the latest quarter landing
+    inside 20-25 percent produced `supports_convergence` by itself, and a company whose annual
+    earnings and sales had both halved cleared it that way.
 
-    The band that decides is the minimum the source names, because that is what it is: "many
-    successful growth managers require a minimum of 20 to 25 percent". Inside that range is
-    at the minimum and supports; short of it does not. The higher bars are read from the same
-    number and reported as context, since a candidate can support convergence without being
-    a superperformer.
+    Convergence is the source's own word for a conjunction, so what decides is the conjunction:
+    the quarterly band at or above its range, and the annual claim's own direction. Any of them
+    prompting review makes the state `review`, which is no-trade rather than rejection -- every
+    fundamentals claim in the registry carries `needs_review`, so nothing here can reject, and
+    marginal evidence never earns a pass. The higher bars are read from the same quarterly
+    number and reported as context, since a candidate can support convergence without being a
+    superperformer.
     """
 
     missing = []
@@ -1288,11 +1290,25 @@ def _growth_quality(growth: Mapping[str, Any], quarterly: Mapping[str, Any], ann
     minimum = growth["minimum_quarterly_earnings_growth"]
     if missing or minimum["state"] == "unavailable":
         return {"state": "unavailable", "minimum_growth_state": minimum["state"]}, missing
+    review = []
+    if minimum["state"] not in {"within_source_range", "above_source_range"}:
+        review.append("quarterly_earnings_growth_below_source_range")
+    # Direction, not magnitude. The annual claim is a constitution-level one -- quarterly
+    # strength has to translate into annual results -- and it names no number, so what is read
+    # is the sign the claim itself points at. A year whose earnings halved is not a year that
+    # translated, whatever the latest quarter did.
+    if not annual["eps_yoy_pct"] > 0:
+        review.append("annual_earnings_did_not_grow")
+    if not annual["revenue_yoy_pct"] > 0:
+        review.append("annual_sales_did_not_grow")
     return {
-        "state": "supports" if minimum["state"] in {"within_source_range", "above_source_range"} else "contradicts",
+        "state": "supports" if not review else "review",
+        "read": [_MINIMUM_GROWTH, _ANNUAL_REQUIREMENT],
+        "review_reasons": review,
         "minimum_growth_state": minimum["state"],
         "measured_yoy_pct": minimum["measured"],
-        "decided_by": _MINIMUM_GROWTH,
+        "annual_eps_yoy_pct": annual["eps_yoy_pct"],
+        "annual_revenue_yoy_pct": annual["revenue_yoy_pct"],
     }, missing
 
 
