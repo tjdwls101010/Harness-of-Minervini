@@ -6,7 +6,7 @@ optional FMP enrichment. Narrative is not a numeric evidence input.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 import math
 from typing import Any, Mapping
 
@@ -58,6 +58,10 @@ _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
 _FOUR_FILED_QUARTERS = "four_consecutive_filed_quarters"
 _ROLLED_FORWARD = "annual_rolled_forward_by_filed_quarters"
+# Half a quarter, used to ask which calendar quarter a fiscal year's closing date belongs to:
+# the quarter that ends on it is the one whose middle sits this far behind it. Not a threshold
+# -- it is the same midpoint rule the SEC provider labels a duration fact by.
+_HALF_QUARTER_DAYS = 365 // (2 * _QUARTERS_PER_YEAR)
 
 
 SEC_SOURCE = "sec_filed_facts"
@@ -817,6 +821,21 @@ def _consecutive_quarter_windows(series: list[dict[str, Any]]) -> list[tuple[str
     return windows
 
 
+def _quarter_ordinal_on(closing: str) -> int | None:
+    """Which quarter a fiscal year's closing date is the end of.
+
+    The quarter ending on that date is the one whose middle falls half a quarter behind it,
+    which is how the provider named every quarter it published -- so the same date reaches the
+    same label from both directions.
+    """
+
+    try:
+        middle = date.fromisoformat(closing) - timedelta(days=_HALF_QUARTER_DAYS)
+    except (TypeError, ValueError):
+        return None
+    return _period_ordinal(f"{middle.year}-Q{(middle.month - 1) // 3 + 1}")
+
+
 def _rolled_forward_windows(series: list[dict[str, Any]], annual: list[dict[str, Any]]) -> list[tuple[str, float]]:
     """A trailing year at each quarter: the last closed fiscal year, rolled forward and back.
 
@@ -842,9 +861,14 @@ def _rolled_forward_windows(series: list[dict[str, Any]], annual: list[dict[str,
             key=lambda other: other["end"],
         )
         ordinals = [_period_ordinal(other["period"]) for other in since]
-        if not ordinals or len(ordinals) >= _QUARTERS_PER_YEAR or ordinals[-1] != ordinal:
+        # Every quarter between the close and here, not merely a consecutive run of them. Filed
+        # Q2 with Q1 absent is consecutive with itself and ends in the right place, and the
+        # subtraction then quietly assumed the missing quarter was unchanged year over year --
+        # a fifth of a year's earnings dropped with nothing in the envelope saying so.
+        last = _quarter_ordinal_on(closed["end"])
+        if last is None or not 0 < ordinal - last < _QUARTERS_PER_YEAR:
             continue
-        if ordinals != list(range(ordinals[0], ordinals[0] + len(ordinals))):
+        if ordinals != list(range(last + 1, ordinal + 1)):
             continue
         replaced = [by_ordinal.get(position - _QUARTERS_PER_YEAR) for position in ordinals]
         if any(quarter is None for quarter in replaced):
@@ -1051,7 +1075,7 @@ def _price_earnings(last_close: float | None, trailing: float | None, route: str
     if not _is_number(last_close):
         return {**reading, "state": "unavailable", "missing_inputs": ["last_close"], "pe_ratio": None}
     if trailing is None:
-        return {**reading, "state": "unavailable", "missing_inputs": ["four_consecutive_filed_quarters"], "pe_ratio": None}
+        return {**reading, "state": "unavailable", "missing_inputs": ["filed_quarters_for_a_complete_trailing_year"], "pe_ratio": None}
     if trailing <= 0:
         return {**reading, "state": "not_meaningful", "reason": "trailing_12m_eps_not_positive", "pe_ratio": None}
     return {**reading, "state": "reported", "pe_ratio": _reported(float(last_close) / trailing)}

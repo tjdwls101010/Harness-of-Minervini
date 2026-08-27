@@ -102,7 +102,7 @@ class TheTrailingYearEndsAtTheLatestQuarter(unittest.TestCase):
         reading = result["valuation"]["price_earnings_ratio"]
         self.assertIsNone(reading["trailing_12m_eps"])
         self.assertEqual(reading["state"], "unavailable")
-        self.assertEqual(reading["missing_inputs"], ["four_consecutive_filed_quarters"])
+        self.assertEqual(reading["missing_inputs"], ["filed_quarters_for_a_complete_trailing_year"])
 
 
 class Code33CountsConsecutiveQuarters(unittest.TestCase):
