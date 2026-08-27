@@ -61,6 +61,17 @@ class AnExplicitPriceCannotOutrankAnEarlierExit(unittest.TestCase):
         self.assertEqual(path["breach_date"], "2025-12-10")
         self.assertEqual(path["checked_level"], 90.0)
 
+    def test_the_bars_own_a_level_they_broke_first_even_when_the_price_crosses_it_too(self) -> None:
+        payload = run(
+            {"2025-12-10": (100.0, 101.0, 89.0, 100.0), AS_OF: (96.0, 97.0, 93.0, 94.0)},
+            stop_price=95.0,
+            current_price=94.0,
+        )
+
+        path = payload["data"]["completed_price_path"]
+        self.assertEqual(path["breach_date"], "2025-12-10")
+        self.assertEqual(path["basis"], "completed_daily_low")
+
     def test_a_terminal_price_still_sells_when_the_bars_never_arrive(self) -> None:
         def refuse(ticker: str, as_of: str):
             raise ProviderUnavailable(provider="fixture-prices", reason="unavailable", retryable=False)
@@ -88,6 +99,31 @@ class AnExplicitPriceCannotOutrankAnEarlierExit(unittest.TestCase):
 
         trail = payload["data"]["management_evidence"]["moving_average_trail"]
         self.assertNotEqual(trail.get("reason"), "price_history_not_fetched_after_asserted_breach")
+
+
+class WithNoBarsThePriceIsTheWholeRecord(unittest.TestCase):
+    """What one price can and cannot say, when nothing else is available to say it."""
+
+    def refused(self, **request) -> dict:
+        def refuse(ticker: str, as_of: str):
+            raise ProviderUnavailable(provider="fixture-prices", reason="unavailable", retryable=False)
+
+        return execute("ticker.risk", {**POSITION, **request}, runtime=Runtime(price_history=refuse))
+
+    def test_a_level_under_the_price_is_unaudited_rather_than_clear(self) -> None:
+        payload = self.refused(stop_price=90.0, invalidation={"price": 95.0}, current_price=94.0)
+
+        audits = {audit["role"]: audit for audit in payload["data"]["completed_price_path"]["audits"]}
+        self.assertEqual(audits["stop"]["state"], "unavailable")
+        self.assertEqual(audits["stop"]["reason"], "not_audited_after_explicit_breach")
+
+    def test_the_record_is_about_the_highest_level_the_price_crossed(self) -> None:
+        payload = self.refused(stop_price=90.0, invalidation={"price": 95.0}, current_price=88.0)
+
+        path = payload["data"]["completed_price_path"]
+        self.assertEqual(path["governing_role"], "invalidation")
+        self.assertEqual(path["checked_level"], 95.0)
+        self.assertEqual(payload["data"]["failed"], ["invalidation_breach"])
 
 
 class AnInvalidationIsAboutWhereTheSessionFinished(unittest.TestCase):

@@ -72,6 +72,13 @@ class ACellNoBlockOpensDoesNotVoidIt(unittest.TestCase):
         # The volume baseline ends at the breakout, and the closes read are the sessions
         # after it: a session before the baseline is outside both.
         ("failed_volume_confirmation", "2025-11-19", "Close"),
+        # Both true ranges read fourteen sessions each; the session before the earlier one
+        # contributes only its close, which the slope guard already covers.
+        ("stage3_transition", "2025-11-21", "Low"),
+        # A twenty-session return opens two closes. This one sits between them.
+        ("climax", "2025-12-30", "Close"),
+        # The weekly reading opens one close per week, from the first week of the advance.
+        ("largest_decline_since_stage2_start", "2025-10-31", "Close"),
     )
 
     def test_a_cell_outside_the_reading_leaves_the_block_reported(self) -> None:
@@ -101,6 +108,23 @@ class AReadingRefusesOnlyItsOwnHole(unittest.TestCase):
 
         self.assertEqual(result["state"], "reported")
         self.assertEqual(result["daily"]["state"], "unavailable")
+
+    def test_the_close_before_the_anchor_is_outside_both_readings(self) -> None:
+        # The advance's first change is measured from its own first session, and the week
+        # this Wednesday belongs to is read at its Friday.
+        result = build(break_cell(frame(), "2025-11-05", "Close"))["largest_decline_since_stage2_start"]
+
+        self.assertEqual(result["daily"]["state"], "reported")
+        self.assertEqual(result["weekly"]["state"], "reported")
+
+    def test_a_down_session_the_volume_cannot_be_read_for_voids_the_volume_block(self) -> None:
+        bars = frame()
+        fell = pd.Timestamp("2025-12-08")
+        bars.loc[fell, ["Open", "High", "Low", "Close"]] = [100.0, 100.0, 97.0, 98.0]
+        result = build(break_cell(bars, "2025-12-08", "Volume"))["failed_volume_confirmation"]
+
+        self.assertEqual(result["state"], "unavailable")
+        self.assertEqual(result["date"], "2025-12-08")
 
 
 class APopulationIsReadWhole(unittest.TestCase):
