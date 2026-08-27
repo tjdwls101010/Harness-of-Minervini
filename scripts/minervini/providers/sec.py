@@ -238,6 +238,11 @@ def normalize_filed_facts(
                     accession,
                     {
                         "filed_at": submission["filed_at"],
+                        # The form as filed, amendment suffix and all. Support is decided on
+                        # the half before the slash, because an amendment carries facts, but
+                        # publishing only that half loses the one thing that tells a reader
+                        # these numbers replaced numbers already published.
+                        "form": submission["form"],
                         "accounting_basis": accounting_basis,
                         "quarterly": {},
                         "annual": {},
@@ -255,6 +260,7 @@ def normalize_filed_facts(
         normalized_filings.append(
             {
                 "filed_at": filing["filed_at"],
+                "form": filing["form"],
                 "accounting_basis": filing["accounting_basis"],
                 "quarterly": list(filing["quarterly"].values()),
                 "annual": list(filing["annual"].values()),

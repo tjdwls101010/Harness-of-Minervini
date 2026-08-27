@@ -65,6 +65,34 @@ def submissions() -> dict:
     }
 
 
+class AnAmendedFilingKeepsItsOwnForm(unittest.TestCase):
+    def test_the_normalized_filing_says_it_was_an_amendment(self) -> None:
+        # `10-K/A` is split at the slash to decide whether the form is supported, which is
+        # right -- an amendment carries facts. Publishing only the split half loses the one
+        # thing that distinguishes it from the filing it replaced.
+        amended = [("0000042-25-000001", "2025-02-20", "10-K"), ("0000042-26-000001", "2026-02-19", "10-K/A")]
+        facts = company_facts()
+        for concept in facts["facts"]["us-gaap"].values():
+            for rows in concept["units"].values():
+                for row in rows:
+                    if row["accn"] == amended[1][0]:
+                        row["form"] = "10-K/A"
+        filings = {
+            "cik": int(CIK),
+            "filings": {"recent": {
+                "accessionNumber": [row[0] for row in amended],
+                "filingDate": [row[1] for row in amended],
+                "reportDate": ["2024-12-31", "2025-12-31"],
+                "form": [row[2] for row in amended],
+            }},
+        }
+        normalized = normalize_filed_facts(facts, filings, as_of="2026-05-08")
+
+        forms = {filing["filed_at"]: filing["form"] for filing in normalized["filings"]}
+        self.assertEqual(forms["2026-02-19"], "10-K/A")
+        self.assertEqual(forms["2025-02-20"], "10-K")
+
+
 class TheBalanceSheetTravelsWithTheAnnualPeriodItCloses(unittest.TestCase):
     def test_inventory_and_receivables_reach_the_annual_facts(self) -> None:
         normalized = normalize_filed_facts(company_facts(), submissions(), as_of="2026-05-08")

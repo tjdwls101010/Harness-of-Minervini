@@ -74,6 +74,15 @@ def evaluate_fundamentals(
     return {
         "as_of": as_of_date.isoformat(),
         "filings_used": [filing["filed_at"] for filing in filings],
+        # Which of those filings restated numbers that had already been published. It is
+        # provenance rather than a finding: no source in this harness's corpus says an
+        # amendment is evidence about the company, so it changes no verdict and is put in
+        # front of a reader who may want to know the figures moved after the fact.
+        "amended_filings": [
+            {"filed_at": filing["filed_at"], "form": filing["form"]}
+            for filing in filings
+            if isinstance(filing.get("form"), str) and filing["form"].endswith("/A")
+        ],
         "accounting_basis": basis,
         "quarterly": quarterly,
         "annual_growth": annual_growth,
@@ -249,9 +258,7 @@ def _integrity_read(quarters: list[dict[str, Any]], *, going_concern: str | None
 
     accounting = _declared_status(accounting_integrity, allowed=ACCOUNTING_INTEGRITY_WORDS, critical_terms={"concern", "restatement", "adverse"})
     concern = _declared_status(going_concern, allowed=GOING_CONCERN_WORDS, critical_terms={"substantial_doubt"})
-    dilution = _dilution_status(quarters)
-    missing = [name for name, item in (("dilution", dilution),) if item["state"] == "unavailable"]
-    return {"accounting_integrity": accounting, "going_concern": concern, "dilution": dilution}, missing
+    return {"accounting_integrity": accounting, "going_concern": concern, "dilution": _dilution_reading(quarters)}, []
 
 
 def _declared_status(value: Any, *, allowed: tuple[str, ...], critical_terms: set[str]) -> dict[str, Any]:
@@ -264,14 +271,27 @@ def _declared_status(value: Any, *, allowed: tuple[str, ...], critical_terms: se
     return {"state": "supports", "declared_status": value}
 
 
-def _dilution_status(quarters: list[dict[str, Any]]) -> dict[str, Any]:
+def _dilution_reading(quarters: list[dict[str, Any]]) -> dict[str, Any]:
+    """How the diluted share count moved between the two latest filed quarters.
+
+    Reported, never judged. This used to call a ten-percent quarterly rise a contradiction
+    and reject a candidate on it, but neither corpus this harness reads mentions dilution --
+    the word does not appear once in either -- so the limit was the harness's own opinion
+    wearing the shape of doctrine. The count is a filed fact and belongs in front of a
+    reader; deciding what it means about the company is the reader's, until a source says
+    otherwise and the registry carries the quotation.
+    """
+
     if len(quarters) < 2 or not _is_number(quarters[-1].get("diluted_shares")) or not _is_number(quarters[-2].get("diluted_shares")):
-        return {"state": "unavailable"}
+        return {"state": "unavailable", "reason": "two_filed_share_counts_required"}
     previous, current = float(quarters[-2]["diluted_shares"]), float(quarters[-1]["diluted_shares"])
     if previous <= 0:
-        return {"state": "unavailable"}
-    increase = round((current / previous - 1) * 100, 1)
-    return {"state": "contradicts" if increase >= 10 else "supports", "quarterly_share_change_pct": increase}
+        return {"state": "unavailable", "reason": "share_count_is_not_a_count"}
+    return {
+        "state": "reported",
+        "periods": [quarters[-2].get("period"), quarters[-1].get("period")],
+        "quarterly_share_change_pct": _reported((current / previous - 1) * 100),
+    }
 
 
 def _inventory_receivables_vs_sales(annual: list[dict[str, Any]]) -> dict[str, Any]:
