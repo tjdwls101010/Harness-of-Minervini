@@ -160,7 +160,7 @@ class TheFailedVolumeEventNamesWhatItCouldNotSettle(unittest.TestCase):
     """The source's "low volume" and "high volume" have no boundary, so the bars do not claim them."""
 
     def measure(self, breakout_volume: int, selling_volume: int) -> dict:
-        rows = flat(50) + [(100.0, 101.0, 99.0, 105.0, breakout_volume), (105.0, 106.0, 104.0, 106.0, 1_000_000), (106.0, 106.0, 102.0, 103.0, selling_volume)] + flat(2, 103.0)
+        rows = flat(50) + [(100.0, 105.0, 99.0, 105.0, breakout_volume), (105.0, 106.0, 104.0, 106.0, 1_000_000), (106.0, 106.0, 102.0, 103.0, selling_volume)] + flat(2, 103.0)
         bars = frame(rows)
         return build_management_evidence(bars, entry_date=bars.index[50].date(), as_of=bars.index[-1].date(), breakout_date=bars.index[50].date())["failed_volume_confirmation"]
 

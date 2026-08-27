@@ -150,6 +150,26 @@ def _closing_range(row: pd.Series) -> dict[str, Any]:
     }
 
 
+def _first_trouble(readable: _Readable, start: int) -> tuple[int | None, dict[str, Any] | None]:
+    """The first session an average cannot be computed through, and how to say so.
+
+    Two kinds of trouble bound an audit the same way. A split makes the closes on either
+    side of it two coordinate systems; an unreadable close leaves the average nothing to be
+    an average of from that session on. Neither reaches backwards -- the values before it
+    were computed from readable closes in one coordinate system -- so both are a session
+    the audit stops at rather than a reason to void the window and lose a declared exit
+    that had already triggered.
+    """
+
+    split = readable.split_position(start)
+    hole = readable.gap_position(start, columns=("Close",))
+    if split is None and hole is None:
+        return None, None
+    if hole is None or (split is not None and split <= hole):
+        return split, readable.split(start)
+    return hole, readable.gap(start, columns=("Close",))
+
+
 def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: date, as_of: date, refuse_from: int | None = None, refusal: dict[str, Any] | None = None) -> dict[str, Any]:
     """Two completed closes below one management average, audited from the entry session.
 
@@ -232,22 +252,19 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
     # measurement that is fine and turn a readable HOLD into INCOMPLETE.
     audited = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= entry_date]
     sma_start = max(0, (audited[0] if audited else len(bars)) - sma_length + 1)
-    ema_gap = readable.gap(0, columns=("Close",)) or readable.split(0)
-    sma_gap = readable.gap(sma_start, columns=("Close",)) or readable.split(sma_start)
     # Where the trouble starts, so each audit can read the sessions before it: a declared
-    # exit those closes already triggered is an exit that happened, and an event after it
-    # cannot take it back. A gap voids the average's own values, so only a split bounds an
-    # audit this way -- a NaN close leaves nothing to compute the average from at all.
-    ema_stop = readable.split_position(0)
-    sma_stop = readable.split_position(sma_start)
+    # exit those closes already triggered is an exit that happened, and neither an event
+    # nor a hole three weeks later can take it back.
+    ema_stop, ema_gap = _first_trouble(readable, 0)
+    sma_stop, sma_gap = _first_trouble(readable, sma_start)
     closes = bars["Close"].astype(float)
     # The recursive form (adjust=False) is the exponential average charts draw; the
     # adjusted form weights a short history differently and would disagree with the chart.
     ema = closes.ewm(span=ema_length, adjust=False).mean()
     ema.iloc[: ema_length - 1] = float("nan")
     sma = closes.rolling(sma_length).mean()
-    ema21 = _trail(bars, ema, length=ema_length, entry_date=entry_date, as_of=as_of, refuse_from=ema_stop, refusal=ema_gap) if ema_gap is None or ema_stop is not None else ema_gap
-    sma50 = _trail(bars, sma, length=sma_length, entry_date=entry_date, as_of=as_of, refuse_from=sma_stop, refusal=sma_gap) if sma_gap is None or sma_stop is not None else sma_gap
+    ema21 = _trail(bars, ema, length=ema_length, entry_date=entry_date, as_of=as_of, refuse_from=ema_stop, refusal=ema_gap)
+    sma50 = _trail(bars, sma, length=sma_length, entry_date=entry_date, as_of=as_of, refuse_from=sma_stop, refusal=sma_gap)
     def refused(result: dict[str, Any], record: dict[str, Any] | None) -> bool:
         return record is not None and result.get("state") == "unavailable" and result.get("reason") == record.get("reason")
 
@@ -457,14 +474,29 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
             "stage2_start": stage2_start.isoformat(),
             "first_available": first_available.isoformat(),
         }
+    daily = _daily(bars, stage2_start=stage2_start, readable=readable)
+    weekly = _weekly(bars, stage2_start=stage2_start, readable=readable)
+    if daily.get("state") == "unavailable" and weekly.get("state") == "unavailable":
+        # Neither timeframe produced a decline, so the block measured nothing. Saying
+        # "reported" over two holes publishes a reading a reader can compare against a
+        # depth band when no depth was read, and an empty answer is not a shallow one.
+        return {
+            "state": "unavailable",
+            "reason": "no_readable_timeframe_since_stage2_start",
+            "doctrine_id": _LARGEST_DECLINE,
+            "stage2_start": declared.isoformat(),
+            "measured_from": stage2_start.isoformat(),
+            "daily": daily,
+            "weekly": weekly,
+        }
     return {
         "doctrine_id": _LARGEST_DECLINE,
         "binds": doctrine.binds(_LARGEST_DECLINE),
         "state": "reported",
         "stage2_start": declared.isoformat(),
         "measured_from": stage2_start.isoformat(),
-        "daily": _daily(bars, stage2_start=stage2_start, readable=readable),
-        "weekly": _weekly(bars, stage2_start=stage2_start, readable=readable),
+        "daily": daily,
+        "weekly": weekly,
         "claim_inputs_not_read": _unread_claim_inputs((_LARGEST_DECLINE, _VOLUME_STATE), ("price_history", "volume_history", "stage2_start", "daily_volume")),
     }
 
@@ -497,6 +529,38 @@ def split_sized_discontinuities(closes: Any) -> Any:
     return np.concatenate(([False], jumped))
 
 
+def impossible_bar_relations(bars: pd.DataFrame) -> Any:
+    """Which sessions report a price outside the range that session claims to have had.
+
+    A close under its own low, an open above its own high, a high beneath its own low --
+    none of these is a session that happened, and no reading can decide which of the four
+    numbers is the wrong one. The point is not tidiness. The audits read Lows and the
+    current price is the Close, so a bar like this hands one reader a window that came
+    through clear and the other a price far under the stop, and the verdict then contradicts
+    the record printed beside it. So the whole bar is unusable, the way a NaN is.
+    """
+
+    columns = {name: pd.to_numeric(bars[name], errors="coerce").to_numpy(dtype=float) for name in ("Open", "High", "Low", "Close") if name in bars.columns}
+    if "High" not in columns or "Low" not in columns:
+        return None
+    # Only prices that are prices take part. A zero or a NaN in one column is already that
+    # column's own unreadable value, and letting it fail the relation test as well would
+    # make one broken cell void the whole bar -- the opposite of the rule that a bad Volume
+    # does not spoil a count of Opens. What is left is a genuine contradiction: four usable
+    # numbers that cannot all be true of one session.
+    usable = {name: (np.isfinite(value) & (value > 0)) for name, value in columns.items()}
+    high, low = columns["High"], columns["Low"]
+    both = usable["High"] & usable["Low"]
+    broken = both & (high < low)
+    for name in ("Open", "Close"):
+        value = columns.get(name)
+        if value is None:
+            continue
+        inside = usable[name]
+        broken = broken | (inside & usable["High"] & (value > high)) | (inside & usable["Low"] & (value < low))
+    return broken
+
+
 class _Readable:
     """Which sessions the harness can read, asked one window at a time.
 
@@ -516,17 +580,27 @@ class _Readable:
                 continue
             values = pd.to_numeric(bars[column], errors="coerce").to_numpy(dtype=float)
             self._bad[column] = ~np.isfinite(values) | (values <= floor)
+        relations = impossible_bar_relations(bars)
+        if relations is not None:
+            for column in self._bad:
+                self._bad[column] = self._bad[column] | relations
         self._length = len(bars)
         self._bars = bars
         if _SPLIT_COLUMN in bars.columns:
-            events = pd.to_numeric(bars[_SPLIT_COLUMN], errors="coerce").fillna(0).to_numpy(dtype=float)
-            self._splits = (events != 0) & (events != 1)
+            events = pd.to_numeric(bars[_SPLIT_COLUMN], errors="coerce").to_numpy(dtype=float)
+            unreadable = ~np.isfinite(events)
+            # A blank event cell has not said there was no split. Filling it with a zero
+            # would turn missing evidence into an assertion of absence, and the session
+            # beside it can carry a split-sized fall the window would then measure across.
+            self._splits = unreadable | ((events != 0) & (events != 1))
+            self._unreadable_events = unreadable
             self._split_reason = "share_split_inside_window"
         else:
             # A history without the event column has not said there was no split. What a
             # hidden split does to these measurements is print a discontinuity, so the
             # closes are asked for one directly and the window is refused the same way.
             self._splits = split_sized_discontinuities(bars.get("Close"))
+            self._unreadable_events = None
             self._split_reason = self._discontinuity_reason
 
     def split(self, start: int = 0, end: int | None = None) -> dict[str, Any] | None:
@@ -543,7 +617,9 @@ class _Readable:
         found = self.split_position(start, end)
         if found is None:
             return None
-        return {"state": "unavailable", "reason": self._split_reason, "date": self._bars.index[found].date().isoformat()}
+        blank = self._unreadable_events is not None and bool(self._unreadable_events[found])
+        reason = self._discontinuity_reason if blank else self._split_reason
+        return {"state": "unavailable", "reason": reason, "date": self._bars.index[found].date().isoformat()}
 
     def split_position(self, start: int = 0, end: int | None = None) -> int | None:
         """Where in the frame the window's first uncrossable session sits, or None.
@@ -554,16 +630,34 @@ class _Readable:
 
         if self._splits is None:
             return None
-        window = self._splits[max(0, start) : self._length if end is None else end]
+        # From the session after the window opens. The event is stamped on the session that
+        # printed the new coordinate system, so a window starting there is entirely inside
+        # that system and nothing in it spans the change. The stop audit reads the boundary
+        # this way, and one frame must not be two different frames to two readers.
+        first = max(0, start) + 1
+        window = self._splits[first : self._length if end is None else end]
         if not bool(window.any()):
             return None
-        return max(0, start) + int(window.argmax())
+        return first + int(window.argmax())
 
     def gap(self, start: int = 0, end: int | None = None, columns: tuple[str, ...] = ("Open", "High", "Low", "Close", "Volume")) -> dict[str, Any] | None:
         """The unavailable block for a window holding a session this reading cannot use, or None.
 
         Columns as well as sessions: a broken Volume has nothing to do with an average of
         closes, and voiding one because of the other hides a measurement that is fine.
+        """
+
+        first = self.gap_position(start, end, columns)
+        if first is None:
+            return None
+        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[first].date().isoformat()}
+
+    def gap_position(self, start: int = 0, end: int | None = None, columns: tuple[str, ...] = ("Open", "High", "Low", "Close", "Volume")) -> int | None:
+        """Where in the frame the window's first unusable session sits, or None.
+
+        A reading that must refuse a window still read the sessions before the hole, and a
+        finding among them already happened. The position is what lets an audit stop there
+        instead of throwing away what it had.
         """
 
         first: int | None = None
@@ -575,9 +669,7 @@ class _Readable:
             if bool(window.any()):
                 position = max(0, start) + int(window.argmax())
                 first = position if first is None else min(first, position)
-        if first is None:
-            return None
-        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[first].date().isoformat()}
+        return first
 
     def missing_at(self, positions: list[int], columns: tuple[str, ...]) -> dict[str, Any] | None:
         """The unavailable block for a reading that opens named cells rather than a span.
@@ -821,21 +913,25 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
 def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | None, readable: _Readable) -> dict[str, Any]:
     if base_top is None:
         return {"state": "unavailable", "reason": "base_top_not_declared"}
-    held_positions = _positions_since(bars, entry_date)
+    # From the session after entry, which is the window the excursion beside this block
+    # reads. A daily bar cannot say whether its High printed before or after the fill, so
+    # crediting the entry session's own High here would report the position further along
+    # than the peak the stop rules measure from -- one question with two answers, and the
+    # more flattering one on the page a reader takes the extension from.
+    held = [position for position, timestamp in enumerate(bars.index) if timestamp.date() > entry_date]
     # Two readings, two windows: the extension is the latest close against the base top, and
     # the furthest the position got is the highest High since entry. No close between them
     # is opened, so a hole in one is not this block's business.
     gap = (
         readable.gap(len(bars) - 1, columns=("Close",))
-        or readable.gap(held_positions[0] if held_positions else 0, columns=("High",))
-        or readable.split(held_positions[0] if held_positions else 0)
+        or readable.gap(held[0] if held else 0, columns=("High",))
+        or readable.split(held[0] if held else 0)
     )
     if gap is not None:
         return {**gap, "doctrine_id": _PAUSE_ZONE}
     closes = bars["Close"].astype(float)
     highs = bars["High"].astype(float)
     last_close = _finite(closes.iloc[-1])
-    held = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= entry_date]
     max_high = _finite(highs.iloc[held].max()) if held else None
     if last_close is None or base_top <= 0:
         return {"state": "unavailable", "reason": "invalid_close_or_base_top"}

@@ -547,6 +547,17 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 250 — 창의 첫 세션에 찍힌 분할은 창 안이 아니다(p3f8-verdict⑤).** 분할 이후에 연 포지션(진입 50, 스탑 45)의 감사가 전 구간을 거절했다. 사건은 **새 좌표계를 찍은 세션**에 스탬프되므로 그 세션에서 시작하는 창은 통째로 새 좌표계 안이다. `<=`를 `<`로 바꾼다 — 최고 High 측정은 이미 strict였고, 한 프레임을 두 리더가 다르게 읽고 있었던 것이 진짜 신호였다.
 
     - **결정 251 — 레벨을 건너는 규칙의 주인은 하나다(변이 생존자).** 결정 245가 감사와 명시 가격 경로를 맞췄는데, 리듀서의 `current <= invalidation_price`가 **세 번째 사본**으로 남아 95=95를 깼다고 판정했다. `AUDIT_BASIS`와 `crosses(role, price, level)`를 `risk.py`가 소유하고 `operations.py`가 가져다 쓴다 — Phase 0 5라운드가 적어 둔 교훈("연산이 리듀서가 이미 답한 질문을 자기 말로 다시 묻고 있었다")이 그대로 반복된 자리다.
+    - **결정 252 — 한 질문에 답이 둘이면 둘 다 못 믿는다(15라운드 fresh-read).** 포지션이 어디까지 갔는가를 `_max_high_since`는 진입 세션 다음부터, `_base_extension`은 진입 세션부터 읽어 같은 화면에 두 개의 최고점을 실었다. 후자를 엄격 창으로 맞췄다 — 일봉은 고가가 체결 전인지 후인지 못 말하므로 배제하는 쪽이 옳고, 3R 스탑을 올리는 쪽이 그 답을 이미 쓰고 있었다.
+    - **결정 253 — 읽히지 않는 이벤트 칸은 "이벤트 없음"이 아니다.** `Stock Splits` 열의 NaN을 `.fillna(0)`으로 메우면 증거 부재가 부재 증거로 바뀐다 — 옆 세션에 분할 크기 낙폭이 있어도 감사가 그대로 통과한다. `_uncrossable_sessions`는 세션마다 이유를 달아 반환하고(`corporate_action_evidence_missing` / `share_split`), `_Readable`도 같은 규칙을 쓴다. 문자열 쓰레기 열도 같은 경로로 잡힌다.
+    - **결정 254 — 분할 경계는 관리 블록에서도 결정 250과 같다.** `_Readable.split_position`이 창의 첫 세션에 찍힌 분할을 창 안으로 셌다. 이벤트는 새 좌표계를 인쇄한 세션에 찍히므로 그 세션에서 시작하는 창은 통째로 새 좌표계 안에 있다. 한 프레임이 두 독자에게 서로 다른 프레임이 되지 않게 `start + 1`부터 본다.
+    - **결정 255 — 넘겨받은 경로는 이 요청에 대한 기록이어야 한다.** `supplied_price_path`가 `governing_role`을 요구하지 않아 역할 없는 상태 단어가 감사를 건너뛰었다. 이제 역할·`checked_level`이 선언 레벨과 일치하고, `breach_date`가 `entry_date..as_of` 안이며, `basis`가 그 역할의 기준이고, 기록된 가격이 실제로 레벨을 건너야 기록으로 인정한다.
+    - **결정 256 — 종가 감사는 지정가 주문에 대해 아무 말도 하지 않는다.** `_audited`가 레벨 크기만 비교해, 95 종가 무사통과가 90 스탑을 청소했다. `protective_plan`이 역할을 들고 다니고 `_PROVES`가 기준 간 함의를 명시한다 — 저가 기준 무사통과는 종가 기준도 증명하지만 그 역은 아니다.
+    - **결정 257 — 이미 일어난 청산은 나중 구멍이 지우지 못한다.** 선언 평균 이탈이 12-03에 확정됐는데 12-15의 NaN 종가가 블록 전체를 unavailable로 만들어 SELL이 사라졌다. 분할에만 쓰던 `refuse_from` 기제를 구멍에도 적용한다(`_first_trouble`) — 구멍 이전 값은 읽을 수 있는 종가로 계산된 값이다.
+    - **결정 258 — 요청도 증거처럼 읽는다(15라운드 hostile-input).** 어휘 밖 상태 단어(`{"state":"banana"}`)가 "아니오"로, 리스트가 "없음"으로, `20251201` 정수가 한쪽에선 날짜로 다른 쪽에선 결측으로 읽혔다. `_STATE_VOCABULARY`·`_MAPPING_FIELDS`·`_request_date`가 요청 seam에서 거절한다 — CLI가 이미 강제하던 목록을 `execute()` 경로에도 둔 것이다.
+    - **결정 259 — 가격 칸에는 가격이 들어간다.** `current_price=0`이 SELL을 만들고 `inf`·`"100"`은 조용히 버려져 프로바이더 값으로 대체됐다(같은 필드, 정반대 실패). `entry_price`·`current_price`도 `_positive` 검증에 넣고, 보고 정밀도에서 0으로 반올림되는 값(1e-323)도 거절한다 — 그 자리에서 나오는 몫이 `inf`다. `_reported`는 비유한 값을 절대 싣지 않는다(이월 #13의 이 seam 몫).
+    - **결정 260 — 진입 시점에 유효한 스탑은 진입가 아래에 있다.** `initial_stop_price`에만 있던 앵커를 `stop_price`에도 둔다. 단 `stop_effective_date > entry_date`면 나중에 올린 스탑이므로 진입가 위가 정상이고, 그 경우 "진입가 대비 손실률"은 측정 대상이 아니어서 `stop_pct`를 싣지 않는다 — 음수 손실률을 손실 밴드 옆에 두는 것이 원래 결함이었다.
+    - **결정 261 — 저가 아래에서 끝난 종가를 가진 바는 바가 아니다.** 감사는 Low를 읽어 무사통과라 하고 현재가는 Close를 읽어 SELL이라 했다. 넷 중 무엇이 틀렸는지 알 수 없으므로 `impossible_bar_relations`가 그 바 전체를 NaN처럼 취급한다(`operations`와 `_Readable` 양쪽).
+    - **결정 262 — 거래소 휴장일 검증은 거부한다(hostile-input #6).** 리뷰어는 조작된 2025-12-25 행이 SELL을 만든다며 세션 캘린더 검증을 요구했다. 이 하네스에는 거래 캘린더 소스가 없고(`capabilities` 프로즈가 이미 "Sessions missing in the middle of a window cannot be told from market holidays without a trading calendar, which this harness does not carry"로 공표한다), 없는 캘린더를 `bdate_range`로 흉내내면 반휴장일과 진짜 휴장일을 구분 못 하는 두 번째 거짓말이 된다. 프로바이더는 yfinance이고 `Runtime(price_history=...)`는 테스트 seam이다 — 프로덕션 입력이 아니다.
 
 - **Phase 4~7 — 미착수.**
 

@@ -192,9 +192,15 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _reported(value: float | None) -> float | None:
-    """Round for the reader only; every comparison ran on the measurement itself."""
+    """Round for the reader only; every comparison ran on the measurement itself.
 
-    return None if value is None else round(value, _REPORTED_PRECISION)
+    A figure that is not finite is not a measurement, whatever arithmetic produced it, and
+    an infinity on the page is worse than the absence it stands for: it reads as a quantity.
+    """
+
+    if value is None or not math.isfinite(value):
+        return None
+    return round(value, _REPORTED_PRECISION)
 
 
 def _reported_beside_gate(value: float, claim_id: str, name: str) -> float:
@@ -267,7 +273,11 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     # and measuring the loss from the looser level would report a risk the trade does not run
     # and then order a raise to the level the audit says never stopped governing.
     stop = _effective_stop(payload)
-    band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", (entry - stop) / entry * 100 if entry and stop is not None else None)
+    # A stop raised above entry defends a gain rather than bounding a loss, so there is no
+    # loss percent to read: publishing the negative distance would put a number under a
+    # band about how tight a stop should be that is not the thing the band measures.
+    loss_pct = (entry - stop) / entry * 100 if entry and stop is not None and stop < entry else None
+    band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", loss_pct)
     low, high = doctrine.get_claim(_MARKET_DEFENSE)["claim"]["thresholds"]["difficult_market_loss_pct"]["range"]
     tighten_to = _reported(entry * (1 - high / 100)) if entry else None
     current = _number(payload.get("current_price"))
@@ -342,8 +352,30 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     return blocks
 
 
-def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None, required_to: date | None) -> bool:
-    """Whether some record cleared ``level`` over every session from ``required_from`` to ``required_to``.
+# Which basis an audit's clear finding can settle. A window where no Low reached a level
+# is a window where no close fell below it either, because a close is inside its own
+# session's range -- so the order audit answers both questions. The reverse does not hold:
+# closes that stayed above a level say nothing about the lows underneath them, and reading
+# a cleared invalidation as a cleared stop is how an order that was taken out intraday goes
+# unreported.
+_PROVES = {
+    "completed_daily_low": frozenset({"completed_daily_low", "completed_daily_close"}),
+    "completed_daily_close": frozenset({"completed_daily_close"}),
+}
+
+
+def _record_basis(record: Mapping[str, Any]) -> str | None:
+    """Which prices a record was audited against, taken from its role or its own word."""
+
+    role = record.get("role")
+    if isinstance(role, str) and role in AUDIT_BASIS:
+        return AUDIT_BASIS[role]
+    basis = record.get("basis")
+    return basis if isinstance(basis, str) else None
+
+
+def _audited(records: list[Mapping[str, Any]], role: str, level: float, required_from: date | None, required_to: date | None) -> bool:
+    """Whether some record cleared ``role``'s ``level`` over every session from ``required_from`` to ``required_to``.
 
     ``required_to`` is as_of for a level still in force and the eve of the raise for an
     initial stop that a later stop superseded upward.
@@ -351,9 +383,13 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
 
     if required_from is None or required_to is None:
         return False
+    wanted = AUDIT_BASIS[role]
     for record in records:
         audited_level = _number(record.get("level"))
         if audited_level is None or audited_level < level:
+            continue
+        basis = _record_basis(record)
+        if basis is None or wanted not in _PROVES[basis]:
             continue
         if _status_word(record) != "clear":
             continue
@@ -469,20 +505,42 @@ def supplied_price_path(evidence: Mapping[str, Any]) -> bool:
 
     This is the one settled breach the bars cannot improve on, because it is the same record
     they would produce -- but only if it is one. A record carries the coordinates that make
-    it auditable: which session, and which level. A state word on its own is an assertion
-    wearing the shape of an audit, and it goes to the bars like any other assertion. So does
-    a record naming a role for a level this request never declared, because a path about an
-    invalidation nobody declared is about nothing.
+    it auditable, and each of them is a way the record could be about some other request:
+    which level it checked, which declared level that was, and which session it found. A
+    state word on its own is an assertion wearing the shape of an audit, and it goes to the
+    bars like any other assertion.
+
+    Every coordinate is checked against what this request declared, because a record whose
+    level is not the level the trader is carrying, or whose session is outside the window
+    the position existed in, describes a position that is not this one -- and settling this
+    request on it would skip the audit that would have found nothing.
     """
 
     payload = _mapping(evidence)
     path = _mapping(payload.get("completed_price_path"))
-    if not _triggered(path) or path.get("breach_date") is None or _number(path.get("checked_level")) is None:
+    breach_date = _iso_date(path.get("breach_date"))
+    checked_level = _number(path.get("checked_level"))
+    if not _triggered(path) or breach_date is None or checked_level is None:
         return False
     invalidation_price, _ = _exit_plan(payload)
     declared = {"stop": _number(payload.get("stop_price")), "initial_stop": _number(payload.get("initial_stop_price")), "invalidation": invalidation_price}
     role = path.get("governing_role")
-    return role is None or declared.get(role) is not None
+    if declared.get(role) is None or declared[role] != checked_level:
+        return False
+    # The basis and the price have to agree with the role too. A record that says it read
+    # closes cannot settle a stop, which is an order the tape takes out intraday; and a
+    # price that never reached the level is a record of nothing having happened, wearing a
+    # breached state word. Either one, taken on trust, skips the audit that would have
+    # found the position still open.
+    stated_basis = path.get("basis")
+    if isinstance(stated_basis, str) and stated_basis != AUDIT_BASIS[role]:
+        return False
+    found = _number(path.get("breach_low" if AUDIT_BASIS[role] == "completed_daily_low" else "breach_close"))
+    if found is not None and not crosses(role, found, checked_level):
+        return False
+    entry_date = _iso_date(payload.get("entry_date"))
+    as_of = _iso_date(payload.get("as_of"))
+    return entry_date is not None and as_of is not None and entry_date <= breach_date <= as_of
 
 
 _POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
@@ -525,18 +583,18 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     stop_effective_date = _iso_date(payload.get("stop_effective_date"))
     stop_from = stop_effective_date or entry_date
     protective_plan = [
-        (level, required_from, as_of)
-        for level, required_from in ((stop, stop_from), (invalidation_price, entry_date))
+        (role, level, required_from, as_of)
+        for role, level, required_from in (("stop", stop, stop_from), ("invalidation", invalidation_price, entry_date))
         if level is not None
     ]
     if initial_stop is not None and stop is not None and initial_stop != stop and entry_date is not None and stop_effective_date is not None:
         if stop > initial_stop:
             # The initial stop governed every completed session before the raise took effect.
             if stop_effective_date > entry_date:
-                protective_plan.append((initial_stop, entry_date, stop_effective_date - timedelta(days=1)))
+                protective_plan.append(("initial_stop", initial_stop, entry_date, stop_effective_date - timedelta(days=1)))
         else:
             # A stop is never widened; a lower later stop does not relieve the initial one.
-            protective_plan.append((initial_stop, entry_date, as_of))
+            protective_plan.append(("initial_stop", initial_stop, entry_date, as_of))
 
     # Anchors describe whether the request is a coherent position at all. A breach
     # outranks evidence nobody gathered, but never a request that contradicts itself.
@@ -594,7 +652,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # contradicting itself, and neither half of it can be published as a verdict.
     if asserted_stop and protective_plan:
         records = _audit_records(completed_price_path, path_state)
-        if path_state == "clear" and all(_audited(records, level, required_from, required_to) for level, required_from, required_to in protective_plan):
+        if path_state == "clear" and all(_audited(records, role, level, required_from, required_to) for role, level, required_from, required_to in protective_plan):
             anchors.append("asserted_breach_contradicted_by_completed_bars")
 
     gaps: list[str] = []
@@ -610,7 +668,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             gaps.append("auditable_protective_level")
         if protective_plan:
             records = _audit_records(completed_price_path, path_state)
-            if path_state != "clear" or not all(_audited(records, level, required_from, required_to) for level, required_from, required_to in protective_plan):
+            if path_state != "clear" or not all(_audited(records, role, level, required_from, required_to) for role, level, required_from, required_to in protective_plan):
                 gaps.append("completed_price_path")
         if invalidation_price is None and has_condition:
             # HOLD asserts nothing has invalidated the thesis; an exit condition the

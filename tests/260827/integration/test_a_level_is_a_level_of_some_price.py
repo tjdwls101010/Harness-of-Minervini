@@ -51,6 +51,27 @@ class AThresholdIsCrossedRatherThanTouched(unittest.TestCase):
         audits = {audit["role"]: audit for audit in payload["data"]["completed_price_path"]["audits"]}
         self.assertEqual(audits["invalidation"]["state"], "clear")
 
+    def test_a_last_close_exactly_at_the_invalidation_has_not_gone_below_it(self) -> None:
+        # The same equality reached the other way: not a price handed in, but the last close
+        # the provider returned, which is what the reducer reads as the current price.
+        payload = run(
+            {AS_OF: (96.0, 97.0, 94.0, 95.0)},
+            stop_price=90.0,
+            invalidation={"price": 95.0, "condition": "completed close below 95"},
+        )
+
+        self.assertEqual(payload["data"]["current_price"], 95.0)
+        self.assertNotIn("invalidation_breach", payload["data"]["failed"])
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+
+    def test_a_price_exactly_at_the_stop_did_reach_the_order(self) -> None:
+        # The other side of the same rule, read from a price rather than a bar: an order
+        # resting at 90 is filled by a print of 90.
+        payload = run({}, stop_price=90.0, current_price=90.0)
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["data"]["failed"], ["completed_stop_breach"])
+
     def test_a_low_exactly_at_the_stop_did_reach_the_order(self) -> None:
         payload = run({"2025-12-10": (100.0, 101.0, 90.0, 100.0)}, stop_price=90.0)
 

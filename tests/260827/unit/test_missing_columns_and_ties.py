@@ -86,7 +86,7 @@ class WhatTheReviewProbeLeftAlive(unittest.TestCase):
         self.assertEqual(cold["state"], "unavailable")
 
     def test_a_breakout_with_exactly_fifty_prior_sessions_has_a_baseline(self) -> None:
-        rows = flat(50) + [(100.0, 101.0, 99.0, 105.0, 800_000)] + flat(2, 103.0)
+        rows = flat(50) + [(100.0, 105.0, 99.0, 105.0, 800_000)] + flat(2, 103.0)
         enough = build(frame(rows), entry=50, breakout_date=frame(rows).index[50].date())
         short = build(frame(rows[1:]), entry=49, breakout_date=frame(rows[1:]).index[49].date())
 

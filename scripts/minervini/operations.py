@@ -35,7 +35,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
-from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, split_sized_discontinuities
+from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
 from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -1612,10 +1612,73 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     )
 
 
+# Every price the harness publishes is rounded to this many places, so a positive number
+# below it is a price the reader would be handed as zero -- and the measurements divided by
+# it come back infinite beside that zero. Such a scale is refused rather than reported on.
+_REPORTED_PRECISION = 10
+
+
 def _positive(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value) if value > 0 and math.isfinite(value) else None
+    if not (value > 0 and math.isfinite(value)):
+        return None
+    return float(value) if round(float(value), _REPORTED_PRECISION) > 0 else None
+
+
+def _request_date(value: Any, field: str) -> date:
+    """A calendar date the caller wrote as ``YYYY-MM-DD``, or a refusal naming the field.
+
+    The extended form only. ``date.fromisoformat`` also reads the basic form and a full
+    timestamp, and the reducer's own reader takes neither -- so a request written either way
+    parses here, is written back in a shape the reducer answers "missing" to, and the two
+    halves of the harness disagree about whether the field was supplied at all. A number is
+    refused for the same reason: ``20251201`` is not a date the reducer can read.
+    """
+
+    if not isinstance(value, str) or len(value) != 10 or value[4] != "-" or value[7] != "-":
+        raise RequestError(f"{field} must be an ISO date written YYYY-MM-DD", field)
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise RequestError(f"{field} must be an ISO date written YYYY-MM-DD", field) from error
+
+
+# What each state-bearing field the caller may hand in is allowed to say. A word outside its
+# own vocabulary is not a quiet "no": read through a triggered-or-not test an unknown word
+# means untriggered, through a clear-or-breached test it means unaudited, and either way an
+# input nobody can interpret would decide a verdict by being unrecognised. The lists are the
+# CLI's own choices, so one surface cannot accept what the other refuses.
+_STATE_VOCABULARY: dict[str, frozenset[str]] = {
+    "market": frozenset({"favorable", "cautious", "defensive", "incomplete"}),
+    "eligibility": frozenset({"eligible", "avoid", "incomplete"}),
+    "setup": frozenset({"ready", "wait", "avoid", "incomplete"}),
+    "fundamentals": frozenset({"supports_convergence", "does_not_support_convergence", "incomplete"}),
+    "completed_stop": frozenset({"triggered", "not_triggered"}),
+    "stop_event": frozenset({"triggered", "not_triggered"}),
+    "live_stop": frozenset({"triggered", "not_triggered"}),
+    "completed_price_path": frozenset({"clear", "breached", "unavailable"}),
+}
+_MAPPING_FIELDS = ("invalidation", "risk", "management", *_STATE_VOCABULARY)
+
+
+def _check_declared_shapes(evidence: Mapping[str, Any]) -> None:
+    """Refuse a declared field whose shape or state word the reducer could only misread."""
+
+    for field in _MAPPING_FIELDS:
+        value = evidence.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, Mapping):
+            raise RequestError(f"{field} must be an object", field)
+        allowed = _STATE_VOCABULARY.get(field)
+        if allowed is None:
+            continue
+        state = value.get("state", value.get("status"))
+        if state is None:
+            continue
+        if not isinstance(state, str) or state.strip().lower() not in allowed:
+            raise RequestError(f"{field}.state must be one of {', '.join(sorted(allowed))}", field)
 
 
 # A window whose refusal is a coordinate-system break rather than a missing bar.
@@ -1657,28 +1720,39 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _uncrossable_sessions(ordered: Any) -> tuple[str, list[date]]:
-    """Sessions no measurement may span, and the reason they cannot be spanned.
+def _uncrossable_sessions(ordered: Any) -> list[tuple[date, str]]:
+    """Sessions no measurement may span, each with the reason it cannot be spanned.
 
-    Two different findings share one shape. A declared split is an event the provider
+    Three different findings share one shape. A declared split is an event the provider
     handed over: the prices before and after it are two coordinate systems, and a level or
     a percentage across it is arithmetic between two different shares. A history with no
     event column has not said there was no split, so a split-sized jump in the closes is
     the same refusal reached from the other side -- the harness cannot tell a share-count
     change from a fall the market made, and the two call for opposite answers.
+
+    The third is an event column whose cell is empty. Reading that blank as a zero turns
+    missing evidence into an assertion that nothing happened, which is the one move a gap
+    may never make: the session beside it can carry a split-sized fall and the audit would
+    walk straight through it. So an unreadable cell is refused as evidence missing, which
+    is what it is, rather than as a split the provider never declared. The reason travels
+    with the session because one frame can hold both kinds at once.
     """
 
     if _SPLIT_COLUMN in ordered.columns:
-        events = pd.to_numeric(ordered[_SPLIT_COLUMN], errors="coerce").fillna(0)
-        marked = [float(factor) not in (0.0, 1.0) for factor in events]
-        reason = "share_split"
+        events = pd.to_numeric(ordered[_SPLIT_COLUMN], errors="coerce")
+        marked: list[str | None] = []
+        for factor in events:
+            value = float(factor)
+            if not math.isfinite(value):
+                marked.append("corporate_action_evidence_missing")
+            else:
+                marked.append("share_split" if value not in (0.0, 1.0) else None)
     else:
         discontinuities = split_sized_discontinuities(ordered.get("Close"))
         if discontinuities is None:
-            return "share_split", []
-        marked = list(discontinuities)
-        reason = "corporate_action_evidence_missing"
-    return reason, [timestamp.date() for timestamp, flagged in zip(ordered.index, marked) if flagged]
+            return []
+        marked = ["corporate_action_evidence_missing" if flagged else None for flagged in discontinuities]
+    return [(timestamp.date(), reason) for timestamp, reason in zip(ordered.index, marked) if reason is not None]
 
 
 def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> dict[str, Any]:
@@ -1713,13 +1787,14 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> dict[str, A
     # two prices the same day had, and reading it as a discontinuity would withhold a peak
     # over a session the stop audit -- which deduplicates first -- reads as continuous.
     ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
-    reason, uncrossable = _uncrossable_sessions(ordered)
+    uncrossable = _uncrossable_sessions(ordered)
     # The highest High before a split is in the old coordinate system and the entry price
     # three R is measured against is in whichever one the trader declared. Reading a peak
     # across the event either invents a gain or hides one, and both raise a stop.
-    inside = [session for session in uncrossable if entry_date < session <= as_of]
+    inside = [(session, reason) for session, reason in uncrossable if entry_date < session <= as_of]
     if inside:
-        return {"max_high_withheld_reason": f"{reason}_inside_excursion_window", "max_high_withheld_date": inside[0].isoformat()}
+        session, reason = inside[0]
+        return {"max_high_withheld_reason": f"{reason}_inside_excursion_window", "max_high_withheld_date": session.isoformat()}
     highs = pd.to_numeric(frame["High"], errors="coerce")
     highs.index = timestamps
     # Sorted before the last print wins, because "last" has to mean the latest session's
@@ -1824,13 +1899,13 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    split_reason, uncrossable = _uncrossable_sessions(ordered)
+    uncrossable = _uncrossable_sessions(ordered)
     # Strictly after the window opens. The event is stamped on the session that printed the
     # new coordinate system, so a window starting there is entirely inside that system -- the
     # position was opened in it and the declared level is in it. Refusing that window would
     # call a coordinate change a crossing when nothing crossed. The excursion reads its own
     # window the same way, and the two must not disagree about one frame.
-    inside = [session for session in uncrossable if effective_date < session <= as_of and (end_before is None or session < end_before)]
+    inside = [(session, reason) for session, reason in uncrossable if effective_date < session <= as_of and (end_before is None or session < end_before)]
     # The declared level is in the pre-split coordinate system and the closes after the
     # event are in the post-split one. Comparing them is arithmetic between two different
     # shares, and it would sell a position the market never took out. But the sessions
@@ -1839,7 +1914,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     # un-take-out a stop the market took out. So the audit runs up to the event and refuses
     # only from there. The current price is withheld either way -- it is on the far side of
     # the event and the declared stop is not.
-    refuse_from = inside[0] if inside else None
+    refuse_from, split_reason = inside[0] if inside else (None, "share_split")
     refused: tuple[dict[str, Any], float | None] | None = None
     if refuse_from is not None:
         current_price = None
@@ -1876,6 +1951,12 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     ]
     if not path_rows:
         return refused if refused is not None else ({"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price)
+    # A session whose own prices contradict each other is not a session, and which of the
+    # four numbers is wrong is unknowable. It is refused here as well as in the structure
+    # blocks, because this loop reads one column and the current price is read from another:
+    # left alone, the audit would clear a window on Lows while the Close sold the position.
+    relations = impossible_bar_relations(ordered)
+    broken_sessions = frozenset() if relations is None else frozenset(timestamp.date() for timestamp, flagged in zip(ordered.index, relations) if flagged)
     intraday = basis == "completed_daily_low"
     column = "Low" if intraday else "Close"
     unreadable = "invalid_low_in_stop_window" if intraday else "invalid_close_in_stop_window"
@@ -1891,6 +1972,8 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         # point it stopped being readable.
         spoken = [(spoken_date, spoken_row) for spoken_date, spoken_row in path_rows if spoken_date < bar_date]
         broke_off = ({"state": "unavailable", "reason": unreadable, "date": bar_date.isoformat(), **(_bars_that_spoke(spoken) if spoken else {})}, current_price)
+        if bar_date in broken_sessions:
+            return ({"state": "unavailable", "reason": "invalid_ohlc_history", "date": bar_date.isoformat(), **(_bars_that_spoke(spoken) if spoken else {})}, None)
         try:
             level_price = float(row[column])
         except (TypeError, ValueError):
@@ -1978,6 +2061,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     evidence["as_of"] = clock.date.isoformat()
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
+    _check_declared_shapes(evidence)
     invalidation = evidence.get("invalidation")
     # The audit needs the date the position started and a plan to clear; what it
     # was bought at decides 3R protection, not whether a level was breached. Both
@@ -1989,7 +2073,21 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     invalidation_price = _positive(raw_invalidation_price)
     raw_initial_stop = evidence.get("initial_stop_price")
     initial_stop_price = _positive(raw_initial_stop)
-    for raw, resolved, field in ((raw_stop_price, stop_price, "stop_price"), (raw_invalidation_price, invalidation_price, "invalidation_price"), (raw_initial_stop, initial_stop_price, "initial_stop_price")):
+    raw_current_price = evidence.get("current_price")
+    current_price_input = _positive(raw_current_price)
+    raw_entry_price = evidence.get("entry_price")
+    entry_price = _positive(raw_entry_price)
+    for raw, resolved, field in (
+        (raw_stop_price, stop_price, "stop_price"),
+        (raw_invalidation_price, invalidation_price, "invalidation_price"),
+        (raw_initial_stop, initial_stop_price, "initial_stop_price"),
+        # A price the caller hands in decides the verdict where the audit could not speak,
+        # so a zero, a negative or a string in that field is not a value to drop quietly:
+        # dropping it falls back on the provider and answers a question the caller asked a
+        # different way, and keeping it sells the position at a price that is not a price.
+        (raw_current_price, current_price_input, "current_price"),
+        (raw_entry_price, entry_price, "entry_price"),
+    ):
         if raw is not None and resolved is None:
             raise RequestError(f"{field} must be a finite positive number", field)
     widened = initial_stop_price is not None and stop_price is not None and stop_price < initial_stop_price
@@ -2000,13 +2098,9 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     stop_effective_date: date | None = None
     entry_date: date | None = None
     if mode == "active" and evidence.get("entry_date") is not None:
-        raw_effective_date = evidence.get("stop_effective_date") or evidence.get("entry_date")
-        try:
-            stop_effective_date = date.fromisoformat(str(raw_effective_date))
-            entry_date = date.fromisoformat(str(evidence["entry_date"]))
-        except ValueError as error:
-            field = "stop_effective_date" if evidence.get("stop_effective_date") is not None else "entry_date"
-            raise RequestError(f"{field} must be an ISO date", field) from error
+        entry_date = _request_date(evidence["entry_date"], "entry_date")
+        raw_effective_date = evidence.get("stop_effective_date")
+        stop_effective_date = entry_date if raw_effective_date is None else _request_date(raw_effective_date, "stop_effective_date")
         # Chronology is checked before any evidence is fetched: a position that does
         # not exist on the decision date cannot be sold, held, or audited.
         if entry_date > clock.date:
@@ -2015,6 +2109,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             raise RequestError("stop_effective_date cannot precede entry_date", "stop_effective_date")
         if stop_effective_date > clock.date:
             raise RequestError("stop_effective_date cannot be after as_of", "stop_effective_date")
+        # A stop the trade started with sits below the price it was entered at, or the
+        # position runs no risk for the stop to bound and every measurement read from it --
+        # the loss percent, the reward-to-risk, the R multiple -- is about a trade nobody
+        # could have taken. A stop raised later is the opposite case and is left alone:
+        # defending a gain above entry is the rule this harness is built on.
+        if stop_price is not None and entry_price is not None and stop_price >= entry_price and stop_effective_date == entry_date:
+            raise RequestError("stop_price must be below entry_price unless it was raised later, on a stop_effective_date after entry_date", "stop_price")
         if evidence.get("stop_effective_date") is not None:
             # Written back only when the caller declared it: the reducer's request contract
             # says a stop that differs from the initial one was raised on some date, and
@@ -2022,10 +2123,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             evidence["stop_effective_date"] = stop_effective_date.isoformat()
     stage2_start: date | None = None
     if evidence.get("stage2_start") is not None:
-        try:
-            stage2_start = date.fromisoformat(str(evidence["stage2_start"]))
-        except ValueError as error:
-            raise RequestError("stage2_start must be an ISO date", "stage2_start") from error
+        stage2_start = _request_date(evidence["stage2_start"], "stage2_start")
         if stage2_start > clock.date:
             raise RequestError("stage2_start cannot be after as_of", "stage2_start")
         evidence["stage2_start"] = stage2_start.isoformat()
@@ -2036,21 +2134,14 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     if raw_base_top is not None and base_top is None:
         raise RequestError("base_top must be a finite positive number", "base_top")
     if evidence.get("earnings_date") is not None:
-        try:
-            earnings_date = date.fromisoformat(str(evidence["earnings_date"]))
-        except ValueError as error:
-            raise RequestError("earnings_date must be an ISO date", "earnings_date") from error
-        evidence["earnings_date"] = earnings_date.isoformat()
+        evidence["earnings_date"] = _request_date(evidence["earnings_date"], "earnings_date").isoformat()
     raw_base_count = evidence.get("base_count")
     if raw_base_count is not None:
         if isinstance(raw_base_count, bool) or not isinstance(raw_base_count, int) or raw_base_count < 1:
             raise RequestError("base_count must be a whole number of bases, at least 1", "base_count")
     breakout_date: date | None = None
     if evidence.get("breakout_date") is not None:
-        try:
-            breakout_date = date.fromisoformat(str(evidence["breakout_date"]))
-        except ValueError as error:
-            raise RequestError("breakout_date must be an ISO date", "breakout_date") from error
+        breakout_date = _request_date(evidence["breakout_date"], "breakout_date")
         if breakout_date > clock.date:
             raise RequestError("breakout_date cannot be after as_of", "breakout_date")
         evidence["breakout_date"] = breakout_date.isoformat()
