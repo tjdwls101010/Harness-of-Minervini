@@ -160,6 +160,17 @@
 
 완료 판정: 실 SEC 픽스처로 fundamentals_state가 incomplete 고착 없이 산출. 어닝 근접 셀업 패스 골든 케이스 통과.
 
+**착수 시 감사에서 드러난 것(2026-08-27):** 계획서가 적은 것보다 한 겹 더 깊다. `fundamentals.py`는 `doctrine`을 **한 번도 import하지 않는다**(`grep -c doctrine` → 0). 모듈 안의 모든 수치가 발명된 것이고(희석 10%, 감속 판정), `ticker.fundamentals` 봉투가 인용하는 claim은 `scope.data_integrity` 하나뿐이다. 레지스트리에는 `fundamentals.*` claim이 33개 채굴되어 있는데 그중 **0개**가 코드에 연결돼 있다. 그리고 상시 INCOMPLETE의 기전이 확인됐다 — `normalize_filed_facts`가 내보내는 필드는 `filed_at`·`accounting_basis`·`quarterly`·`annual` 넷뿐인데 `_integrity_read`는 `accounting_integrity`·`going_concern`을 filing 매핑에서 읽으므로 **라이브 경로에서 항상 둘 다 unavailable**, 따라서 `safety_missing`이 항상 비어 있지 않고 `_fundamentals_state`는 항상 `incomplete`을 반환한다.
+
+슬라이스:
+
+- **4-A 라이브 경로 수리.** `accounting_integrity`를 SEC가 실제로 주는 것으로 대체 — 정정공시 탐지(submissions의 `10-K/A`·`10-Q/A`)와 `fundamentals.inventory_receivables_vs_sales`(프로바이더에 Inventory·AccountsReceivable 메트릭 추가). `going_concern`은 서술 텍스트라 프로바이더 경계에서 **명시적 미구현**으로 타입드 처리하고 판정을 막지 않는다. `dilution`은 계산 경로를 유지하되 임계를 레지스트리에 결속. `leader_category`의 filing 유래 시임 제거 — 분석가 입력으로. 완료 판정: 실제 모양의 SEC 픽스처로 `supports_convergence`와 `does_not_support_convergence`가 **둘 다** 도달 가능함을 통합 테스트로 증명.
+- **4-B 성장 측정 재설계 + doctrine 결속.** Code 33, 최소 분기 성장(20-25%/슈퍼퍼포먼스 30-40%), 연간 요건, 감속 적신호, 2분기 롤링 평활, 마진 분석, 일회성 항목 배제, 원가절감 지속불가. 모든 판독이 claim을 인용하고 gate/band/marker를 CLAUDE.md의 역할 계약대로 보고한다. 완료 판정: 모듈에 발명된 수치 0, `verify_doctrine_quotations.py` exit 0.
+- **4-C 카테고리별 해석 + 상대 측정.** 6분류 해석 차이, ROE 동종업계 상대(marker), P/E 확장 배수, 저P/E 함정, 20-F 연간 주기.
+- **4-D 어닝스 캘린더 프로바이더.** 타입드 불가용성·메타데이터·캐싱·PIT. `ticker.setup` 어닝 근접 게이트와 `ticker.risk` `--earnings-date`가 소비.
+- **4-E 인터페이스.** CLI 플래그, capabilities 프로즈, schema_sync, harness-spec.
+- **4-F 적대 리뷰 + 변이 스윕 + PR.** 결정 267에 따라 **렌즈를 고정**해서 돌린다 — 매 라운드 새 렌즈를 주면 종료 조건이 도달 불가능하다.
+
 ### Phase 5 — 시장/리더십 행동 증거
 
 파일: `scripts/minervini/market_evidence.py`, `market.py`, `operations.py`.
