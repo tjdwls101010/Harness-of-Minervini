@@ -494,6 +494,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 203 — 최고가도 이벤트를 건너뛰지 않는다(p3f2 양쪽 ①).** `_max_high_since`가 분할 창을 그대로 통과시켜 분할 이전 좌표계의 High로 3R을 재고 있었다. 스탑 감사와 같은 헬퍼(`_uncrossable_sessions`)를 읽게 하고, 걸리면 값을 내지 않고 `max_high_withheld_reason`으로 이유를 발표한다. 두 창의 시작이 한 세션 다르다는 점(진입 세션은 스탑 감사에만 포함)은 경계 테스트로 고정했다.
     - **결정 204 — claim 요약문도 런타임과 같은 수를 말해야 한다(p3f2-b8ad③).** `management.tl_key_reversal_criteria`의 요약이 "Four are computable"인 채로 런타임은 `computable_criteria: 3`을 발표하고 있었다. 인용문은 그대로 두고 하네스가 쓴 요약만 셋/셋으로 고쳤다.
     - **결정 205 — 불연속을 묻기 전에 세션을 먼저 합친다(자체 발견).** `_max_high_since`가 정렬만 하고 중복 제거 전에 `_uncrossable_sessions`를 부르고 있었다. 한 세션의 09:30 프린트와 16:00 프린트는 하루가 가진 두 가격이지 1/3 떨어진 두 세션이 아니므로, 스탑 감사(먼저 합친다)와 최고가가 같은 프레임을 다르게 읽게 된다 — 여덟 라운드 내내 반복된 바로 그 형태다. 중복 제거를 앞으로 옮기고 재현 테스트를 먼저 실패시킨 뒤 고쳤다.
+    - **결정 206 — 세는 수가 바뀌면 세 곳이 같이 바뀐다(p3f3-boundaries①).** 키 리버설을 셋으로 고치면서 claim 요약과 harness-spec은 고쳤는데 capabilities 산문과 스키마는 "four computed, two left to the chart"로 남아 있었다. 런타임이 `computable_criteria: 3`을 발표하는 동안 인터페이스가 다른 수를 말하고 있었으므로, 수를 바꾸는 변경은 claim·capabilities·스키마·spec 넷을 한 커밋에서 확인한다.
 
 - **Phase 4~7 — 미착수.**
 
