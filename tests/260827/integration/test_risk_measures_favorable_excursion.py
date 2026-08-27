@@ -53,3 +53,39 @@ class TheHighSinceEntryIsMeasuredFromTheBars(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhatTheReviewerOfSliceAFound(unittest.TestCase):
+    """Round p3a: two inputs the measurement had not been asked about."""
+
+    def test_a_history_that_repeats_a_session_still_yields_one_high(self) -> None:
+        # The provider layer permits a repeated session; the highest bar sits on the repeated date.
+        closes = a_run_to(125.0, 110.0)
+        snapshot = bars(closes)
+        frame = snapshot.data
+        doubled = pd.concat([frame, frame.iloc[[frame["High"].argmax()]]]).sort_index()
+        payload = execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: ProviderSnapshot(doubled, snapshot.meta)))
+
+        self.assertAlmostEqual(payload["data"]["max_high_since_entry"], 126.25)
+        self.assertEqual(payload["data"]["max_high_date"], frame["High"].idxmax().date().isoformat())
+
+    def test_a_bar_the_provider_returned_past_as_of_is_not_something_the_position_reached(self) -> None:
+        closes = list(np.linspace(100.0, 105.0, 89)) + [140.0]
+        later = bars(closes, end="2026-01-02")  # the 140 print is the session after as_of
+        payload = execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: later))
+
+        self.assertLess(payload["data"]["max_high_since_entry"], 110.0)
+        self.assertEqual(payload["data"]["management_actions"], [])
+
+    def test_a_stop_raised_later_but_still_below_entry_is_not_the_initial_risk(self) -> None:
+        # Entry 100, stop lifted from 94 to 97 on the 15th. Measured against 97 the run to 110
+        # would read as 3.3R; the initial risk is unknown without the initial stop, so no 3R.
+        payload = execute(
+            "ticker.risk",
+            {**POSITION, "stop_price": 97.0, "stop_effective_date": "2025-10-15"},
+            runtime=Runtime(price_history=lambda ticker, as_of: bars(a_run_to(110.0, 108.0))),
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+        self.assertIsNone(payload["data"]["risk_controls"]["r_multiple_reached"])
+        self.assertEqual(payload["data"]["management_actions"], [])

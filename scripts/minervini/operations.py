@@ -1661,8 +1661,10 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     held = held[held.notna() & (held > 0) & (held != math.inf)]
     if held.empty:
         return None
-    peak = held.idxmax()
-    return float(held.loc[peak]), peak.date().isoformat()
+    # Positional, not by label: the provider layer permits a repeated session, and a label
+    # lookup on a repeated index returns every bar under it rather than the one that was highest.
+    position = int(held.to_numpy().argmax())
+    return float(held.iloc[position]), held.index[position].date().isoformat()
 
 
 def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float) -> tuple[dict[str, Any], float | None]:
@@ -1708,6 +1710,16 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         if not math.isfinite(low) or low <= 0:
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
         if low <= protective_level:
+            # A session that opened below the level never offered the level's price; the
+            # record says so rather than letting the stop read as if it had been filled there.
+            opened: float | None = None
+            if "Open" in row.index:
+                try:
+                    opened = float(row["Open"])
+                except (TypeError, ValueError):
+                    opened = None
+                if opened is not None and (not math.isfinite(opened) or opened <= 0):
+                    opened = None
             return {
                 "state": "breached",
                 "basis": "completed_daily_low",
@@ -1716,6 +1728,8 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
                 "bars_checked": len(path_rows),
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
+                "breach_open": opened,
+                "gap_through_stop": None if opened is None else opened < protective_level,
             }, current_price
     if latest_date < as_of:
         # No breach in the bars that exist. A later missing bar cannot prove HOLD,

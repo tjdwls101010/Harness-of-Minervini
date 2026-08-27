@@ -72,6 +72,35 @@ class ThreeRProtectionIsAnAction(unittest.TestCase):
         self.assertFalse(result["risk_controls"]["breakeven_protection_required"])
 
 
+class ANumberNeverRoundsAcrossItsOwnGate(unittest.TestCase):
+    """Round p3a: a High one part in ten billion short of 3R read as `3.0` beside `required: false`."""
+
+    def test_just_short_of_three_r_is_published_short_of_three_r(self) -> None:
+        result = reduce_risk(held(max_high_since_entry=117.99999999994))
+
+        self.assertFalse(result["risk_controls"]["breakeven_protection_required"])
+        self.assertEqual(result["management_actions"], [])
+        self.assertLess(result["risk_controls"]["r_multiple_reached"], 3.0)
+
+    def test_the_same_holds_for_the_prospective_stop_ceiling(self) -> None:
+        result = reduce_risk(
+            {
+                "mode": "prospective",
+                "market": {"state": "favorable"},
+                "eligibility": {"state": "pass"},
+                "setup": {"state": "ready"},
+                "fundamentals": {"state": "pass"},
+                "entry_price": 100.0,
+                "stop_price": 89.99999999999,
+                "upside_price": 130.0,
+                "average_gain_pct": 24.0,
+            }
+        )
+
+        self.assertIn("initial_stop_pct", result["failed"])
+        self.assertGreater(result["risk_controls"]["initial_stop_pct"], 10.0)
+
+
 class ActionsBelongToAHeldPosition(unittest.TestCase):
     def test_a_sell_carries_no_management_actions(self) -> None:
         result = reduce_risk(held(max_high_since_entry=130.0, completed_stop={"state": "triggered"}))

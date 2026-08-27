@@ -1121,6 +1121,22 @@
           "exact": true,
           "quote_index": 0,
           "comparator": ">="
+        },
+        "ema_length_sessions": {
+          "role": "reference",
+          "value": 21,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the swing-management average the source recommends. A reference: it selects which series exists and is never compared with a measurement."
+        },
+        "sma_length_sessions": {
+          "role": "reference",
+          "value": 50,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the position-trail average the source recommends; a reference for the same reason."
         }
       },
       "failure": {
@@ -1148,7 +1164,7 @@
             "assembled_from": "an inline icon glyph for '21 ema'/'50 sma' is extracted as a displaced token that also splits 'The' into fragments; ellipses mark exactly where the icon-splitting intrudes, and the quotation states '21 ema'/'50 sma' plainly rather than reproducing the scrambled extraction"
           }
         ],
-        "resolution": "exclusively TraderLion.db row 10-sourced; Minervini.db contains zero occurrences of '21 EMA' or '21-day' in any form, so this framework should not read as dual-sourced with the book"
+        "resolution": "exclusively TraderLion.db row 10-sourced; Minervini.db contains zero occurrences of '21 EMA' or '21-day' in any form, so this framework should not read as dual-sourced with the book; the two closes gate reaches ticker.risk only as contrast, and the average the trader declares as their own exit plan is what a breach can sell"
       },
       "quarantine": {
         "is_quarantined": false,
@@ -1159,7 +1175,9 @@
       ],
       "tests": [
         "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/260824/doctrine/test_registry_sourcing.py",
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
       ],
       "computability": "deterministic"
     },
@@ -10862,6 +10880,299 @@
         "tests/260826/unit/test_entry_tactics.py"
       ],
       "computability": "chart_assisted"
+    },
+    {
+      "id": "management.tl_stage12_half_at_five_percent",
+      "title": "TraderLion's Stage 1 and 2 default: at a 5% profit, sell half and move the balance's stop to breakeven",
+      "kind": "default",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_price",
+        "max_high_since_entry",
+        "management_profile"
+      ],
+      "rule": {
+        "summary": "For early-stage traders TraderLion prescribes a fixed first step: once the stock shows a 5% profit, sell half the position at once and raise the stop on the balance to breakeven. It is a practice-layer default the trader opts into, not a Minervini rule, so it reaches the management actions and never the verdict.",
+        "trigger": "the position has shown a 5% profit, measured from the furthest it got",
+        "actions": [
+          "sell half the position",
+          "raise the stop on the balance to breakeven"
+        ]
+      },
+      "thresholds": {
+        "half_sale_profit_pct": {
+          "role": "gate",
+          "value": 5,
+          "unit": "percent",
+          "comparator": ">=",
+          "exact": true,
+          "quote_index": 0,
+          "note": "Stated as a filter -- 'once your stock reaches a profit of 5%' -- so it is a gate. It belongs to TraderLion, so evaluate_gate stamps it contrast_pass or contrast_fail and no verdict reads it; the opted-in profile turns a contrast_pass into a REDUCE and a RAISE_STOP action under HOLD."
+        }
+      },
+      "parameters": {
+        "half_sale_fraction": {
+          "value": 0.5,
+          "unit": "fraction_of_position",
+          "affects_verdict": false,
+          "note": "The fraction the source names. A fraction of a position is a selling discipline, not an allocation; this harness still prescribes no position size."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A position past the 5% profit under this profile without the half sale and the breakeven stop has an unexecuted default; the trader reviews it, the harness does not sell for them."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the entry price and the furthest the position got, the 5% reading cannot be taken; without the opted-in profile there is no default to apply."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "Once your stock reaches a profit of 5%, immediately sell half your position and raise the stop on the balance of your position to breakeven.",
+            "supports": "the exact 5% trigger, the half sale, and the breakeven stop on the balance"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "From this point, if your stock ever breaches your maximum stop loss, the position should immediately be sold at the market, no ifs, ands, or buts.",
+            "supports": "the hard stop stays in force under this profile; the half sale does not replace it"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (SELL RULES FOR STAGE 1 AND 2 TRADERS); the chapter also lists progressions that split the sale into thirds, which are not encoded because the passage presents them as optional later steps"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_stop_and_r_rules.py",
+        "tests/260824/doctrine/test_registry_sourcing.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "management.tl_sell_into_strength_at_average_gain_and_r_multiples",
+      "title": "The first places to sell some into strength are the trader's rolling average gain and R multiples from entry",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "entry_price",
+        "initial_stop_price",
+        "current_price",
+        "max_high_since_entry",
+        "average_gain_pct"
+      ],
+      "rule": {
+        "summary": "TraderLion names two reference points for selling part of a position into strength: the trader's own rolling average gain, and multiples of the initial risk (R). The passage names no multiple and no fraction, so the harness reports the position's return, its R multiple, and the distance to the trader's average gain, and prescribes nothing."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "These are reference points the source names without a filter; nothing passes or fails against them."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the trader's average gain the distance to it is unknown, and without the initial stop the R multiple is unknown; each is reported as unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "The first logical spots to sell some of your position into strength are at your ... rolling average gain and at multiples from your entry point. (An r multiple means a multiple of your initial stop loss. For example a profit of 9% when your original stop was 3% means you have a gain of 3 r multiples.)",
+            "supports": "both reference points and the definition of an R multiple from the initial stop",
+            "assembled_from": "an inline icon glyph for 'r multiple' is extracted as a stray 'r' token between 'your' and 'rolling'; the ellipsis marks exactly where it intrudes"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength at your average gain and R multiples); no multiple for the partial sale is given anywhere in the chapter, so none is registered"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_stop_and_r_rules.py",
+        "tests/260824/doctrine/test_registry_sourcing.py"
+      ],
+      "computability": "deterministic",
+      "unquantified": [
+        "the R multiple at which to sell part of the position -- the chapter names none"
+      ]
+    },
+    {
+      "id": "management.close_below_20_day_average_lowers_probability",
+      "title": "After a breakout, a close below the 20-day moving average lowers the odds and becomes a judgment call, subordinate to the stop",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "sma_20",
+        "stop_price"
+      ],
+      "rule": {
+        "summary": "Once a stock has broken out it should hold its 20-day moving average and in most cases not close below it; a close below lowers the probability of success and becomes a judgment call, sometimes a sale, while the hard stop stays the only automatic exit."
+      },
+      "thresholds": {
+        "average_length_sessions": {
+          "role": "reference",
+          "value": 20,
+          "unit": "sessions",
+          "exact": true,
+          "quote_index": 0,
+          "note": "The length of the average the source names. A reference: it selects which series exists and is never compared with a measurement."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "A completed close below the 20-day average after entry is review evidence: the source calls it a judgment call and keeps the stop as the only automatic sale."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without twenty completed sessions the average does not exist and the reading is reported as unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Once the stock successfully breaks out, the stock price should hold its 20-day moving average and in most cases should not close below it. The pattern should not get wider (meaning up and down movements). Up is good, but wild swings back and forth are not.",
+            "supports": "the 20-day average as the post-breakout level to hold, and widening action as a warning"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 3,
+            "text": "Of course, if the reversal is large enough to trigger my stop, I sell. If the reversal causes the price to close below its 20-day moving average, it lowers the probability of success and it becomes a judgment call; sometimes I sell if this happens. However, as long as the price holds above my stop loss, I try to give the stock some room.",
+            "supports": "a close below the 20-day average is a judgment call, and only the stop is automatic"
+          }
+        ],
+        "resolution": "mined from Minervini.db row 3 (How Do You Know When a Breakout Has Failed?); 'in most cases' and 'judgment call' keep this an interpretation and not a gate"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini"
+    },
+    {
+      "id": "management.largest_decline_since_stage2_start",
+      "title": "The largest daily or weekly decline since the stage 2 advance began, on overwhelming volume, is a sell signal in most cases",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "stage2_start"
+      ],
+      "rule": {
+        "summary": "If the stock experiences its largest daily and/or weekly price decline since the beginning of the stage 2 advance, that is a sell signal in most cases, even on the heels of a good earnings report; the source gives no formula for 'largest' beyond the decline itself and no number for 'overwhelming volume', so the harness reports the decline, its date, and the session's volume ratio, and the signal stays chart-assisted."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "The latest completed session or week being the largest decline of the advance is review evidence the reader takes to the chart; 'in most cases' is not a filter."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the date the stage 2 advance began there is no window to find the largest decline in, and the reading is reported as unavailable rather than measured from an arbitrary start."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "Before it becomes apparent that the fundamentals have changed, a major break in the stock price often will occur on overwhelming volume. If your stock experiences its largest daily and/or weekly price decline since the beginning of the stage 2 advance, this is a sell signal in most cases even if it comes on the heels of a seemingly great earnings report.",
+            "supports": "the largest daily or weekly decline since the stage 2 advance began as a sell signal in most cases, on overwhelming volume"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "There is usually a major price break in the stock on an increase in volume. Often, it's the largest one-day decline since the beginning of the stage 2 advance.",
+            "supports": "the same measurement named among the stage 3 characteristics"
+          }
+        ],
+        "resolution": "mined from Minervini.db row 11; the stage 3 characteristics claim already carries the second passage as description, and this claim is the one ticker.risk measures against a declared stage 2 start"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_management_evidence.py",
+        "tests/260827/unit/test_structure_deterioration_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "what 'overwhelming volume' is -- the volume ratio is reported beside the practice-layer high-volume marker, and no threshold is registered"
+      ]
     }
   ]
 }

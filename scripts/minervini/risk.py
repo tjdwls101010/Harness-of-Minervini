@@ -16,6 +16,12 @@ from . import doctrine
 _REPORTED_PRECISION = 10
 _ENTRY_RISK = "risk.initial_stop_and_reward"
 _PROFIT_PROTECTION = "risk.profit_protection_at_3r"
+_TL_HALF_AT_FIVE = "management.tl_stage12_half_at_five_percent"
+_STRENGTH_REFERENCES = "management.tl_sell_into_strength_at_average_gain_and_r_multiples"
+# A management profile is a tagged practice-layer default the trader opts into. It reaches
+# the management actions under HOLD and never the verdict, and each action it produces says
+# so: binds false, source "[TL]", and the contrast state the gate actually returned.
+_PROFILES = {"tl_stage12": _TL_HALF_AT_FIVE}
 
 # `waived_by_exception` is deliberately absent. It is the one word in this vocabulary that
 # claims an absence of evidence has been forgiven, and it was reachable by writing it: with
@@ -135,7 +141,7 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
             # Rounded for the reader, never for the comparison: a value tidied to the
             # limit before it is checked is a tolerance the gate design forbids.
             stop_pct = (entry - stop) / entry * 100
-            controls["initial_stop_pct"] = round(stop_pct, _REPORTED_PRECISION)
+            controls["initial_stop_pct"] = _reported_beside_gate(stop_pct, _ENTRY_RISK, "initial_stop_ceiling_pct")
             # The source gives the ordinary loss target as a range, so the reading
             # travels with its range instead of collapsing to a pass.
             controls["loss_target"] = doctrine.evaluate_band(_ENTRY_RISK, "ordinary_loss_target_pct", stop_pct)
@@ -145,7 +151,7 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
                 failed.append("half_average_gain_cap")
             if upside is not None:
                 reward_to_risk = (upside - entry) / (entry - stop)
-                controls["reward_to_risk"] = round(reward_to_risk, _REPORTED_PRECISION)
+                controls["reward_to_risk"] = _reported_beside_gate(reward_to_risk, _ENTRY_RISK, "reward_to_risk_minimum")
                 if doctrine.evaluate_gate(_ENTRY_RISK, "reward_to_risk_minimum", reward_to_risk)["state"] == "fail":
                     failed.append("reward_to_risk")
     elif entry is not None and upside is not None and upside <= entry:
@@ -168,6 +174,26 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         "missing": list(dict.fromkeys(missing)),
         "waiting": list(dict.fromkeys(waiting)),
     }
+
+
+def _reported(value: float | None) -> float | None:
+    """Round for the reader only; every comparison ran on the measurement itself."""
+
+    return None if value is None else round(value, _REPORTED_PRECISION)
+
+
+def _reported_beside_gate(value: float, claim_id: str, name: str) -> float:
+    """Round for the reader unless rounding would move the figure across the gate.
+
+    A measurement one part in ten billion short of a limit rounds to the limit itself and
+    then sits beside a state that says the limit was not reached. Publishing the raw figure
+    in that one case keeps the number and the state saying the same thing.
+    """
+
+    rounded = round(value, _REPORTED_PRECISION)
+    if doctrine.evaluate_gate(claim_id, name, rounded)["state"] != doctrine.evaluate_gate(claim_id, name, value)["state"]:
+        return value
+    return rounded
 
 
 def _status_word(value: Any) -> str:
@@ -288,6 +314,8 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     entry = _number(payload.get("entry_price"))
     entry_date = _iso_date(payload.get("entry_date"))
     stop = _number(payload.get("stop_price"))
+    initial_stop = _number(payload.get("initial_stop_price"))
+    profile = payload.get("management_profile")
     invalidation = _mapping(payload.get("invalidation"))
     invalidation_price, has_condition = _exit_plan(payload)
     declared_plan = declares_exit_plan(payload)
@@ -316,6 +344,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         anchors.append("stop_effective_date_after_as_of")
     if not declared_plan:
         anchors.append("stop_or_invalidation")
+    if initial_stop is not None and entry is not None and initial_stop >= entry:
+        # Initial risk is entry minus the initial stop; a stop at or above entry leaves none.
+        anchors.append("initial_stop_price")
+    if initial_stop is not None and stop is not None and initial_stop != stop and stop_effective_date is None:
+        # A stop that differs from the one the trade started with was raised on some date,
+        # and without it the raised level would be audited back to entry.
+        anchors.append("stop_effective_date")
+    if profile is not None and profile not in _PROFILES:
+        anchors.append("management_profile")
 
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
@@ -351,9 +388,13 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     controls: dict[str, Any] = {
         "breakeven_at_r": breakeven_at_r,
         "breakeven_protection_required": False,
+        "initial_risk": None,
+        "initial_risk_basis": None,
         "r_multiple_reached": None,
         "favorable_excursion_basis": None,
     }
+    # Measurements beside the position that prescribe nothing, filled under HOLD.
+    management_evidence: dict[str, Any] = {}
     # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
     # established that there is a position to manage, so only HOLD fills this.
     actions: list[dict[str, Any]] = []
@@ -377,12 +418,23 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         # measurement; without it, the last close is the floor of what was reached.
         max_high = _number(payload.get("max_high_since_entry"))
         reached = [(price, basis) for price, basis in ((max_high, "max_high_since_entry"), (current, "current_price")) if price is not None]
-        if entry is not None and stop is not None and stop < entry and reached:
+        # R is a multiple of the risk the trade started with. A stop raised since then is
+        # not that risk, so a raised stop needs the initial one declared or R goes unmeasured.
+        initial_risk: float | None = None
+        if entry is not None and initial_stop is not None:
+            initial_risk = entry - initial_stop
+            controls["initial_risk_basis"] = "initial_stop_price"
+        elif entry is not None and stop is not None and stop < entry and (stop_effective_date is None or stop_effective_date == entry_date):
+            initial_risk = entry - stop
+            controls["initial_risk_basis"] = "stop_price"
+        if initial_risk is not None:
+            controls["initial_risk"] = round(initial_risk, _REPORTED_PRECISION)
+        if entry is not None and initial_risk is not None and reached:
             price, basis = max(reached, key=lambda item: item[0])
-            r_multiple = (price - entry) / (entry - stop)
-            controls["r_multiple_reached"] = round(r_multiple, _REPORTED_PRECISION)
+            r_multiple = (price - entry) / initial_risk
+            controls["r_multiple_reached"] = _reported_beside_gate(r_multiple, _PROFIT_PROTECTION, "breakeven_protection_trigger_r")
             controls["favorable_excursion_basis"] = basis
-            if doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", r_multiple)["state"] == "pass":
+            if stop is not None and stop < entry and doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", r_multiple)["state"] == "pass":
                 controls["breakeven_protection_required"] = True
                 actions.append(
                     {
@@ -392,11 +444,38 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                         "evidence": {"r_multiple_reached": controls["r_multiple_reached"], "measured_from": basis},
                     }
                 )
+        if profile == "tl_stage12" and entry is not None and reached:
+            price, basis = max(reached, key=lambda item: item[0])
+            gain_pct = (price - entry) / entry * 100
+            signal = doctrine.evaluate_gate(_TL_HALF_AT_FIVE, "half_sale_profit_pct", gain_pct)
+            if signal["state"] == "contrast_pass":
+                evidence = {"gain_pct_reached": _reported_beside_gate(gain_pct, _TL_HALF_AT_FIVE, "half_sale_profit_pct"), "measured_from": basis, "state": signal["state"]}
+                tagged = {"doctrine_id": _TL_HALF_AT_FIVE, "binds": False, "source": "[TL]", "evidence": evidence}
+                actions.append({"action": "REDUCE", **tagged, "fraction": doctrine.parameter(_TL_HALF_AT_FIVE, "half_sale_fraction")})
+                if stop is not None and stop < entry:
+                    actions.append({"action": "RAISE_STOP", **tagged, "to_at_least": entry})
+        # Reference points for selling into strength. The source names the trader's own
+        # average gain and R multiples and gives neither a multiple nor a fraction, so this
+        # reports distances and prescribes nothing.
+        average_gain = _number(payload.get("average_gain_pct"))
+        return_pct = (current - entry) / entry * 100 if current is not None and entry is not None else None
+        max_return_pct = (max_high - entry) / entry * 100 if max_high is not None and entry is not None else None
+        management_evidence["strength_references"] = {
+            "doctrine_id": _STRENGTH_REFERENCES,
+            "binds": doctrine.binds(_STRENGTH_REFERENCES),
+            "return_pct": _reported(return_pct),
+            "max_return_pct": _reported(max_return_pct),
+            "r_multiple": _reported((current - entry) / initial_risk if current is not None and entry is not None and initial_risk else None),
+            "max_r_multiple": _reported((max_high - entry) / initial_risk if max_high is not None and entry is not None and initial_risk else None),
+            "average_gain_pct": average_gain,
+            "distance_to_average_gain_pct": _reported(return_pct - average_gain if return_pct is not None and average_gain is not None else None),
+        }
     return {
         "mode": "active",
         "verdict": verdict,
         "risk_controls": controls,
         "management_actions": actions,
+        "management_evidence": management_evidence,
         "completed_price_path": completed_price_path or None,
         "failed": reasons,
         "missing": missing,
