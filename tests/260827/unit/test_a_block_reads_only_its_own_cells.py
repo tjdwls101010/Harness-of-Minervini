@@ -117,6 +117,13 @@ class AReadingRefusesOnlyItsOwnHole(unittest.TestCase):
         self.assertEqual(result["daily"]["state"], "reported")
         self.assertEqual(result["weekly"]["state"], "reported")
 
+    def test_a_week_that_ended_before_the_advance_is_outside_the_weekly_reading(self) -> None:
+        # The first week weighed is the first whose change is measured from a week-end on or
+        # after the anchor, so the Friday before that is a close this reading never opens.
+        result = build(break_cell(frame(), "2025-10-31", "Close"))["largest_decline_since_stage2_start"]
+
+        self.assertEqual(result["weekly"]["state"], "reported")
+
     def test_a_down_session_the_volume_cannot_be_read_for_voids_the_volume_block(self) -> None:
         bars = frame()
         fell = pd.Timestamp("2025-12-08")
