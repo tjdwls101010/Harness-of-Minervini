@@ -346,7 +346,13 @@ def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any]) -> d
     rather than from this module.
     """
 
-    reading = {"doctrine_id": _GROUP_NEW_HIGHS, "binds": doctrine.binds(_GROUP_NEW_HIGHS)}
+    reading = {
+        "doctrine_id": _GROUP_NEW_HIGHS,
+        "binds": doctrine.binds(_GROUP_NEW_HIGHS),
+        # The claim states the signal; the two conventions below sized the window it is read
+        # over, and a reader following the citation needs all three to arrive at this count.
+        "window_doctrine_ids": [_GROUP_MEMBER_READING, _TRADING_WEEK],
+    }
     lookback = _growth_lookback_sessions()
     countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker)) is not None]
     if not countable:

@@ -1796,16 +1796,17 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         status = "partial"
     else:
         status = "ok"
+    data = {**result, "leaders": evidence["leaders"] or []}
     return envelope(
         "market.snapshot",
         request=_clean_request(request),
         as_of=_as_of(clock),
         status=status,
-        data={**result, "leaders": evidence["leaders"] or []},
+        data=data,
         signals=result["signal_vector"],
         missing=missing,
         sources=sources,
-        doctrine_ids=["scope.data_integrity"],
+        doctrine_ids=["scope.data_integrity", *sorted(_named_doctrine_ids(data) - {"scope.data_integrity"})],
         next_capabilities=["market.candidates", "ticker.qualify"] if succeeded else [],
     )
 
