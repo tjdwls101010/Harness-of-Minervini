@@ -21,7 +21,7 @@ from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
-from .fundamentals import evaluate_fundamentals
+from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates, evaluate_market_snapshot
 from .market_evidence import build_market_evidence
@@ -1130,6 +1130,14 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     cik = request.get("cik")
     if cik is not None and (not isinstance(cik, str) or not cik.isdigit() or len(cik) > 10):
         raise RequestError("cik must contain at most ten digits", "cik")
+    # What the filings do not carry and an analyst may. Refused here against the same
+    # vocabularies the evaluator holds, so a word it could only misread never reaches it.
+    declared: dict[str, str | None] = {}
+    for field, allowed in (("going_concern", FUNDAMENTALS_GOING_CONCERN), ("accounting_integrity", FUNDAMENTALS_ACCOUNTING_INTEGRITY), ("leader_category", FUNDAMENTALS_LEADER_CATEGORIES)):
+        value = request.get(field)
+        if value is not None and (not isinstance(value, str) or value not in allowed):
+            raise RequestError(f"{field} must be one of {', '.join(allowed)}", field)
+        declared[field] = value
     if request.get("as_of") is not None and cik is None:
         return envelope(
             "ticker.fundamentals",
@@ -1159,7 +1167,7 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[_missing_provider(error)],
         )
-    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat())
+    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat(), **declared)
     missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
     status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
     doctrine_ids = ["scope.data_integrity"]

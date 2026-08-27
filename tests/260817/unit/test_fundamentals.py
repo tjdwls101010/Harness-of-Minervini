@@ -63,17 +63,18 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
             ],
         )
 
-    def test_missing_critical_safety_evidence_is_incomplete_not_a_pass_or_fail(self) -> None:
+    def test_a_measurement_the_filings_came_up_short_of_is_incomplete_not_a_pass_or_fail(self) -> None:
+        # Dilution is computed from the filed share counts, so an absent count is a real gap
+        # about this company -- unlike the narrative checks, which are outside what is read.
         evidence = load_fixture("filed_evidence.json")
-        evidence["filings"][-2].pop("going_concern")
-        evidence["filings"][-2]["quarterly"][-1].pop("diluted_shares")
+        for filing in evidence["filings"]:
+            for fact in filing["quarterly"]:
+                fact.pop("diluted_shares", None)
 
         result = evaluate_fundamentals(evidence, as_of="2026-05-10")
 
         self.assertEqual(result["fundamentals_state"], "incomplete")
-        self.assertEqual(result["integrity"]["going_concern"]["state"], "unavailable")
         self.assertEqual(result["integrity"]["dilution"]["state"], "unavailable")
-        self.assertIn("going_concern", result["missing"])
         self.assertIn("dilution", result["missing"])
 
     def test_an_integrity_contradiction_still_governs(self) -> None:
@@ -84,9 +85,8 @@ class FundamentalsEvaluatorTests(unittest.TestCase):
         read. This is the part that was about the filings.
         """
         unsafe = copy.deepcopy(FILED_SAFETY_EVIDENCE)
-        unsafe["filings"][0]["going_concern"] = {"status": "substantial_doubt"}
 
-        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10")
+        blocked = evaluate_fundamentals(unsafe, as_of="2026-05-10", going_concern="substantial_doubt")
 
         self.assertEqual(blocked["fundamentals_state"], "does_not_support_convergence")
         self.assertEqual(blocked["integrity"]["going_concern"]["state"], "contradicts")

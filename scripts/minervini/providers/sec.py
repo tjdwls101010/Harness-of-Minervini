@@ -23,6 +23,14 @@ _QUARTERLY_METRICS = {
     "diluted_shares": ("WeightedAverageNumberOfDilutedSharesOutstanding",),
 }
 _ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRICS["revenue"]}
+# Balances rather than flows. Inventory and receivables are reported as of a date, so a
+# filing carries no `start` for them and the period they belong to is the one whose books
+# close on that date -- never the fiscal year of the report, which for a comparative column
+# is this year while the balance is last year's.
+_ANNUAL_INSTANT_METRICS = {
+    "inventory": ("InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross"),
+    "accounts_receivable": ("AccountsReceivableNetCurrent", "ReceivablesNetCurrent", "AccountsReceivableNet"),
+}
 
 
 def _filed_date(value: Any) -> date:
@@ -212,7 +220,7 @@ def normalize_filed_facts(
     submission_rows = _submission_rows(submissions)
     taxonomy, accounting_basis = _accounting_taxonomy(company_facts)
     filings: dict[str, dict[str, Any]] = {}
-    for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS)):
+    for kind, metrics in (("quarterly", _QUARTERLY_METRICS), ("annual", _ANNUAL_METRICS), ("annual_instant", _ANNUAL_INSTANT_METRICS)):
         for metric, concepts in metrics.items():
             for record in _metric_records(taxonomy, concepts, kind):
                 accession = record["accn"]
@@ -235,7 +243,8 @@ def normalize_filed_facts(
                         "annual": {},
                     },
                 )
-                fact = filing[kind].setdefault(
+                bucket = "annual" if kind == "annual_instant" else kind
+                fact = filing[bucket].setdefault(
                     record["period"],
                     {"period": record["period"], "end": record["end"]},
                 )
@@ -347,6 +356,14 @@ def _is_supported_form(value: Any) -> bool:
 
 
 def _period_from_fact(raw: Mapping[str, Any], kind: str) -> str | None:
+    if kind == "annual_instant":
+        # A balance sheet date is the period, full stop. `fy` names the report it was
+        # printed in, and a prior-year comparative column carries this year's -- reading it
+        # would file last year's inventory under this year and erase a year of growth.
+        end = raw.get("end")
+        if not isinstance(end, str) or not end.endswith("-12-31"):
+            return None
+        return end[:4]
     frame = raw.get("frame")
     if isinstance(frame, str):
         matched = re.fullmatch(r"CY(\d{4})(?:Q([1-4]))?", frame)
