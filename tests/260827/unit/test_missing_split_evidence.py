@@ -115,6 +115,18 @@ class AnEventCannotUndoWhatTheMarketAlreadyDid(unittest.TestCase):
         self.assertAlmostEqual(path["breach_low"], 89.0)
         self.assertEqual(path["bars_checked"], 2)
 
+    def test_the_refusal_names_the_sessions_it_did_read(self) -> None:
+        # The audit ran to the event and those bars came through clear. A refusal that names
+        # no bars reads as a window nothing was read in, which is not what happened.
+        bars = self.rows([(100.0, 99.0, 100.0), (100.0, 99.0, 100.0), (50.0, 49.0, 50.0), (50.0, 49.0, 50.0)])
+        payload = run(bars, entry_date=bars.index[0].date().isoformat(), stop_price=90.0)
+
+        path = payload["data"]["completed_price_path"]
+        self.assertEqual(path["state"], "unavailable")
+        self.assertEqual(path["first_bar_checked"], bars.index[0].date().isoformat())
+        self.assertEqual(path["last_bar_checked"], bars.index[1].date().isoformat())
+        self.assertEqual(path["bars_checked"], 2)
+
     def test_no_breach_before_it_still_refuses_the_window(self) -> None:
         bars = self.rows([(100.0, 99.0, 100.0), (100.0, 99.0, 100.0), (76.0, 75.0, 76.0)])
         payload = run(bars, entry_date=bars.index[0].date().isoformat(), stop_price=90.0)

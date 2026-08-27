@@ -487,10 +487,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
     path_state = _status_word(completed_price_path)
-    # A breached path names the level it is about. An invalidation breach is a SELL under
-    # its own name; calling it a stop breach would report a line the market never crossed.
-    path_breach_is_the_stop = _triggered(completed_price_path) and completed_price_path.get("governing_role") != "invalidation"
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_breach_is_the_stop or (current is not None and stop is not None and current <= stop)
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = (current is not None and invalidation_price is not None and current <= invalidation_price) or (
         _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
     )

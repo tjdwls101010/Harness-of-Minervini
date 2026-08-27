@@ -92,6 +92,15 @@ class TheGoldenCase(unittest.TestCase):
         self.assertEqual(actions(result), [])
         self.assertEqual(result["management_evidence"]["twenty_day_average"]["action_withheld_reason"], "no_completed_bar_on_breakout_date")
 
+    def test_a_breakout_the_history_begins_after_withholds_it_as_well(self) -> None:
+        # The other way a declared anchor is absent: the provider's history starts later
+        # than the date, so no session on it was ever seen.
+        payload = held(management={**measured(ema21="clear", twenty="below"), "gaps_since_breakout": {"state": "unavailable", "reason": "history_starts_after_breakout_date"}})
+        result = reduce_risk(payload)
+
+        self.assertEqual(actions(result), [])
+        self.assertEqual(result["management_evidence"]["twenty_day_average"]["action_withheld_reason"], "history_starts_after_breakout_date")
+
     def test_the_same_structure_with_the_ema_declared_as_the_exit_plan_is_a_sell(self) -> None:
         result = reduce_risk(held(management_average="ema21", management=measured(selected="ema21", ema21="breached", twenty="below")))
 

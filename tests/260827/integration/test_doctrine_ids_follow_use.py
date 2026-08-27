@@ -123,6 +123,34 @@ class AMarkerTravelsWithItsDistance(unittest.TestCase):
         self.assertAlmostEqual(marker["distance"], abs(marker["measured"] - 50))
 
 
+class ACitedClaimSaysWhichHalfWasRead(unittest.TestCase):
+    """Evidence a reading never consumes is named, and is not the same as evidence it wanted."""
+
+    def test_the_climax_names_the_base_count_it_does_not_read(self) -> None:
+        index = pd.bdate_range(end=AS_OF, periods=80)
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[60].date().isoformat(), "stop_price": 90.0},
+            runtime=Runtime(price_history=lambda ticker, as_of: bars([100.0] * 80)),
+        )
+
+        climax = payload["data"]["management_evidence"]["climax"]
+        self.assertEqual(climax["claim_inputs_not_read"], ["base_count"])
+        self.assertEqual(climax["missing_inputs"], [])
+
+    def test_the_base_count_disclaimer_names_the_history_it_does_not_read(self) -> None:
+        index = pd.bdate_range(end=AS_OF, periods=80)
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[60].date().isoformat(), "stop_price": 90.0, "base_count": 4},
+            runtime=Runtime(price_history=lambda ticker, as_of: bars([100.0] * 80)),
+        )
+
+        block = payload["data"]["management_evidence"]["base_count_context"]
+        self.assertEqual(block["disclaimer_doctrine_id"], "basecount.role_and_disclaimer")
+        self.assertEqual(block["claim_inputs_not_read"], ["price_history", "volume_history"])
+
+
 class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
     def test_a_history_without_volume_says_so_beside_the_claim(self) -> None:
         index = pd.bdate_range(end=AS_OF, periods=224)

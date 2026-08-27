@@ -2033,14 +2033,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # cleared -- no bar was read, and a session last week could have taken it out -- so
         # it is unaudited rather than clear. The record is about the level the price actually
         # crossed, named by role, because a breached invalidation is not a breached stop.
-        # Only a level whose own window reaches as_of can be breached by today's price: an
-        # initial stop the raise ended weeks ago is not audited by a price printed since.
-        crossed = [
-            (role, level, effective)
-            for role, level, effective, end_before in protective_plan
-            if price <= level and (end_before is None or clock.date < end_before)
-        ]
-        # The highest level crossed is the one the price passed first on its way down.
+        # The highest level crossed is the one the price passed first on its way down -- and
+        # that is also why no expired-window filter is needed here: a window only ends when a
+        # raise replaced it, so the level that expired is always below the one that replaced
+        # it, and this comparison never reaches it. The audits below check the window itself.
+        crossed = [(role, level, effective) for role, level, effective, _end in protective_plan if price <= level]
         governing_role, governing_level, governing_from = max(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
         evidence["completed_price_path"] = {
             "state": "breached",
