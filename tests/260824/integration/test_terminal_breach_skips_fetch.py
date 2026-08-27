@@ -1,4 +1,12 @@
-"""A breach that is already terminal must not send the harness looking for prices."""
+"""A breach the request already settled cannot be downgraded by prices nobody could fetch.
+
+This file once held the stronger claim -- that a terminal breach must not send the harness
+looking for prices at all. A later round showed why that went too far: an assertion says
+the position ended without saying when, and the bars can hold an exit that happened first,
+so the record named the wrong level on the wrong day. The bars are consulted now. What a
+settled verdict still buys is what this file was really protecting: their absence is
+reported without turning a terminal SELL into a partial one.
+"""
 
 from __future__ import annotations
 
@@ -29,18 +37,19 @@ class TerminalBreachTests(unittest.TestCase):
     def run_risk(self, **request: object) -> dict:
         return execute("ticker.risk", {**POSITION, **request}, runtime=self.runtime)
 
-    def test_an_authorized_live_stop_breach_needs_no_daily_history(self) -> None:
+    def test_an_authorized_live_stop_breach_survives_a_history_nobody_could_fetch(self) -> None:
         payload = self.run_risk(stop_price=94.0, live_stop_check=True, live_stop={"state": "triggered", "partial_session": True})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
-        self.assertEqual(self.calls, [])
+        # Asked for -- the bars could have held an earlier exit -- and not depended on.
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["status"], "ok")
 
-    def test_an_asserted_invalidation_trigger_needs_no_daily_history(self) -> None:
+    def test_an_asserted_invalidation_trigger_survives_the_same(self) -> None:
         payload = self.run_risk(invalidation={"price": 94.0, "condition": "completed close below the base low", "state": "triggered"})
 
         self.assertEqual(payload["data"]["verdict"], "SELL")
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["status"], "ok")
 
     def test_an_unresolved_position_still_asks_the_provider(self) -> None:
@@ -86,7 +95,7 @@ class RoutingAgreesWithTheReducerTests(unittest.TestCase):
     def test_a_triggered_stop_event_is_a_settled_breach(self) -> None:
         payload = self.run_risk(stop_price=94.0, stop_event={"state": "triggered"})
 
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["TEST"])
         self.assertEqual(payload["data"]["verdict"], "SELL")
         self.assertEqual(payload["status"], "ok")
 

@@ -80,15 +80,18 @@ class TheBaseExtensionPauseZone(unittest.TestCase):
 
 
 class FailedVolumeConfirmation(unittest.TestCase):
-    def test_selling_heavier_than_the_breakout_is_a_review_that_names_sell_or_reduce(self) -> None:
+    def test_selling_heavier_than_the_breakout_is_a_review_named_after_the_comparison(self) -> None:
         block = {"doctrine_id": FAILED_VOLUME, "binds": True, "state": "reported", "breakout_date": "2026-08-10", "breakout_volume_ratio": 0.8, "heaviest_down_session": {"date": "2026-08-14", "volume_ratio": 2.0}, "selling_volume_exceeded_breakout_volume": True, "qualitative_conditions_unresolved": ["breakout_was_on_low_volume", "selling_was_on_high_volume"]}
         result = reduce_risk(held({"failed_volume_confirmation": block}))
 
         self.assertEqual(result["verdict"], "HOLD")
-        self.assertEqual(actions(result), [("REVIEW", FAILED_VOLUME, "failed_volume_confirmation")])
+        self.assertEqual(actions(result), [("REVIEW", FAILED_VOLUME, "selling_volume_exceeded_breakout_volume")])
         review = result["management_actions"][0]
         self.assertIs(review["binds"], True)
-        self.assertIs(review["reduce_or_sell"], True)
+        # The source's pattern needs a low-volume breakout and high-volume selling, and the
+        # corpus draws neither boundary. The action cannot borrow its sell-or-reduce guidance
+        # for a pattern the evidence beside it leaves unresolved.
+        self.assertNotIn("reduce_or_sell", review)
         self.assertEqual(review["evidence"]["heaviest_down_session"]["volume_ratio"], 2.0)
 
     def test_the_event_not_occurring_is_evidence_only(self) -> None:

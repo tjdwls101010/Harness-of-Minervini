@@ -90,10 +90,10 @@ class TheBreakoutSessionTheTraderDeclares(unittest.TestCase):
         self.assertEqual(block["breakout_volume_ratio"], 0.8)
         self.assertEqual(block["heaviest_down_session"]["volume_ratio"], 2.0)
         self.assertIs(block["selling_volume_exceeded_breakout_volume"], True)
-        review = next(action for action in payload["data"]["management_actions"] if action.get("reason") == "failed_volume_confirmation")
+        review = next(action for action in payload["data"]["management_actions"] if action.get("reason") == "selling_volume_exceeded_breakout_volume")
         self.assertEqual(review["action"], "REVIEW")
         self.assertIs(review["binds"], True)
-        self.assertIs(review["reduce_or_sell"], True)
+        self.assertNotIn("reduce_or_sell", review)
         self.assertIn(FAILED_VOLUME, payload["doctrine_ids"])
         self.assertEqual(payload["data"]["verdict"], "HOLD")
 

@@ -438,6 +438,17 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
     )
 
 
+def supplied_price_path(evidence: Mapping[str, Any]) -> bool:
+    """Whether the caller handed in the completed-bar audit itself.
+
+    This is the one settled breach the bars cannot improve on, because it is the same
+    record they would produce. Every other assertion says the position ended without saying
+    when, and the bars can still hold an exit that happened first.
+    """
+
+    return _triggered(_mapping(evidence).get("completed_price_path"))
+
+
 _POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
 # Two ways a declared breakout is not a session these rules can hang from: no bar printed on
 # it, or the history the provider returned begins after it. Either way the anchor is absent.
@@ -643,10 +654,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             for day, word in (
                 (_iso_date(completed_price_path.get("breach_date")), "invalidation_breach" if path_names_invalidation else "completed_stop_breach"),
                 (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, "management_average_exit"),
+                # A live breach is a partial session, which is today. It has a date after
+                # all, and it is the latest one any exit here can have.
+                (as_of if live_triggered else None, "live_stop_breach"),
             )
             if day is not None
         ]
-        reasons = [min(dated)[1] if len(dated) > 1 else default]
+        # Compared by date alone, and ties keep the order above: what the bars measured
+        # comes before what the caller asserted about the same session.
+        reasons = [min(dated, key=lambda item: item[0])[1] if len(dated) > 1 else default]
     elif gaps:
         verdict = "INCOMPLETE"
         missing = gaps
@@ -703,7 +719,19 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                 # The rule is a pair. A position holding a stop at or above entry has the
                 # breakeven half already; one with no declared stop at all is told to set it.
                 if stop is None or stop < entry:
-                    actions.append({"action": "RAISE_STOP", **tagged, "to_at_least": entry})
+                    # The same placeability rule the 3R protection uses: a stop ordered above
+                    # the last completed close is a sale this harness never said it was
+                    # making. Price back through breakeven means the half was missed, and
+                    # the record says so instead of ordering it.
+                    if current is None or entry < current:
+                        actions.append({"action": "RAISE_STOP", **tagged, "to_at_least": entry})
+                    else:
+                        controls["breakeven_protection_not_placeable"] = {
+                            **evidence,
+                            "to_at_least": entry,
+                            "current_price": current,
+                            "reason": "breakeven_is_above_the_current_price",
+                        }
         # Structure that deteriorated while the stop held. The average the trader did not
         # declare is review evidence; the one they declared is a SELL above and never here.
         for name in _AVERAGES:
@@ -762,7 +790,13 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             # than the breakout session against one baseline; whether either was "low" or
             # "high" volume is a boundary the source never drew, so the action carries both
             # unresolved qualities and asks for the chart rather than claiming the sentence.
-            actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "needs_chart": True, "unresolved_criteria": failed_volume.get("qualitative_conditions_unresolved"), "evidence": failed_volume})
+            # What the bars settled is the comparison and nothing else: this selling session
+            # traded heavier than the breakout session against one baseline. The source's
+            # pattern is a low-volume breakout followed by high-volume selling, and neither
+            # "low" nor "high" has a boundary anywhere in the corpus -- so the action is
+            # named after the comparison it made, and does not borrow the source's "sell or
+            # at least reduce" for a pattern the evidence beside it says was not established.
+            actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "selling_volume_exceeded_breakout_volume", "needs_chart": True, "unresolved_criteria": failed_volume.get("qualitative_conditions_unresolved"), "evidence": failed_volume})
         defense = _mapping(management_evidence.get("market_defense"))
         tightened = _mapping(defense.get("difficult_market_band")).get("state")
         if defense.get("market_state") in _DIFFICULT_MARKET and defense.get("tighten_to_is_placeable") and tightened == "above_source_range":
