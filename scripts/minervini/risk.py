@@ -22,6 +22,12 @@ _STRENGTH_REFERENCES = "management.tl_sell_into_strength_at_average_gain_and_r_m
 # the management actions under HOLD and never the verdict, and each action it produces says
 # so: binds false, source "[TL]", and the contrast state the gate actually returned.
 _PROFILES = {"tl_stage12": _TL_HALF_AT_FIVE}
+_ROLES = "management.ema21_sma50_roles"
+_TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
+_LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
+# The averages the harness measures a held position against. One of them may be the
+# trader's declared exit plan; the other is still read, as review evidence.
+_AVERAGES = ("ema21", "sma50")
 
 # `waived_by_exception` is deliberately absent. It is the one word in this vocabulary that
 # claims an absence of evidence has been forgiven, and it was reachable by writing it: with
@@ -316,6 +322,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     stop = _number(payload.get("stop_price"))
     initial_stop = _number(payload.get("initial_stop_price"))
     profile = payload.get("management_profile")
+    management_average = payload.get("management_average")
+    management = _mapping(payload.get("management"))
+    trail = _mapping(management.get("moving_average_trail"))
+    selected_trail = _mapping(trail.get(management_average)) if management_average in _AVERAGES else {}
     invalidation = _mapping(payload.get("invalidation"))
     invalidation_price, has_condition = _exit_plan(payload)
     declared_plan = declares_exit_plan(payload)
@@ -353,6 +363,8 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         anchors.append("stop_effective_date")
     if profile is not None and profile not in _PROFILES:
         anchors.append("management_profile")
+    if management_average is not None and management_average not in _AVERAGES:
+        anchors.append("management_average")
 
     live_stop = _mapping(payload.get("live_stop"))
     live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
@@ -362,7 +374,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
-    breached = live_triggered or completed_stop or invalidation_triggered
+    # Two completed closes below the average the trader declared they manage by is
+    # that trader's own exit plan breached, audited over completed bars like a stop.
+    trail_breached = _status_word(selected_trail) == "breached"
+    breached = live_triggered or completed_stop or invalidation_triggered or trail_breached
 
     gaps: list[str] = []
     if not breached:
@@ -383,6 +398,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             # HOLD asserts nothing has invalidated the thesis; an exit condition the
             # harness never evaluated cannot be part of that assertion.
             gaps.append("invalidation_condition_not_audited")
+        if management_average in _AVERAGES and _status_word(selected_trail) != "clear":
+            # The declared average is an exit plan; a HOLD cannot stand on one the bars
+            # could not read, any more than on an unaudited stop.
+            gaps.append("management_average_trail")
 
     breakeven_at_r = doctrine.threshold(_PROFIT_PROTECTION, "breakeven_protection_trigger_r")
     controls: dict[str, Any] = {
@@ -393,8 +412,12 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         "r_multiple_reached": None,
         "favorable_excursion_basis": None,
     }
-    # Measurements beside the position that prescribe nothing, filled under HOLD.
-    management_evidence: dict[str, Any] = {}
+    # Measurements beside the position that prescribe nothing. The structural blocks
+    # travel with every verdict -- a SELL on the declared average needs its breach shown --
+    # and the strength references are filled under HOLD.
+    management_evidence: dict[str, Any] = {
+        key: management[key] for key in ("moving_average_trail", "twenty_day_average", "largest_decline_since_stage2_start") if key in management
+    }
     # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
     # established that there is a position to manage, so only HOLD fills this.
     actions: list[dict[str, Any]] = []
@@ -405,7 +428,17 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     elif breached:
         verdict = "SELL"
         missing = []
-        reasons = ["live_stop_breach" if live_triggered else "completed_stop_breach" if completed_stop else "invalidation_triggered" if _triggered(invalidation) else "invalidation_breach"]
+        reasons = [
+            "live_stop_breach"
+            if live_triggered
+            else "completed_stop_breach"
+            if completed_stop
+            else "invalidation_triggered"
+            if _triggered(invalidation)
+            else "invalidation_breach"
+            if invalidation_triggered
+            else "management_average_exit"
+        ]
     elif gaps:
         verdict = "INCOMPLETE"
         missing = gaps
@@ -454,6 +487,31 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                 actions.append({"action": "REDUCE", **tagged, "fraction": doctrine.parameter(_TL_HALF_AT_FIVE, "half_sale_fraction")})
                 if stop is not None and stop < entry:
                     actions.append({"action": "RAISE_STOP", **tagged, "to_at_least": entry})
+        # Structure that deteriorated while the stop held. The average the trader did not
+        # declare is review evidence; the one they declared is a SELL above and never here.
+        for name in _AVERAGES:
+            record = _mapping(trail.get(name))
+            if name != management_average and _status_word(record) == "breached":
+                actions.append({"action": "REVIEW", "doctrine_id": _ROLES, "binds": doctrine.binds(_ROLES), "source": "[TL]", "reason": f"two_closes_below_{name}", "evidence": record})
+        twenty = _mapping(management.get("twenty_day_average"))
+        if _status_word(twenty) == "below":
+            actions.append({"action": "REVIEW", "doctrine_id": _TWENTY_DAY, "binds": doctrine.binds(_TWENTY_DAY), "reason": "close_below_20_day_average", "evidence": twenty})
+        largest = _mapping(management.get("largest_decline_since_stage2_start"))
+        daily = _mapping(largest.get("daily"))
+        weekly = _mapping(largest.get("weekly"))
+        if daily.get("last_session_is_largest") is True or weekly.get("latest_completed_week_is_largest") is True:
+            # The source says "in most cases" and names no formula for overwhelming volume,
+            # so this is the chart's question, with the measurement beside it.
+            actions.append(
+                {
+                    "action": "REVIEW",
+                    "doctrine_id": _LARGEST_DECLINE,
+                    "binds": doctrine.binds(_LARGEST_DECLINE),
+                    "reason": "largest_decline_since_stage2_start",
+                    "needs_chart": True,
+                    "evidence": {"stage2_start": largest.get("stage2_start"), "daily": daily, "weekly": weekly},
+                }
+            )
         # Reference points for selling into strength. The source names the trader's own
         # average gain and R multiples and gives neither a multiple nor a fraction, so this
         # reports distances and prescribes nothing.

@@ -35,6 +35,7 @@ from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
+from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, build_management_evidence
 from .risk import declares_exit_plan, reduce_risk, settled_breach
 from .setup import evaluate_setup
 from .swings import canonical_chain
@@ -1796,6 +1797,17 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         if stop_effective_date > clock.date:
             raise RequestError("stop_effective_date cannot be after as_of", "stop_effective_date")
         evidence["stop_effective_date"] = stop_effective_date.isoformat()
+    stage2_start: date | None = None
+    if evidence.get("stage2_start") is not None:
+        try:
+            stage2_start = date.fromisoformat(str(evidence["stage2_start"]))
+        except ValueError as error:
+            raise RequestError("stage2_start must be an ISO date", "stage2_start") from error
+        if stage2_start > clock.date:
+            raise RequestError("stage2_start cannot be after as_of", "stage2_start")
+        evidence["stage2_start"] = stage2_start.isoformat()
+    if evidence.get("management_average") is not None and evidence["management_average"] not in MANAGEMENT_AVERAGES:
+        raise RequestError(f"management_average must be one of {', '.join(MANAGEMENT_AVERAGES)}", "management_average")
 
     # A stop raised later is only in force from its own date, while the structural
     # invalidation has stood since entry. Auditing both against one date would let
@@ -1857,6 +1869,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 excursion = _max_high_since(prices.data, entry_date=entry_date, as_of=clock.date)
                 if excursion is not None:
                     evidence["max_high_since_entry"], evidence["max_high_date"] = excursion
+                evidence["management"] = build_management_evidence(
+                    prices.data,
+                    entry_date=entry_date,
+                    as_of=clock.date,
+                    management_average=evidence.get("management_average"),
+                    stage2_start=stage2_start,
+                )
             if protective_plan:
                 # Runs even when the history stops early: a completed breach is
                 # irreversible, and a later missing bar cannot undo one.
@@ -1916,7 +1935,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],
         missing=missing,
         sources=sources,
-        doctrine_ids=["risk.initial_stop_and_reward", "risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"],
+        doctrine_ids=[
+            "risk.initial_stop_and_reward",
+            "risk.hard_stop_and_no_average_down",
+            "risk.profit_protection_at_3r",
+            "management.ema21_sma50_roles",
+            "management.close_below_20_day_average_lowers_probability",
+            "management.largest_decline_since_stage2_start",
+            "management.tl_stage12_half_at_five_percent",
+            "management.tl_sell_into_strength_at_average_gain_and_r_multiples",
+        ],
     )
 
 

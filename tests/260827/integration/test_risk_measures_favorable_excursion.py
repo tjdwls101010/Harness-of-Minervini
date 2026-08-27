@@ -29,6 +29,12 @@ def a_run_to(peak: float, then_back_to: float, *, sessions: int = 90) -> list[fl
     return up + down
 
 
+def protection(payload: dict) -> list[str]:
+    """Only the three-R actions; the same bars may also carry structural reviews."""
+
+    return [action["action"] for action in payload["data"]["management_actions"] if action["doctrine_id"] == "risk.profit_protection_at_3r"]
+
+
 class TheHighSinceEntryIsMeasuredFromTheBars(unittest.TestCase):
     def run_risk(self, closes: list[float]) -> dict:
         return execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: bars(closes)))
@@ -38,7 +44,7 @@ class TheHighSinceEntryIsMeasuredFromTheBars(unittest.TestCase):
 
         self.assertEqual(payload["data"]["verdict"], "HOLD")
         self.assertAlmostEqual(payload["data"]["max_high_since_entry"], 126.25)
-        self.assertEqual([action["action"] for action in payload["data"]["management_actions"]], ["RAISE_STOP"])
+        self.assertEqual(protection(payload), ["RAISE_STOP"])
         self.assertEqual(payload["data"]["management_actions"][0]["evidence"]["measured_from"], "max_high_since_entry")
 
     def test_bars_before_the_entry_date_do_not_count_as_something_the_position_reached(self) -> None:
@@ -48,7 +54,7 @@ class TheHighSinceEntryIsMeasuredFromTheBars(unittest.TestCase):
 
         self.assertEqual(payload["data"]["verdict"], "HOLD")
         self.assertLess(payload["data"]["max_high_since_entry"], 110.0)
-        self.assertEqual(payload["data"]["management_actions"], [])
+        self.assertEqual(protection(payload), [])
 
 
 if __name__ == "__main__":
@@ -75,7 +81,7 @@ class WhatTheReviewerOfSliceAFound(unittest.TestCase):
         payload = execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: later))
 
         self.assertLess(payload["data"]["max_high_since_entry"], 110.0)
-        self.assertEqual(payload["data"]["management_actions"], [])
+        self.assertEqual(protection(payload), [])
 
     def test_a_stop_raised_later_but_still_below_entry_is_not_the_initial_risk(self) -> None:
         # Entry 100, stop lifted from 94 to 97 on the 15th. Measured against 97 the run to 110
@@ -88,4 +94,4 @@ class WhatTheReviewerOfSliceAFound(unittest.TestCase):
 
         self.assertEqual(payload["data"]["verdict"], "HOLD")
         self.assertIsNone(payload["data"]["risk_controls"]["r_multiple_reached"])
-        self.assertEqual(payload["data"]["management_actions"], [])
+        self.assertEqual(protection(payload), [])

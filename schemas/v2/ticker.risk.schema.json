@@ -121,6 +121,15 @@
         "required": false,
         "type": "boolean"
       },
+      "management_average": {
+        "choices": [
+          "ema21",
+          "sma50"
+        ],
+        "description": "The moving average the trader manages the position by, declared as their own exit plan: ema21 for swing management, sma50 for a position trail (the TraderLion role split). Two completed closes below it, both inside the position, are audited over completed bars like a stop and are a SELL. Both averages are measured either way; the one not declared reports two closes below it as a REVIEW action.",
+        "required": false,
+        "type": "enum"
+      },
       "management_profile": {
         "choices": [
           "tl_stage12"
@@ -167,6 +176,11 @@
         "required": false,
         "type": "enum"
       },
+      "stage2_start": {
+        "description": "The session the stage 2 advance began. With it, the largest daily and weekly decline since then are measured and the latest completed session or week being that decline is a REVIEW action that needs the chart; without it that block is reported unavailable rather than measured from an arbitrary start.",
+        "required": false,
+        "type": "date"
+      },
       "stop_effective_date": {
         "description": "Calendar date when --stop-price became effective in active mode; defaults to --entry-date. The audit begins with the first completed bar on or after this date.",
         "required": false,
@@ -198,9 +212,11 @@
       "An explicit --current-price at or below the stop can trigger SELL; a partial-session breach must instead use the explicit live-stop flags.",
       "A live stop breach triggers SELL only when --live-stop-check is explicit; ordinary gates use completed bars.",
       "A completed breach records the breaching session's Open and whether it opened below the level (gap_through_stop): a stop the market gapped through was never available at its price, and the record does not pretend it was.",
-      "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states."
+      "The reducer does not infer unsupported market, eligibility, setup, or fundamentals states.",
+      "Two closes below --management-average sell because the trader declared that average as their exit plan, not because TraderLion's rule binds this harness; the same two closes below the average not declared are a REVIEW action. A declared average the bars cannot read (too little history) leaves HOLD unestablished, like an unaudited stop.",
+      "A close below the 20-day average and the largest decline of the advance are REVIEW evidence, never a SELL on their own: the source calls the first a judgment call and the second a sell signal in most cases, and keeps the hard stop as the only automatic exit."
     ],
-    "output": "The sole final ticker verdict with component states, completed stop-path evidence, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context. An active HOLD also carries management_actions -- what to do while holding, each naming its action (RAISE_STOP, REDUCE, or REVIEW), the claim it comes from, and the measurement behind it; the list is empty when nothing is due, and SELL and INCOMPLETE carry no actions because there is nothing left to manage or no established position to manage. Three R is measured from the highest completed High since the entry session (max_high_since_entry, with its date), not from the last close: a gain that was reached and given back is exactly what the rule protects, and the last close is only the floor of what was reached when no High is available. Every limit comes from the doctrine registry: a gate decides pass or fail, while a band such as the ordinary loss target reports the measurement, the source's range, where the measurement sat against that range, and which edge of it is the good one -- a stop tighter than the range is outside it on the favourable side.",
+    "output": "The sole final ticker verdict with component states, completed stop-path evidence, failed/waiting/missing evidence, stop constraints, reward-to-risk, and 3R protection context. An active HOLD also carries management_actions -- what to do while holding, each naming its action (RAISE_STOP, REDUCE, or REVIEW), the claim it comes from, and the measurement behind it; the list is empty when nothing is due, and SELL and INCOMPLETE carry no actions because there is nothing left to manage or no established position to manage. Beside them, management_evidence holds the structural measurements the actions were read from -- both management averages with their two-close audit and, at a breach, the quality of the second close (distance from the average, closing range, whether it held above the first close and the first low); the 20-day average against the last close; and, given --stage2-start, the largest daily and weekly decline of the advance with the session's volume ratio -- so a HOLD with an untouched stop and deteriorating structure reads as HOLD plus REVIEW, never as a bare HOLD. Three R is measured from the highest completed High since the entry session (max_high_since_entry, with its date), not from the last close: a gain that was reached and given back is exactly what the rule protects, and the last close is only the floor of what was reached when no High is available. Every limit comes from the doctrine registry: a gate decides pass or fail, while a band such as the ordinary loss target reports the measurement, the source's range, where the measurement sat against that range, and which edge of it is the good one -- a stop tighter than the range is outside it on the favourable side.",
     "prerequisites": [
       "Prospective mode should consume market.snapshot, ticker.qualify, ticker.setup, and ticker.fundamentals verdicts."
     ],
