@@ -649,20 +649,28 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         # level a position that no longer existed could not have reached. Where the evidence
         # carries dates, the earliest dated exit names the failure; where it does not, the
         # order above stands.
+        # Two exits on one session did not happen at the same moment. A stop resting in the
+        # market is taken out the moment the Low reaches it, and a live breach is a session
+        # still in progress; a close below an average, and a level read from the close, are
+        # settled at the bell. So each dated exit carries when inside the session it
+        # happened, and the word is the last tiebreak rather than the first.
+        intraday, at_the_close = 0, 1
         dated = [
-            (day, word)
-            for day, word in (
-                (_iso_date(completed_price_path.get("breach_date")), "invalidation_breach" if path_names_invalidation else "completed_stop_breach"),
-                (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, "management_average_exit"),
-                # A live breach is a partial session, which is today. It has a date after
-                # all, and it is the latest one any exit here can have.
-                (as_of if live_triggered else None, "live_stop_breach"),
+            (day, moment, word)
+            for day, moment, word in (
+                (
+                    _iso_date(completed_price_path.get("breach_date")),
+                    intraday if completed_price_path.get("basis") == "completed_daily_low" else at_the_close,
+                    "invalidation_breach" if path_names_invalidation else "completed_stop_breach",
+                ),
+                (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, at_the_close, "management_average_exit"),
+                # A live breach is a partial session, which is today, and it is happening
+                # while the session runs rather than at its close.
+                (as_of if live_triggered else None, intraday, "live_stop_breach"),
             )
             if day is not None
         ]
-        # Compared by date alone, and ties keep the order above: what the bars measured
-        # comes before what the caller asserted about the same session.
-        reasons = [min(dated, key=lambda item: item[0])[1] if len(dated) > 1 else default]
+        reasons = [min(dated)[2] if len(dated) > 1 else default]
     elif gaps:
         verdict = "INCOMPLETE"
         missing = gaps

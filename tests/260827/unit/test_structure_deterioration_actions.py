@@ -191,3 +191,45 @@ class TheLargestDeclineOfTheAdvance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TwoExitsOnOneSessionDidNotHappenAtOneMoment(unittest.TestCase):
+    """Inside a session the order is the prices', not the words'."""
+
+    def payload(self, **evidence) -> dict:
+        return {
+            "mode": "active",
+            "as_of": "2025-12-31",
+            "entry_price": 100.0,
+            "entry_date": "2025-12-01",
+            "stop_price": 90.0,
+            "management_average": "ema21",
+            **evidence,
+        }
+
+    def test_a_live_breach_precedes_an_average_that_closed_the_same_day(self) -> None:
+        result = reduce_risk(self.payload(
+            live_stop_check=True,
+            live_stop={"state": "triggered", "partial_session": True},
+            management={"moving_average_trail": {"ema21": {"state": "breached", "breach_date": "2025-12-31"}}},
+        ))
+
+        self.assertEqual(result["verdict"], "SELL")
+        self.assertEqual(result["failed"], ["live_stop_breach"])
+
+    def test_a_stop_taken_out_intraday_precedes_an_average_that_closed_the_same_day(self) -> None:
+        result = reduce_risk(self.payload(
+            completed_price_path={"state": "breached", "basis": "completed_daily_low", "breach_date": "2025-12-31", "governing_role": "stop"},
+            management={"moving_average_trail": {"ema21": {"state": "breached", "breach_date": "2025-12-31"}}},
+        ))
+
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
+    def test_an_average_that_closed_first_still_owns_an_earlier_day(self) -> None:
+        result = reduce_risk(self.payload(
+            live_stop_check=True,
+            live_stop={"state": "triggered", "partial_session": True},
+            management={"moving_average_trail": {"ema21": {"state": "breached", "breach_date": "2025-12-23"}}},
+        ))
+
+        self.assertEqual(result["failed"], ["management_average_exit"])
