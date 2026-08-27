@@ -73,7 +73,7 @@
       }
     },
     "limitations": [
-      "QQQ versus 21 EMA is context: an index that has switched off refuses a favorable regime, and a switch that is on does not produce one.",
+      "QQQ versus 21 EMA is context: the switch neither produces a favorable regime nor refuses one. The claim's own registry note forbids promoting it to a hard gate, so it is published beside the verdict and never inside it.",
       "Finviz publishes only a live page, so breadth is a current observation standing in for the completed session; no registered threshold reads it, so it never gates a regime word, and the envelope discloses how long after the close it was read.",
       "Breadth is refused outright while a regular session is open, and an uncaptured historical page can never be reconstructed.",
       "Group membership comes from a mutable current classification, so a snapshot taken against a past session reads no membership at all and says so rather than attaching today's taxonomy to it.",

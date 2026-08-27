@@ -130,6 +130,64 @@ class LeaderFanOutTests(unittest.TestCase):
         self.assertEqual(payload["data"]["leaders"][0]["behavior"]["state"], "unavailable")
         self.assertIn("EMPTY", {item.get("ticker") for item in payload["missing"]})
 
+    def test_the_snapshot_publishes_no_more_leaders_than_the_limit_allowed(self) -> None:
+        """The limit is what the caller asked to observe. Publishing every row the provider
+        sent puts names the fan-out never read into the reducer's denominator, where they
+        decide the leader majority by not having been looked at."""
+
+        payload = execute(
+            "market.snapshot",
+            {"trade_traction": "supports", "leader_limit": 2},
+            runtime=_runtime(
+                lambda ticker, as_of: _snapshot(_frame()),
+                leaders=[{"ticker": f"L{index}", "rs_rating": 99 - index} for index in range(25)],
+            ),
+        )
+
+        self.assertEqual([leader["ticker"] for leader in payload["data"]["leaders"]], ["L0", "L1"])
+
+    def test_a_history_whose_iterrows_is_not_callable_becomes_that_leader_s_gap(self) -> None:
+        class NotAFrame:
+            iterrows = 7
+
+        def prices(ticker: str, as_of: str) -> ProviderSnapshot[object]:
+            return _snapshot(_frame() if ticker in {"QQQ", "GOOD"} else NotAFrame())
+
+        payload = execute(
+            "market.snapshot",
+            {"trade_traction": "supports"},
+            runtime=_runtime(prices, leaders=[{"ticker": "GOOD", "rs_rating": 99}, {"ticker": "ODD", "rs_rating": 97}]),
+        )
+
+        leaders = {leader["ticker"]: leader for leader in payload["data"]["leaders"]}
+        self.assertEqual(leaders["GOOD"]["behavior"]["state"], "supports")
+        self.assertEqual(leaders["ODD"]["behavior"]["state"], "unavailable")
+        self.assertIn("ODD", {item.get("ticker") for item in payload["missing"]})
+
+    def test_a_frame_of_rows_with_no_readable_price_is_named_in_missing(self) -> None:
+        """Rows arrived, so the empty-frame gap never fired; not one of them carries a price,
+        so the leader still published nothing. The envelope has to say so."""
+
+        def prices(ticker: str, as_of: str) -> ProviderSnapshot[object]:
+            if ticker == "QQQ":
+                return _snapshot(_frame())
+            blank = _frame().copy()
+            for column in ("Open", "High", "Low", "Close"):
+                blank[column] = np.nan
+            return _snapshot(blank)
+
+        payload = execute(
+            "market.snapshot",
+            {"trade_traction": "supports"},
+            runtime=_runtime(prices, leaders=[{"ticker": "BLANK", "rs_rating": 99}]),
+        )
+
+        self.assertEqual(payload["data"]["leaders"][0]["behavior"]["state"], "unavailable")
+        self.assertIn(
+            ("leader_price_history", "BLANK"),
+            {(item.get("id"), item.get("ticker")) for item in payload["missing"]},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

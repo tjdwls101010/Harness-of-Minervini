@@ -564,6 +564,19 @@ def _leader_behavior_state(distance: Mapping[str, Any], on_low_list: Mapping[str
     return {"state": "observed"}
 
 
+def carries_a_readable_bar(bars: Any) -> bool:
+    """Whether these rows yield the series every leader reading is taken from.
+
+    The caller that collects a leader's history has to report a gap when the reading was never
+    taken, and "the frame was empty" is only one way for that to happen: a frame of three
+    hundred rows carrying no price at all publishes exactly as little. Both callers ask the
+    same question here so that the envelope's gap and the payload's `unavailable` cannot come
+    from two different definitions of readable.
+    """
+
+    return _leader_series(bars)[0] is not None
+
+
 def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[float]]:
     """Closes, highs and lows from completed rows, or nothing at all.
 
@@ -614,17 +627,23 @@ def _correction_depth(highs: list[float], lows: list[float]) -> float | None:
     the source's ceiling decides whether a stock is buyable "on the next new high", so a stock
     that just made one reported a depth of zero and the reading became unreachable exactly
     where it was needed. Running the peak forward also settles what an argmax could not --
-    which of two tied peaks to anchor on, and whether a low printed before its own peak.
+    which of two tied peaks to anchor on.
+
+    The peak a low is measured against is the one the sessions before it established. A daily
+    bar records a high and a low and never which of them printed first, so measuring a session
+    against its own high invents the ordering: a bar that opened low, sold off, and then ran
+    to a new high reported the whole span as a decline that no completed bar says happened.
+    The window's first bar therefore anchors nothing -- it has no session before it.
     """
 
     if not highs or not lows:
         return None
-    peak = highs[0]
+    peak: float | None = None
     deepest = 0.0
     for high, low in zip(highs, lows):
-        peak = max(peak, high)
-        if peak > 0:
+        if peak is not None and peak > 0:
             deepest = max(deepest, (peak - low) / peak * 100)
+        peak = high if peak is None else max(peak, high)
     return _reported(deepest)
 
 

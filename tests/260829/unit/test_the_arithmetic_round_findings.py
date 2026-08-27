@@ -63,15 +63,16 @@ class SeriesGuardTests(unittest.TestCase):
 
         self.assertAlmostEqual(leader["correction_depth"]["measured"], 5.0, places=6)
 
-    def test_a_session_that_gave_back_its_own_high_is_a_decline_from_that_high(self) -> None:
+    def test_a_session_is_measured_against_the_peak_before_it_and_not_its_own_high(self) -> None:
         highs = [90.0] * (SESSIONS - 1) + [100.0]
         lows = [89.0] * (SESSIONS - 1) + [40.0]
         leader = _leader(_bars(highs, lows))
 
-        # The running peak reaches 100 on the same session the 40 printed, so that session's
-        # own give-back is the deepest decline in the window rather than the 55.6% measured
-        # from the 90 that preceded it. A stock that traded 100 down to 40 did decline 60%.
-        self.assertAlmostEqual(leader["correction_depth"]["measured"], 60.0, places=6)
+        # The second round reversed this. The bar records a 100 and a 40 and never which came
+        # first: a session that opened at 45, sold to 40 and then ran to a new high at 100 is
+        # the same bar, and calling it a 60% decline invents the ordering. The peak the 40 is
+        # known to have followed is the 90 the sessions before it established.
+        self.assertAlmostEqual(leader["correction_depth"]["measured"], 55.5555555556, places=6)
 
     def test_two_rows_for_one_ticker_are_read_as_one_leader(self) -> None:
         evidence = build_market_evidence(
@@ -122,7 +123,9 @@ class OneAnswerPerQuestionTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("industries.group_reading", {item["id"] for item in snapshot["missing"]})
+        # The second round split this by metric, so the gap says which reading went missing.
+        self.assertIn("industries.new_highs", {item["id"] for item in snapshot["missing"]})
+        self.assertIn("industries.striking_distance_names", {item["id"] for item in snapshot["missing"]})
         self.assertEqual(snapshot["evidence_quality"]["status"], "partial")
 
     def test_a_non_finite_group_count_does_not_decide_a_rank(self) -> None:

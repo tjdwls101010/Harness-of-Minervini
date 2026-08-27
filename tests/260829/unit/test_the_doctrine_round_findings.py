@@ -142,8 +142,11 @@ class LeaderMajorityTests(unittest.TestCase):
         self.assertEqual(by_id["leader_traction"]["state"], "unavailable")
         self.assertEqual(snapshot["regime"]["judgment"], "incomplete")
 
-    def test_a_majority_of_the_read_leaders_holding_their_ground_is_what_supports(self) -> None:
-        snapshot = self._snapshot(["supports", "supports", "observed", "unavailable"])
+    def test_a_majority_of_the_ranked_leaders_holding_their_ground_is_what_supports(self) -> None:
+        """The second round narrowed this: the majority is of the ranked list, not of the
+        part of it that answered -- see test_the_second_round_findings."""
+
+        snapshot = self._snapshot(["supports", "supports", "supports", "unavailable"])
 
         by_id = {signal["id"]: signal for signal in snapshot["signal_vector"]}
 

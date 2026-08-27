@@ -24,7 +24,7 @@ from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .ledger import Ledger
 from .market import build_market_candidates, evaluate_market_snapshot, evidence_quality
-from .market_evidence import build_market_evidence
+from .market_evidence import build_market_evidence, carries_a_readable_bar
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
 from .providers import DETAIL_LIMIT, ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry, redact
@@ -1557,32 +1557,35 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     )
 
 
-def _leader_symbols(rows: list[dict[str, Any]] | None, limit: int) -> list[str]:
+def _leaders_within_limit(rows: list[dict[str, Any]] | None, limit: int) -> list[dict[str, Any]]:
     """Each ranked leader once, in rank order, no more of them than the caller asked for.
 
     The limit is passed to the provider, and a provider that answers with more rows than it
     was asked for would otherwise decide how many external calls this snapshot makes -- two
-    per name. The seen-set is a set because the fan-out is the one place in this capability
-    where the list can be long enough for a scan per row to matter.
+    per name. It would also decide the reducer's denominator: the leaders past the limit are
+    published unread, and the majority the leader signal counts is a majority of the list it
+    was handed. The observations the caller asked for and the leaders the snapshot publishes
+    are the same set. The seen-set is a set because the fan-out is the one place in this
+    capability where the list can be long enough for a scan per row to matter.
     """
 
-    symbols: list[str] = []
+    bounded: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in rows or []:
         symbol = row.get("ticker") if isinstance(row, Mapping) else None
         if not isinstance(symbol, str) or symbol in seen:
             continue
         seen.add(symbol)
-        symbols.append(symbol)
-        if len(symbols) >= limit:
+        bounded.append(row)
+        if len(bounded) >= limit:
             break
-    return symbols
+    return bounded
 
 
 def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
     """Completed rows from a provider frame, or none at all from anything that is not one."""
 
-    if not hasattr(frame, "iterrows"):
+    if not callable(getattr(frame, "iterrows", None)):
         return []
     rows: list[dict[str, Any]] = []
     for index, row in frame.iterrows():
@@ -1771,7 +1774,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
 
     sector_rows = _ranked_groups(sectors.data, "sector", as_of) if sectors is not None else None
     industry_rows = _ranked_groups(industries.data, "industry", as_of) if industries is not None else None
-    leader_rows = _ranked_leaders(leaders.data, as_of) if leaders is not None else None
+    leader_rows = _leaders_within_limit(_ranked_leaders(leaders.data, as_of), leader_limit) if leaders is not None else None
     # The RS source ranks a leader and says nothing about how it is behaving, so the behavior
     # reading has to come from the leader's own completed bars. Withheld or session-behind
     # history is left withheld: the evidence adapter reports the gap rather than a word.
@@ -1782,7 +1785,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     # membership is left unread instead, and every group reports that it was.
     reads_membership = clock.date == resolve_as_of().date
     leader_groups: dict[str, Any] = {}
-    for symbol in _leader_symbols(leader_rows, leader_limit):
+    for symbol in (row["ticker"] for row in leader_rows or []):
         history = _optional_leader_read(
             runtime, request, clock, symbol, "daily_bars", lambda: runtime.price_history(symbol, as_of), provider_missing, sources
         )
@@ -1794,7 +1797,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
                 provider_missing.append(stale_price)
             else:
                 rows = _ohlcv_rows(history.data)
-                if rows:
+                if carries_a_readable_bar(rows):
                     leader_history[symbol] = rows
                 else:
                     # A snapshot that arrived and carried nothing readable is a gap the

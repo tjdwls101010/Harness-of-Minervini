@@ -43,8 +43,10 @@ _ELIGIBLE_TYPES = frozenset({"common", "common_stock", "common stock", "adr"})
 def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
     """Return a transparent market-regime read from normalized provider evidence.
 
-    A favorable judgment needs convergent breadth, QQQ context, leader behavior,
-    and actual user trade traction.  The QQQ 21-EMA switch is only one signal.
+    A favorable judgment needs the two signals this harness measures against doctrine to
+    converge: the ranked leaders read from their own bars, and the trader's own realized
+    traction. Breadth and the QQQ 21-EMA switch are published beside that verdict as context
+    and never inside it -- neither produces the favorable word, and neither refuses it.
     """
     if not isinstance(evidence, Mapping):
         raise ValueError("market evidence must be a mapping")
@@ -177,6 +179,11 @@ def _leader_signal(leaders: Any, missing: list[dict[str, str]]) -> dict[str, Any
     unavailable leader before deciding, which let a single measured name among nineteen unread
     ones publish `supports` -- and the signal's own `value`, sitting beside it, still carried
     the nineteen. A sample too small to hold a majority is a gap, not a reading.
+
+    The majority is then counted against the ranked list rather than against the answering
+    part of it: four names holding ground beside four that were never read is four of ten,
+    and two nested majorities -- most of what answered, out of most of the list -- do not add
+    up to the one majority the source asked for.
     """
 
     reading = {"id": "leader_traction", "doctrine_id": _LEADER_MAJORITY}
@@ -188,9 +195,9 @@ def _leader_signal(leaders: Any, missing: list[dict[str, str]]) -> dict[str, Any
     if len(read) * 2 <= len(states):
         missing.append({"id": "leaders", "reason": "fewer_than_a_majority_of_ranked_leaders_were_read"})
         return {**reading, "state": "unavailable", "value": leaders, "read": len(read), "of": len(states)}
-    if read.count("supports") * 2 > len(read):
+    if read.count("supports") * 2 > len(states):
         state = "supports"
-    elif read.count("contradicts") * 2 > len(read):
+    elif read.count("contradicts") * 2 > len(states):
         state = "contradicts"
     else:
         state = "mixed"
@@ -226,11 +233,14 @@ def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) ->
     ranked.sort(key=_group_rank_key)
     for rank, group in enumerate(ranked, start=1):
         group["rank"] = rank
-    withheld = [group["name"] for group in ranked if _reading_state(group, "new_highs") == "unavailable"]
-    if withheld:
+    for metric in _GROUP_READINGS:
         # Without this the envelope could publish "all requested evidence is available" beside
-        # a group whose reading was never taken.
-        missing.append({"id": f"{missing_id}.group_reading", "reason": f"no_reading_for_{len(withheld)}_of_{len(ranked)}_groups"})
+        # a group whose reading was never taken. Every reading counts, not only the group
+        # advance: a striking-distance count that no ranked leader could be found for is as
+        # unread as a new-high count, and naming the metric says which one went missing.
+        withheld = [group["name"] for group in ranked if _reading_state(group, metric) == "unavailable"]
+        if withheld:
+            missing.append({"id": f"{missing_id}.{metric}", "reason": f"no_reading_for_{len(withheld)}_of_{len(ranked)}_groups"})
     return ranked
 
 
@@ -246,9 +256,16 @@ def _group_summary_signal(identifier: str, ranks: list[dict[str, Any]]) -> list[
     if not ranks:
         return [{"id": identifier, "state": "unavailable", "value": []}]
     advancing = _unique([group["name"] for group in ranks if _reading_state(group, "new_highs") == "supports"])
-    read = [group for group in ranks if _reading_state(group, "new_highs") not in {"unavailable", "not_applicable"}]
+    states = [_reading_state(group, "new_highs") for group in ranks]
+    read = [state for state in states if state not in {"unavailable", "not_applicable"}]
     if not read:
-        return [{"id": identifier, "state": "unavailable", "value": {"leading_group": ranks[0]["name"], "reason": "no_group_reading_available"}}]
+        # A claim the source scoped to industries is not evidence a sector withheld. Calling
+        # it unavailable filed an out-of-scope claim as a gap, which is the reading the group
+        # advance signal was just corrected not to make one row further down.
+        out_of_scope = all(state == "not_applicable" for state in states)
+        state = "not_applicable" if out_of_scope else "unavailable"
+        reason = "the_source_states_this_signal_for_an_industry" if out_of_scope else "no_group_reading_available"
+        return [{"id": identifier, "state": state, "value": {"leading_group": ranks[0]["name"], "reason": reason}}]
     value: dict[str, Any] = {
         "leading_group": ranks[0]["name"],
         "groups_showing_a_group_advance": advancing,
