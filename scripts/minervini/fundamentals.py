@@ -34,6 +34,10 @@ _LAGGARD = "fundamentals.laggard_fundamentals_reading"
 _CYCLICAL = "fundamentals.cyclical_inverse_pe_and_signals"
 _REPEATED_CHARGE = "fundamentals.repeated_one_time_charge_red_flag"
 _TAX_DISCLOSURE = "fundamentals.tax_disclosure_red_flag"
+_PE_USELESS = "fundamentals.pe_useless_alone"
+_ANTI_LOW_PE = "fundamentals.anti_low_pe_bargain_trap"
+_PE_EXPANSION = "fundamentals.pe_expansion_late_stage_and_historical_average"
+_MONTHS_PER_YEAR = 12
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
@@ -61,6 +65,9 @@ def evaluate_fundamentals(
     accounting_integrity: str | None = None,
     leader_category: str | None = None,
     market_regime: str | None = None,
+    last_close: float | None = None,
+    breakout_close: float | None = None,
+    breakout_date: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate normalized SEC filings available on ``as_of``.
 
@@ -89,6 +96,7 @@ def evaluate_fundamentals(
     }
     growth = _growth_read(quarterly, annual, market_regime=market_regime)
     classification = _leader_category(leader_category)
+    valuation = _valuation(filings, quarterly, as_of_date, last_close=last_close, breakout_close=breakout_close, breakout_date=breakout_date)
     category_reading = _category_reading(classification, quarterly, annual)
     growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
@@ -125,6 +133,7 @@ def evaluate_fundamentals(
         "earnings_quality": earnings_quality,
         "leader_category": classification,
         "category_reading": category_reading,
+        "valuation": valuation,
         "discrepancies": discrepancies,
         "signals": [
             {"id": name, "state": item["state"]}
@@ -756,6 +765,103 @@ _CATEGORY_READERS = {
     "top_competitor": _top_competitor_boundary,
     "past_leader_or_laggard": _laggard_boundary,
 }
+
+
+def _valuation(
+    filings: list[dict[str, Any]],
+    quarterly: Mapping[str, Any],
+    as_of: date,
+    *,
+    last_close: float | None,
+    breakout_close: float | None,
+    breakout_date: str | None,
+) -> dict[str, Any]:
+    """What the price says about the earnings, and what the source says about that.
+
+    The price is not in the filings, so it arrives declared. Everything here is framed by the
+    claim that a multiple on its own ranks among the most useless statistics on Wall Street:
+    the number is published, and no state anywhere derives a verdict from it.
+    """
+
+    trailing, _ = _trailing_twelve_months(quarterly["eps"])
+    return {
+        "price_earnings_ratio": _price_earnings(last_close, trailing),
+        "anti_low_pe_bargain_trap": _unread_claim(
+            _ANTI_LOW_PE,
+            ["peer_group_pe_ratios", "eps_growth_comparison"],
+            reason="peer_group_not_held_by_this_capability",
+        ),
+        "pe_expansion": _pe_expansion(filings, as_of, last_close=last_close, trailing=trailing, breakout_close=breakout_close, breakout_date=breakout_date),
+    }
+
+
+def _price_earnings(last_close: float | None, trailing: float | None) -> dict[str, Any]:
+    """The close over the trailing twelve months of filed earnings.
+
+    A company that lost money has no meaningful multiple, and the arithmetic would still return
+    one -- a negative number that sorts below every cheap stock in a screen. So it is refused
+    by name rather than published.
+    """
+
+    reading = {
+        # Two claims read the same number, so both are named: what it is worth alone, and what
+        # a low one is worth. A block that cited only one would hide the other from the reader.
+        "doctrine_ids": [_PE_USELESS, _ANTI_LOW_PE],
+        "last_close": _reported(last_close) if _is_number(last_close) else None,
+        "trailing_12m_eps": trailing,
+    }
+    if not _is_number(last_close):
+        return {**reading, "state": "unavailable", "missing_inputs": ["last_close"], "pe_ratio": None}
+    if trailing is None:
+        return {**reading, "state": "unavailable", "missing_inputs": ["four_consecutive_filed_quarters"], "pe_ratio": None}
+    if trailing <= 0:
+        return {**reading, "state": "not_meaningful", "reason": "trailing_12m_eps_not_positive", "pe_ratio": None}
+    return {**reading, "state": "reported", "pe_ratio": _reported(float(last_close) / trailing)}
+
+
+def _pe_expansion(
+    filings: list[dict[str, Any]],
+    as_of: date,
+    *,
+    last_close: float | None,
+    trailing: float | None,
+    breakout_close: float | None,
+    breakout_date: str | None,
+) -> dict[str, Any]:
+    """How far the multiple travelled between the breakout and now, over how long.
+
+    The source gave the same finding twice, once as a percentage and once as a multiple -- "the
+    P/E expands by 100 to 200 percent... (or two to three times)" -- and both are registered as
+    bands, so both are reported where the measurement sat rather than as a signal that fired.
+
+    The multiple at the breakout is computed from what had been filed by then. Using today's
+    filings would credit the buyer with a quarter published six weeks after they bought, and
+    would shrink every expansion this claim exists to notice.
+    """
+
+    reading = {"doctrine_id": _PE_EXPANSION, "binds": doctrine.binds(_PE_EXPANSION), "computability": doctrine.get_claim(_PE_EXPANSION)["claim"]["computability"]}
+    if not _is_number(breakout_close) or breakout_date is None:
+        return {**reading, "state": "unavailable", "missing_inputs": ["breakout_close", "breakout_date"]}
+    breakout = _parse_date(breakout_date, "breakout_date")
+    if breakout > as_of:
+        raise ValueError("breakout_date must not be after as_of.")
+    known = _eligible_filings(filings, breakout)
+    at_breakout, _ = _trailing_twelve_months(_metric_series(_latest_periods(known, "quarterly"), "eps"))
+    current = _price_earnings(last_close, trailing)
+    then = None if at_breakout is None or at_breakout <= 0 else _reported(float(breakout_close) / at_breakout)
+    months = (as_of.year - breakout.year) * _MONTHS_PER_YEAR + (as_of.month - breakout.month)
+    expanded = None if then is None or not then > 0 or current["pe_ratio"] is None else current["pe_ratio"] / then
+    return {
+        **reading,
+        "breakout_date": breakout.isoformat(),
+        "trailing_12m_eps_at_breakout": at_breakout,
+        "filings_used_at_breakout": [filing["filed_at"] for filing in known],
+        "pe_ratio_at_breakout": then,
+        "pe_ratio_current": current["pe_ratio"],
+        "expansion": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_late_stage_signal_percent", None if expanded is None else _reported((expanded - 1) * 100)),
+        "multiple": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_historical_average_multiple", None if expanded is None else _reported(expanded)),
+        "elapsed": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_signal_window_months", months),
+    }
 
 
 def _margin_read(series: list[dict[str, Any]]) -> dict[str, Any]:

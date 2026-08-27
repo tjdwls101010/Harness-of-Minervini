@@ -115,5 +115,31 @@ class TheProviderSendsEnoughToDecide(unittest.TestCase):
         self.assertEqual([item["id"] for item in payload["missing"]], [])
 
 
+class TheEnvelopeAdmitsWhatItRead(unittest.TestCase):
+    """A fixed list of one claim said far less than the payload used.
+
+    Every reading in this capability now names the claim it came from, and the envelope's
+    citation list is the reader's index into them. Leaving it at `scope.data_integrity` meant
+    a result citing two dozen claims declared one, which is the same drift in the other
+    direction as a list that overstates.
+    """
+
+    def test_the_claims_the_payload_names_are_the_claims_the_envelope_cites(self) -> None:
+        payload = run(leader_category="turnaround")
+
+        cited = payload["doctrine_ids"]
+        self.assertIn("scope.data_integrity", cited)
+        self.assertIn("fundamentals.minimum_quarterly_earnings_growth", cited)
+        self.assertIn("fundamentals.code_33_triple_acceleration", cited)
+        self.assertIn("fundamentals.turnaround_qualifying_criteria", cited)
+        self.assertEqual(len(cited), len(set(cited)))
+        self.assertEqual(cited[0], "scope.data_integrity")
+
+    def test_a_category_nobody_declared_is_not_cited(self) -> None:
+        payload = run()
+
+        self.assertNotIn("fundamentals.turnaround_qualifying_criteria", payload["doctrine_ids"])
+
+
 if __name__ == "__main__":
     unittest.main()

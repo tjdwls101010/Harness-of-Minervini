@@ -1138,6 +1138,16 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         if value is not None and (not isinstance(value, str) or value not in allowed):
             raise RequestError(f"{field} must be one of {', '.join(allowed)}", field)
         declared[field] = value
+    breakout_date = _request_date(request.get("breakout_date"), "breakout_date") if request.get("breakout_date") is not None else None
+    if breakout_date is not None and breakout_date > clock.date:
+        return envelope(
+            "ticker.fundamentals",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="needs_input",
+            data={"ticker": ticker, "fundamentals_state": "incomplete"},
+            missing=[{"id": "breakout_date", "reason": "breakout_date_after_as_of", "required": True}],
+        )
     if request.get("as_of") is not None and cik is None:
         return envelope(
             "ticker.fundamentals",
@@ -1167,10 +1177,46 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[_missing_provider(error)],
         )
-    result = evaluate_fundamentals(snapshot.data, as_of=clock.date.isoformat(), **declared)
-    missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]]
+    # The price is not filed evidence, so a provider that cannot answer does not stop the
+    # filings from reaching a verdict: the gap is reported where the multiple would have been
+    # and marked not required.
+    sources = [_source(snapshot.meta)]
+    provider_missing: list[dict[str, Any]] = []
+    closes: dict[str, float | None] = {"last_close": None, "breakout_close": None}
+    try:
+        prices = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.fundamentals",
+            provider="yfinance",
+            operation="daily_bars",
+            params={"ticker": ticker},
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
+        )
+    except ProviderUnavailable as error:
+        provider_missing.append({**_missing_provider(error), "required": False})
+    else:
+        sources.append(_source(prices.meta))
+        closes = _valuation_closes(prices.data, as_of=clock.date, breakout_date=breakout_date)
+        if breakout_date is not None and closes["breakout_close"] is None:
+            provider_missing.append({"id": "breakout_close", "reason": "no_completed_session_on_breakout_date", "required": False})
+    result = evaluate_fundamentals(
+        snapshot.data,
+        as_of=clock.date.isoformat(),
+        breakout_date=breakout_date.isoformat() if breakout_date is not None and closes["breakout_close"] is not None else None,
+        breakout_close=closes["breakout_close"],
+        last_close=closes["last_close"],
+        **declared,
+    )
+    missing = [{"id": item, "reason": "filed_evidence_missing", "required": True} for item in result["missing"]] + provider_missing
     status = "partial" if result["fundamentals_state"] == "incomplete" else "ok"
-    doctrine_ids = ["scope.data_integrity"]
+    # Every reading in this evaluator names the claim it came from, so the citation list is
+    # read off the payload rather than kept beside it. A hand-maintained list of one said the
+    # result used one claim while its readings named two dozen, and the reader's index into
+    # them was the thing that went missing.
+    base = ["scope.data_integrity"]
+    doctrine_ids = base + sorted(_named_doctrine_ids(result) - set(base))
     return envelope(
         "ticker.fundamentals",
         request=_clean_request({**request, "ticker": ticker}),
@@ -1179,10 +1225,50 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
         data={"ticker": ticker, **result},
         signals=result["signals"],
         missing=missing,
-        sources=[_source(snapshot.meta)],
+        sources=sources,
         doctrine_ids=doctrine_ids,
         next_capabilities=["ticker.peers", "ticker.risk"],
     )
+
+
+def _valuation_closes(frame: Any, *, as_of: date, breakout_date: date | None) -> dict[str, float | None]:
+    """The last completed close, and the close of the breakout session if the history holds one.
+
+    Same reading rules as every other consumer of these bars: one session printed twice keeps
+    its last print, sessions past ``as_of`` are not completed yet, and a price that is not a
+    finite positive number is not a price. A breakout date that names no completed session
+    returns nothing rather than the nearest bar -- the nearest bar is a different session, and
+    a multiple computed on it is a multiple nobody could have paid.
+    """
+
+    closes: dict[str, float | None] = {"last_close": None, "breakout_close": None}
+    if not isinstance(frame, pd.DataFrame) or frame.empty or "Close" not in frame.columns:
+        return closes
+    timestamps = pd.to_datetime(frame.index, errors="coerce")
+    if timestamps.isna().any():
+        return closes
+    if timestamps.tz is not None:
+        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    ordered = frame.copy()
+    ordered.index = timestamps
+    ordered = ordered.sort_index()
+    ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
+    by_date = {}
+    for timestamp, row in ordered.iterrows():
+        if timestamp.date() > as_of:
+            continue
+        try:
+            close = float(row["Close"])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(close) and close > 0:
+            by_date[timestamp.date()] = close
+    if not by_date:
+        return closes
+    closes["last_close"] = by_date[max(by_date)]
+    if breakout_date is not None:
+        closes["breakout_close"] = by_date.get(breakout_date)
+    return closes
 
 
 def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -2391,6 +2477,12 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
         if mode == "prospective"
         else ["risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"]
     )
+    return base + sorted(_named_doctrine_ids(data) - set(base))
+
+
+def _named_doctrine_ids(data: Mapping[str, Any]) -> set[str]:
+    """Every registered claim the payload names, anywhere in it."""
+
     named: set[str] = set()
 
     def collect(value: Any) -> None:
@@ -2420,7 +2512,7 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
                 collect(item)
 
     collect(data)
-    return base + sorted(named - set(base))
+    return named
 
 
 def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
