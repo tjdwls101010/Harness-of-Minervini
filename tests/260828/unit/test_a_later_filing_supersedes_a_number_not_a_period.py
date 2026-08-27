@@ -30,7 +30,10 @@ class ARestatementIsPerNumber(unittest.TestCase):
         ]}
         result = evaluate_fundamentals(evidence, as_of="2026-05-08")
 
-        self.assertEqual(result["annual_growth"]["periods"], ["2025"])
+        # Two slots always: the year a rate would have been measured from, and the latest.
+        # A prior year nobody filed is None rather than a shorter list, so a reader never has
+        # to work out which of the two the single entry was.
+        self.assertEqual(result["annual_growth"]["periods"], [None, "2025"])
         self.assertEqual(result["profitability"]["return_on_equity"]["period"], "2025")
         self.assertEqual(result["profitability"]["return_on_equity"]["roe_pct"], 20.0)
 

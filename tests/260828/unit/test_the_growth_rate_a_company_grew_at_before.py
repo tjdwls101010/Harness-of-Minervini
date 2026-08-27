@@ -61,7 +61,7 @@ class TheCompanysOwnPace(unittest.TestCase):
 
         reading = result["growth"]["acceleration_vs_historical_growth_rate"]
         self.assertIsNone(reading["trailing_3yr_eps_cagr_pct"])
-        self.assertEqual(reading["reason"], "compound_rate_requires_a_positive_starting_year")
+        self.assertEqual(reading["reason"], "compound_rate_requires_positive_endpoints")
 
     def test_nothing_is_compared_against_the_figures_the_source_only_illustrated(self) -> None:
         years = [annual(2022 + n, 1.00 + n, 100.0) for n in range(4)]
