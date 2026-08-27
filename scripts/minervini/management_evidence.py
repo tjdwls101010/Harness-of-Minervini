@@ -194,6 +194,8 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     if largest >= 0:
         return {"state": "reported", "largest_pct": None, "week_ending": latest_end.isoformat(), "latest_completed_week_is_largest": False}
     largest_end = since.idxmin()
+    if float(since.iloc[-1]) == largest:
+        largest_end = since.index[-1]
     return {
         "state": "reported",
         "largest_pct": _reported(largest),
@@ -214,6 +216,10 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     if largest >= 0:
         return {"state": "reported", "largest_pct": None, "date": None, "last_session_is_largest": False, "volume_ratio": None, "volume_signal": None}
     stamp = since.idxmin()
+    if float(since.iloc[-1]) == largest:
+        # A latest decline tied with an earlier one is still the largest of the advance;
+        # reporting the earlier date would suppress the review the last session earned.
+        stamp = since.index[-1]
     position = int(bars.index.get_loc(stamp))
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
     ratio: float | None = None
@@ -236,6 +242,16 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
 def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[str, Any]:
     if stage2_start is None:
         return {"state": "unavailable", "reason": "stage2_start_not_declared"}
+    first_available = bars.index[0].date()
+    if first_available > stage2_start:
+        # A larger decline in the sessions the provider never returned is unknowable, so a
+        # "largest since" measured from a later start would say more than the bars know.
+        return {
+            "state": "unavailable",
+            "reason": "history_starts_after_stage2_start",
+            "stage2_start": stage2_start.isoformat(),
+            "first_available": first_available.isoformat(),
+        }
     return {
         "doctrine_id": _LARGEST_DECLINE,
         "binds": doctrine.binds(_LARGEST_DECLINE),

@@ -61,3 +61,20 @@ class StopUntouchedStructureDeteriorating(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ABreachOnAStaleHistoryStillSells(unittest.TestCase):
+    """p3c1 TS1: the breach is irreversible even when the provider stopped short of as_of."""
+
+    def test_the_sell_stands_and_the_staleness_is_still_reported(self) -> None:
+        stale = bars(deteriorating())
+        clipped = stale.data.iloc[:-4]
+        snapshot = ProviderSnapshot(clipped, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=clipped.index[-1].date(), coverage={"completed_only": True, "requested_session": AS_OF, "last_completed_bar": clipped.index[-1].date().isoformat()}, stale=True))
+        payload = execute("ticker.risk", {**POSITION, "management_average": "ema21"}, runtime=Runtime(price_history=lambda ticker, as_of: snapshot))
+
+        self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual(payload["data"]["failed"], ["management_average_exit"])
+        self.assertEqual(payload["status"], "partial")
+        gaps = {item["id"] for item in payload["missing"]}
+        self.assertIn("completed_price_evidence", gaps)
+        self.assertIn("completed_price_path", gaps)

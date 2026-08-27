@@ -55,6 +55,7 @@ class GapThroughTheStop(unittest.TestCase):
 
         path = payload["data"]["completed_price_path"]
         self.assertEqual(payload["data"]["verdict"], "SELL")
+        self.assertIs(path["gap_through_stop"], True)
         by_role = {audit["role"]: audit for audit in path["audits"]}
         self.assertEqual(by_role["invalidation"]["state"], "breached")
         self.assertIs(by_role["invalidation"]["gap_through_stop"], True)

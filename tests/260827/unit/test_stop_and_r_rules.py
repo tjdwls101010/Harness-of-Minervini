@@ -29,10 +29,14 @@ def held(**overrides: object) -> dict:
 def raised(**overrides: object) -> dict:
     """The same position after its stop was lifted to 101 on the 14th."""
 
+    audits = [
+        {"role": "initial_stop", "level": 94.0, "effective_from": "2026-08-10", "through": "2026-08-13", "bars_checked": 4, "state": "clear"},
+        {"role": "stop", "level": 101.0, "effective_from": "2026-08-14", "through": AS_OF, "bars_checked": 5, "state": "clear"},
+    ]
     return held(
         stop_price=101.0,
         stop_effective_date="2026-08-14",
-        completed_price_path={"state": "clear", "checked_level": 101.0, "from": "2026-08-14", "through": AS_OF, "bars_checked": 5},
+        completed_price_path={"state": "clear", "checked_level": 101.0, "from": "2026-08-14", "through": AS_OF, "bars_checked": 5, "audits": audits},
         **overrides,
     )
 
@@ -87,6 +91,29 @@ class TheTraderLionProfileIsOptIn(unittest.TestCase):
 
         self.assertEqual(result["verdict"], "INCOMPLETE")
         self.assertIn("management_profile", result["missing"])
+
+
+class TheProfilePromisesAPairAndDeliversAPair(unittest.TestCase):
+    def test_a_position_with_only_an_invalidation_still_gets_both_actions(self) -> None:
+        # No hard stop is declared; the breakeven half of the rule is then "set one at entry".
+        result = reduce_risk(
+            held(
+                stop_price=None,
+                invalidation={"price": 90.0, "condition": "completed close below the base low"},
+                completed_price_path={"state": "clear", "checked_level": 90.0, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
+                max_high_since_entry=107.06,
+                management_profile="tl_stage12",
+            )
+        )
+
+        self.assertEqual(result["verdict"], "HOLD")
+        self.assertEqual(actions(result), [("REDUCE", TL_HALF), ("RAISE_STOP", TL_HALF)])
+
+    def test_without_a_measured_high_the_profile_reads_the_last_close(self) -> None:
+        result = reduce_risk(held(current_price=106.0, management_profile="tl_stage12"))
+
+        self.assertEqual(actions(result), [("REDUCE", TL_HALF), ("RAISE_STOP", TL_HALF)])
+        self.assertEqual(result["management_actions"][0]["evidence"]["measured_from"], "current_price")
 
 
 class RIsMeasuredFromTheInitialStop(unittest.TestCase):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from copy import deepcopy
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from . import doctrine
@@ -243,10 +243,14 @@ def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, A
     ]
 
 
-def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None, as_of: date | None) -> bool:
-    """Whether some record cleared ``level`` over every session from ``required_from`` to ``as_of``."""
+def _audited(records: list[Mapping[str, Any]], level: float, required_from: date | None, required_to: date | None) -> bool:
+    """Whether some record cleared ``level`` over every session from ``required_from`` to ``required_to``.
 
-    if required_from is None or as_of is None:
+    ``required_to`` is as_of for a level still in force and the eve of the raise for an
+    initial stop that a later stop superseded upward.
+    """
+
+    if required_from is None or required_to is None:
         return False
     for record in records:
         audited_level = _number(record.get("level"))
@@ -260,7 +264,7 @@ def _audited(records: list[Mapping[str, Any]], level: float, required_from: date
         through = _iso_date(record.get("through"))
         if effective_from is None or through is None:
             continue
-        if effective_from > required_from or through < as_of:
+        if effective_from > required_from or through < required_to:
             continue
         bars = record.get("bars_checked")
         if not isinstance(bars, int) or isinstance(bars, bool) or bars < 1:
@@ -334,10 +338,18 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     stop_effective_date = _iso_date(payload.get("stop_effective_date"))
     stop_from = stop_effective_date or entry_date
     protective_plan = [
-        (level, required_from)
+        (level, required_from, as_of)
         for level, required_from in ((stop, stop_from), (invalidation_price, entry_date))
         if level is not None
     ]
+    if initial_stop is not None and stop is not None and initial_stop != stop and entry_date is not None and stop_effective_date is not None:
+        if stop > initial_stop:
+            # The initial stop governed every completed session before the raise took effect.
+            if stop_effective_date > entry_date:
+                protective_plan.append((initial_stop, entry_date, stop_effective_date - timedelta(days=1)))
+        else:
+            # A stop is never widened; a lower later stop does not relieve the initial one.
+            protective_plan.append((initial_stop, entry_date, as_of))
 
     # Anchors describe whether the request is a coherent position at all. A breach
     # outranks evidence nobody gathered, but never a request that contradicts itself.
@@ -392,7 +404,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             gaps.append("auditable_protective_level")
         if protective_plan:
             records = _audit_records(completed_price_path, path_state)
-            if path_state != "clear" or not all(_audited(records, level, required_from, as_of) for level, required_from in protective_plan):
+            if path_state != "clear" or not all(_audited(records, level, required_from, required_to) for level, required_from, required_to in protective_plan):
                 gaps.append("completed_price_path")
         if invalidation_price is None and has_condition:
             # HOLD asserts nothing has invalidated the thesis; an exit condition the
@@ -485,7 +497,9 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                 evidence = {"gain_pct_reached": _reported_beside_gate(gain_pct, _TL_HALF_AT_FIVE, "half_sale_profit_pct"), "measured_from": basis, "state": signal["state"]}
                 tagged = {"doctrine_id": _TL_HALF_AT_FIVE, "binds": False, "source": "[TL]", "evidence": evidence}
                 actions.append({"action": "REDUCE", **tagged, "fraction": doctrine.parameter(_TL_HALF_AT_FIVE, "half_sale_fraction")})
-                if stop is not None and stop < entry:
+                # The rule is a pair. A position holding a stop at or above entry has the
+                # breakeven half already; one with no declared stop at all is told to set it.
+                if stop is None or stop < entry:
                     actions.append({"action": "RAISE_STOP", **tagged, "to_at_least": entry})
         # Structure that deteriorated while the stop held. The average the trader did not
         # declare is review evidence; the one they declared is a SELL above and never here.

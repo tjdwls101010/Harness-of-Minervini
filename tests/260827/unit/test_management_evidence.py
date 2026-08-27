@@ -149,6 +149,35 @@ class TheLargestDeclineSinceTheStageTwoAdvanceBegan(unittest.TestCase):
         self.assertIs(weekly["latest_completed_week_is_largest"], True)
         self.assertEqual(weekly["week_ending"], FRIDAY)
 
+    def test_a_history_that_starts_after_the_declared_stage_two_start_cannot_answer(self) -> None:
+        # Any larger decline in the missing months is unknowable, so nothing is reported.
+        bars = frame([100.0] * 60)
+        result = build_management_evidence(bars, entry_date=bars.index[40].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=date(2024, 1, 2))
+
+        block = result["largest_decline_since_stage2_start"]
+        self.assertEqual(block["state"], "unavailable")
+        self.assertEqual(block["reason"], "history_starts_after_stage2_start")
+
+    def test_a_latest_decline_tied_with_an_earlier_one_is_still_the_largest(self) -> None:
+        closes = rising(20) + [100.0, 90.0] + [90.0] * 18 + [100.0, 90.0]
+        bars = frame(closes)
+        result = build_management_evidence(bars, entry_date=bars.index[30].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=bars.index[0].date())
+
+        daily = result["largest_decline_since_stage2_start"]["daily"]
+        self.assertAlmostEqual(daily["largest_pct"], -10.0)
+        self.assertIs(daily["last_session_is_largest"], True)
+
+    def test_a_second_close_that_held_above_the_first_session_s_low_says_so(self) -> None:
+        # First close 110 with a deep Low of 80; the second close 108 is under the average
+        # and under the first close, but above that Low.
+        closes = rising(60) + [110.0, 108.0]
+        bars = frame(closes, lows={60: 80.0})
+        result = build_management_evidence(bars, entry_date=bars.index[40].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=None)
+
+        quality = result["moving_average_trail"]["ema21"]["quality"]
+        self.assertIs(quality["second_close_above_first_close"], False)
+        self.assertIs(quality["second_close_above_first_low"], True)
+
     def test_a_week_still_in_progress_is_not_a_completed_weekly_bar(self) -> None:
         closes = [100.0] * 50 + [100.0, 100.0, 100.0, 100.0, 100.0, 92.0]  # the drop lands on the Monday after
         bars = frame(closes, end="2025-12-29")
@@ -161,3 +190,32 @@ class TheLargestDeclineSinceTheStageTwoAdvanceBegan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhatTheMutationProbeLeftAlive(unittest.TestCase):
+    """Three survivors of the C1 sweep, each pinned by the boundary it moved."""
+
+    def test_the_average_is_readable_on_the_exact_session_it_warms_up(self) -> None:
+        # Bar 20 is the twenty-first session: the EMA21 exists there and not one bar earlier.
+        closes = rising(23)
+        bars = frame(closes)
+        result = build_management_evidence(bars, entry_date=bars.index[20].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=None)
+
+        self.assertEqual(result["moving_average_trail"]["ema21"]["state"], "clear")
+
+    def test_a_close_sitting_exactly_on_the_average_is_not_below_it(self) -> None:
+        # A flat series equals its own average every session; equality must never count.
+        result = evidence([100.0] * 62, entry_offset=40)
+
+        ema = result["moving_average_trail"]["ema21"]
+        self.assertEqual(ema["state"], "clear")
+        self.assertEqual(ema["closes_below_in_a_row"], 0)
+
+    def test_the_entry_session_itself_can_be_the_first_of_the_two_closes(self) -> None:
+        closes = rising(50) + [100.0, 99.0]
+        bars = frame(closes)
+        result = build_management_evidence(bars, entry_date=bars.index[50].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=None)
+
+        ema = result["moving_average_trail"]["ema21"]
+        self.assertEqual(ema["state"], "breached")
+        self.assertEqual(ema["breach_date"], bars.index[51].date().isoformat())

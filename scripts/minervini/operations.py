@@ -7,7 +7,7 @@ import os
 import sys
 import math
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -1657,6 +1657,7 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
         timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
     highs = pd.to_numeric(frame["High"], errors="coerce")
     highs.index = timestamps
+    highs = highs[~highs.index.duplicated(keep="last")]
     dates = pd.Index([timestamp.date() for timestamp in highs.index])
     held = highs[(dates >= entry_date) & (dates <= as_of)]
     held = held[held.notna() & (held > 0) & (held != math.inf)]
@@ -1668,7 +1669,15 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     return float(held.iloc[position]), held.index[position].date().isoformat()
 
 
-def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float) -> tuple[dict[str, Any], float | None]:
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float, end_before: date | None = None) -> tuple[dict[str, Any], float | None]:
+    """Audit every completed Low against ``protective_level`` from ``effective_date``.
+
+    ``end_before`` bounds the window for a level a later stop superseded: only sessions
+    strictly before that date are audited, and the window counts as fully covered once the
+    frame holds any bar on or past it -- the sessions inside the window all exist then, and
+    the record's ``through`` is the calendar eve of the raise so the reducer can compare it
+    with the window it requires without knowing the trading calendar.
+    """
     if not isinstance(frame, pd.DataFrame) or frame.empty or not {"Low", "Close"}.issubset(frame.columns):
         return {"state": "unavailable", "reason": "completed_ohlc_path_unavailable"}, None
     timestamps = pd.to_datetime(frame.index, errors="coerce")
@@ -1679,6 +1688,10 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()
+    # A repeated timestamp is one session printed twice, and the last print is the one
+    # that completed; auditing a superseded print would sell on a Low the session no
+    # longer has. The favorable-excursion measurement reads the same rule.
+    ordered = ordered[~ordered.index.duplicated(keep="last")]
     dated_rows = [(timestamp.date(), row) for timestamp, row in ordered.iterrows() if timestamp.date() <= as_of]
     if not dated_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_through_as_of"}, None
@@ -1700,7 +1713,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date]
+    path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date and (end_before is None or bar_date < end_before)]
     if not path_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
     for bar_date, row in path_rows:
@@ -1711,6 +1724,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         if not math.isfinite(low) or low <= 0:
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
         if low <= protective_level:
+            window_end = latest_date if end_before is None else (end_before - timedelta(days=1))
             # A session that opened below the level never offered the level's price; the
             # record says so rather than letting the stop read as if it had been filled there.
             opened: float | None = None
@@ -1725,13 +1739,31 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
                 "state": "breached",
                 "basis": "completed_daily_low",
                 "from": effective_date.isoformat(),
-                "through": latest_date.isoformat(),
+                "through": window_end.isoformat(),
                 "bars_checked": len(path_rows),
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
                 "breach_open": opened,
                 "gap_through_stop": None if opened is None else opened < protective_level,
             }, current_price
+    if end_before is not None:
+        if latest_date >= end_before:
+            # A bar past the window's end proves every session inside it was seen.
+            return {
+                "state": "clear",
+                "basis": "completed_daily_low",
+                "from": effective_date.isoformat(),
+                "through": (end_before - timedelta(days=1)).isoformat(),
+                "bars_checked": len(path_rows),
+            }, current_price
+        return {
+            "state": "unavailable",
+            "reason": "history_ends_before_stop_raise",
+            "requested_from": effective_date.isoformat(),
+            "last_available": latest_date.isoformat(),
+            "requested_through": (end_before - timedelta(days=1)).isoformat(),
+            "bars_checked": len(path_rows),
+        }, current_price
     if latest_date < as_of:
         # No breach in the bars that exist. A later missing bar cannot prove HOLD,
         # but it could never have erased a breach found above either.
@@ -1774,10 +1806,16 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     stop_price = _positive(raw_stop_price)
     raw_invalidation_price = invalidation.get("price") if isinstance(invalidation, Mapping) else None
     invalidation_price = _positive(raw_invalidation_price)
-    for raw, resolved, field in ((raw_stop_price, stop_price, "stop_price"), (raw_invalidation_price, invalidation_price, "invalidation_price")):
+    raw_initial_stop = evidence.get("initial_stop_price")
+    initial_stop_price = _positive(raw_initial_stop)
+    for raw, resolved, field in ((raw_stop_price, stop_price, "stop_price"), (raw_invalidation_price, invalidation_price, "invalidation_price"), (raw_initial_stop, initial_stop_price, "initial_stop_price")):
         if raw is not None and resolved is None:
             raise RequestError(f"{field} must be a finite positive number", field)
-    protective_level = max([level for level in (stop_price, invalidation_price) if level is not None], default=None)
+    widened = initial_stop_price is not None and stop_price is not None and stop_price < initial_stop_price
+    protective_level = max(
+        [level for level in (stop_price, invalidation_price, initial_stop_price if widened else None) if level is not None],
+        default=None,
+    )
     stop_effective_date: date | None = None
     entry_date: date | None = None
     if mode == "active" and evidence.get("entry_date") is not None:
@@ -1796,7 +1834,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             raise RequestError("stop_effective_date cannot precede entry_date", "stop_effective_date")
         if stop_effective_date > clock.date:
             raise RequestError("stop_effective_date cannot be after as_of", "stop_effective_date")
-        evidence["stop_effective_date"] = stop_effective_date.isoformat()
+        if evidence.get("stop_effective_date") is not None:
+            # Written back only when the caller declared it: the reducer's request contract
+            # says a stop that differs from the initial one was raised on some date, and
+            # materialising the default here would answer that question for them.
+            evidence["stop_effective_date"] = stop_effective_date.isoformat()
     stage2_start: date | None = None
     if evidence.get("stage2_start") is not None:
         try:
@@ -1812,11 +1854,20 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # A stop raised later is only in force from its own date, while the structural
     # invalidation has stood since entry. Auditing both against one date would let
     # the later start hide a breach the earlier level already suffered.
-    protective_plan: list[tuple[str, float, date]] = []
+    protective_plan: list[tuple[str, float, date, date | None]] = []
     if stop_price is not None and stop_effective_date is not None:
-        protective_plan.append(("stop", stop_price, stop_effective_date))
+        protective_plan.append(("stop", stop_price, stop_effective_date, None))
     if invalidation_price is not None and entry_date is not None:
-        protective_plan.append(("invalidation", invalidation_price, entry_date))
+        protective_plan.append(("invalidation", invalidation_price, entry_date, None))
+    if initial_stop_price is not None and stop_price is not None and initial_stop_price != stop_price and entry_date is not None and stop_effective_date is not None:
+        if stop_price > initial_stop_price:
+            # The initial stop governed every completed session before the raise took effect.
+            if stop_effective_date > entry_date:
+                protective_plan.append(("initial_stop", initial_stop_price, entry_date, stop_effective_date))
+        else:
+            # A stop is never widened, so a lower later stop does not relieve the initial
+            # one; the initial stop stays in force over the whole window.
+            protective_plan.append(("initial_stop", initial_stop_price, entry_date, None))
 
     explicit_current = evidence.get("current_price")
     explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
@@ -1837,7 +1888,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                     "through": clock.date.isoformat(),
                     "state": "breached" if float(explicit_current) <= level else "clear",
                 }
-                for role, level, effective in protective_plan
+                for role, level, effective, _end_before in protective_plan
             ],
         }
     # A breach that already settles the verdict needs no price history, and a
@@ -1881,12 +1932,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 # irreversible, and a later missing bar cannot undo one.
                 audits: list[dict[str, Any]] = []
                 path_price = None
-                for role, level, effective in protective_plan:
+                for role, level, effective, end_before in protective_plan:
                     audit, audit_price = _completed_stop_path(
                         prices.data,
                         effective_date=effective,
                         as_of=clock.date,
                         protective_level=level,
+                        end_before=end_before,
                     )
                     audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
                     path_price = audit_price if audit_price is not None else path_price
@@ -1918,34 +1970,53 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}
     missing = [*provider_missing, *({"id": item, "reason": "evidence_required", "required": True} for item in result["missing"] if item not in provider_missing_ids)]
+    data = {
+        "ticker": ticker,
+        **result,
+        "current_price": evidence.get("current_price"),
+        "max_high_since_entry": evidence.get("max_high_since_entry"),
+        "max_high_date": evidence.get("max_high_date"),
+    }
     return envelope(
         "ticker.risk",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        data={
-            "ticker": ticker,
-            **result,
-            "current_price": evidence.get("current_price"),
-            "max_high_since_entry": evidence.get("max_high_since_entry"),
-            "max_high_date": evidence.get("max_high_date"),
-        },
+        data=data,
         signals=[
             {"id": item, "state": "fail"} for item in result["failed"]
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],
         missing=missing,
         sources=sources,
-        doctrine_ids=[
-            "risk.initial_stop_and_reward",
-            "risk.hard_stop_and_no_average_down",
-            "risk.profit_protection_at_3r",
-            "management.ema21_sma50_roles",
-            "management.close_below_20_day_average_lowers_probability",
-            "management.largest_decline_since_stage2_start",
-            "management.tl_stage12_half_at_five_percent",
-            "management.tl_sell_into_strength_at_average_gain_and_r_multiples",
-        ],
+        doctrine_ids=_risk_doctrine_ids(mode, data),
     )
+
+
+def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
+    """The claims this result actually cites: the mode's own risk claims, plus every claim
+    the payload names beside a measurement or an action. A fixed list said more than the
+    result used in one mode and less than it used in the other."""
+
+    base = (
+        ["risk.initial_stop_and_reward", "risk.profit_protection_at_3r"]
+        if mode == "prospective"
+        else ["risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"]
+    )
+    named: set[str] = set()
+
+    def collect(value: Any) -> None:
+        if isinstance(value, Mapping):
+            claim = value.get("doctrine_id")
+            if isinstance(claim, str):
+                named.add(claim)
+            for item in value.values():
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+
+    collect(data)
+    return base + sorted(named - set(base))
 
 
 def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
