@@ -500,6 +500,7 @@ def _acceleration_vs_history(quarterly: Mapping[str, Any], annual: list[dict[str
     """
 
     series = [(str(fact.get("period")), float(fact["eps"])) for fact in annual if _is_number(fact.get("eps"))]
+    income = [(str(fact.get("period")), float(fact["net_income"])) for fact in annual if _is_number(fact.get("net_income"))]
     three, three_reason = _compound_growth(series, 3)
     five, _ = _compound_growth(series, 5)
     latest = quarterly["eps_yoy_growth"]
@@ -510,9 +511,31 @@ def _acceleration_vs_history(quarterly: Mapping[str, Any], annual: list[dict[str
         "periods": [series[-4][0], series[-1][0]] if len(series) >= 4 else [fact[0] for fact in series[:1] + series[-1:]],
         "trailing_3yr_eps_cagr_pct": three,
         "trailing_5yr_eps_cagr_pct": five,
+        # The two rates the per-share one is made of. A split multiplies the share count and
+        # leaves total earnings untouched, so a compound rate that disagrees with the total is
+        # reporting a share base that moved rather than a business that did.
+        "trailing_3yr_net_income_cagr_pct": _compound_growth(income, 3)[0],
+        "trailing_5yr_net_income_cagr_pct": _compound_growth(income, 5)[0],
+        "trailing_3yr_diluted_shares_change_pct": _share_base_change(annual, 3),
+        "trailing_5yr_diluted_shares_change_pct": _share_base_change(annual, 5),
         "latest_quarterly_eps_yoy_pct": latest[-1]["yoy_pct"] if latest else None,
     }
     return reading if three is not None else {**reading, "reason": three_reason}
+
+
+def _share_base_change(annual: list[dict[str, Any]], years: int) -> float | None:
+    """How far the filed diluted share count moved across the same window.
+
+    Not adjusted for, only reported. The split itself is a price-history fact and this evaluator
+    holds filings, so nothing here can tell a four-for-one split from a share issue four times
+    the size -- but both make a per-share rate say something other than what the business did,
+    and both show up here.
+    """
+
+    shares = [float(fact["diluted_shares"]) for fact in annual if _is_number(fact.get("diluted_shares"))]
+    if len(shares) < years + 1 or shares[-(years + 1)] <= 0:
+        return None
+    return _reported((shares[-1] / shares[-(years + 1)] - 1) * 100)
 
 
 def _compound_growth(series: list[tuple[str, float]], years: int) -> tuple[float | None, str]:
@@ -679,7 +702,12 @@ def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, 
         "best_stretch_years": doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years"),
         "missing_inputs": ["market_share_trend", "industry_classification"],
     }
-    return reading if span is None else {**reading, "best_stretch_span_years": span}
+    if span is None:
+        return reading
+    # The winning stretch is the highest per-share rate on file, and a share base that shrank
+    # raises that rate without the business having done anything. What the count did over the
+    # same years travels with it so the reader can see which happened.
+    return {**reading, "best_stretch_span_years": span, "best_stretch_diluted_shares_change_pct": _share_base_change(annual, span)}
 
 
 def _best_stretch(series: list[tuple[str, float]]) -> tuple[int | None, float | None]:

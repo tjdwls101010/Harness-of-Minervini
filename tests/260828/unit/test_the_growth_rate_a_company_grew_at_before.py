@@ -70,7 +70,19 @@ class TheCompanysOwnPace(unittest.TestCase):
         reading = result["growth"]["acceleration_vs_historical_growth_rate"]
         self.assertEqual(
             sorted(reading),
-            ["binds", "computability", "doctrine_id", "latest_quarterly_eps_yoy_pct", "periods", "trailing_3yr_eps_cagr_pct", "trailing_5yr_eps_cagr_pct"],
+            [
+                "binds",
+                "computability",
+                "doctrine_id",
+                "latest_quarterly_eps_yoy_pct",
+                "periods",
+                "trailing_3yr_diluted_shares_change_pct",
+                "trailing_3yr_eps_cagr_pct",
+                "trailing_3yr_net_income_cagr_pct",
+                "trailing_5yr_diluted_shares_change_pct",
+                "trailing_5yr_eps_cagr_pct",
+                "trailing_5yr_net_income_cagr_pct",
+            ],
         )
 
 
