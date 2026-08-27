@@ -23,6 +23,8 @@ _STRENGTH_REFERENCES = "management.tl_sell_into_strength_at_average_gain_and_r_m
 # so: binds false, source "[TL]", and the contrast state the gate actually returned.
 _PROFILES = {"tl_stage12": _TL_HALF_AT_FIVE}
 _ROLES = "management.ema21_sma50_roles"
+_PAUSE_ZONE = "management.tl_base_extension_pause_zone"
+_FAILED_VOLUME = "management.low_volume_breakout_then_high_volume_selling"
 _TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
 _LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
 # The averages the harness measures a held position against. One of them may be the
@@ -428,7 +430,19 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     # travel with every verdict -- a SELL on the declared average needs its breach shown --
     # and the strength references are filled under HOLD.
     management_evidence: dict[str, Any] = {
-        key: management[key] for key in ("moving_average_trail", "twenty_day_average", "largest_decline_since_stage2_start") if key in management
+        key: management[key]
+        for key in (
+            "moving_average_trail",
+            "twenty_day_average",
+            "largest_decline_since_stage2_start",
+            "base_extension",
+            "moving_average_extension",
+            "key_reversal",
+            "gaps_since_breakout",
+            "climax",
+            "failed_volume_confirmation",
+        )
+        if key in management
     }
     # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
     # established that there is a position to manage, so only HOLD fills this.
@@ -526,6 +540,16 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
                     "evidence": {"stage2_start": largest.get("stage2_start"), "daily": daily, "weekly": weekly},
                 }
             )
+        base_extension = _mapping(management.get("base_extension"))
+        if _mapping(base_extension.get("band")).get("state") == "within_source_range":
+            # Inside the zone the source describes is where the pause is likely and where a
+            # swing trader may take some or all off; past it the stock has continued.
+            actions.append({"action": "REVIEW", "doctrine_id": _PAUSE_ZONE, "binds": doctrine.binds(_PAUSE_ZONE), "source": "[TL]", "reason": "base_extension_pause_zone", "evidence": base_extension})
+        failed_volume = _mapping(management.get("failed_volume_confirmation"))
+        if failed_volume.get("selling_volume_exceeded_breakout_volume") is True:
+            # The source says "sell or at least reduce", so the action names both and
+            # chooses neither.
+            actions.append({"action": "REVIEW", "doctrine_id": _FAILED_VOLUME, "binds": doctrine.binds(_FAILED_VOLUME), "reason": "failed_volume_confirmation", "reduce_or_sell": True, "evidence": failed_volume})
         # Reference points for selling into strength. The source names the trader's own
         # average gain and R multiples and gives neither a multiple nor a fraction, so this
         # reports distances and prescribes nothing.

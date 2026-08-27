@@ -11173,6 +11173,478 @@
       "unquantified": [
         "what 'overwhelming volume' is -- the volume ratio is reported beside the practice-layer high-volume marker, and no threshold is registered"
       ]
+    },
+    {
+      "id": "management.tl_base_extension_pause_zone",
+      "title": "Stocks often pause 20 to 25 percent above the top of the base, where swing traders may take some or all off",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "base_top",
+        "current_price",
+        "max_high_since_entry"
+      ],
+      "rule": {
+        "summary": "After a breakout a stock often pauses around 20-25% above the top of its base before continuing; as it approaches that zone volatility can rise as participants take profits, and a swing trader may take some or all of the position off. The zone is where a pause is likely, not a filter, so it is a band the harness reports position against and a REVIEW action inside it."
+      },
+      "thresholds": {
+        "pause_zone_pct": {
+          "role": "band",
+          "range": [
+            20.0,
+            25.0
+          ],
+          "unit": "percent",
+          "direction": "inside_is_better",
+          "exact": true,
+          "quote_index": 0,
+          "note": "Stated as a range, so a band. 'inside' is the zone where the pause the source describes is likely -- the direction word names where the source's statement applies, not a quality ranking of the extension."
+        }
+      },
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Evidence the source names as a reason to consider selling into strength goes to review; TraderLion is read for contrast and never rejects for this harness."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "Often, there is a pause around 20–25% from the top of the base where the stock may pause, consolidate, and then continue higher.",
+            "supports": "the 20-25% pause zone above the base top"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "As a stock approaches this level, it may increase in volatility, as different market participants take profits. For swing traders, you can also look to take some or all of your position off, having ridden a strong momentum move from the breakout.",
+            "supports": "taking some or all off as the zone is approached, for swing traders"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength at base extensions); the passage says 'may' and 'continue higher', so nothing here is a gate"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py",
+        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+      ],
+      "computability": "deterministic"
+    },
+    {
+      "id": "management.tl_extension_measured_against_own_character",
+      "title": "How far a stock stretches from its moving averages is measured against its own habit, in percent or ATR",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "ema_21",
+        "sma_50",
+        "average_true_range"
+      ],
+      "rule": {
+        "summary": "A trending stock forms a habit of how far it stretches from its moving averages before pulling in; the trader notes that typical percent, or measures it in average true range, or eyeballs it, and expects the character to continue. The harness reports the current extension in percent and in ATR beside the stock's own history of extensions, and prescribes nothing -- the source's proprietary Relative Measured Extension indicator is mentioned without a formula and is not cloned."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A measurement against the stock's own habit has no pass or fail; it is read on the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "You will start to notice that it will form a habit of how far stretched it can be from the moving averages before pulling back in.",
+            "supports": "extension read against the stock's own habit"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "You can note the % it typically becomes extended from the moving average, ... or measure it in average true range ( ), or simply eyeball it. Regardless of your method, the stock will be likely to continue with this character.",
+            "supports": "percent or ATR as the two measurements, character expected to persist",
+            "assembled_from": "an inline icon glyph for 'atr' is extracted as a stray token and empty parentheses; the ellipsis marks where it intrudes"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength using moving averages); no percent or ATR multiple is given, so none is registered"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "the percent or ATR multiple at which the stock is 'extended' -- the source says to note the stock's own typical value"
+      ]
+    },
+    {
+      "id": "management.tl_key_reversal_criteria",
+      "title": "A key reversal is read from six criteria at an extended high; the source names them and no count",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "TraderLion lists six things to look for in a key reversal: visually extended from the moving averages at the high; a gap up quickly filled and reversed; a breach of a trend line of highs; abnormally high volume or the highest since the breakout; the widest range bar since the breakout; a reversal below the prior day's low closing low in the range. Four are computable from bars and two are read from the chart; the harness returns the vector and the count of computable criteria met, and never invents 'N of six'."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A criterion vector has no pass or fail; the reader takes it to the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "At the high the stock was visually extended from the moving averages. The stock gaps up but quickly fills the gap and reverses downwards. The stock breaches a trend line of highs. The volume is abnormally high or the highest since the breakout. The stock forms the widest range bar since the breakout. The stock reverses below the prior day's low and closes low in the range.",
+            "supports": "the six criteria, verbatim, as a list",
+            "assembled_from": "the six criteria are separate lines of one list in the source; they are joined with spaces here"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 10,
+            "text": "These reversals can mark a change in momentum and potentially the start of a new base. It may be prudent to use these reversals to lock in some profits so you can move the capital toward a fresh opportunity as the original stock consolidates.",
+            "supports": "the reversal as a reason to lock in some profits, not a rule to exit"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 10 (Selling into strength on key reversals); the passage gives no required count, so the harness reports the vector"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "how many of the six make a key reversal -- the source names none",
+        "what 'abnormally high' volume is -- the highest since the breakout is the computable half"
+      ]
+    },
+    {
+      "id": "management.tl_late_gaps_fail_more_often",
+      "title": "Early gaps in a trend are the higher-probability ones; later gaps fail more often, and exhaustion gaps often close near their highs before reversing",
+      "kind": "interpretation",
+      "layer": "practice",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "TraderLion's chart notes count gaps within a trend: the first or second gap is the higher-probability setup, later gaps often fail and need a larger base before the next leg, and an exhaustion gap after a fast run often closes near its highs or reverses early. The harness counts gap-ups since the breakout, reports the run since then, whether the latest gap was filled, and its closing range, and prescribes nothing."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "Gap context has no pass or fail; it is read on the chart."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the inputs the measurement is reported unavailable rather than assumed."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "TraderLion",
+            "row": 4,
+            "text": "guidance to count bases and gaps, focus on first or second gap for higher probability, later gaps often fail and require larger bases to set up the next leg up.",
+            "supports": "gap count within a trend as context, later gaps failing more often",
+            "assembled_from": "a chart annotation preserved in the extraction's figure description"
+          },
+          {
+            "corpus": "TraderLion",
+            "row": 4,
+            "text": "explanatory note that exhaustion gaps often close with highs or early reversals",
+            "supports": "exhaustion gaps closing near highs or reversing early",
+            "assembled_from": "a chart annotation preserved in the extraction's figure description"
+          }
+        ],
+        "resolution": "mined from TraderLion.db row 4 chart annotations; the examples ('100% run in 35 days', '6th gap') are illustrations and no count or run is registered as a threshold"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "unquantified": [
+        "the gap count or run size past which a gap is 'late' or 'exhaustion' -- only examples are given"
+      ]
+    },
+    {
+      "id": "management.climax_run_ends_the_advance",
+      "title": "A stage 2 advance can turn parabolic and end in a climax run or blow-off top; leaders churn, buckle, or accelerate ahead of the top",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "base_count"
+      ],
+      "rule": {
+        "summary": "Some stocks turn up in a parabolic fashion and end the advance in a climax run or blow-off top; leaders that churn, buckle, or accelerate over a number of weeks in a parabolic fashion are the ones that force a trader out ahead of the bear phase. The source gives no rate of ascent or volume figure, so the harness reports short-horizon returns, extension from the averages, recent gap-ups, the last session's volume percentile and closing range, and leaves the reading to the chart."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Acceleration late in an advance is review evidence for the chart; nothing here is a filter."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without enough completed sessions for the return windows the block is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 11,
+            "text": "can turn up in a parabolic fashion and end in a climax run or blow-off top. By itself, base counting will not tell you if a stock has topped or is about to move substantially higher.",
+            "supports": "the climax run or blow-off top as one way an advance ends, beside the base-count disclaimer"
+          },
+          {
+            "corpus": "Minervini",
+            "row": 2,
+            "text": "you will be forced out of the market—stock by stock— as many of the same issues start to churn, buckle, or accelerate their advance over a number of weeks in a parabolic fashion ahead of the inevitable bear phase or market correction.",
+            "supports": "churning, buckling, or parabolic acceleration among leaders ahead of a top"
+          }
+        ],
+        "resolution": "mined from Minervini.db rows 11 and 2; TraderLion row 1 corroborates ('accelerates upward in a euphoric last push') and is not quoted here because this claim is attributed to Minervini"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "chart_assisted",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "the rate of ascent, number of weeks, or volume that makes a climax -- the source gives examples and no figures"
+      ]
+    },
+    {
+      "id": "management.low_volume_breakout_then_high_volume_selling",
+      "title": "A breakout on low volume followed by selling on high volume usually gets Minervini to sell or at least reduce",
+      "kind": "interpretation",
+      "layer": "canonical",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history",
+        "volume_history",
+        "breakout_date"
+      ],
+      "rule": {
+        "summary": "A low-volume breakout alone is not a sale -- volume can arrive over the next days -- but a breakout on low volume followed by selling on high volume usually gets Minervini to sell or at least reduce. The harness measures the breakout session's volume ratio and the heaviest down session since, and the event is a down session whose volume exceeded the breakout's; the source says 'sell or at least reduce', so the action is a REVIEW that names both and chooses neither."
+      },
+      "thresholds": {},
+      "failure": {
+        "effect": "needs_review",
+        "meaning": "Selling volume exceeding breakout volume is a reason to sell or reduce; which one is the trader's call, so it goes to review with both named."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "Without the breakout session there is no breakout volume to compare with, and the block is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [
+          {
+            "corpus": "Minervini",
+            "row": 15,
+            "text": "I wouldn't sell a stock just because it broke out on low volume. Sometimes the volume comes in the next day or several days later. In that case, I would like to see the stock follow through on higher volume. On the other hand, if the breakout was on low volume and then the stock sold off on high volume, that would usually get me to sell or at least reduce my position.",
+            "supports": "the whole rule: a low-volume breakout is tolerated, low-volume breakout then high-volume selling is sell or reduce"
+          }
+        ],
+        "resolution": "mined verbatim from Minervini.db row 15 (multi-practitioner Q&A), attributed to Minervini; 'low' and 'high' volume carry no number, so the encoded event is selling volume exceeding breakout volume, a comparison of the stock's own two sessions"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py",
+        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+      ],
+      "computability": "deterministic",
+      "attributed_to": "Minervini",
+      "unquantified": [
+        "what 'low' and 'high' volume are in ratio terms -- the practice-layer markers are reported beside the measurement for context"
+      ]
+    },
+    {
+      "id": "convention.average_true_range",
+      "title": "Average true range is the simple mean of the true range over fourteen sessions",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "active_position",
+        "trade_management"
+      ],
+      "required_inputs": [
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The sources say 'average true range (ATR)' and name no length. True range is the largest of high minus low, high minus the prior close, and the prior close minus low; the harness averages it over fourteen sessions with a simple mean. Fourteen is the conventional length and a harness choice, recorded here so it is read from one place."
+      },
+      "thresholds": {},
+      "parameters": {
+        "atr_length_sessions": {
+          "value": 14,
+          "unit": "sessions",
+          "affects_verdict": false,
+          "note": "A harness convention; no source names a length. It changes a reported extension in ATR units and no verdict reads that."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "incomplete",
+        "meaning": "With fewer than fifteen completed sessions the range has no average and is reported unavailable."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the ATR the sources mention is named without a length"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "ticker.risk"
+      ],
+      "tests": [
+        "tests/260827/unit/test_structure_extension_evidence.py",
+        "tests/260827/unit/test_structure_extension_actions.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

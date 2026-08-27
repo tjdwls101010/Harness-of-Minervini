@@ -1850,6 +1850,19 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         evidence["stage2_start"] = stage2_start.isoformat()
     if evidence.get("management_average") is not None and evidence["management_average"] not in MANAGEMENT_AVERAGES:
         raise RequestError(f"management_average must be one of {', '.join(MANAGEMENT_AVERAGES)}", "management_average")
+    raw_base_top = evidence.get("base_top")
+    base_top = _positive(raw_base_top)
+    if raw_base_top is not None and base_top is None:
+        raise RequestError("base_top must be a finite positive number", "base_top")
+    breakout_date: date | None = None
+    if evidence.get("breakout_date") is not None:
+        try:
+            breakout_date = date.fromisoformat(str(evidence["breakout_date"]))
+        except ValueError as error:
+            raise RequestError("breakout_date must be an ISO date", "breakout_date") from error
+        if breakout_date > clock.date:
+            raise RequestError("breakout_date cannot be after as_of", "breakout_date")
+        evidence["breakout_date"] = breakout_date.isoformat()
 
     # A stop raised later is only in force from its own date, while the structural
     # invalidation has stood since entry. Auditing both against one date would let
@@ -1926,6 +1939,8 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                     as_of=clock.date,
                     management_average=evidence.get("management_average"),
                     stage2_start=stage2_start,
+                    base_top=base_top,
+                    breakout_date=breakout_date,
                 )
             if protective_plan:
                 # Runs even when the history stops early: a completed breach is
