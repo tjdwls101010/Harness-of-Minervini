@@ -1771,7 +1771,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.qualify"
+        "ticker.qualify",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -1960,7 +1961,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -2038,7 +2040,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260824/doctrine/test_registry_sourcing.py"
@@ -9764,7 +9767,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",
@@ -9857,7 +9861,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup"
+        "ticker.setup",
+        "ticker.risk"
       ],
       "tests": [
         "tests/260825/unit/test_setup_measurements.py",

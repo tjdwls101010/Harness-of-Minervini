@@ -59,6 +59,18 @@ class TheBaseExtensionPauseZone(unittest.TestCase):
         self.assertEqual(result["management_actions"], [])
         self.assertEqual(result["management_evidence"]["base_extension"]["action_withheld_reason"], "breakout_date_not_declared")
 
+    def test_a_breakout_the_bars_cannot_find_withholds_the_review_too(self) -> None:
+        # A date the caller typed is not a session the market held. When the measurements
+        # report no completed bar on it, the anchor these rules hang from does not exist.
+        payload = held({
+            "base_extension": {"doctrine_id": PAUSE, "binds": False, "state": "reported", "base_top": 100.0, "extension_pct": 22.0, "max_extension_pct": 23.22, "band": band("within_source_range")},
+            "key_reversal": {"state": "unavailable", "reason": "no_completed_bar_on_breakout_date"},
+        })
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["management_actions"], [])
+        self.assertEqual(result["management_evidence"]["base_extension"]["action_withheld_reason"], "no_completed_bar_on_breakout_date")
+
     def test_past_the_zone_or_short_of_it_is_evidence_only(self) -> None:
         for state in ("above_source_range", "below_source_range"):
             result = reduce_risk(held({"base_extension": {"doctrine_id": PAUSE, "binds": False, "state": "reported", "base_top": 100.0, "extension_pct": 30.0, "max_extension_pct": 31.0, "band": band(state)}}))

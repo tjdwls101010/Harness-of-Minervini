@@ -95,7 +95,14 @@ class ABlockReadsOnlyItsOwnColumns(unittest.TestCase):
         result = build_management_evidence(bars, entry_date=bars.index[110].date(), as_of=bars.index[-1].date(), management_average="ema21")
 
         # The EMA is recursive from the first bar, so the bad close is inside its computation.
-        self.assertEqual(result["moving_average_trail"]["reason"], "invalid_ohlc_history")
+        # The simple average's own window starts fifty sessions before the audit and never
+        # reaches that bar, so it is still measured -- one broken session voids the averages
+        # that read it and no others.
+        trail = result["moving_average_trail"]
+        self.assertEqual(trail["ema21"]["reason"], "invalid_ohlc_history")
+        self.assertEqual(trail["sma50"]["state"], "clear")
+        # The extension block ranks the current stretch against every prior session, so its
+        # window really is the whole history and the bad close is inside it.
         self.assertEqual(result["moving_average_extension"]["reason"], "invalid_ohlc_history")
 
 

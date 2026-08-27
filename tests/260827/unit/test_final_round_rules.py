@@ -80,6 +80,28 @@ class TheDeclineBelongsToTheAdvance(unittest.TestCase):
         self.assertIs(daily["last_session_is_largest"], False)
 
 
+class AWeekWithNoFridayIsNamedRatherThanDropped(unittest.TestCase):
+    def test_a_holiday_shortened_final_week_is_published_as_pending(self) -> None:
+        # Thursday 2025-04-17 was the last session before Good Friday, so this week ended
+        # early. Without a trading calendar the harness cannot tell that from a week whose
+        # Friday has not printed yet, and it will not call an unfinished week completed --
+        # but a twenty percent week it declines to weigh has to be visible beside the finding.
+        index = pd.bdate_range(start="2025-03-31", end="2025-04-17")
+        closes = [100.0] * (len(index) - 1) + [80.0]
+        bars = pd.DataFrame(
+            {"Open": closes, "High": [close * 1.01 for close in closes], "Low": [close * 0.99 for close in closes], "Close": closes, "Volume": [1_000_000] * len(closes), "Stock Splits": [0.0] * len(closes)},
+            index=index,
+        )
+        block = build_management_evidence(bars, entry_date=index[0].date(), as_of=index[-1].date(), stage2_start=date(2025, 3, 31))["largest_decline_since_stage2_start"]["weekly"]
+
+        self.assertEqual(block["pending_week_ending"], "2025-04-18")
+        self.assertAlmostEqual(block["pending_week_pct"], -20.0)
+        self.assertEqual(block["pending_week_reason"], "no_friday_session_and_no_later_week")
+        # And the completed weeks still report what they were: nothing fell in them.
+        self.assertIsNone(block["largest_pct"])
+        self.assertIs(block["latest_completed_week_is_largest"], False)
+
+
 class TheFailedVolumeEventNamesWhatItCouldNotSettle(unittest.TestCase):
     """The source's "low volume" and "high volume" have no boundary, so the bars do not claim them."""
 

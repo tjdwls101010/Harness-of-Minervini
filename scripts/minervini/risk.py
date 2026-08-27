@@ -398,6 +398,24 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
     )
 
 
+_POST_BREAKOUT_BLOCKS = ("key_reversal", "gaps_since_breakout", "post_breakout_behavior", "failed_volume_confirmation")
+
+
+def _unlocatable_breakout(management: Mapping[str, Any]) -> str | None:
+    """The reason a declared breakout cannot anchor a rule, or None when it can.
+
+    The blocks measured from the breakout are the ones that know whether a session printed
+    on it. Reading their reason keeps one answer in one place: the measurements and the
+    actions cannot disagree about whether the anchor exists.
+    """
+
+    for name in _POST_BREAKOUT_BLOCKS:
+        reason = _mapping(management.get(name)).get("reason")
+        if reason == "no_completed_bar_on_breakout_date":
+            return reason
+    return None
+
+
 def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     as_of = _iso_date(payload.get("as_of"))
     entry = _number(payload.get("entry_price"))
@@ -462,8 +480,13 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
     path_state = _status_word(completed_price_path)
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
-    invalidation_price_breach = current is not None and invalidation_price is not None and current <= invalidation_price
+    # A breached path names the level it is about. An invalidation breach is a SELL under
+    # its own name; calling it a stop breach would report a line the market never crossed.
+    path_breach_is_the_stop = _triggered(completed_price_path) and completed_price_path.get("governing_role") != "invalidation"
+    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or path_breach_is_the_stop or (current is not None and stop is not None and current <= stop)
+    invalidation_price_breach = (current is not None and invalidation_price is not None and current <= invalidation_price) or (
+        _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
+    )
     invalidation_triggered = _triggered(invalidation) or invalidation_price_breach
     # Two completed closes below the average the trader declared they manage by is
     # that trader's own exit plan breached, audited over completed bars like a stop.
@@ -620,14 +643,19 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         # The source's sentence begins "Once the stock successfully breaks out", so the rule
         # belongs to a position that broke out. Without a declared breakout the measurement
         # is published and nothing acts: an early or cheat entry has not reached this rule yet.
-        breakout_declared = payload.get("breakout_date") is not None
+        # A date the caller typed is not a breakout the bars can find. When the measurements
+        # report that no completed session printed on it -- a weekend, a holiday, a gap in
+        # the history -- the anchor these rules hang from does not exist, and acting on it
+        # would be acting on a session nobody traded.
+        breakout_withheld = _unlocatable_breakout(management) if payload.get("breakout_date") is not None else "breakout_date_not_declared"
+        breakout_declared = breakout_withheld is None
         if _status_word(twenty) == "below":
             if breakout_declared:
                 actions.append({"action": "REVIEW", "doctrine_id": _TWENTY_DAY, "binds": doctrine.binds(_TWENTY_DAY), "reason": "close_below_20_day_average", "evidence": twenty})
             else:
                 # Withheld, and said so: a reader must be able to see that the measurement is
                 # below the average and that the rule about it has not been applied.
-                management_evidence["twenty_day_average"] = {**twenty, "action_withheld_reason": "breakout_date_not_declared"}
+                management_evidence["twenty_day_average"] = {**twenty, "action_withheld_reason": breakout_withheld}
         largest = _mapping(management.get("largest_decline_since_stage2_start"))
         daily = _mapping(largest.get("daily"))
         weekly = _mapping(largest.get("weekly"))
@@ -651,7 +679,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             # the pause it describes is one a stock takes after it has broken out. Ordering a
             # review off it without a declared breakout reads post-breakout doctrine into an
             # entry that has not broken out yet, the same leak the 20-day rule had.
-            management_evidence["base_extension"] = {**base_extension, "action_withheld_reason": "breakout_date_not_declared"}
+            management_evidence["base_extension"] = {**base_extension, "action_withheld_reason": breakout_withheld}
         elif inside_pause_zone:
             # Inside the zone the source describes is where the pause is likely and where a
             # swing trader may take some or all off; past it the stock has continued.

@@ -114,5 +114,36 @@ class DuplicateSessionsReadTheSameEverywhere(unittest.TestCase):
         self.assertEqual(payload["data"]["management_evidence"]["moving_average_trail"]["ema21"]["state"], "clear")
 
 
+class ABreachNamesTheLevelItCrossed(unittest.TestCase):
+    """A price at or below one level says nothing about the levels below it."""
+
+    def test_an_explicit_price_under_the_invalidation_is_not_a_stop_breach(self) -> None:
+        payload = run(
+            quiet(40),
+            stop_price=90.0,
+            invalidation={"price": 95.0, "condition": "close at or below 95"},
+            current_price=94.0,
+        )
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "SELL")
+        self.assertEqual(data["failed"], ["invalidation_breach"])
+        path = data["completed_price_path"]
+        self.assertEqual(path["governing_role"], "invalidation")
+        self.assertEqual(path["checked_level"], 95.0)
+        stop_audit = next(audit for audit in path["audits"] if audit["role"] == "stop")
+        # No bar was read, so the stop is unaudited. Ninety-four today cannot say the Low
+        # never reached ninety last week.
+        self.assertEqual(stop_audit["state"], "unavailable")
+        self.assertEqual(stop_audit["reason"], "not_audited_after_explicit_breach")
+
+    def test_a_price_under_both_levels_is_the_stop_breach(self) -> None:
+        payload = run(quiet(40), stop_price=90.0, invalidation={"price": 95.0, "condition": "close at or below 95"}, current_price=88.0)
+
+        data = payload["data"]
+        self.assertEqual(data["failed"], ["completed_stop_breach"])
+        self.assertEqual(data["completed_price_path"]["governing_role"], "stop")
+
+
 if __name__ == "__main__":
     unittest.main()

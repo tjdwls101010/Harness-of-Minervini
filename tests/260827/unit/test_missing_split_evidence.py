@@ -82,6 +82,52 @@ class TheExcursionAsksTheSameQuestion(unittest.TestCase):
         self.assertEqual(payload["data"]["max_high_withheld_reason"], "corporate_action_evidence_missing_inside_excursion_window")
 
 
+class AnEventCannotUndoWhatTheMarketAlreadyDid(unittest.TestCase):
+    """A breach found before the event stands; the refusal begins at the event."""
+
+    def rows(self, closes: list[tuple[float, float, float]]) -> pd.DataFrame:
+        index = pd.bdate_range(end=AS_OF, periods=len(closes))
+        frame = pd.DataFrame(
+            {
+                "Open": [row[0] for row in closes],
+                "High": [row[2] * 1.01 for row in closes],
+                "Low": [row[1] for row in closes],
+                "Close": [row[2] for row in closes],
+                "Volume": np.full(len(closes), 1_000_000),
+            },
+            index=index,
+        )
+        return frame
+
+    def test_a_breach_before_the_discontinuity_still_sells(self) -> None:
+        # The stop was taken out on the second session, in the trader's own coordinate
+        # system, and the third session is a jump the history cannot explain. An event two
+        # days later cannot un-take-out a stop the market took out.
+        bars = self.rows([(100.0, 99.0, 100.0), (95.0, 89.0, 95.0), (76.0, 75.0, 76.0)])
+        payload = run(bars, entry_date=bars.index[0].date().isoformat(), stop_price=90.0)
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "SELL")
+        path = data["completed_price_path"]
+        self.assertEqual(path["state"], "breached")
+        self.assertEqual(path["breach_date"], bars.index[1].date().isoformat())
+        self.assertEqual(path["through"], bars.index[1].date().isoformat())
+        self.assertAlmostEqual(path["breach_low"], 89.0)
+        self.assertEqual(path["bars_checked"], 2)
+
+    def test_no_breach_before_it_still_refuses_the_window(self) -> None:
+        bars = self.rows([(100.0, 99.0, 100.0), (100.0, 99.0, 100.0), (76.0, 75.0, 76.0)])
+        payload = run(bars, entry_date=bars.index[0].date().isoformat(), stop_price=90.0)
+
+        data = payload["data"]
+        self.assertEqual(data["verdict"], "INCOMPLETE")
+        path = data["completed_price_path"]
+        self.assertEqual(path["state"], "unavailable")
+        self.assertEqual(path["reason"], "corporate_action_evidence_missing")
+        self.assertEqual(path["date"], bars.index[2].date().isoformat())
+        self.assertIsNone(data["current_price"])
+
+
 class ARepeatedSessionIsNotADiscontinuity(unittest.TestCase):
     def test_a_superseded_print_does_not_withhold_the_highest_high(self) -> None:
         # The morning print and the closing print of one session are one session's two
@@ -110,6 +156,39 @@ class TheMeasurementsRefuseTheSameWindow(unittest.TestCase):
         self.assertEqual(block["state"], "unavailable")
         self.assertEqual(block["reason"], "corporate_action_evidence_missing")
         self.assertEqual(block["date"], bars.index[40].date().isoformat())
+
+    def test_a_split_before_the_simple_average_s_window_does_not_void_it(self) -> None:
+        # The split is a hundred sessions before the position and fifty before the first
+        # value the SMA uses, so no average this audit reads spans it. Withholding it would
+        # turn a readable HOLD into INCOMPLETE over an event outside every window in use.
+        bars = frame([50.0] * 20 + [100.0] * 100, splits={20: 2.0})
+        result = build_management_evidence(bars, entry_date=bars.index[100].date(), as_of=bars.index[-1].date(), management_average="sma50")
+
+        trail = result["moving_average_trail"]
+        self.assertEqual(trail["sma50"]["state"], "clear")
+        # The recursive average runs from the first bar, so it does span the event.
+        self.assertEqual(trail["ema21"]["reason"], "share_split_inside_window")
+
+    def test_a_split_inside_the_simple_average_s_window_still_voids_the_block(self) -> None:
+        bars = frame([50.0] * 80 + [100.0] * 40, splits={80: 2.0})
+        result = build_management_evidence(bars, entry_date=bars.index[100].date(), as_of=bars.index[-1].date(), management_average="sma50")
+
+        self.assertEqual(result["moving_average_trail"]["reason"], "share_split_inside_window")
+
+    def test_the_bound_is_read_at_both_split_ratios_and_just_inside_them(self) -> None:
+        # Five-for-four is the smallest split the harness recognizes, so a close at exactly
+        # 80% or 125% of the one before it is split-sized and a hair inside either is a move.
+        for factor, refused in ((0.8, True), (0.800001, False), (1.25, True), (1.249999, False)):
+            with self.subTest(factor=factor):
+                bars = frame([100.0] * 20 + [100.0 * factor] * 10, events=False)
+                result = build_management_evidence(bars, entry_date=bars.index[15].date(), as_of=bars.index[-1].date(), management_average="ema21")
+
+                block = result["moving_average_trail"]
+                if refused:
+                    self.assertEqual(block["reason"], "corporate_action_evidence_missing")
+                    self.assertEqual(block["date"], bars.index[20].date().isoformat())
+                else:
+                    self.assertIn("ema21", block)
 
     def test_a_move_smaller_than_the_smallest_ordinary_split_is_a_move(self) -> None:
         # Five-for-four is the smallest split the harness recognizes, so a nineteen percent

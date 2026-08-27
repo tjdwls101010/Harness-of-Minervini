@@ -83,6 +83,15 @@ class TheGoldenCase(unittest.TestCase):
         self.assertEqual(block["state"], "below")
         self.assertEqual(block["action_withheld_reason"], "breakout_date_not_declared")
 
+    def test_a_breakout_date_the_bars_could_not_find_withholds_it_the_same_way(self) -> None:
+        # The measurements already said no completed session printed on the declared date.
+        # An action read from that anchor would be read from a session nobody traded.
+        payload = held(management={**measured(ema21="clear", twenty="below"), "gaps_since_breakout": {"state": "unavailable", "reason": "no_completed_bar_on_breakout_date"}})
+        result = reduce_risk(payload)
+
+        self.assertEqual(actions(result), [])
+        self.assertEqual(result["management_evidence"]["twenty_day_average"]["action_withheld_reason"], "no_completed_bar_on_breakout_date")
+
     def test_the_same_structure_with_the_ema_declared_as_the_exit_plan_is_a_sell(self) -> None:
         result = reduce_risk(held(management_average="ema21", management=measured(selected="ema21", ema21="breached", twenty="below")))
 

@@ -64,7 +64,6 @@ _DISCONTINUITY = "convention.unexplained_price_discontinuity"
 # own claim and their own non-binding stamp: the baseline length and the low/high ratios
 # are TraderLion's, not Minervini's, and a reader must be able to see whose they are.
 _VOLUME_CONVENTION = {"doctrine_id": _VOLUME_STATE, "binds": False, "source": "[TL]"}
-_CLOSING_RANGE = "setup.closing_range_formula"
 # Enough places to strip binary-float noise from a reported figure and far too many to
 # soften any limit the registry states.
 _REPORTED_PRECISION = 10
@@ -119,6 +118,22 @@ def _closing_range_pct(row: pd.Series) -> float | None:
     return (close - low) / (high - low) * 100
 
 
+def _closing_range(row: pd.Series) -> dict[str, Any]:
+    """The closing range with the marker the source named beside it.
+
+    The registry records the midpoint as a marker: a value named for comparison and never
+    bounded, so what it produces is the measurement and its distance from that value. A
+    bare percentage published under this claim would be a number citing a limit it never
+    reported against.
+    """
+
+    measured = _closing_range_pct(row)
+    return {
+        "closing_range_pct": _reported(measured),
+        "closing_range_marker": doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", measured),
+    }
+
+
 def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: date, as_of: date) -> dict[str, Any]:
     """Two completed closes below one management average, audited from the entry session.
 
@@ -156,7 +171,7 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
         second_close = float(closes.iloc[breach])
         quality = {
             "close_distance_pct": _reported((second_close - float(average.iloc[breach])) / float(average.iloc[breach]) * 100),
-            "closing_range_pct": _reported(_closing_range_pct(bars.iloc[breach])),
+            **_closing_range(bars.iloc[breach]),
             "second_close_above_first_close": second_close > float(closes.iloc[first]),
             "second_close_above_first_low": second_close > float(lows.iloc[first]),
         }
@@ -174,13 +189,21 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
 
 
 def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, selected: str | None, readable: _Readable) -> dict[str, Any]:
-    # An EMA is recursive from the first bar, so an unreadable close anywhere is inside its
-    # computation; the simple average only reads its own window plus the audit's.
-    gap = readable.gap(0, columns=("Close",)) or readable.split(0)
-    if gap is not None:
-        return {**gap, "selected": selected}
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
     sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
+    # An EMA is recursive from the first bar, so an unreadable close anywhere is inside its
+    # computation. The simple average reads only its own window: the sessions the audit
+    # covers plus the length it averages over, and a split two years before the position
+    # is outside every value it uses. Asking one question for both would withhold a
+    # measurement that is fine and turn a readable HOLD into INCOMPLETE.
+    audited = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= entry_date]
+    sma_start = max(0, (audited[0] if audited else len(bars)) - sma_length + 1)
+    ema_gap = readable.gap(0, columns=("Close",)) or readable.split(0)
+    sma_gap = readable.gap(sma_start, columns=("Close",)) or readable.split(sma_start)
+    if sma_gap is not None:
+        # The simple average's window sits inside the recursive one's, so a session it
+        # cannot read is one neither average can read: the block is unavailable as a whole.
+        return {**sma_gap, "selected": selected}
     closes = bars["Close"].astype(float)
     # The recursive form (adjust=False) is the exponential average charts draw; the
     # adjusted form weights a short history differently and would disagree with the chart.
@@ -191,7 +214,7 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
         "doctrine_id": _ROLES,
         "binds": doctrine.binds(_ROLES),
         "selected": selected,
-        "ema21": _trail(bars, ema, length=ema_length, entry_date=entry_date, as_of=as_of),
+        "ema21": ema_gap if ema_gap is not None else _trail(bars, ema, length=ema_length, entry_date=entry_date, as_of=as_of),
         "sma50": _trail(bars, sma, length=sma_length, entry_date=entry_date, as_of=as_of),
     }
 
@@ -237,9 +260,23 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
         for index, timestamp in enumerate(last_of_week.index)
     ]
     weekly = pd.Series(last_of_week.to_numpy(), index=pd.Index(week_ends))
+    # The week left out and what it did. Without a trading calendar the harness cannot tell
+    # a week that ended early on a holiday from one whose Friday has not printed yet, so it
+    # does not promote the trailing week to completed. Publishing it beside the finding is
+    # the difference between a week that was weighed and found smaller and one that was
+    # never weighed: a reader comparing "the latest completed week is not the largest" with
+    # a twenty percent week the block dropped needs to see that week here.
+    pending: dict[str, Any] = {}
+    if completed and not completed[-1] and len(weekly) >= 2:
+        change = (float(weekly.iloc[-1]) - float(weekly.iloc[-2])) / float(weekly.iloc[-2]) * 100 if float(weekly.iloc[-2]) > 0 else None
+        pending = {
+            "pending_week_ending": weekly.index[-1].isoformat(),
+            "pending_week_pct": None if change is None else _reported(change),
+            "pending_week_reason": "no_friday_session_and_no_later_week",
+        }
     weekly = weekly[completed]
     if len(weekly) < 2:
-        return {"state": "unavailable", "reason": "fewer_than_two_completed_weeks"}
+        return {"state": "unavailable", "reason": "fewer_than_two_completed_weeks", **pending}
     changes = weekly.pct_change() * 100
     # A weekly change spans from the previous week's close, so the week whose predecessor
     # ended before the advance began measures a decline that partly happened before it.
@@ -247,11 +284,11 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     inside = {end: previous for end, previous in zip(weekly.index[1:], previous_ends) if previous >= stage2_start}
     since = changes[[end in inside for end in changes.index]].dropna()
     if since.empty:
-        return {"state": "unavailable", "reason": "no_completed_week_since_stage2_start"}
+        return {"state": "unavailable", "reason": "no_completed_week_since_stage2_start", **pending}
     largest = float(since.min())
     latest_end = weekly.index[-1]
     if largest >= 0:
-        return {"state": "reported", "largest_pct": None, "week_ending": latest_end.isoformat(), "latest_completed_week_is_largest": False}
+        return {"state": "reported", "largest_pct": None, "week_ending": latest_end.isoformat(), "latest_completed_week_is_largest": False, **pending}
     largest_end = _latest_tie(since, largest)
     return {
         "state": "reported",
@@ -259,6 +296,7 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
         "largest_week_ending": largest_end.isoformat(),
         "week_ending": latest_end.isoformat(),
         "latest_completed_week_is_largest": largest_end == latest_end,
+        **pending,
     }
 
 
@@ -462,7 +500,7 @@ def _first_sessions(bars: pd.DataFrame, *, window: list[int]) -> dict[str, Any]:
                 "date": bars.index[position].date().isoformat(),
                 "close": _reported(close),
                 "close_vs_first_session_pct": _reported((close / first_close - 1) * 100 if first_close > 0 else None),
-                "closing_range_pct": _reported(_closing_range_pct(bars.iloc[position])),
+                **_closing_range(bars.iloc[position]),
                 "volume_ratio": _reported(volume / baseline if baseline and volume is not None else None),
             }
         )
@@ -620,6 +658,11 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
         "sma200_average_sessions": sma_length,
         "sma200_lookback_sessions": lookback,
         "sma200_state": state,
+        # The claim this block cites describes a price break on heavy volume, and volume is
+        # among its required inputs. Neither measurement here reads it, so the block is not
+        # withheld -- but publishing the claim as reported without saying the volume half
+        # was never available would present a partial reading as the whole one.
+        "missing_inputs": [] if "Volume" in bars.columns else ["volume_history"],
         "needs_chart": True,
     }
 
@@ -739,7 +782,7 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
         # the range. "Low in the range" has no boundary in the source, so the pair stays
         # unresolved and is not counted among the criteria met.
         "reversed_below_prior_low_and_closed_low_in_range": None,
-        "closing_range_pct": _reported(_closing_range_pct(bars.iloc[last])),
+        **_closing_range(bars.iloc[last]),
         "visually_extended": None,
         "trend_line_of_highs_breached": None,
     }
@@ -785,7 +828,7 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
         # The gap session itself can close its own gap: it opened above the prior high and
         # traded back down through it before the bell.
         filled = any(float(lows.iloc[position]) <= prior_high for position in range(gap, len(bars)))
-        latest = {"date": bars.index[gap].date().isoformat(), "filled": filled, "closing_range_pct": _reported(_closing_range_pct(bars.iloc[gap]))}
+        latest = {"date": bars.index[gap].date().isoformat(), "filled": filled, **_closing_range(bars.iloc[gap])}
     breakout_close = float(closes.iloc[window[0]])
     return {
         "doctrine_id": _LATE_GAPS,
@@ -835,6 +878,7 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         "gap_ups_last_10_sessions": gap_ups,
         "last_volume_percentile": _reported(percentile),
         "last_closing_range_pct": _reported(_closing_range_pct(bars.iloc[-1])),
+        "last_closing_range_marker": doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", _closing_range_pct(bars.iloc[-1])),
         "needs_chart": True,
     }
 

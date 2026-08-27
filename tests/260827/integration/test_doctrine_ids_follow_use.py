@@ -8,6 +8,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
+from scripts.minervini.doctrine import get_claim
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
@@ -68,6 +69,78 @@ class ActiveCitesWhatItsPayloadNames(unittest.TestCase):
 
         walk(payload["data"])
         self.assertLessEqual(named, set(payload["doctrine_ids"]), named - set(payload["doctrine_ids"]))
+
+
+class EveryCitationIsAClaimThisCapabilityIsRegisteredFor(unittest.TestCase):
+    """A citation the registry does not expect from here is a contract nobody agreed to."""
+
+    def payload(self) -> dict:
+        index = pd.bdate_range(end=AS_OF, periods=80)
+        return execute(
+            "ticker.risk",
+            {
+                "ticker": "TEST",
+                "mode": "active",
+                "as_of": AS_OF,
+                "entry_price": 100.0,
+                "entry_date": index[60].date().isoformat(),
+                "breakout_date": index[60].date().isoformat(),
+                "stop_price": 90.0,
+                "base_count": 4,
+                "base_top": 95.0,
+                "stage2_start": index[10].date().isoformat(),
+            },
+            runtime=Runtime(price_history=lambda ticker, as_of: bars([100.0] * 80)),
+        )
+
+    def test_ticker_risk_is_a_registered_consumer_of_everything_it_cites(self) -> None:
+        for claim_id in self.payload()["doctrine_ids"]:
+            with self.subTest(claim=claim_id):
+                self.assertIn("ticker.risk", get_claim(claim_id)["claim"]["consumers"])
+
+    def test_a_claim_named_beside_a_disclaimer_reaches_the_envelope(self) -> None:
+        payload = self.payload()
+        disclaimer = payload["data"]["management_evidence"]["base_count_context"]["disclaimer_doctrine_id"]
+
+        # It is cited under its own key rather than doctrine_id, and a collector that read
+        # only that one key published a result citing a claim the envelope never listed.
+        self.assertIn(disclaimer, payload["doctrine_ids"])
+
+
+class AMarkerTravelsWithItsDistance(unittest.TestCase):
+    def test_the_closing_range_is_published_as_the_marker_the_registry_records(self) -> None:
+        index = pd.bdate_range(end=AS_OF, periods=80)
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[60].date().isoformat(), "breakout_date": index[60].date().isoformat(), "stop_price": 90.0},
+            runtime=Runtime(price_history=lambda ticker, as_of: bars([100.0] * 80)),
+        )
+
+        marker = payload["data"]["management_evidence"]["key_reversal"]["features"]["closing_range_marker"]
+        self.assertEqual(marker["role"], "marker")
+        self.assertEqual(marker["source_value"], 50)
+        self.assertEqual(marker["state"], "reported")
+        self.assertAlmostEqual(marker["distance"], abs(marker["measured"] - 50))
+
+
+class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
+    def test_a_history_without_volume_says_so_beside_the_claim(self) -> None:
+        index = pd.bdate_range(end=AS_OF, periods=224)
+        close = pd.Series([100.0] * 224, index=index, dtype=float)
+        frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close}, index=index)
+        snapshot = ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+        payload = execute(
+            "ticker.risk",
+            {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[200].date().isoformat(), "stop_price": 90.0},
+            runtime=Runtime(price_history=lambda ticker, as_of: snapshot),
+        )
+
+        # The claim describes a price break on heavy volume and lists volume among its
+        # required inputs. Neither measurement here reads it, so the block reports what it
+        # measured and names the half it never had.
+        block = payload["data"]["management_evidence"]["stage3_transition"]
+        self.assertEqual(block["missing_inputs"], ["volume_history"])
+        self.assertEqual(block["doctrine_id"], "stage.stage3_characteristics")
 
 
 if __name__ == "__main__":

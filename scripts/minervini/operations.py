@@ -1635,6 +1635,10 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         **shared,
         "checked_level": governing["level"],
+        # Which level this record is about. A breached invalidation and a breached stop are
+        # both a SELL, but they are not the same finding, and a reader auditing the trade
+        # has to see which line the market crossed.
+        "governing_role": governing["role"],
         "from": governing["effective_from"],
         "audits": audits,
     }
@@ -1790,19 +1794,29 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         }, current_price
     split_reason, uncrossable = _uncrossable_sessions(ordered)
     inside = [session for session in uncrossable if effective_date <= session <= as_of and (end_before is None or session < end_before)]
-    if inside:
-        # The declared level is in the pre-split coordinate system and these closes are
-        # in the post-split one. Comparing them is arithmetic between two different
-        # shares, and it would sell a position the market never took out.
-        # The current price is withheld too: it is in the post-split coordinate system
-        # and the declared stop is not, so handing it back would sell on the same
-        # arithmetic this record refuses to perform.
-        return {
-            "state": "unavailable",
-            "reason": "share_split_inside_stop_window" if split_reason == "share_split" else split_reason,
-            "date": inside[0].isoformat(),
-            "requested_from": effective_date.isoformat(),
-        }, None
+    # The declared level is in the pre-split coordinate system and the closes after the
+    # event are in the post-split one. Comparing them is arithmetic between two different
+    # shares, and it would sell a position the market never took out. But the sessions
+    # before the event are in the trader's own coordinate system and were audited honestly,
+    # and a breach found among them already happened: an event two sessions later cannot
+    # un-take-out a stop the market took out. So the audit runs up to the event and refuses
+    # only from there. The current price is withheld either way -- it is on the far side of
+    # the event and the declared stop is not.
+    refuse_from = inside[0] if inside else None
+    refused: tuple[dict[str, Any], float | None] | None = None
+    if refuse_from is not None:
+        current_price = None
+        refused = (
+            {
+                "state": "unavailable",
+                "reason": "share_split_inside_stop_window" if split_reason == "share_split" else split_reason,
+                "date": refuse_from.isoformat(),
+                "requested_from": effective_date.isoformat(),
+            },
+            None,
+        )
+        if refuse_from <= effective_date:
+            return refused
     if require_session and not any(bar_date == effective_date for bar_date, _ in dated_rows):
         # The position existed inside its entry session, so a frame that skips that bar is
         # missing a session this level had to survive. Starting at the next bar would let a
@@ -1813,9 +1827,13 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "requested_from": effective_date.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
-    path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date and (end_before is None or bar_date < end_before)]
+    path_rows = [
+        (bar_date, row)
+        for bar_date, row in dated_rows
+        if bar_date >= effective_date and (end_before is None or bar_date < end_before) and (refuse_from is None or bar_date < refuse_from)
+    ]
     if not path_rows:
-        return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
+        return refused if refused is not None else ({"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price)
     for bar_date, row in path_rows:
         try:
             low = float(row["Low"])
@@ -1851,6 +1869,8 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
                 "breach_open": opened,
                 "gap_through_stop": None if opened is None else opened < protective_level,
             }, current_price
+    if refused is not None:
+        return refused
     if end_before is not None:
         if latest_date >= end_before:
             # A bar past the window's end proves every session inside it was seen.
@@ -2000,21 +2020,32 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     explicit_current = evidence.get("current_price")
     explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
     if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
+        price = float(explicit_current)
+        # One price says one thing: which levels it is at or below. A level under it was not
+        # cleared -- no bar was read, and a session last week could have taken it out -- so
+        # it is unaudited rather than clear. The record is about the level the price actually
+        # crossed, named by role, because a breached invalidation is not a breached stop.
+        crossed = [(role, level, effective) for role, level, effective, _end in protective_plan if price <= level]
+        governing_role, governing_level, governing_from = min(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
         evidence["completed_price_path"] = {
             "state": "breached",
             "basis": "explicit_completed_price",
-            "from": stop_effective_date.isoformat(),
+            "from": (governing_from or stop_effective_date).isoformat(),
             "through": clock.date.isoformat(),
-            "checked_level": protective_level,
+            "checked_level": governing_level,
+            "governing_role": governing_role,
             "breach_date": clock.date.isoformat(),
-            "breach_price": float(explicit_current),
+            "breach_price": price,
             "audits": [
                 {
                     "role": role,
                     "level": level,
                     "effective_from": effective.isoformat(),
-                    "through": clock.date.isoformat(),
-                    "state": "breached" if float(explicit_current) <= level else "clear",
+                    **(
+                        {"through": clock.date.isoformat(), "state": "breached"}
+                        if price <= level
+                        else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
+                    ),
                 }
                 for role, level, effective, _end_before in protective_plan
             ],
@@ -2145,16 +2176,24 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
 
     def collect(value: Any) -> None:
         if isinstance(value, Mapping):
-            claim = value.get("doctrine_id")
-            # Caller-supplied evidence travels through the payload, so a name here is a
-            # claim only if the registry holds it: an id nobody can look up cites nothing.
-            if isinstance(claim, str) and has_claim(claim):
-                named.add(claim)
+            # Every key that names a claim, not only the one called doctrine_id: a block
+            # naming the claim a disclaimer came from cites it just as much, and a citation
+            # the envelope leaves out is a claim the result used and did not admit to.
+            # Caller-supplied evidence travels through the payload, so a name counts only
+            # if the registry holds it: an id nobody can look up cites nothing.
+            for key, claim in value.items():
+                if not isinstance(key, str) or not key.endswith("doctrine_id"):
+                    continue
+                if isinstance(claim, str) and has_claim(claim):
+                    named.add(claim)
             # A block that reads more than one claim -- a measurement plus the convention
             # that sized its window -- names them all, and each is checked the same way.
-            for extra in value.get("doctrine_ids") or []:
-                if isinstance(extra, str) and has_claim(extra):
-                    named.add(extra)
+            for key, extras in value.items():
+                if not isinstance(key, str) or not key.endswith("doctrine_ids"):
+                    continue
+                for extra in extras or []:
+                    if isinstance(extra, str) and has_claim(extra):
+                        named.add(extra)
             for item in value.values():
                 collect(item)
         elif isinstance(value, list):
