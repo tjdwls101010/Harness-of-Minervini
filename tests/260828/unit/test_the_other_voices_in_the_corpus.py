@@ -73,11 +73,12 @@ class WhoElseLooksAtTheMultipleAndTheReturn(unittest.TestCase):
         self.assertEqual([view["attributed_to"] for view in views], ["Minervini", "Ritchie II"])
         self.assertIn("rarely concern myself", views[0]["quotation"])
 
-    def test_the_return_on_equity_carries_the_voice_that_agrees_without_a_number(self) -> None:
+    def test_the_return_on_equity_carries_the_three_voices_the_corpus_records(self) -> None:
         views = evaluate_fundamentals(evidence(two_years([1.10, 1.20, 1.30, 1.35])), as_of="2026-05-08")["profitability"]["practitioner_views"]
 
-        self.assertEqual([view["attributed_to"] for view in views], ["Ryan"])
+        self.assertEqual([view["attributed_to"] for view in views], ["Ryan", "Zanger", "Ritchie II"])
         self.assertIs(views[0]["binds"], False)
+        self.assertIn("never return on equity", views[1]["quotation"])
 
 
 if __name__ == "__main__":

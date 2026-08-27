@@ -44,7 +44,14 @@ _ZANGER_GROWTH = "practitioners.earnings.zanger_min_30_to_40pct_gains_each_quart
 _SEQUENTIAL_ACCELERATION = "practitioners.earnings.minervini_accelerating_1_to_4_quarters"
 _RITCHIE_GROWTH = "practitioners.earnings.ritchie_not_mechanical_explosive_growth_only"
 _PE_VIEWS = ("practitioners.fundamentals.minervini_pe_indifferent_prefers_high_over_ultralow", "practitioners.fundamentals.ritchie_never_pe")
-_ROE_VIEWS = ("practitioners.fundamentals.ryan_roe_margins_important_no_number",)
+# One agrees without a number and two say they never look at it. The Minervini claim records
+# the disagreement as prose; naming the claims puts the sentences themselves in front of the
+# reader, which is the only form in which "never" and "secondary" stay distinguishable.
+_ROE_VIEWS = (
+    "practitioners.fundamentals.ryan_roe_margins_important_no_number",
+    "practitioners.fundamentals.zanger_never_roe_sometimes_margins",
+    "practitioners.fundamentals.ritchie_never_roe_margins_secondary",
+)
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
