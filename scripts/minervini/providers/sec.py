@@ -22,7 +22,7 @@ _QUARTERLY_METRICS = {
     "net_income": ("NetIncomeLoss", "ProfitLoss"),
     "diluted_shares": ("WeightedAverageNumberOfDilutedSharesOutstanding",),
 }
-_ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRICS["revenue"]}
+_ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRICS["revenue"], "net_income": _QUARTERLY_METRICS["net_income"]}
 # Balances rather than flows. Inventory and receivables are reported as of a date, so a
 # filing carries no `start` for them and the period they belong to is the one whose books
 # close on that date -- never the fiscal year of the report, which for a comparative column
@@ -30,6 +30,7 @@ _ANNUAL_METRICS = {"eps": _QUARTERLY_METRICS["eps"], "revenue": _QUARTERLY_METRI
 _ANNUAL_INSTANT_METRICS = {
     "inventory": ("InventoryNet", "InventoryFinishedGoodsNetOfReserves", "InventoryGross"),
     "accounts_receivable": ("AccountsReceivableNetCurrent", "ReceivablesNetCurrent", "AccountsReceivableNet"),
+    "stockholders_equity": ("StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"),
 }
 
 

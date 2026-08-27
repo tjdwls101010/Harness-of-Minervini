@@ -38,6 +38,13 @@ _PE_USELESS = "fundamentals.pe_useless_alone"
 _ANTI_LOW_PE = "fundamentals.anti_low_pe_bargain_trap"
 _PE_EXPANSION = "fundamentals.pe_expansion_late_stage_and_historical_average"
 _MONTHS_PER_YEAR = 12
+_RETURN_ON_EQUITY = "practitioners.fundamentals.minervini_roe_15_to_17_or_higher"
+_ANNUAL_ONLY_FORMS = ("20-F",)
+_ZANGER_GROWTH = "practitioners.earnings.zanger_min_30_to_40pct_gains_each_quarter_greater"
+_SEQUENTIAL_ACCELERATION = "practitioners.earnings.minervini_accelerating_1_to_4_quarters"
+_RITCHIE_GROWTH = "practitioners.earnings.ritchie_not_mechanical_explosive_growth_only"
+_PE_VIEWS = ("practitioners.fundamentals.minervini_pe_indifferent_prefers_high_over_ultralow", "practitioners.fundamentals.ritchie_never_pe")
+_ROE_VIEWS = ("practitioners.fundamentals.ryan_roe_margins_important_no_number",)
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
@@ -97,8 +104,10 @@ def evaluate_fundamentals(
     growth = _growth_read(quarterly, annual, market_regime=market_regime)
     classification = _leader_category(leader_category)
     valuation = _valuation(filings, quarterly, as_of_date, last_close=last_close, breakout_close=breakout_close, breakout_date=breakout_date)
+    profitability = {"return_on_equity": _return_on_equity(annual), "practitioner_views": [_practitioner_view(claim_id) for claim_id in _ROE_VIEWS]}
     category_reading = _category_reading(classification, quarterly, annual)
     growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
+    growth_missing = _annual_only(filings, growth_missing)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
 
     # The classification is not counted here. A reading the harness never derives is a
@@ -134,6 +143,7 @@ def evaluate_fundamentals(
         "leader_category": classification,
         "category_reading": category_reading,
         "valuation": valuation,
+        "profitability": profitability,
         "discrepancies": discrepancies,
         "signals": [
             {"id": name, "state": item["state"]}
@@ -359,6 +369,7 @@ def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, 
         "earnings_without_sales_growth": _earnings_without_sales_growth(quarterly),
         "acceleration_vs_historical_growth_rate": _acceleration_vs_history(quarterly, annual),
         "earnings_history_lookback": _earnings_history_lookback(quarterly),
+        "practitioner_readings": _practitioner_readings(series),
     }
     return readings
 
@@ -792,6 +803,7 @@ def _valuation(
             reason="peer_group_not_held_by_this_capability",
         ),
         "pe_expansion": _pe_expansion(filings, as_of, last_close=last_close, trailing=trailing, breakout_close=breakout_close, breakout_date=breakout_date),
+        "practitioner_views": [_practitioner_view(claim_id) for claim_id in _PE_VIEWS],
     }
 
 
@@ -861,6 +873,123 @@ def _pe_expansion(
         "expansion": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_late_stage_signal_percent", None if expanded is None else _reported((expanded - 1) * 100)),
         "multiple": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_historical_average_multiple", None if expanded is None else _reported(expanded)),
         "elapsed": doctrine.evaluate_band(_PE_EXPANSION, "pe_expansion_signal_window_months", months),
+    }
+
+
+def _return_on_equity(annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """What a year's earnings returned on the equity that produced them.
+
+    The source's use of it is comparative -- "use it to compare your stock with other stocks in
+    the same industry group" -- and this evaluator holds one company, so half the claim is a
+    named gap. The band is still measured, because fifteen to seventeen percent is a range the
+    source gave as a range.
+
+    Two of the practitioners in this corpus say they never look at it. The registry records that
+    disagreement, and it travels with the reading rather than being resolved here.
+    """
+
+    claim = doctrine.get_claim(_RETURN_ON_EQUITY)["claim"]
+    reading = {
+        "doctrine_id": _RETURN_ON_EQUITY,
+        "binds": doctrine.binds(_RETURN_ON_EQUITY),
+        "computability": claim["computability"],
+        "missing_inputs": ["industry_group_roe_comparison"],
+        "disagrees_with": claim.get("disagrees_with", []),
+    }
+    latest = next(
+        (fact for fact in reversed(annual) if _is_number(fact.get("net_income")) and _is_number(fact.get("stockholders_equity"))),
+        None,
+    )
+    if latest is None:
+        return {**reading, "state": "unavailable", "reason": "annual_net_income_and_stockholders_equity_required", "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
+    equity = float(latest["stockholders_equity"])
+    if equity <= 0:
+        # A negative book value returns a ratio whose sign says the opposite of what it means:
+        # a loss on negative equity comes out positive. It is refused rather than published.
+        return {**reading, "state": "not_meaningful", "reason": "stockholders_equity_not_positive", "period": latest.get("period"), "roe_pct": None, "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", None)}
+    roe = _reported(float(latest["net_income"]) / equity * 100)
+    return {
+        **reading,
+        "state": "reported",
+        "period": latest.get("period"),
+        "net_income": _reported(float(latest["net_income"])),
+        "stockholders_equity": _reported(equity),
+        "roe_pct": roe,
+        "band": doctrine.evaluate_band(_RETURN_ON_EQUITY, "roe_min", roe),
+    }
+
+
+def _annual_only(filings: list[dict[str, Any]], growth_missing: list[str]) -> list[str]:
+    """One gap instead of three when the registrant does not file quarters at all.
+
+    A foreign private issuer files an annual 20-F and nothing in between. Listing the three
+    quarterly series as missing reads like data that was not fetched and might turn up, and the
+    doctrine's growth claims are quarterly, so waiting will not fill it. Naming the reason is
+    the difference between an incomplete reading and one a reader keeps re-running.
+    """
+
+    quarterly_gaps = [gap for gap in growth_missing if gap.startswith("quarterly_")]
+    if not quarterly_gaps or not filings:
+        return growth_missing
+    if not all(isinstance(filing.get("form"), str) and filing["form"].split("/", 1)[0] in _ANNUAL_ONLY_FORMS for filing in filings):
+        return growth_missing
+    return [gap for gap in growth_missing if gap not in quarterly_gaps] + ["quarterly_facts_not_filed_by_this_registrant"]
+
+
+def _practitioner_readings(series: list[dict[str, Any]]) -> dict[str, Any]:
+    """The same quarterly growth, read the three other ways this corpus records.
+
+    None of these can move a verdict. The canonical layer is the default and the practice layer
+    fills execution gaps rather than overriding, so what these add is the disagreement itself --
+    which a reader weighing a borderline measurement needs and cannot get from one voice.
+    """
+
+    latest = series[-1]["yoy_pct"] if series else None
+    return {
+        "zanger_quarterly_growth_target": {
+            **_practitioner_view(_ZANGER_GROWTH),
+            "band": doctrine.evaluate_band(_ZANGER_GROWTH, "yoy_quarterly_earnings_growth_target", latest),
+        },
+        "minervini_sequential_acceleration": {
+            **_practitioner_view(_SEQUENTIAL_ACCELERATION),
+            "lookback_quarters": doctrine.threshold(_SEQUENTIAL_ACCELERATION, "earnings_acceleration_lookback"),
+            "consecutive_accelerating_quarters": _sequential_acceleration(series),
+        },
+        "ritchie_explosive_growth_only": _practitioner_view(_RITCHIE_GROWTH),
+    }
+
+
+def _sequential_acceleration(series: list[dict[str, Any]]) -> int:
+    """How many quarters in a row, ending at the latest, came in faster than the one before.
+
+    Capped at the quarters the source inspects, and the registry says why that cap is not a
+    range: a fifth accelerating quarter is not adverse, it is simply past where he looked.
+    """
+
+    limit = int(max(doctrine.threshold(_SEQUENTIAL_ACCELERATION, "earnings_acceleration_lookback")))
+    run = 0
+    for earlier, later in zip(reversed(series[:-1]), reversed(series[1:])):
+        if later["yoy_pct"] <= earlier["yoy_pct"] or run >= limit:
+            break
+        run += 1
+    return run
+
+
+def _practitioner_view(claim_id: str) -> dict[str, Any]:
+    """One practitioner's position, quoted rather than summarised.
+
+    A judgment-only claim's whole content is the sentence somebody said. Paraphrasing it would
+    put this harness's words under their name, and these are exactly the claims where the
+    difference between "never looks at it" and "rarely concerns himself with it" is the point.
+    """
+
+    record = doctrine.get_claim(claim_id)
+    return {
+        "doctrine_id": claim_id,
+        "attributed_to": record["claim"]["attributed_to"],
+        "binds": doctrine.binds(claim_id),
+        "computability": record["claim"]["computability"],
+        "quotation": record["provenance"]["quotations"][0]["text"],
     }
 
 
