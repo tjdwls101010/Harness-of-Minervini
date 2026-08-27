@@ -171,7 +171,7 @@
 - **4-E 인터페이스.** CLI 플래그, capabilities 프로즈, schema_sync, harness-spec.
 - **4-F 적대 리뷰 + 변이 스윕 + PR.** 결정 267에 따라 **렌즈를 고정**해서 돌린다 — 매 라운드 새 렌즈를 주면 종료 조건이 도달 불가능하다.
 
-진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 완료 `98d0a44` · 4-E 완료 `11f5f13`+`4a30f38` · 4-F 진행 중 — 고정 렌즈 4개(p4f1) 21건 중 F1 밴드 판정 `9db4889` · F2 기간 정체성 `91cb3fd` · F3 프로바이더 경계·봉투 진행 중. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
+진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 완료 `9d37f5c`+`56bdeab`+`2718048`+`ac574e8` · 4-D 완료 `98d0a44` · 4-E 완료 `11f5f13`+`4a30f38` · 4-F 진행 중 — 고정 렌즈 4개(p4f1) 21건 중 F1 밴드 판정 `9db4889` · F2 기간 정체성 `91cb3fd` · F3 필드별 출처·봉투 `18f741e` · F4 분기 길이·라벨(라이브) `c884a1d` · F5 후행 12개월 롤포워드 `1b812b3` · F6 변이 생존자 4건 `651d8b1` · 변이 스윕 72개 재실행 중. 4-C 종료 시점 스위트 1533 OK, fundamentals 컨텍스트 claim 32/41 결속. 남은 7개는 세 부류다 — 추정치 프로바이더 부재(`analyst_estimate_revision_threshold`, `estimate_trend_lookback_window`, 4-D 소관), `reference` 역할이라 티커 측정과 비교될 수 없는 인구·예시 통계(`best_performers_recent_quarter_frequency`, `earnings_acceleration_before_big_moves`, `big_winners_pe_before_advance`, `growth_stock_pe_premium` — 4-E에서 capability 프로즈로), 그리고 다른 capability 소유(`power_play_exception`).
 
 ### Phase 5 — 시장/리더십 행동 증거
 
