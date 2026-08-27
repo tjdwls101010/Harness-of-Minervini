@@ -58,6 +58,7 @@ _ROE_VIEWS = (
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
+_STALE_HEADLINE = "latest_filed_quarter_has_no_year_over_year_pair"
 _FOUR_FILED_QUARTERS = "four_consecutive_filed_quarters"
 _ROLLED_FORWARD = "annual_rolled_forward_by_filed_quarters"
 # Half a quarter, used to ask which calendar quarter a fiscal year's closing date belongs to:
@@ -548,11 +549,14 @@ def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, 
     """
 
     series = quarterly["eps_yoy_growth"]
-    latest = series[-1]["yoy_pct"] if series else None
+    latest_filed = quarterly["latest_filed_period"]
+    current = _current_tail(series, latest_filed)
+    latest = current[-1]["yoy_pct"] if current else None
+    superperformance = doctrine.evaluate_band(_SUPERPERFORMANCE, "superperformance_yoy_earnings_growth_percent", latest)
     readings = {
-        "minimum_quarterly_earnings_growth": _banded_window(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", "minimum_growth_window_quarters", series, quarterly["latest_filed_period"]),
-        "superperformance_quarterly_earnings_growth": doctrine.evaluate_band(_SUPERPERFORMANCE, "superperformance_yoy_earnings_growth_percent", latest),
-        "bull_market_quarterly_earnings_growth": _bull_market_read(series, latest, market_regime, quarterly["latest_filed_period"]),
+        "minimum_quarterly_earnings_growth": _banded_window(_MINIMUM_GROWTH, "minimum_yoy_earnings_growth_percent", "minimum_growth_window_quarters", series, latest_filed),
+        "superperformance_quarterly_earnings_growth": superperformance if current else {**superperformance, "reason": _STALE_HEADLINE, "latest_filed_period": latest_filed},
+        "bull_market_quarterly_earnings_growth": _bull_market_read(series, latest, market_regime, latest_filed),
         "earnings_deceleration": _deceleration_read(series),
         "two_quarter_rolling_average": _rolling_average(quarterly),
         "margin_trend": _margin_read(quarterly["margin_pct"]),
@@ -560,7 +564,7 @@ def _growth_read(quarterly: Mapping[str, Any], annual: list[dict[str, Any]], *, 
         "earnings_without_sales_growth": _earnings_without_sales_growth(quarterly),
         "acceleration_vs_historical_growth_rate": _acceleration_vs_history(quarterly, annual),
         "earnings_history_lookback": _earnings_history_lookback(quarterly),
-        "practitioner_readings": _practitioner_readings(series),
+        "practitioner_readings": _practitioner_readings(series, latest_filed),
     }
     return readings
 
@@ -847,7 +851,7 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, An
 
     strong = growth["window_quarters_passing"]
     gate = doctrine.evaluate_gate(_TURNAROUND_CRITERIA, "turnaround_min_strong_quarters", strong)
-    trailing, peak, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"))
+    trailing, peak, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"), quarterly["latest_filed_period"])
     at_or_above = None if trailing is None or peak is None else trailing >= peak
     return {
         "doctrine_id": _TURNAROUND_CRITERIA,
@@ -868,7 +872,7 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, An
     }
 
 
-def _trailing_twelve_months(series: list[dict[str, Any]], annual: list[dict[str, Any]] | None = None) -> tuple[float | None, float | None, str | None]:
+def _trailing_twelve_months(series: list[dict[str, Any]], annual: list[dict[str, Any]] | None = None, latest_filed: str | None = None) -> tuple[float | None, float | None, str | None]:
     """Twelve months of filed earnings ending at the latest quarter, and the highest earlier one.
 
     Four consecutive filed quarters is the direct route and almost never available: no US
@@ -886,8 +890,11 @@ def _trailing_twelve_months(series: list[dict[str, Any]], annual: list[dict[str,
     rolled = _rolled_forward_windows(series, annual or [])
     # The current trailing year has to end at the latest quarter the company filed. A window
     # that ended four quarters ago is a historical figure, and publishing it as the current
-    # denominator put a two-year-old earnings base under today's price.
-    latest = series[-1]["period"] if series else None
+    # denominator put a two-year-old earnings base under today's price. Which quarter that is
+    # comes from the filings rather than from this series: a quarter filed without earnings
+    # leaves the series a quarter short, and reading its tail put a December year under a May
+    # price and called it reported.
+    latest = latest_filed if latest_filed is not None else (series[-1]["period"] if series else None)
     current, route = None, None
     if direct and direct[-1][0] == latest:
         current, route = direct[-1][1], _FOUR_FILED_QUARTERS
@@ -1163,7 +1170,7 @@ def _valuation(
     the number is published, and no state anywhere derives a verdict from it.
     """
 
-    trailing, _, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"))
+    trailing, _, route = _trailing_twelve_months(quarterly["eps"], _metric_series(annual, "eps"), quarterly["latest_filed_period"])
     return {
         "price_earnings_ratio": _price_earnings(last_close, trailing, route, _trailing_share_base(quarterly, annual)),
         "anti_low_pe_bargain_trap": _unread_claim(
@@ -1255,7 +1262,10 @@ def _pe_expansion(
     if breakout > as_of:
         raise ValueError("breakout_date must not be after as_of.")
     known = _eligible_filings(filings, breakout)
-    at_breakout, _, at_breakout_route = _trailing_twelve_months(_metric_series(_latest_periods(known, "quarterly"), "eps"), _metric_series(_latest_periods(known, "annual"), "eps"))
+    # The same question at the breakout, asked of the filings that existed then: the latest
+    # quarter filed by that date, not the latest one carrying an earnings figure.
+    quarters_then = _latest_periods(known, "quarterly")
+    at_breakout, _, at_breakout_route = _trailing_twelve_months(_metric_series(quarters_then, "eps"), _metric_series(_latest_periods(known, "annual"), "eps"), quarters_then[-1]["period"] if quarters_then else None)
     current = _price_earnings(last_close, trailing)
     # Both ratios are divided raw and rounded only on the way out. Dividing the two published
     # numbers instead put a measurement a hair under the source's two-times edge exactly on it,
@@ -1357,7 +1367,7 @@ def _annual_only(filings: list[dict[str, Any]], growth_missing: list[str]) -> li
     return [gap for gap in growth_missing if gap not in quarterly_gaps] + ["quarterly_facts_not_filed_by_this_registrant"]
 
 
-def _practitioner_readings(series: list[dict[str, Any]]) -> dict[str, Any]:
+def _practitioner_readings(series: list[dict[str, Any]], latest_filed: str | None) -> dict[str, Any]:
     """The same quarterly growth, read the three other ways this corpus records.
 
     None of these can move a verdict. The canonical layer is the default and the practice layer
@@ -1365,16 +1375,17 @@ def _practitioner_readings(series: list[dict[str, Any]]) -> dict[str, Any]:
     which a reader weighing a borderline measurement needs and cannot get from one voice.
     """
 
-    latest = series[-1]["yoy_pct"] if series else None
+    current = _current_tail(series, latest_filed)
+    band = doctrine.evaluate_band(_ZANGER_GROWTH, "yoy_quarterly_earnings_growth_target", current[-1]["yoy_pct"] if current else None)
     return {
         "zanger_quarterly_growth_target": {
             **_practitioner_view(_ZANGER_GROWTH),
-            "band": doctrine.evaluate_band(_ZANGER_GROWTH, "yoy_quarterly_earnings_growth_target", latest),
+            "band": band if current else {**band, "reason": _STALE_HEADLINE, "latest_filed_period": latest_filed},
         },
         "minervini_sequential_acceleration": {
             **_practitioner_view(_SEQUENTIAL_ACCELERATION),
             "lookback_quarters": doctrine.threshold(_SEQUENTIAL_ACCELERATION, "earnings_acceleration_lookback"),
-            **_sequential_reading(series),
+            **(_sequential_reading(current) if current else {"state": "unavailable", "reason": _STALE_HEADLINE, "consecutive_accelerating_quarters": None}),
         },
         "ritchie_explosive_growth_only": _practitioner_view(_RITCHIE_GROWTH),
     }
@@ -1470,6 +1481,18 @@ def _bull_market_read(series: list[dict[str, Any]], latest: float | None, market
     return {**_banded_window(_BULL_MARKET, "bull_market_yoy_earnings_growth_percent", "bull_market_growth_window_quarters", series, latest_filed), "market_regime": market_regime}
 
 
+def _current_tail(series: list[dict[str, Any]], latest_filed: str | None) -> list[dict[str, Any]]:
+    """The series, but only while it still reaches the quarter the company last filed.
+
+    Every series here drops the quarters whose own figure was absent, so a quarter filed
+    without earnings leaves the earnings series ending a quarter earlier. Reading "the latest"
+    off it then promotes a stale quarter to the company's current one -- and a window of "the
+    most recent three quarters" slides back with it, over a quarter that has since been filed.
+    """
+
+    return series if series and latest_filed is not None and series[-1]["period"] == latest_filed else []
+
+
 def _banded_window(claim_id: str, band: str, window: str, series: list[dict[str, Any]], latest_filed: str | None) -> dict[str, Any]:
     """A band read on the latest quarter, with the quarters the source's own window covers beside it.
 
@@ -1488,15 +1511,16 @@ def _banded_window(claim_id: str, band: str, window: str, series: list[dict[str,
     # The headline is the latest quarter the company filed or it is nothing. A quarter filed
     # without the figure leaves no year-over-year pair, and reading the pair before it
     # published a stale quarter's growth as the company's current growth.
-    reachable = bool(series) and series[-1]["period"] == latest_filed
-    reading = doctrine.evaluate_band(claim_id, band, series[-1]["yoy_pct"] if reachable else None)
-    if not reachable:
-        reading = {**reading, "reason": "latest_filed_quarter_has_no_year_over_year_pair", "latest_filed_period": latest_filed}
-    # "The most recent three quarters" means three quarters in a row. A window that reaches back
-    # over a quarter nobody filed reports the one before the gap as though it were recent.
+    current = _current_tail(series, latest_filed)
+    reading = doctrine.evaluate_band(claim_id, band, current[-1]["yoy_pct"] if current else None)
+    if not current:
+        reading = {**reading, "reason": _STALE_HEADLINE, "latest_filed_period": latest_filed}
+    # "The most recent three quarters" means three quarters in a row, ending where the filings
+    # end. A window that reaches back over a quarter nobody filed reports the one before the gap
+    # as though it were recent, and one anchored to a stale tail does the same a quarter later.
     held: list[dict[str, Any]] = []
     for length in range(quarters, 0, -1):
-        tail = _consecutive_tail(series, length)
+        tail = _consecutive_tail(current, length)
         if tail is not None:
             held = tail
             break
