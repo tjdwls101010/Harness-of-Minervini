@@ -1639,6 +1639,32 @@ def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float, str] | None:
+    """The highest completed High from the entry session through ``as_of``, and its date.
+
+    Three R is measured from the furthest a position got. The last close only says where
+    it is now, and a position that reached three R and gave some back is the one the
+    rule is for. The entry session's own bar counts: the position existed inside it.
+    """
+
+    if not isinstance(frame, pd.DataFrame) or frame.empty or "High" not in frame.columns:
+        return None
+    timestamps = pd.to_datetime(frame.index, errors="coerce")
+    if timestamps.isna().any():
+        return None
+    if timestamps.tz is not None:
+        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    highs = pd.to_numeric(frame["High"], errors="coerce")
+    highs.index = timestamps
+    dates = pd.Index([timestamp.date() for timestamp in highs.index])
+    held = highs[(dates >= entry_date) & (dates <= as_of)]
+    held = held[held.notna() & (held > 0) & (held != math.inf)]
+    if held.empty:
+        return None
+    peak = held.idxmax()
+    return float(held.loc[peak]), peak.date().isoformat()
+
+
 def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float) -> tuple[dict[str, Any], float | None]:
     if not isinstance(frame, pd.DataFrame) or frame.empty or not {"Low", "Close"}.issubset(frame.columns):
         return {"state": "unavailable", "reason": "completed_ohlc_path_unavailable"}, None
@@ -1810,6 +1836,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             if stale_price is not None:
                 provider_missing.append(stale_price)
             current_price = None
+            # A High that was printed is a fact whether or not the history reaches as_of,
+            # so this is measured before staleness is weighed; the reducer only acts on
+            # it under a HOLD the audit has established.
+            if entry_date is not None:
+                excursion = _max_high_since(prices.data, entry_date=entry_date, as_of=clock.date)
+                if excursion is not None:
+                    evidence["max_high_since_entry"], evidence["max_high_date"] = excursion
             if protective_plan:
                 # Runs even when the history stops early: a completed breach is
                 # irreversible, and a later missing bar cannot undo one.
@@ -1857,7 +1890,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        data={"ticker": ticker, **result, "current_price": evidence.get("current_price")},
+        data={
+            "ticker": ticker,
+            **result,
+            "current_price": evidence.get("current_price"),
+            "max_high_since_entry": evidence.get("max_high_since_entry"),
+            "max_high_date": evidence.get("max_high_date"),
+        },
         signals=[
             {"id": item, "state": "fail"} for item in result["failed"]
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],

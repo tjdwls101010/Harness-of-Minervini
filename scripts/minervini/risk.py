@@ -348,7 +348,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             gaps.append("invalidation_condition_not_audited")
 
     breakeven_at_r = doctrine.threshold(_PROFIT_PROTECTION, "breakeven_protection_trigger_r")
-    controls = {"breakeven_at_r": breakeven_at_r, "breakeven_protection_required": False}
+    controls: dict[str, Any] = {
+        "breakeven_at_r": breakeven_at_r,
+        "breakeven_protection_required": False,
+        "r_multiple_reached": None,
+        "favorable_excursion_basis": None,
+    }
+    # What to do while holding. SELL leaves nothing to manage and INCOMPLETE has not
+    # established that there is a position to manage, so only HOLD fills this.
+    actions: list[dict[str, Any]] = []
     reasons: list[str] = []
     if anchors:
         verdict = "INCOMPLETE"
@@ -363,14 +371,32 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     else:
         verdict = "HOLD"
         missing = []
-        if entry is not None and stop is not None and current is not None and stop < entry:
-            initial_risk = entry - stop
-            if initial_risk > 0 and doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", (current - entry) / initial_risk)["state"] == "pass":
+        # Three R is measured from the furthest the position got, not from where it
+        # happens to be: a gain that was reached and given back is exactly the loss the
+        # rule exists to prevent. The highest completed High since entry is that
+        # measurement; without it, the last close is the floor of what was reached.
+        max_high = _number(payload.get("max_high_since_entry"))
+        reached = [(price, basis) for price, basis in ((max_high, "max_high_since_entry"), (current, "current_price")) if price is not None]
+        if entry is not None and stop is not None and stop < entry and reached:
+            price, basis = max(reached, key=lambda item: item[0])
+            r_multiple = (price - entry) / (entry - stop)
+            controls["r_multiple_reached"] = round(r_multiple, _REPORTED_PRECISION)
+            controls["favorable_excursion_basis"] = basis
+            if doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", r_multiple)["state"] == "pass":
                 controls["breakeven_protection_required"] = True
+                actions.append(
+                    {
+                        "action": "RAISE_STOP",
+                        "doctrine_id": _PROFIT_PROTECTION,
+                        "to_at_least": entry,
+                        "evidence": {"r_multiple_reached": controls["r_multiple_reached"], "measured_from": basis},
+                    }
+                )
     return {
         "mode": "active",
         "verdict": verdict,
         "risk_controls": controls,
+        "management_actions": actions,
         "completed_price_path": completed_price_path or None,
         "failed": reasons,
         "missing": missing,

@@ -449,7 +449,12 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **고치지 않고 보고한 것 둘.** (a) `ticker.chart`를 한 번도 부르지 않고 `qualified`에 도달할 수 있다 — `observed`는 구조상 호출자 주장이고 하네스는 사람이 봤는지 증명할 수 없다. 렌더 영수증을 요구하는 것은 ④-b seam 자체를 바꾸는 일이다. (b) 여러 top의 부분 답변이 다음 호출에서 사라진다 — 요청 단위 무상태는 기존 설계고 지속 상태는 CLAUDE.md가 금지한다. 대신 `chart_readings` 산문에 "답은 요청 안에만 살고 여전히 원하는 답은 매번 같이 보내야 한다"를 명시했다. (c) CLI의 `needs_input` 봉투가 request·as_of를 보존하지 않는 것은 `error_envelope`이 `{field: None}`을 넣는 레포 전역 계약이라 이 슬라이스 밖이다.
     - **키 안정성.** 페이로드가 세 번 바뀌는 동안 `_chart_key`는 한 번도 안 움직였다(리뷰어 독립 검증: 189 fixture / 133 질문 / 변경 0). `_BOUNDARIES`가 묶는 6개는 그대로고 baseline 세션은 이미 그 안에 있다.
 
-- **Phase 3~7 — 미착수.**
+- **Phase 3 (매도/포지션 관리) — 진행 중, 2026-08-27 시작.** 26규칙을 한 덩어리로 열지 않고 여섯 슬라이스(A 어휘 계약 / B 스탑·R / C1 구조 악화 ① 골든 / C2 구조 악화 ② / D 컨텍스트 / E 인터페이스 / F 리뷰·머지)로 쪼개고 **슬라이스마다 완료 판정을 트래커에 먼저 적었다**(#20의 교훈). 레지스트리에 실제로 있는 관리 claim은 `risk.*` 3·`management.ema21_sma50_roles`·`stage.stage3_characteristics`·`basecount.*` 3뿐이라, 나머지 규칙은 각 슬라이스가 자기 claim을 인용과 함께 추가하고 `verify_doctrine_quotations.py`로 검증한다 — 별도 "레지스트리 슬라이스"를 두지 않는 것은 수직 슬라이스가 claim·리듀서·테스트를 한 번에 닫기 때문이다.
+    - **결정 162 — 3R은 현재가가 아니라 도달한 최고가에서 잰다.** 기존 리듀서는 `current_price`로 3R을 판단했다 — 3R에 닿았다가 되돌아온 포지션이 보호 대상에서 빠지는데, 그 되돌림이 규칙이 막으려는 손실 그 자체다. 오퍼레이션이 진입 세션부터 as_of까지 완결 봉의 최고 High(`max_high_since_entry`, 날짜 포함)를 재고, 리듀서는 High와 현재가 중 높은 쪽으로 R을 계산해 `favorable_excursion_basis`에 무엇으로 쟀는지 적는다. 진입 세션의 봉은 포함한다 — 포지션이 그 안에 존재했고, 스탑 감사도 그 봉부터 본다.
+    - **결정 163 — `management_actions`는 HOLD에만 실린다.** SELL은 관리할 것이 남지 않았고 INCOMPLETE는 관리할 포지션이 확립되지 않았다. 각 액션은 `{action, doctrine_id, evidence}`에 액션별 필드(RAISE_STOP은 `to_at_least`)를 더한 모양이고, 프로스펙티브 결과에는 키 자체가 없다. REDUCE의 분수는 매도 규율이지 배분이 아니라는 문장을 limitations에 넣어 사이징 금지와의 경계를 적었다(사용자 결정 2).
+    - **결정 164 — 스탑이 이미 진입가 이상이면 R을 보고하지 않는다.** 리듀서가 아는 스탑은 현재 스탑뿐이라 올린 스탑으로는 초기 리스크를 복원할 수 없다. 초기 스탑 입력(`initial_stop_price`)은 갭스루·R 참조점에도 필요하므로 슬라이스 B에서 함께 연다.
+
+- **Phase 4~7 — 미착수.**
 
 ### Phase 2가 Phase 1 덕에 줄어드는 부분
 

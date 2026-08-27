@@ -1,0 +1,55 @@
+"""The operation measures how far a position got, so the reducer is not guessing from the last close."""
+
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+import unittest
+
+import numpy as np
+import pandas as pd
+
+from scripts.minervini.operations import Runtime, execute
+from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+
+AS_OF = "2025-12-31"
+POSITION = {"ticker": "TEST", "mode": "active", "entry_price": 100.0, "entry_date": "2025-10-01", "stop_price": 94.0, "as_of": AS_OF}
+
+
+def bars(closes: list[float], *, end: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
+    index = pd.bdate_range(end=end, periods=len(closes))
+    close = pd.Series(closes, index=index, dtype=float)
+    frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
+    return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(end), coverage={"completed_only": True}))
+
+
+def a_run_to(peak: float, then_back_to: float, *, sessions: int = 90) -> list[float]:
+    up = list(np.linspace(100.0, peak, sessions // 2))
+    down = list(np.linspace(peak, then_back_to, sessions - len(up)))
+    return up + down
+
+
+class TheHighSinceEntryIsMeasuredFromTheBars(unittest.TestCase):
+    def run_risk(self, closes: list[float]) -> dict:
+        return execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: bars(closes)))
+
+    def test_three_r_reached_at_the_high_is_seen_even_when_the_last_close_is_below_it(self) -> None:
+        payload = self.run_risk(a_run_to(125.0, 110.0))
+
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+        self.assertAlmostEqual(payload["data"]["max_high_since_entry"], 126.25)
+        self.assertEqual([action["action"] for action in payload["data"]["management_actions"]], ["RAISE_STOP"])
+        self.assertEqual(payload["data"]["management_actions"][0]["evidence"]["measured_from"], "max_high_since_entry")
+
+    def test_bars_before_the_entry_date_do_not_count_as_something_the_position_reached(self) -> None:
+        # The stock was at 140 before the position existed; since entry it never left 100-105.
+        history = list(np.linspace(140.0, 100.0, 40)) + list(np.linspace(100.0, 105.0, 50))
+        payload = execute("ticker.risk", {**POSITION, "entry_date": "2025-10-28"}, runtime=Runtime(price_history=lambda ticker, as_of: bars(history)))
+
+        self.assertEqual(payload["data"]["verdict"], "HOLD")
+        self.assertLess(payload["data"]["max_high_since_entry"], 110.0)
+        self.assertEqual(payload["data"]["management_actions"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()
