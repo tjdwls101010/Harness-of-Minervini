@@ -1618,6 +1618,12 @@ def _positive(value: Any) -> float | None:
     return float(value) if value > 0 and math.isfinite(value) else None
 
 
+# Which price each protective level is a level of. A stop is an order in the market and the
+# tape takes it out intraday; a structural invalidation is a statement about where a session
+# finished, and the condition a caller writes beside one says "completed close below".
+_AUDIT_BASIS = {"stop": "completed_daily_low", "initial_stop": "completed_daily_low", "invalidation": "completed_daily_close"}
+
+
 def _combine_audits(audits: list[dict[str, Any]]) -> dict[str, Any]:
     """One path verdict over several levels, each audited from its own effective date.
 
@@ -1749,8 +1755,15 @@ def _bars_that_spoke(path_rows: list[tuple[date, Any]]) -> dict[str, Any]:
     }
 
 
-def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float, end_before: date | None = None, require_session: bool = False) -> tuple[dict[str, Any], float | None]:
-    """Audit every completed Low against ``protective_level`` from ``effective_date``.
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float, end_before: date | None = None, require_session: bool = False, basis: str = "completed_daily_low") -> tuple[dict[str, Any], float | None]:
+    """Audit every completed session against ``protective_level`` from ``effective_date``.
+
+    ``basis`` says which price the level is a level of. A hard stop is an order resting in
+    the market, so the tape takes it out the moment the Low reaches it. A structural
+    invalidation is a statement about where a session finished -- the harness's own
+    vocabulary for one is "completed close below the base low" -- so a poke through it that
+    closed above is not the exit the trader declared, and selling on it puts a condition in
+    their mouth. The record names the basis it used, and the two are different findings.
 
     ``end_before`` bounds the window for a level a later stop superseded: only sessions
     strictly before that date are audited, and the window counts as fully covered once the
@@ -1842,14 +1855,17 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     ]
     if not path_rows:
         return refused if refused is not None else ({"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price)
+    column = "Low" if basis == "completed_daily_low" else "Close"
+    unreadable = "invalid_low_in_stop_window" if basis == "completed_daily_low" else "invalid_close_in_stop_window"
+    breach_key = "breach_low" if basis == "completed_daily_low" else "breach_close"
     for bar_date, row in path_rows:
         try:
-            low = float(row["Low"])
+            level_price = float(row[column])
         except (TypeError, ValueError):
-            return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
-        if not math.isfinite(low) or low <= 0:
-            return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
-        if low <= protective_level:
+            return {"state": "unavailable", "reason": unreadable, "date": bar_date.isoformat()}, current_price
+        if not math.isfinite(level_price) or level_price <= 0:
+            return {"state": "unavailable", "reason": unreadable, "date": bar_date.isoformat()}, current_price
+        if level_price <= protective_level:
             # A session that opened below the level never offered the level's price; the
             # record says so rather than letting the stop read as if it had been filled there.
             opened: float | None = None
@@ -1866,14 +1882,14 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             # reached them, and after a breach there is nothing left to examine.
             return {
                 "state": "breached",
-                "basis": "completed_daily_low",
+                "basis": basis,
                 "from": effective_date.isoformat(),
                 "through": bar_date.isoformat(),
                 "first_bar_checked": checked[0].isoformat(),
                 "last_bar_checked": bar_date.isoformat(),
                 "bars_checked": len(checked),
                 "breach_date": bar_date.isoformat(),
-                "breach_low": low,
+                breach_key: level_price,
                 "breach_open": opened,
                 "gap_through_stop": None if opened is None else opened < protective_level,
             }, current_price
@@ -1884,7 +1900,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             # A bar past the window's end proves every session inside it was seen.
             return {
                 "state": "clear",
-                "basis": "completed_daily_low",
+                "basis": basis,
                 "from": effective_date.isoformat(),
                 "through": (end_before - timedelta(days=1)).isoformat(),
                 **_bars_that_spoke(path_rows),
@@ -1910,7 +1926,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         }, current_price
     return {
         "state": "clear",
-        "basis": "completed_daily_low",
+        "basis": basis,
         "from": effective_date.isoformat(),
         "through": latest_date.isoformat(),
         **_bars_that_spoke(path_rows),
@@ -2027,6 +2043,8 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
     explicit_current = evidence.get("current_price")
     explicit_completed_breach = protective_level is not None and isinstance(explicit_current, (int, float)) and not isinstance(explicit_current, bool) and float(explicit_current) <= protective_level
+    explicit_path: dict[str, Any] | None = None
+    explicit_audits: list[dict[str, Any]] = []
     if mode == "active" and explicit_completed_breach and stop_effective_date is not None:
         price = float(explicit_current)
         # One price says one thing: which levels it is at or below. A level under it was not
@@ -2039,7 +2057,20 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # it, and this comparison never reaches it. The audits below check the window itself.
         crossed = [(role, level, effective) for role, level, effective, _end in protective_plan if price <= level]
         governing_role, governing_level, governing_from = max(crossed, key=lambda item: item[1]) if crossed else ("stop", protective_level, stop_effective_date)
-        evidence["completed_price_path"] = {
+        explicit_audits = [
+            {
+                "role": role,
+                "level": level,
+                "effective_from": effective.isoformat(),
+                **(
+                    {"through": clock.date.isoformat(), "state": "breached", "basis": "explicit_completed_price", "breach_date": clock.date.isoformat(), "breach_price": price}
+                    if price <= level and (end_before is None or clock.date < end_before)
+                    else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
+                ),
+            }
+            for role, level, effective, end_before in protective_plan
+        ]
+        explicit_path = {
             "state": "breached",
             "basis": "explicit_completed_price",
             "from": (governing_from or stop_effective_date).isoformat(),
@@ -2048,19 +2079,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "governing_role": governing_role,
             "breach_date": clock.date.isoformat(),
             "breach_price": price,
-            "audits": [
-                {
-                    "role": role,
-                    "level": level,
-                    "effective_from": effective.isoformat(),
-                    **(
-                        {"through": clock.date.isoformat(), "state": "breached"}
-                        if price <= level and (end_before is None or clock.date < end_before)
-                        else {"state": "unavailable", "reason": "not_audited_after_explicit_breach"}
-                    ),
-                }
-                for role, level, effective, end_before in protective_plan
-            ],
+            "audits": explicit_audits,
         }
     # A breach that already settles the verdict needs no price history, and a
     # provider failure fetched for nothing would downgrade a terminal SELL to partial.
@@ -2085,6 +2104,10 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             )
         except ProviderUnavailable as error:
             provider_missing.append(_missing_provider(error))
+            # The blocks still travel with a verdict the request settled on its own, and they
+            # say what actually happened: the history was asked for and the provider had none.
+            # A block that vanishes reads as a measurement with nothing to report instead.
+            evidence["management"] = {key: {"state": "unavailable", "reason": "price_history_unavailable"} for key in MANAGEMENT_BLOCKS}
         else:
             sources.append(_source(prices.meta))
             stale_price = _stale_price_gap(prices.meta)
@@ -2119,9 +2142,15 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                         end_before=end_before,
                         # A stop can be moved on a day the market was shut; an entry cannot happen on one.
                         require_session=effective == entry_date,
+                        basis=_AUDIT_BASIS[role],
                     )
                     audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
                     path_price = audit_price if audit_price is not None else path_price
+                # A price handed in is an observation dated as_of, which is the latest date any
+                # exit can carry. It stands where the bars found no breach of that level, and
+                # yields to a breach the bars printed, because that one happened first.
+                crossed_now = {item["role"]: item for item in explicit_audits if item["state"] == "breached"}
+                audits = [crossed_now.get(audit["role"], audit) if audit["state"] != "breached" else audit for audit in audits]
                 price_path = _combine_audits(audits)
                 evidence["completed_price_path"] = price_path
                 if stale_price is None:
@@ -2146,6 +2175,10 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                     current_price = None
             if current_price is not None:
                 evidence["current_price"] = current_price
+    if explicit_path is not None and evidence.get("completed_price_path") is None:
+        # No audit reached the levels -- the provider had nothing to give, or the request
+        # declared no plan to audit. The price the caller handed in is then the whole record.
+        evidence["completed_price_path"] = explicit_path
     result = reduce_risk(evidence)
     status = "partial" if provider_missing else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}

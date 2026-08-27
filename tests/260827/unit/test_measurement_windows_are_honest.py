@@ -117,13 +117,22 @@ class ABadBarOnlySpoilsWhatReadsIt(unittest.TestCase):
         for key in ("base_extension", "key_reversal", "gaps_since_breakout", "climax", "twenty_day_average", "post_breakout_behavior"):
             self.assertNotEqual(result[key].get("reason"), "invalid_ohlc_history", key)
 
-    def test_a_broken_session_inside_the_window_still_voids_that_block(self) -> None:
+    def test_a_broken_session_the_block_reads_still_voids_it(self) -> None:
+        # The extension is the latest close against the base top, so that is the close whose
+        # loss voids it. A close in the middle of the held window is spanned, never opened.
+        bars = frame(120)
+        bars.iloc[119, bars.columns.get_loc("Close")] = 0.0
+        result = build(bars, entry=110, base_top=100.0)
+
+        self.assertEqual(result["base_extension"]["reason"], "invalid_ohlc_history")
+        self.assertEqual(result["base_extension"]["date"], bars.index[119].date().isoformat())
+
+    def test_a_broken_session_the_block_only_spans_leaves_it_reported(self) -> None:
         bars = frame(120)
         bars.iloc[115, bars.columns.get_loc("Close")] = 0.0
         result = build(bars, entry=110, base_top=100.0)
 
-        self.assertEqual(result["base_extension"]["reason"], "invalid_ohlc_history")
-        self.assertEqual(result["base_extension"]["date"], bars.index[115].date().isoformat())
+        self.assertEqual(result["base_extension"]["state"], "reported")
 
 
 class TheWeekendAnchorAdvancesToTheNextSession(unittest.TestCase):

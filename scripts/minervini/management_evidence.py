@@ -73,6 +73,19 @@ AVERAGES = ("ema21", "sma50")
 BLOCKS = _BLOCKS
 
 
+def _unread_claim_inputs(claim_ids: tuple[str, ...], consumed: tuple[str, ...]) -> list[str]:
+    """Which of the cited claims' required inputs this reading never consumes.
+
+    Derived rather than written down beside each block, because a hand-kept list is the one
+    thing that can disagree with the claim it is describing -- and a citation that reads as
+    covering the whole claim while measuring half of it is exactly the contradiction this
+    evidence pack exists to prevent. A block names what it opened; this names the rest.
+    """
+
+    required = {name for claim_id in claim_ids for name in doctrine.required_inputs(claim_id)}
+    return sorted(required - set(consumed))
+
+
 def _reported(value: float | None) -> float | None:
     return None if value is None else round(value, _REPORTED_PRECISION)
 
@@ -247,6 +260,7 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
         "doctrine_id": _ROLES,
         "binds": doctrine.binds(_ROLES),
         "selected": selected,
+        "claim_inputs_not_read": _unread_claim_inputs((_ROLES,), ("daily_ema_21", "sma_50", "management_mode")),
         "ema21": ema21,
         "sma50": sma50,
     }
@@ -266,6 +280,7 @@ def _twenty_day_average(bars: pd.DataFrame, *, readable: _Readable) -> dict[str,
         return {"doctrine_id": _TWENTY_DAY, "state": "unavailable", "reason": "invalid_close"}
     return {
         "doctrine_id": _TWENTY_DAY,
+        "claim_inputs_not_read": _unread_claim_inputs((_TWENTY_DAY,), ("price_history", "sma_20")),
         "state": "below" if close < average else "above",
         "date": bars.index[-1].date().isoformat(),
         "average": _reported(average),
@@ -281,11 +296,20 @@ def _latest_tie(series: pd.Series, value: float) -> Any:
     return series.index[positions[-1]]
 
 
-def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
+def _weekly(bars: pd.DataFrame, *, stage2_start: date, readable: _Readable) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
     # A week is a completed bar once its Friday has printed or a later week has begun;
     # the week as_of falls inside is still being drawn and is not compared.
     periods = closes.index.to_period("W-FRI")
+    # The weekly reading opens one session per week: the last one in it. The first week it
+    # weighs is the first whose Friday falls on or after the advance began -- which a
+    # holiday can leave ending on a session before that date, so the start is asked of the
+    # weeks themselves rather than assumed to be the anchor.
+    last_of = {period: position for position, period in enumerate(periods)}
+    first_read = min((position for period, position in last_of.items() if period.end_time.date() >= stage2_start), default=0)
+    gap = readable.missing_at([position for position in last_of.values() if position >= first_read], ("Close",))
+    if gap is not None:
+        return gap
     last_of_week = closes.groupby(periods).tail(1)
     week_ends = [period.end_time.normalize().date() for period in last_of_week.index.to_period("W-FRI")]
     completed = [
@@ -333,8 +357,14 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     }
 
 
-def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
+def _daily(bars: pd.DataFrame, *, stage2_start: date, readable: _Readable) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
+    # The advance's first change is measured from its own first session, so the close before
+    # the anchor is outside every reading here.
+    anchored = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= stage2_start]
+    gap = readable.gap(anchored[0] if anchored else len(bars), columns=("Close",))
+    if gap is not None:
+        return gap
     changes = closes.pct_change() * 100
     dates = [timestamp.date() for timestamp in changes.index]
     # The first session of the advance measures its change from the session before it,
@@ -353,18 +383,35 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     position = int(bars.index.get_loc(stamp))
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
     ratio: float | None = None
-    if "Volume" in bars.columns and position >= baseline_sessions:
-        baseline = float(bars["Volume"].iloc[position - baseline_sessions : position].mean())
-        volume = _finite(bars["Volume"].iloc[position])
-        if volume is not None and math.isfinite(baseline) and baseline > 0:
-            ratio = volume / baseline
+    # Which absence this is. The column missing is a history that never carried volume; a
+    # position too early, a hole among the fifty, or a split inside them is a baseline that
+    # cannot be averaged -- pandas would skip the hole and divide by the sessions that were
+    # there, publishing a ratio against a yardstick nobody can reproduce, and across a split
+    # it would compare share counts. A baseline is a population, so it is read whole or not
+    # at all, and the two absences are named apart.
+    missing_input = "volume_history" if "Volume" not in bars.columns else None
+    if missing_input is None:
+        if position < baseline_sessions:
+            missing_input = "volume_baseline"
+        elif readable.gap(position - baseline_sessions, position, columns=("Volume",)) is not None or readable.split(position - baseline_sessions, position + 1) is not None:
+            missing_input = "volume_baseline"
+        else:
+            baseline = float(bars["Volume"].iloc[position - baseline_sessions : position].mean())
+            volume = _finite(bars["Volume"].iloc[position])
+            if volume is None:
+                missing_input = "volume_history"
+            elif not math.isfinite(baseline) or baseline <= 0:
+                missing_input = "volume_baseline"
+            else:
+                ratio = volume / baseline
     return {
         "state": "reported",
         "volume_convention": dict(_VOLUME_CONVENTION),
-        # The column being present is not the same as this session's volume being readable:
-        # a NaN there leaves the ratio null, and a block reporting no missing inputs beside
-        # a null ratio says the volume was read and had nothing to say.
-        "missing_inputs": [] if ratio is not None else ["volume_history"],
+        # The column being present is not the same as this session's volume being readable,
+        # and neither is the same as the fifty sessions behind it being averageable. A block
+        # reporting no missing inputs beside a null ratio says the volume was read and had
+        # nothing to say, which is a third thing again.
+        "missing_inputs": [] if missing_input is None else [missing_input],
         "largest_pct": _reported(largest),
         "date": stamp.date().isoformat(),
         "last_session_is_largest": stamp == bars.index[-1],
@@ -385,7 +432,11 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
         # sessions before it as missing when none of them exist.
         stage2_start = stage2_start + timedelta(days=7 - stage2_start.weekday())
     anchored = [position for position, timestamp in enumerate(bars.index) if timestamp.date() >= stage2_start]
-    gap = readable.gap(max(0, (anchored[0] if anchored else 0) - 1), columns=("Close",)) or readable.split(max(0, (anchored[0] if anchored else 0) - 1))
+    # A percentage across a split is arithmetic between two different shares, so the event
+    # refuses the whole block. Which closes each reading opens is the readings' own
+    # question, asked below -- the daily one starts at the advance's first session and the
+    # weekly one at the last session of its first week, and neither is the other's window.
+    gap = readable.split(max(0, (anchored[0] if anchored else 0) - 1))
     if gap is not None:
         return {**gap, "doctrine_id": _LARGEST_DECLINE}
     first_available = bars.index[0].date()
@@ -404,8 +455,9 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None, readable:
         "state": "reported",
         "stage2_start": declared.isoformat(),
         "measured_from": stage2_start.isoformat(),
-        "daily": _daily(bars, stage2_start=stage2_start),
-        "weekly": _weekly(bars, stage2_start=stage2_start),
+        "daily": _daily(bars, stage2_start=stage2_start, readable=readable),
+        "weekly": _weekly(bars, stage2_start=stage2_start, readable=readable),
+        "claim_inputs_not_read": _unread_claim_inputs((_LARGEST_DECLINE, _VOLUME_STATE), ("price_history", "volume_history", "stage2_start", "daily_volume")),
     }
 
 
@@ -518,6 +570,24 @@ class _Readable:
         if first is None:
             return None
         return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[first].date().isoformat()}
+
+    def missing_at(self, positions: list[int], columns: tuple[str, ...]) -> dict[str, Any] | None:
+        """The unavailable block for a reading that opens named cells rather than a span.
+
+        Some readings are not a window at all: a return over twenty sessions opens two
+        closes, and a volume ratio opens the sessions that fell. Guarding the span between
+        them would refuse the reading over a bar it never touched.
+        """
+
+        found = [
+            position
+            for position in sorted(set(positions))
+            if 0 <= position < self._length
+            and any(self._bad.get(column) is not None and bool(self._bad[column][position]) for column in columns)
+        ]
+        if not found:
+            return None
+        return {"state": "unavailable", "reason": "invalid_ohlc_history", "date": self._bars.index[found[0]].date().isoformat()}
 
     def clean_positions(self, positions: list[int], columns: tuple[str, ...] = ("Close",)) -> list[int]:
         return [position for position in positions if all(not self._bad.get(column, np.zeros(self._length, dtype=bool))[position] for column in columns)]
@@ -668,6 +738,7 @@ def _post_breakout_behavior(bars: pd.DataFrame, *, entry_date: date, breakout_da
         "state": "reported",
         "since": since.isoformat(),
         "since_basis": basis,
+        "claim_inputs_not_read": _unread_claim_inputs((_TENNIS_BALL, _ACTS_AS_EXPECTED, _FIRST_SESSIONS), ("price_history", "breakout_date", "entry_date")),
         "sessions_since_entry": len(_positions_since(bars, entry_date)) - 1,
         "sessions_since_new_high": (len(bars) - 1) - last_high,
         "last_new_closing_high": bars.index[last_high].date().isoformat(),
@@ -688,7 +759,7 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
     # and Low over their own windows, which end well inside it.
     gap = (
         readable.gap(len(bars) - (sma_length + lookback), columns=("Close",))
-        or readable.gap(len(bars) - (2 * length + 1), columns=("High", "Low"))
+        or readable.gap(len(bars) - 2 * length, columns=("High", "Low"))
         or readable.split(len(bars) - (sma_length + lookback))
     )
     if gap is not None:
@@ -707,6 +778,17 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
         if math.isfinite(now) and math.isfinite(before) and before > 0:
             slope = (now / before - 1) * 100
             state = "reported"
+    if recent.get("value") is None and earlier.get("value") is None and state == "unavailable":
+        # Neither true range and no slope: there is no Stage 3 vector here, and publishing
+        # one as reported beside three unavailable constituents says a reading was made.
+        return {
+            "doctrine_id": _STAGE3,
+            "state": "unavailable",
+            "reason": "insufficient_history_for_stage3_vector",
+            "average_true_range": recent,
+            "earlier_average_true_range": earlier,
+            "sma200_state": state,
+        }
     return {
         "doctrine_id": _STAGE3,
         "doctrine_ids": [_STAGE3, _ATR, _SLOPE],
@@ -723,7 +805,7 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
         # among its required inputs. Neither measurement here reads it, in any history, so it
         # is named as evidence this reading does not consume rather than evidence it wanted:
         # the same numbers came back from a frame that had volume and one that did not.
-        "claim_inputs_not_read": ["volume_history"],
+        "claim_inputs_not_read": _unread_claim_inputs((_STAGE3, _ATR, _SLOPE), ("price_history", "sma_200")),
         "needs_chart": True,
     }
 
@@ -732,7 +814,14 @@ def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | N
     if base_top is None:
         return {"state": "unavailable", "reason": "base_top_not_declared"}
     held_positions = _positions_since(bars, entry_date)
-    gap = readable.gap(held_positions[0] if held_positions else 0, columns=("High", "Close")) or readable.split(held_positions[0] if held_positions else 0)
+    # Two readings, two windows: the extension is the latest close against the base top, and
+    # the furthest the position got is the highest High since entry. No close between them
+    # is opened, so a hole in one is not this block's business.
+    gap = (
+        readable.gap(len(bars) - 1, columns=("Close",))
+        or readable.gap(held_positions[0] if held_positions else 0, columns=("High",))
+        or readable.split(held_positions[0] if held_positions else 0)
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _PAUSE_ZONE}
     closes = bars["Close"].astype(float)
@@ -749,6 +838,7 @@ def _base_extension(bars: pd.DataFrame, *, entry_date: date, base_top: float | N
         "state": "reported",
         "base_top": base_top,
         "extension_pct": _reported(extension_pct),
+        "claim_inputs_not_read": _unread_claim_inputs((_PAUSE_ZONE,), ("base_top", "current_price", "max_high_since_entry")),
         "max_extension_pct": _reported((max_high / base_top - 1) * 100 if max_high is not None else None),
         "band": doctrine.evaluate_band(_PAUSE_ZONE, "pause_zone_pct", extension_pct),
     }
@@ -775,7 +865,7 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
     atr_length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
     # Two windows, because two different readings: the percentile ranks every prior session's
     # closes, and the true range reads High and Low over its own length and no further back.
-    gap = readable.gap(0, columns=("Close",)) or readable.gap(len(bars) - (atr_length + 1), columns=("High", "Low")) or readable.split(0)
+    gap = readable.gap(0, columns=("Close",)) or readable.gap(len(bars) - atr_length, columns=("High", "Low")) or readable.split(0)
     if gap is not None:
         return {**gap, "doctrine_id": _OWN_CHARACTER}
     closes = bars["Close"].astype(float)
@@ -787,7 +877,15 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
     # a rule and is not one.
     ema = closes.ewm(span=ema_length, adjust=False).mean()
     sma = closes.rolling(sma_length).mean()
-    block: dict[str, Any] = {"doctrine_id": _OWN_CHARACTER, "binds": doctrine.binds(_OWN_CHARACTER), "atr": atr, "needs_chart": True}
+    block: dict[str, Any] = {
+        "doctrine_id": _OWN_CHARACTER,
+        "doctrine_ids": [_OWN_CHARACTER, _ATR],
+        "binds": doctrine.binds(_OWN_CHARACTER),
+        "state": "reported",
+        "atr": atr,
+        "claim_inputs_not_read": _unread_claim_inputs((_OWN_CHARACTER, _ATR), ("price_history", "ema_21", "sma_50", "average_true_range")),
+        "needs_chart": True,
+    }
     for name, series, length in (("ema21", ema, ema_length), ("sma50", sma, sma_length)):
         if len(bars) < length or not math.isfinite(float(series.iloc[-1])):
             block[name] = {"state": "unavailable", "reason": "insufficient_history_for_average", "sessions_required": length}
@@ -819,8 +917,15 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
     window = _positions_since(bars, since)
     if len(bars) < 2 or not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
-    # The prior session is part of the reading: the gap and the prior low come from it.
-    gap = readable.gap(max(0, window[0] - 1)) or readable.split(max(0, window[0] - 1))
+    # The prior session is part of the reading: the gap and the prior low come from it. But
+    # only the latest session's Open and Close are opened -- every other session in the
+    # window contributes a range and a volume, and nothing else.
+    gap = (
+        readable.gap(max(0, window[0] - 1), columns=("High", "Low"))
+        or readable.gap(window[0], columns=("Volume",))
+        or readable.gap(len(bars) - 1, columns=("Open", "Close"))
+        or readable.split(max(0, window[0] - 1))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _KEY_REVERSAL}
     last = len(bars) - 1
@@ -855,6 +960,8 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
         "doctrine_id": _KEY_REVERSAL,
         "doctrine_ids": [_KEY_REVERSAL, _CLOSING_RANGE],
         "binds": doctrine.binds(_KEY_REVERSAL),
+        "state": "reported",
+        "claim_inputs_not_read": _unread_claim_inputs((_KEY_REVERSAL, _CLOSING_RANGE), ("price_history", "volume_history", "breakout_date", "daily_bar")),
         "since": since.isoformat(),
         "since_basis": basis,
         "missing_inputs": missing_inputs,
@@ -877,8 +984,14 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
     # Prices only: this block compares one session's Open with the session before it and
-    # measures the run since the breakout. A broken Volume has nothing to do with either.
-    gap = readable.gap(max(0, window[0] - 1), columns=("Open", "High", "Low", "Close")) or readable.split(max(0, window[0] - 1))
+    # measures the run since the breakout. A broken Volume has nothing to do with either,
+    # and neither does a close in the middle of the window -- the only close opened is the
+    # breakout's, plus whichever sessions turn out to have gapped.
+    gap = (
+        readable.gap(max(0, window[0] - 1), columns=("Open", "High", "Low"))
+        or readable.missing_at([window[0]], ("Close",))
+        or readable.split(max(0, window[0] - 1))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _LATE_GAPS}
     opens = bars["Open"].astype(float)
@@ -902,6 +1015,7 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
         "state": "reported",
         "since": since.isoformat(),
         "since_basis": basis,
+        "claim_inputs_not_read": _unread_claim_inputs((_LATE_GAPS, _CLOSING_RANGE), ("price_history", "breakout_date", "daily_bar")),
         "gap_up_count": len(gap_positions),
         "gap_dates": [bars.index[position].date().isoformat() for position in gap_positions],
         "run_pct_since_breakout": _reported((max(float(highs.iloc[position]) for position in window) / breakout_close - 1) * 100 if breakout_close > 0 else None),
@@ -914,7 +1028,14 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
     lengths = [int(doctrine.parameter(_WINDOWS, name)) for name in ("short_window_sessions", "medium_window_sessions", "long_window_sessions")]
     gap_window = int(doctrine.parameter(_WINDOWS, "medium_window_sessions"))
-    gap = readable.gap(len(bars) - (max(lengths) + 1)) or readable.split(len(bars) - (max(lengths) + 1))
+    # A return over twenty sessions opens two closes, not twenty-one. The gap count reads
+    # Opens and Highs over its own window, and the latest session's range is read by the
+    # closing-range formula, which names its own missing inputs rather than voiding this.
+    gap = (
+        readable.missing_at([len(bars) - 1 - back for back in (0, *lengths)], ("Close",))
+        or readable.gap(max(0, len(bars) - (gap_window + 1)), columns=("Open", "High"))
+        or readable.split(len(bars) - (max(lengths) + 1))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _CLIMAX}
     if len(bars) <= max(lengths):
@@ -937,7 +1058,11 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         # session. A NaN inside that population counts as a session the latest volume beat --
         # a rank against bars that were never there -- so an incomplete population produces
         # no percentile rather than a number nobody can reproduce.
-        volume_population_complete = last_volume is not None and all(value is not None for value in prior)
+        # A split inside the population is the same hole reached from the other side: the
+        # volumes before it count a different share, so ranking today against them is a rank
+        # over two populations. The event does not void the block -- the return windows are
+        # this side of it -- but it does void the ranking.
+        volume_population_complete = last_volume is not None and all(value is not None for value in prior) and readable.split_position(0) is None
         if volume_population_complete and prior:
             percentile = sum(1 for value in prior if value <= last_volume) / len(prior) * 100
     return {
@@ -951,7 +1076,7 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         # into the advance the stock is -- and nothing in this block reads it. That is not
         # the same as an input that was wanted and absent, so it is named separately: a
         # reader must be able to see which half of the claim these numbers actually cover.
-        "claim_inputs_not_read": ["base_count"],
+        "claim_inputs_not_read": _unread_claim_inputs((_CLIMAX, _WINDOWS, _CLOSING_RANGE), ("price_history", "volume_history", "daily_bar")),
         **returns,
         "gap_ups_last_10_sessions": gap_ups,
         "last_volume_percentile": _reported(percentile),
@@ -973,7 +1098,14 @@ def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | Non
         return {"state": "unavailable", "reason": "no_completed_bar_on_or_after_breakout_date"}
     breakout = window[0]
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
-    gap = readable.gap(max(0, breakout - baseline_sessions), columns=("Close", "Volume")) or readable.split(max(0, breakout - baseline_sessions))
+    # The baseline is a population and is read whole; the closes start at the breakout,
+    # because the first comparison is the session after it against it. A close before the
+    # baseline is outside both.
+    gap = (
+        readable.gap(max(0, breakout - baseline_sessions), breakout + 1, columns=("Volume",))
+        or readable.gap(breakout, columns=("Close",))
+        or readable.split(max(0, breakout - baseline_sessions))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _FAILED_VOLUME}
     if breakout < baseline_sessions:
@@ -987,11 +1119,13 @@ def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | Non
     # Every ratio uses the pre-breakout baseline, so the breakout session and the selling
     # after it are measured against the same yardstick and the comparison is between the
     # stock's own two sessions rather than two different averages.
-    down = [
-        (position, float(volumes.iloc[position]) / baseline)
-        for position in range(breakout + 1, len(bars))
-        if float(closes.iloc[position]) < float(closes.iloc[position - 1])
-    ]
+    # Only the sessions that fell have their volume read, so those are the cells guarded --
+    # a hole in an up session's volume is a bar this reading never opens.
+    down_positions = [position for position in range(breakout + 1, len(bars)) if float(closes.iloc[position]) < float(closes.iloc[position - 1])]
+    unreadable = readable.missing_at(down_positions, ("Volume",))
+    if unreadable is not None:
+        return {**unreadable, "doctrine_id": _FAILED_VOLUME}
+    down = [(position, float(volumes.iloc[position]) / baseline) for position in down_positions]
     heaviest = max(down, key=lambda item: item[1]) if down else None
     breakout_signal = doctrine.evaluate_marker(_VOLUME_STATE, "low_volume_ratio", breakout_ratio)
     selling_signal = doctrine.evaluate_marker(_VOLUME_STATE, "high_volume_ratio", heaviest[1]) if heaviest else None
@@ -1006,6 +1140,7 @@ def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | Non
         "binds": doctrine.binds(_FAILED_VOLUME),
         "state": "reported",
         "breakout_date": bars.index[breakout].date().isoformat(),
+        "claim_inputs_not_read": _unread_claim_inputs((_FAILED_VOLUME, _VOLUME_STATE), ("price_history", "volume_history", "breakout_date", "daily_volume")),
         "volume_baseline_sessions": baseline_sessions,
         "volume_convention": dict(_VOLUME_CONVENTION),
         "breakout_volume_ratio": _reported(breakout_ratio),

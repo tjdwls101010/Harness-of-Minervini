@@ -411,6 +411,11 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
 
     The operation asks this before fetching bars: a breach it would never look at
     is a request that can only downgrade a terminal SELL to a partial one.
+
+    Only an undated assertion settles anything here. A price handed in carries a date --
+    ``as_of``, the latest one any exit can have -- so the bars can still hold an exit that
+    happened first, and the earliest dated exit is the one that names the failure. Skipping
+    the fetch for it would publish the wrong level on the wrong day.
     """
 
     payload = _mapping(evidence)
@@ -430,7 +435,6 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
         or (stop is not None and _triggered(payload.get("stop_event")))
         or _triggered(payload.get("completed_price_path"))
         or (declares_exit_plan(payload) and _triggered(invalidation))
-        or (current is not None and bool(levels) and current <= max(levels))
     )
 
 

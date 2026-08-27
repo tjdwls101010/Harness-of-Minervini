@@ -132,10 +132,11 @@ class ABreachNamesTheLevelItCrossed(unittest.TestCase):
         self.assertEqual(path["governing_role"], "invalidation")
         self.assertEqual(path["checked_level"], 95.0)
         stop_audit = next(audit for audit in path["audits"] if audit["role"] == "stop")
-        # No bar was read, so the stop is unaudited. Ninety-four today cannot say the Low
-        # never reached ninety last week.
-        self.assertEqual(stop_audit["state"], "unavailable")
-        self.assertEqual(stop_audit["reason"], "not_audited_after_explicit_breach")
+        # The price crossed one level and says nothing about the one below it -- but it does
+        # not stop the bars being read, and they cover the stop's whole window. So the stop
+        # is cleared by the sessions rather than left unaudited by the price.
+        self.assertEqual(stop_audit["state"], "clear")
+        self.assertEqual(stop_audit["basis"], "completed_daily_low")
 
     def test_a_price_under_both_levels_is_named_by_the_one_it_crossed_first(self) -> None:
         # Price falls from above, so 95 was crossed before 90. Naming the lower level would
@@ -159,7 +160,10 @@ class ABreachNamesTheLevelItCrossed(unittest.TestCase):
         self.assertEqual(path["checked_level"], 97.0)
         self.assertEqual(path["from"], "2025-12-15")
         initial = next(audit for audit in path["audits"] if audit["role"] == "initial_stop")
-        self.assertEqual(initial["reason"], "not_audited_after_explicit_breach")
+        # Today's ninety cannot reach a window that closed on the eve of the raise, and the
+        # bars that did cover that window came through clear.
+        self.assertEqual(initial["state"], "clear")
+        self.assertEqual(initial["through"], "2025-12-14")
 
     def test_a_widened_stop_publishes_the_initial_level_that_still_governs(self) -> None:
         # A stop is never widened, so 94 stayed in force. The 88 Low broke both; the record

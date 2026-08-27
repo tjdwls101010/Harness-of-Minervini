@@ -120,6 +120,21 @@ def get_claim(claim_id: str) -> dict[str, Any]:
     raise KeyError(f"unknown doctrine claim: {claim_id}")
 
 
+def required_inputs(claim_id: str) -> tuple[str, ...]:
+    """The evidence a claim says it needs, in the claim's own vocabulary.
+
+    A reading that cites a claim and never opens one of these has measured only part of it,
+    and a citation printed without that difference reads as coverage it does not have. The
+    list is published rather than described so the two can never drift: a block names what
+    it consumed, and what the claim asked for beyond that is arithmetic.
+
+    Raises:
+        KeyError: If ``claim_id`` is not registered.
+    """
+
+    return tuple(get_claim(claim_id)["claim"].get("required_inputs") or ())
+
+
 def list(
     *,
     context: str | None = None,
