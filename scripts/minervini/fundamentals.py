@@ -40,7 +40,9 @@ _ANTI_LOW_PE = "fundamentals.anti_low_pe_bargain_trap"
 _PE_EXPANSION = "fundamentals.pe_expansion_late_stage_and_historical_average"
 _MONTHS_PER_YEAR = 12
 _RETURN_ON_EQUITY = "practitioners.fundamentals.minervini_roe_15_to_17_or_higher"
-_ANNUAL_ONLY_FORMS = ("20-F",)
+# The two annual-only foreign-issuer forms. Both carry a year and no quarters, so the three
+# quarterly series are not a fetch that came up short.
+_ANNUAL_ONLY_FORMS = ("20-F", "40-F")
 _ZANGER_GROWTH = "practitioners.earnings.zanger_min_30_to_40pct_gains_each_quarter_greater"
 _SEQUENTIAL_ACCELERATION = "practitioners.earnings.minervini_accelerating_1_to_4_quarters"
 _RITCHIE_GROWTH = "practitioners.earnings.ritchie_not_mechanical_explosive_growth_only"
@@ -235,9 +237,13 @@ def _merge_periods(filings: list[dict[str, Any]], key: str) -> tuple[list[dict[s
             # Provenance is per number. Stamping the whole period with the later filing's date
             # and accounting basis said a US-GAAP revenue had been filed under IFRS, and the
             # margin built from it divided one regime's earnings by another's sales.
+            units = fact.get("_units") or {}
             for name in fact:
-                if name not in {"period", "end"}:
-                    merged["_sources"][name] = {"accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"]}
+                if name not in {"period", "end", "_units"}:
+                    # The unit belongs to the number as much as the regime does. SEC files a
+                    # concept once per unit, and a hundred US dollars beside a hundred and
+                    # thirty Canadian ones is not thirty percent of anything.
+                    merged["_sources"][name] = {"accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"], "unit": units.get(name)}
             merged.update({**fact, "accounting_basis": filing["accounting_basis"], "filed_at": filing["filed_at"], "_sources": merged["_sources"]})
             if isinstance(fact.get("end"), str):
                 closes.setdefault(fact["period"], set()).add(fact["end"])
@@ -350,16 +356,21 @@ def _metric_series(facts: list[dict[str, Any]], metric: str) -> list[dict[str, A
     return [_point(fact, float(fact[metric]), metric) for fact in facts if _is_number(fact.get(metric))]
 
 
-def _measured_under(fact: Mapping[str, Any], metric: str) -> str | None:
-    """Which accounting regime measured this one number, which is not always the filing's.
+def _measured_under(fact: Mapping[str, Any], metric: str) -> tuple[str | None, str | None]:
+    """Under which regime and in which unit this one number was measured.
 
     A filer that changes regime carries both in one period, and decision 275 put provenance on
     the number rather than the period for exactly that reason. Every measurement built from two
     numbers has to ask this of both of them before their quotient or their difference means
     anything -- the margin was the only one asking.
+
+    The unit rides along because the same question has the same answer for it: SEC stores a
+    concept once per unit, and two currencies collapsed into one series produced growth rates
+    out of an exchange rate nobody applied.
     """
 
-    return ((fact.get("_sources") or {}).get(metric) or {}).get("accounting_basis", fact.get("accounting_basis"))
+    source = (fact.get("_sources") or {}).get(metric) or {}
+    return source.get("accounting_basis", fact.get("accounting_basis")), source.get("unit")
 
 
 def _point(fact: Mapping[str, Any], value: float, metric: str) -> dict[str, Any]:
@@ -406,7 +417,7 @@ def _annual_growth(annual: list[dict[str, Any]]) -> dict[str, Any]:
         "periods": [None if prior is None else prior["period"], None if latest is None else latest["period"]],
         "eps_yoy_pct": _annual_metric_growth(prior, latest, "eps"),
         "revenue_yoy_pct": _annual_metric_growth(prior, latest, "revenue"),
-        **({"reason": "annual_periods_overlap"} if overlapping else {"reason": "annual_periods_measured_under_different_accounting_bases"} if _regime_changed(prior, latest, ("eps", "revenue")) else {}),
+        **({"reason": "annual_periods_overlap"} if overlapping else {"reason": _provenance_conflict(prior, latest, ("eps", "revenue"))} if _provenance_conflict(prior, latest, ("eps", "revenue")) else {}),
     }
 
 
@@ -423,10 +434,24 @@ def _spans_overlap(prior: Mapping[str, Any] | None, latest: Mapping[str, Any] | 
     return isinstance(ends, str) and isinstance(starts, str) and ends >= starts
 
 
-def _regime_changed(prior: Mapping[str, Any] | None, latest: Mapping[str, Any] | None, metrics: tuple[str, ...]) -> bool:
+def _provenance_conflict(prior: Mapping[str, Any] | None, latest: Mapping[str, Any] | None, metrics: tuple[str, ...]) -> str | None:
+    """Which of the two provenance questions refused this comparison, named separately.
+
+    Both refuse, and they are not the same finding: one says the company changed accounting
+    regime between the two years, the other that the two figures are in different currencies.
+    One reason standing in for the other is a field disagreeing with the provenance printed
+    beside it.
+    """
+
     if prior is None or latest is None:
-        return False
-    return any(_measured_under(prior, metric) != _measured_under(latest, metric) for metric in metrics)
+        return None
+    for metric in metrics:
+        before, after = _measured_under(prior, metric), _measured_under(latest, metric)
+        if before[0] != after[0]:
+            return "annual_periods_measured_under_different_accounting_bases"
+        if before[1] != after[1]:
+            return "annual_periods_measured_in_different_units"
+    return None
 
 
 def _prior_year(annual: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:

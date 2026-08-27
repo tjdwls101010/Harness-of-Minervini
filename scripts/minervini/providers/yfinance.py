@@ -45,6 +45,24 @@ def _index_dates(frame: pd.DataFrame) -> pd.Series:
     return pd.Series(index.date, index=frame.index)
 
 
+def _impossible_range(frame: pd.DataFrame) -> np.ndarray:
+    """Rows whose four prices cannot all have come from one session.
+
+    Only rows where every price is present are judged: a blank is a session the provider has
+    not finished writing, which the completeness check answers, and calling it impossible would
+    replace one true statement about the feed with a different, false one.
+    """
+
+    values = {column: pd.to_numeric(frame[column], errors="coerce") for column in ("Open", "High", "Low", "Close")}
+    present = np.ones(len(frame), dtype=bool)
+    for series in values.values():
+        present &= np.asarray(series.notna())
+    ordered = np.array(values["High"] >= values["Low"], dtype=bool)
+    for column in ("Open", "Close"):
+        ordered &= np.asarray(values[column] <= values["High"]) & np.asarray(values[column] >= values["Low"])
+    return present & ~ordered
+
+
 def _session_date(observed_at: datetime) -> date:
     """What day it is where the sessions are.
 
@@ -172,6 +190,16 @@ def completed_daily_bars(
     completed = frame.copy()
     if not completed.empty:
         dates = _index_dates(completed)
+        # An index entry that is not a date coerces to `NaT`, and `NaT <= as_of` is false -- so
+        # a session with a full set of prices vanished from a history whose coverage still said
+        # it was complete, silently shortening every average built on it.
+        if dates.isna().any():
+            raise ProviderUnavailable("yfinance", "daily_bars_unreadable_session_index", operation="daily_bars")
+        # A close above the high did not happen. Every measurement downstream reads the close as
+        # the session's price, so accepting one the same row says the session never reached
+        # publishes a multiple, a stop distance and an extension from a number nobody printed.
+        if _impossible_range(completed).any():
+            raise ProviderUnavailable("yfinance", "daily_bars_impossible_session_range", operation="daily_bars")
         completed = completed.loc[dates <= clock.date]
     if completed.empty:
         raise ProviderUnavailable("yfinance", "no_completed_daily_bars", operation="daily_bars")

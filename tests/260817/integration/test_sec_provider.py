@@ -106,7 +106,7 @@ class SecProviderTests(unittest.TestCase):
 
         self.assertEqual(evidence["source"], "sec_filed_facts")
         self.assertEqual([filing["filed_at"] for filing in evidence["filings"]], ["2025-02-20", "2025-05-01", "2025-08-01", "2025-11-01", "2026-02-20", "2026-05-01", "2026-05-08"])
-        self.assertEqual(evidence["filings"][-1]["quarterly"], [{"period": "2026-Q1", "start": "2026-01-01", "end": "2026-03-31", "eps": 0.75, "revenue": 63.0, "net_income": 16.0, "diluted_shares": 101.0}])
+        self.assertEqual(evidence["filings"][-1]["quarterly"], [{"period": "2026-Q1", "start": "2026-01-01", "end": "2026-03-31", "eps": 0.75, "revenue": 63.0, "net_income": 16.0, "diluted_shares": 101.0, "_units": {"eps": "USD/shares", "revenue": "USD", "net_income": "USD", "diluted_shares": "shares"}}])
         self.assertEqual(evaluation["quarterly"]["eps"][-1]["period"], "2026-Q1")
         self.assertEqual(evaluation["quarterly"]["eps"][-1]["value"], 0.75)
         self.assertEqual(evaluation["annual_growth"]["eps_yoy_pct"], 50.0)
