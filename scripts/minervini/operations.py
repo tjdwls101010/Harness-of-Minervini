@@ -19,7 +19,7 @@ import pandas as pd
 from .cache import ProviderCache
 from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
-from .doctrine import get_claim, validate as validate_doctrine
+from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import evaluate_fundamentals
 from .ledger import Ledger
@@ -1657,7 +1657,7 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
         timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
     highs = pd.to_numeric(frame["High"], errors="coerce")
     highs.index = timestamps
-    highs = highs[~highs.index.duplicated(keep="last")]
+    highs = highs[~highs.index.normalize().duplicated(keep="last")]
     dates = pd.Index([timestamp.date() for timestamp in highs.index])
     held = highs[(dates >= entry_date) & (dates <= as_of)]
     held = held[held.notna() & (held > 0) & (held != math.inf)]
@@ -1669,7 +1669,23 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> tuple[float
     return float(held.iloc[position]), held.index[position].date().isoformat()
 
 
-def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float, end_before: date | None = None) -> tuple[dict[str, Any], float | None]:
+def _bars_that_spoke(path_rows: list[tuple[date, Any]]) -> dict[str, Any]:
+    """Which bars the audit actually read.
+
+    A requested window start is a date the caller named, not a promise that a session
+    printed there. Naming the first and last bar that spoke keeps a window whose first
+    session the provider never delivered from reading as if it had been examined -- the
+    harness has no trading calendar and cannot tell a missing session from a holiday.
+    """
+
+    return {
+        "first_bar_checked": path_rows[0][0].isoformat(),
+        "last_bar_checked": path_rows[-1][0].isoformat(),
+        "bars_checked": len(path_rows),
+    }
+
+
+def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, protective_level: float, end_before: date | None = None, require_session: bool = False) -> tuple[dict[str, Any], float | None]:
     """Audit every completed Low against ``protective_level`` from ``effective_date``.
 
     ``end_before`` bounds the window for a level a later stop superseded: only sessions
@@ -1688,10 +1704,12 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()
-    # A repeated timestamp is one session printed twice, and the last print is the one
+    # A repeated session is one session printed twice, and the last print is the one
     # that completed; auditing a superseded print would sell on a Low the session no
-    # longer has. The favorable-excursion measurement reads the same rule.
-    ordered = ordered[~ordered.index.duplicated(keep="last")]
+    # longer has. Two prints of one session can carry different clock times, so the
+    # comparison is the session date, not the timestamp. Every reader of these bars --
+    # the favorable-excursion measurement and the management evidence -- reads the same rule.
+    ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
     dated_rows = [(timestamp.date(), row) for timestamp, row in ordered.iterrows() if timestamp.date() <= as_of]
     if not dated_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_through_as_of"}, None
@@ -1713,6 +1731,16 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
             "first_available": first_available.isoformat(),
             "through": latest_date.isoformat(),
         }, current_price
+    if require_session and not any(bar_date == effective_date for bar_date, _ in dated_rows):
+        # The position existed inside its entry session, so a frame that skips that bar is
+        # missing a session this level had to survive. Starting at the next bar would let a
+        # breach the provider never delivered read as a window that came through clear.
+        return {
+            "state": "unavailable",
+            "reason": "no_completed_bar_on_window_start",
+            "requested_from": effective_date.isoformat(),
+            "through": latest_date.isoformat(),
+        }, current_price
     path_rows = [(bar_date, row) for bar_date, row in dated_rows if bar_date >= effective_date and (end_before is None or bar_date < end_before)]
     if not path_rows:
         return {"state": "unavailable", "reason": "no_completed_bars_in_stop_window"}, current_price
@@ -1724,7 +1752,6 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         if not math.isfinite(low) or low <= 0:
             return {"state": "unavailable", "reason": "invalid_low_in_stop_window", "date": bar_date.isoformat()}, current_price
         if low <= protective_level:
-            window_end = latest_date if end_before is None else (end_before - timedelta(days=1))
             # A session that opened below the level never offered the level's price; the
             # record says so rather than letting the stop read as if it had been filled there.
             opened: float | None = None
@@ -1735,12 +1762,18 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
                     opened = None
                 if opened is not None and (not math.isfinite(opened) or opened <= 0):
                     opened = None
+            checked = [checked_date for checked_date, _ in path_rows if checked_date <= bar_date]
+            # The audit stopped here, so the record stops here: reporting the whole window
+            # would claim sessions after the breach were examined when the loop never
+            # reached them, and after a breach there is nothing left to examine.
             return {
                 "state": "breached",
                 "basis": "completed_daily_low",
                 "from": effective_date.isoformat(),
-                "through": window_end.isoformat(),
-                "bars_checked": len(path_rows),
+                "through": bar_date.isoformat(),
+                "first_bar_checked": checked[0].isoformat(),
+                "last_bar_checked": bar_date.isoformat(),
+                "bars_checked": len(checked),
                 "breach_date": bar_date.isoformat(),
                 "breach_low": low,
                 "breach_open": opened,
@@ -1754,7 +1787,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
                 "basis": "completed_daily_low",
                 "from": effective_date.isoformat(),
                 "through": (end_before - timedelta(days=1)).isoformat(),
-                "bars_checked": len(path_rows),
+                **_bars_that_spoke(path_rows),
             }, current_price
         return {
             "state": "unavailable",
@@ -1780,7 +1813,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
         "basis": "completed_daily_low",
         "from": effective_date.isoformat(),
         "through": latest_date.isoformat(),
-        "bars_checked": len(path_rows),
+        **_bars_that_spoke(path_rows),
     }, current_price
 
 
@@ -1954,6 +1987,8 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                         as_of=clock.date,
                         protective_level=level,
                         end_before=end_before,
+                        # A stop can be moved on a day the market was shut; an entry cannot happen on one.
+                        require_session=effective == entry_date,
                     )
                     audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
                     path_price = audit_price if audit_price is not None else path_price
@@ -2022,7 +2057,9 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
     def collect(value: Any) -> None:
         if isinstance(value, Mapping):
             claim = value.get("doctrine_id")
-            if isinstance(claim, str):
+            # Caller-supplied evidence travels through the payload, so a name here is a
+            # claim only if the registry holds it: an id nobody can look up cites nothing.
+            if isinstance(claim, str) and has_claim(claim):
                 named.add(claim)
             for item in value.values():
                 collect(item)

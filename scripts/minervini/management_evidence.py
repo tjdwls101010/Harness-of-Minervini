@@ -17,9 +17,10 @@ rather than measured against a shorter average that would read differently.
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from . import doctrine
@@ -29,6 +30,18 @@ _ROLES = "management.ema21_sma50_roles"
 _TWENTY_DAY = "management.close_below_20_day_average_lowers_probability"
 _LARGEST_DECLINE = "management.largest_decline_since_stage2_start"
 _VOLUME_STATE = "setup.volume_state_convention"
+_SINCE_ENTRY = ("base_extension", "key_reversal", "gaps_since_breakout")
+_BLOCKS = (
+    "moving_average_trail",
+    "twenty_day_average",
+    "largest_decline_since_stage2_start",
+    "base_extension",
+    "moving_average_extension",
+    "key_reversal",
+    "gaps_since_breakout",
+    "climax",
+    "failed_volume_confirmation",
+)
 _PAUSE_ZONE = "management.tl_base_extension_pause_zone"
 _OWN_CHARACTER = "management.tl_extension_measured_against_own_character"
 _KEY_REVERSAL = "management.tl_key_reversal_criteria"
@@ -72,7 +85,9 @@ def _completed(frame: Any, as_of: date) -> pd.DataFrame | None:
     if ordered.empty:
         return None
     # A repeated session is one bar, and the last print of it is the one that completed.
-    ordered = ordered[~ordered.index.duplicated(keep="last")]
+    # Two prints of one session can carry different clock times, so the comparison is the
+    # session date -- the same rule the stop audit applies to the same frame.
+    ordered = ordered[~ordered.index.normalize().duplicated(keep="last")]
     for column in ("Open", "High", "Low", "Close", "Volume"):
         if column in ordered.columns:
             ordered[column] = pd.to_numeric(ordered[column], errors="coerce")
@@ -177,6 +192,13 @@ def _twenty_day_average(bars: pd.DataFrame) -> dict[str, Any]:
     }
 
 
+def _latest_tie(series: pd.Series, value: float) -> Any:
+    """The index label of the last element equal to ``value``."""
+
+    positions = [position for position, element in enumerate(series) if float(element) == value]
+    return series.index[positions[-1]]
+
+
 def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     closes = bars["Close"].astype(float)
     # A week is a completed bar once its Friday has printed or a later week has begun;
@@ -200,9 +222,7 @@ def _weekly(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     latest_end = weekly.index[-1]
     if largest >= 0:
         return {"state": "reported", "largest_pct": None, "week_ending": latest_end.isoformat(), "latest_completed_week_is_largest": False}
-    largest_end = since.idxmin()
-    if float(since.iloc[-1]) == largest:
-        largest_end = since.index[-1]
+    largest_end = _latest_tie(since, largest)
     return {
         "state": "reported",
         "largest_pct": _reported(largest),
@@ -222,11 +242,10 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
     largest = float(since.min())
     if largest >= 0:
         return {"state": "reported", "largest_pct": None, "date": None, "last_session_is_largest": False, "volume_ratio": None, "volume_signal": None}
-    stamp = since.idxmin()
-    if float(since.iloc[-1]) == largest:
-        # A latest decline tied with an earlier one is still the largest of the advance;
-        # reporting the earlier date would suppress the review the last session earned.
-        stamp = since.index[-1]
+    # idxmin names the first occurrence. A later session that fell exactly as far is the
+    # more recent evidence, and reporting the earlier date would date the decline before
+    # the session a reader has to act on, so every tie resolves to the latest.
+    stamp = _latest_tie(since, largest)
     position = int(bars.index.get_loc(stamp))
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
     ratio: float | None = None
@@ -249,6 +268,13 @@ def _daily(bars: pd.DataFrame, *, stage2_start: date) -> dict[str, Any]:
 def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[str, Any]:
     if stage2_start is None:
         return {"state": "unavailable", "reason": "stage2_start_not_declared"}
+    declared = stage2_start
+    if stage2_start.weekday() >= 5:
+        # A stage begins in an analyst's reading of the chart, not in a trade, so a weekend
+        # anchor is a real anchor: the advance starts at the first session that could open
+        # after it. Comparing the raw Saturday with a Monday history would report the
+        # sessions before it as missing when none of them exist.
+        stage2_start = stage2_start + timedelta(days=7 - stage2_start.weekday())
     first_available = bars.index[0].date()
     if first_available > stage2_start:
         # A larger decline in the sessions the provider never returned is unknowable, so a
@@ -263,10 +289,30 @@ def _largest_decline(bars: pd.DataFrame, *, stage2_start: date | None) -> dict[s
         "doctrine_id": _LARGEST_DECLINE,
         "binds": doctrine.binds(_LARGEST_DECLINE),
         "state": "reported",
-        "stage2_start": stage2_start.isoformat(),
+        "stage2_start": declared.isoformat(),
+        "measured_from": stage2_start.isoformat(),
         "daily": _daily(bars, stage2_start=stage2_start),
         "weekly": _weekly(bars, stage2_start=stage2_start),
     }
+
+
+def _unreadable(bars: pd.DataFrame) -> str | None:
+    """The first session the harness cannot read, if there is one.
+
+    A price of zero or NaN is not a cheap stock or a quiet session -- it is a bar the
+    provider could not fill. Measuring structure through it produces percentages divided
+    by nothing and comparisons that silently answer false, so the blocks that would have
+    read it say unavailable and name the session instead.
+    """
+
+    for column, floor in (("Open", 0.0), ("High", 0.0), ("Low", 0.0), ("Close", 0.0), ("Volume", -1.0)):
+        if column not in bars.columns:
+            continue
+        values = pd.to_numeric(bars[column], errors="coerce").to_numpy(dtype=float)
+        bad = ~np.isfinite(values) | (values <= floor)
+        if bool(bad.any()):
+            return bars.index[int(bad.argmax())].date().isoformat()
+    return None
 
 
 def _positions_since(bars: pd.DataFrame, since: date) -> list[int]:
@@ -361,8 +407,10 @@ def _key_reversal(bars: pd.DataFrame, *, entry_date: date, breakout_date: date |
     gap_up = opens is not None and float(opens.iloc[last]) > float(highs.iloc[previous])
     features = {
         "gap_up_filled_and_reversed": bool(gap_up and float(lows.iloc[last]) <= float(highs.iloc[previous]) and float(closes.iloc[last]) < float(opens.iloc[last])) if opens is not None else None,
-        "highest_volume_since": bool(others and volumes is not None and float(volumes.iloc[last]) > max(float(volumes.iloc[position]) for position in others)) if volumes is not None else None,
-        "widest_range_since": bool(others and (float(highs.iloc[last]) - float(lows.iloc[last])) > max(float(highs.iloc[position]) - float(lows.iloc[position]) for position in others)),
+        # With no other session inside the window there is nothing to be highest or widest
+        # than, and answering false there would read as a criterion checked and missed.
+        "highest_volume_since": None if (volumes is None or not others) else bool(float(volumes.iloc[last]) > max(float(volumes.iloc[position]) for position in others)),
+        "widest_range_since": None if not others else bool((float(highs.iloc[last]) - float(lows.iloc[last])) > max(float(highs.iloc[position]) - float(lows.iloc[position]) for position in others)),
         "closed_below_prior_low": bool(float(closes.iloc[last]) < float(lows.iloc[previous])),
         "closing_range_pct": _reported(_closing_range_pct(bars.iloc[last])),
         "visually_extended": None,
@@ -442,9 +490,11 @@ def _climax(bars: pd.DataFrame) -> dict[str, Any]:
     }
 
 
-def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | None) -> dict[str, Any]:
+def _failed_volume_confirmation(bars: pd.DataFrame, *, breakout_date: date | None, sessions: set[date], first_session: date) -> dict[str, Any]:
     if breakout_date is None:
         return {"state": "unavailable", "reason": "breakout_date_not_declared"}
+    if breakout_date not in sessions:
+        return {"state": "unavailable", "reason": "history_starts_after_breakout_date" if first_session > breakout_date else "no_completed_bar_on_breakout_date"}
     if "Volume" not in bars.columns:
         return {"state": "unavailable", "reason": "volume_history_unavailable"}
     window = _positions_since(bars, breakout_date)
@@ -513,16 +563,46 @@ def build_management_evidence(
             "climax": unavailable,
             "failed_volume_confirmation": unavailable,
         }
+    unreadable = _unreadable(bars)
+    if unreadable is not None:
+        broken = {"state": "unavailable", "reason": "invalid_ohlc_history", "date": unreadable}
+        return {key: dict(broken) for key in _BLOCKS}
+
+    sessions = {timestamp.date() for timestamp in bars.index}
+    first_session = bars.index[0].date()
+    # A window anchored on a session the frame never printed is not a window. Whether the
+    # provider dropped that bar or the caller named a day the market was shut, the sessions
+    # inside are unknown, and starting at the next bar would re-anchor the measurement
+    # onto a session the trader did not name.
+    if entry_date not in sessions:
+        entry_gap = {"state": "unavailable", "reason": "history_starts_after_entry_date" if first_session > entry_date else "no_completed_bar_on_entry_date"}
+        held_blocks = {key: dict(entry_gap) for key in _SINCE_ENTRY}
+        if entry_gap["reason"] == "no_completed_bar_on_entry_date":
+            # Nothing about this position's history can be trusted to the session level, so
+            # even the measurements that do not look back to entry stay silent.
+            return {key: dict(entry_gap) for key in _BLOCKS}
+        return {
+            "moving_average_trail": {**entry_gap, "selected": management_average},
+            "twenty_day_average": _twenty_day_average(bars),
+            "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start),
+            **held_blocks,
+            "moving_average_extension": _moving_average_extension(bars),
+            "climax": _climax(bars),
+            "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session),
+        }
+    breakout_gap: dict[str, Any] | None = None
+    if breakout_date is not None and breakout_date not in sessions:
+        breakout_gap = {"state": "unavailable", "reason": "history_starts_after_breakout_date" if first_session > breakout_date else "no_completed_bar_on_breakout_date"}
     return {
         "moving_average_trail": _moving_average_trail(bars, entry_date=entry_date, as_of=as_of, selected=management_average),
         "twenty_day_average": _twenty_day_average(bars),
         "largest_decline_since_stage2_start": _largest_decline(bars, stage2_start=stage2_start),
         "base_extension": _base_extension(bars, entry_date=entry_date, base_top=base_top),
         "moving_average_extension": _moving_average_extension(bars),
-        "key_reversal": _key_reversal(bars, entry_date=entry_date, breakout_date=breakout_date),
-        "gaps_since_breakout": _gaps_since_breakout(bars, entry_date=entry_date, breakout_date=breakout_date),
+        "key_reversal": dict(breakout_gap) if breakout_gap else _key_reversal(bars, entry_date=entry_date, breakout_date=breakout_date),
+        "gaps_since_breakout": dict(breakout_gap) if breakout_gap else _gaps_since_breakout(bars, entry_date=entry_date, breakout_date=breakout_date),
         "climax": _climax(bars),
-        "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date),
+        "failed_volume_confirmation": _failed_volume_confirmation(bars, breakout_date=breakout_date, sessions=sessions, first_session=first_session),
     }
 
 

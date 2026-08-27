@@ -158,6 +158,17 @@ class TheLargestDeclineSinceTheStageTwoAdvanceBegan(unittest.TestCase):
         self.assertEqual(block["state"], "unavailable")
         self.assertEqual(block["reason"], "history_starts_after_stage2_start")
 
+    def test_a_weekend_anchor_measures_from_the_first_session_that_could_follow_it(self) -> None:
+        bars = frame([100.0] * 60)
+        monday = bars.index[0].date()
+        self.assertEqual(monday.weekday(), 0, "fixture must start on a Monday")
+        result = build_management_evidence(bars, entry_date=bars.index[40].date(), as_of=bars.index[-1].date(), stage2_start=monday - date.resolution * 2)
+
+        block = result["largest_decline_since_stage2_start"]
+        self.assertEqual(block["state"], "reported")
+        self.assertEqual(block["stage2_start"], (monday - date.resolution * 2).isoformat())
+        self.assertEqual(block["measured_from"], monday.isoformat())
+
     def test_a_latest_decline_tied_with_an_earlier_one_is_still_the_largest(self) -> None:
         closes = rising(20) + [100.0, 90.0] + [90.0] * 18 + [100.0, 90.0]
         bars = frame(closes)
@@ -166,6 +177,29 @@ class TheLargestDeclineSinceTheStageTwoAdvanceBegan(unittest.TestCase):
         daily = result["largest_decline_since_stage2_start"]["daily"]
         self.assertAlmostEqual(daily["largest_pct"], -10.0)
         self.assertIs(daily["last_session_is_largest"], True)
+
+    def test_a_tie_in_the_middle_of_the_advance_also_dates_at_the_later_one(self) -> None:
+        # Two -10% sessions with more advance after them: the later one is the date a
+        # reader has to place, and idxmin would have named the earlier.
+        closes = rising(20) + [100.0, 90.0] + [90.0] * 3 + [100.0, 90.0] + [90.0] * 12
+        bars = frame(closes)
+        result = build_management_evidence(bars, entry_date=bars.index[21].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=bars.index[0].date())
+
+        daily = result["largest_decline_since_stage2_start"]["daily"]
+        self.assertAlmostEqual(daily["largest_pct"], -10.0)
+        self.assertEqual(daily["date"], bars.index[26].date().isoformat())
+        self.assertIs(daily["last_session_is_largest"], False)
+
+    def test_a_weekly_tie_in_the_middle_of_the_advance_dates_at_the_later_week(self) -> None:
+        # Two weeks that each closed 8% below the week before, with quiet weeks after.
+        closes = [100.0] * 25 + [100.0] * 4 + [92.0] + [92.0] * 4 + [92.0] * 4 + [84.64] + [84.64] * 10
+        bars = frame(closes)
+        result = build_management_evidence(bars, entry_date=bars.index[25].date(), as_of=bars.index[-1].date(), management_average=None, stage2_start=bars.index[0].date())
+
+        weekly = result["largest_decline_since_stage2_start"]["weekly"]
+        self.assertAlmostEqual(weekly["largest_pct"], -8.0)
+        self.assertIs(weekly["latest_completed_week_is_largest"], False)
+        self.assertEqual(weekly["largest_week_ending"], "2025-12-12")  # the later of the two -8% weeks, not 2025-12-05
 
     def test_a_second_close_that_held_above_the_first_session_s_low_says_so(self) -> None:
         # First close 110 with a deep Low of 80; the second close 108 is under the average

@@ -98,6 +98,16 @@ def _result(record: dict[str, Any]) -> dict[str, Any]:
     return {"claim": _runtime_claim(record), "provenance": record["provenance"]}
 
 
+def has_claim(claim_id: str) -> bool:
+    """Whether the registry holds this claim.
+
+    A citation nobody can look up is worse than no citation: it reads as doctrine while
+    leading a reader nowhere, and evidence arriving from a caller can name anything.
+    """
+
+    return any(record["id"] == claim_id for record in _load_registry()["claims"])
+
+
 def get_claim(claim_id: str) -> dict[str, Any]:
     """Return one claim and its audit provenance as separate objects.
 
@@ -207,6 +217,25 @@ def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[s
     return specification, record["claim"], record["provenance"]["quotations"][specification["quote_index"]]
 
 
+def _measurable(measured: float | None) -> tuple[float | None, str | None]:
+    """A non-finite measurement is a measurement nobody made.
+
+    NaN compares false against every limit, so a gate reading it would publish "fail" --
+    a verdict word -- for an arithmetic accident, and infinity would publish a real
+    failure for a division that ran out of numbers. Both become the unavailable state the
+    harness already has for evidence it does not hold, with the reason naming which of the
+    two it was so a reader can tell an unmeasured input from a measurement that broke.
+    """
+
+    if measured is None:
+        return None, None
+    if isinstance(measured, bool) or not isinstance(measured, (int, float)):
+        return None, "measurement_not_a_number"
+    if not math.isfinite(float(measured)):
+        return None, "measurement_not_finite"
+    return measured, None
+
+
 def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
     """Compare a measurement with a limit the source states as a filter.
 
@@ -215,6 +244,7 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
     to forbid.
     """
     specification, claim, _ = _specification(claim_id, name, "gate")
+    measured, unmeasurable = _measurable(measured)
     limit = specification["value"]
     comparator = specification["comparator"]
     binds = _binds(claim)
@@ -232,6 +262,8 @@ def evaluate_gate(claim_id: str, name: str, measured: float | None) -> dict[str,
         signal["attributed_to"] = attribution
     if measured is None:
         signal["state"] = "unavailable"
+        if unmeasurable is not None:
+            signal["reason"] = unmeasurable
     else:
         passed = _COMPARATORS[comparator](measured, limit)
         # A non-binding gate is a real filter belonging to someone the harness reads for
@@ -278,6 +310,7 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     reducers branch on.
     """
     specification, _, quotation = _specification(claim_id, name, "marker")
+    measured, unmeasurable = _measurable(measured)
     value = specification["value"]
     signal: dict[str, Any] = {
         "id": f"{claim_id}.{name}",
@@ -294,6 +327,8 @@ def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[st
     if measured is not None:
         signal["distance"] = round(measured - value, _REPORTED_PRECISION)
         signal["state"] = "reported"
+    elif unmeasurable is not None:
+        signal["reason"] = unmeasurable
     return signal
 
 
@@ -342,6 +377,7 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     with the signal so the response can cite what it is reading.
     """
     specification, _, quotation = _specification(claim_id, name, "band")
+    measured, unmeasurable = _measurable(measured)
     low, high = specification["range"]
     if high <= low:
         # validate() refuses both of these at registration, so reaching one means a registry
@@ -367,6 +403,8 @@ def evaluate_band(claim_id: str, name: str, measured: float | None) -> dict[str,
     }
     if measured is None:
         signal["state"] = "unavailable"
+        if unmeasurable is not None:
+            signal["reason"] = unmeasurable
         return signal
     span = high - low
     # Everything below reads the number the envelope prints, not the one this was handed.
