@@ -25,6 +25,15 @@ _COST_CUTTING = "fundamentals.cost_cutting_unsustainable"
 _HISTORICAL_ACCELERATION = "fundamentals.earnings_acceleration_vs_historical_growth_rate"
 _ONE_TIME_INCOME = "fundamentals.one_time_income_exclusion"
 _HISTORY_LOOKBACK = "fundamentals.earnings_history_lookback_window"
+_TURNAROUND_GROWTH = "fundamentals.turnaround_growth_rate_threshold"
+_TURNAROUND_CRITERIA = "fundamentals.turnaround_qualifying_criteria"
+_MARKET_LEADER = "fundamentals.market_leader_earnings_growth_pace"
+_INSTITUTIONAL_FAVORITE = "fundamentals.institutional_favorite_growth_pace"
+_TOP_COMPETITOR = "fundamentals.top_competitor_reading"
+_LAGGARD = "fundamentals.laggard_fundamentals_reading"
+_CYCLICAL = "fundamentals.cyclical_inverse_pe_and_signals"
+_REPEATED_CHARGE = "fundamentals.repeated_one_time_charge_red_flag"
+_TAX_DISCLOSURE = "fundamentals.tax_disclosure_red_flag"
 MARKET_REGIMES = ("bull", "neutral", "bear")
 _REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
@@ -70,9 +79,17 @@ def evaluate_fundamentals(
     quarterly = _quarterly_read(quarters)
     annual_growth = _annual_growth(annual)
     integrity, safety_missing = _integrity_read(quarters, going_concern=going_concern, accounting_integrity=accounting_integrity)
-    earnings_quality = {"inventory_receivables_vs_sales": _inventory_receivables_vs_sales(annual), "one_time_income_exclusion": _one_time_income_exclusion()}
+    earnings_quality = {
+        "inventory_receivables_vs_sales": _inventory_receivables_vs_sales(annual),
+        "one_time_income_exclusion": _one_time_income_exclusion(),
+        # Both of these live in filing prose. They are named so a reader knows the check was
+        # not run, rather than discovering its absence by the silence where a finding would be.
+        "repeated_one_time_charge_red_flag": _unread_claim(_REPEATED_CHARGE, ["filing_history_nonrecurring_charges"], reason="filing_footnotes_not_read_by_this_harness"),
+        "tax_disclosure_red_flag": _unread_claim(_TAX_DISCLOSURE, ["filing_footnotes_tax_disclosure", "effective_tax_rate", "reported_pretax_income"], reason="filing_footnotes_not_read_by_this_harness"),
+    }
     growth = _growth_read(quarterly, annual, market_regime=market_regime)
     classification = _leader_category(leader_category)
+    category_reading = _category_reading(classification, quarterly, annual)
     growth_quality, growth_missing = _growth_quality(growth, quarterly, annual_growth)
     discrepancies = _fmp_discrepancies(quarters, fmp_enrichment, as_of_date)
 
@@ -107,6 +124,7 @@ def evaluate_fundamentals(
         "integrity": integrity,
         "earnings_quality": earnings_quality,
         "leader_category": classification,
+        "category_reading": category_reading,
         "discrepancies": discrepancies,
         "signals": [
             {"id": name, "state": item["state"]}
@@ -485,15 +503,259 @@ def _one_time_income_exclusion() -> dict[str, Any]:
     counted as a per-request gap, because no filing was ever short of it.
     """
 
+    return _unread_claim(
+        _ONE_TIME_INCOME,
+        ["nonrecurring_items_per_share", "filing_footnotes"],
+        reason="filing_footnotes_not_read_by_this_harness",
+        reported_eps_is_unadjusted=True,
+    )
+
+
+def _category_reading(classification: Mapping[str, Any], quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """The claims that read this company's kind, and nothing else's.
+
+    The same earnings history means different things depending on what the company is, and the
+    source says so in claims that name one category each. A turnaround is held to a bar a market
+    leader is not, so running every category's claim over every ticker would publish six
+    readings of which five were about a company this is not.
+
+    Nothing is declared by a filing, so nothing is read until an analyst declares it.
+    """
+
+    reader = _CATEGORY_READERS.get(classification["category"])
+    return {**classification, "readings": reader(quarterly, annual) if reader else {}}
+
+
+def _turnaround_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    growth = _turnaround_growth(quarterly)
+    return {"turnaround_growth_rate_threshold": growth, "turnaround_qualifying_criteria": _turnaround_criteria(quarterly, growth)}
+
+
+def _turnaround_window() -> list[int]:
+    """One to three quarters, which is the two chapters' windows taken together.
+
+    The source gave the scan window twice and not identically -- two or three quarters in one
+    chapter, one or two in the other -- and both are registered as references. Widening to the
+    union reads every quarter either chapter would have looked at; picking one chapter would
+    have silently dropped whichever quarters the other cared about.
+    """
+
+    ch6 = doctrine.threshold(_TURNAROUND_GROWTH, "turnaround_growth_window_quarters_ch6")
+    ch7 = doctrine.threshold(_TURNAROUND_GROWTH, "turnaround_growth_window_quarters_ch7")
+    return [min(*ch6, *ch7), max(*ch6, *ch7)]
+
+
+def _turnaround_growth(quarterly: Mapping[str, Any]) -> dict[str, Any]:
+    """A hundred percent or better, quarter by quarter across the source's window.
+
+    The bar is higher than the one a growth stock is held to, not lower, because a turnaround's
+    comparisons are easy: it is coming off quarters bad enough to need turning around.
+    """
+
+    window = _turnaround_window()
+    series = quarterly["eps_yoy_growth"]
+    read = [
+        {**doctrine.evaluate_gate(_TURNAROUND_GROWTH, "turnaround_recent_growth_percent", point["yoy_pct"]), "period": point["period"]}
+        for point in series[-max(window):]
+    ]
     return {
-        "doctrine_id": _ONE_TIME_INCOME,
-        "binds": doctrine.binds(_ONE_TIME_INCOME),
-        "computability": doctrine.get_claim(_ONE_TIME_INCOME)["claim"]["computability"],
-        "state": "not_evaluated",
-        "reason": "filing_footnotes_not_read_by_this_harness",
-        "missing_inputs": ["nonrecurring_items_per_share", "filing_footnotes"],
-        "reported_eps_is_unadjusted": True,
+        "doctrine_id": _TURNAROUND_GROWTH,
+        "binds": doctrine.binds(_TURNAROUND_GROWTH),
+        "computability": doctrine.get_claim(_TURNAROUND_GROWTH)["claim"]["computability"],
+        "window_quarters": window,
+        "window": read,
+        "window_quarters_passing": sum(1 for point in read if point["state"] == "pass"),
     }
+
+
+def _turnaround_criteria(quarterly: Mapping[str, Any], growth: Mapping[str, Any]) -> dict[str, Any]:
+    """Two strong quarters, or one big enough to carry the trailing year back to its old peak.
+
+    The claim does not define "strong" and the registry says so, pointing at the hundred-percent
+    claim for the quantified version -- so that is what a strong quarter is here, and the reading
+    names which claim decided it rather than leaving a reader to guess.
+
+    "Near or above" the old peak is two tests, and only one of them is defined. At or above is
+    measured; near is not quantified anywhere in the corpus, so the two figures are published
+    beside each other and the word is named as an open judgement instead of being given a
+    tolerance this harness invented.
+    """
+
+    strong = growth["window_quarters_passing"]
+    gate = doctrine.evaluate_gate(_TURNAROUND_CRITERIA, "turnaround_min_strong_quarters", strong)
+    trailing, peak = _trailing_twelve_months(quarterly["eps"])
+    at_or_above = None if trailing is None or peak is None else trailing >= peak
+    return {
+        "doctrine_id": _TURNAROUND_CRITERIA,
+        "binds": doctrine.binds(_TURNAROUND_CRITERIA),
+        "computability": doctrine.get_claim(_TURNAROUND_CRITERIA)["claim"]["computability"],
+        "strong_quarters": strong,
+        "strong_means": _TURNAROUND_GROWTH,
+        "gate": gate,
+        "trailing_12m_eps": trailing,
+        "trailing_12m_eps_prior_peak": peak,
+        "trailing_12m_eps_at_or_above_prior_peak": at_or_above,
+        "unquantified": ["near_prior_peak_is_unquantified"],
+        "satisfied": gate["state"] == "pass" or at_or_above is True,
+    }
+
+
+def _trailing_twelve_months(series: list[dict[str, Any]]) -> tuple[float | None, float | None]:
+    """The latest four filed quarters summed, and the highest any earlier four summed to.
+
+    Quarters have to be consecutive for a sum of four to be a year. A window straddling a gap
+    in the filings would add up whatever four rows happened to be adjacent in the list and
+    call the result twelve months.
+    """
+
+    windows = []
+    for position in range(len(series) - _QUARTERS_PER_YEAR + 1):
+        span = series[position:position + _QUARTERS_PER_YEAR]
+        if any(_previous_quarter(later["period"]) != earlier["period"] for earlier, later in zip(span, span[1:])):
+            continue
+        windows.append((span[-1]["period"], _reported(sum(point["value"] for point in span))))
+    if not windows:
+        return None, None
+    latest = windows[-1]
+    earlier = [total for period, total in windows[:-1]]
+    return latest[1], max(earlier) if earlier else None
+
+
+def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """A market leader's annual pace, against the two figures the source gave for one.
+
+    Twenty percent is a marker -- "they generally grow earnings at a rate of 20 percent or
+    higher" names a value and declines to bound it -- so the reading is the measurement and its
+    distance, never a pass. Thirty-five to forty-five is a band, and the source attached it to a
+    best stretch of five or ten years, so it is measured over the best such stretch on file and
+    reports unavailable when the filings do not reach back that far.
+    """
+
+    series = [(str(fact.get("period")), float(fact["eps"])) for fact in annual if _is_number(fact.get("eps"))]
+    span, best = _best_stretch(series)
+    reading = {
+        "doctrine_id": _MARKET_LEADER,
+        "binds": doctrine.binds(_MARKET_LEADER),
+        "computability": doctrine.get_claim(_MARKET_LEADER)["claim"]["computability"],
+        "latest_annual_growth": doctrine.evaluate_marker(_MARKET_LEADER, "market_leader_min_earnings_growth_percent", _annual_metric_growth(annual, "eps")),
+        "best_stretch": doctrine.evaluate_band(_MARKET_LEADER, "market_leader_best_stretch_growth_percent", best),
+        "best_stretch_years": doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years"),
+        "missing_inputs": ["market_share_trend", "industry_classification"],
+    }
+    return reading if span is None else {**reading, "best_stretch_span_years": span}
+
+
+def _best_stretch(series: list[tuple[str, float]]) -> tuple[int | None, float | None]:
+    """The highest compound annual rate over any stretch the source's span covers.
+
+    Consecutive years only. A stretch spanning a year the company did not file would compound
+    across a gap and report the average of two eras as one company's best run.
+    """
+
+    lower, upper = doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years")
+    best: tuple[int | None, float | None] = (None, None)
+    for span in range(int(lower), int(upper) + 1):
+        for position in range(len(series) - span):
+            window = series[position:position + span + 1]
+            if any(int(later[0]) - int(earlier[0]) != 1 for earlier, later in zip(window, window[1:])):
+                continue
+            rate, _ = _compound_growth(window, span)
+            if rate is not None and (best[1] is None or rate > best[1]):
+                best = (span, rate)
+    return best
+
+
+def _institutional_favorite_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """A mature company's pace, published without a range to compare it against.
+
+    The source described the growth as "low to middle teens", which the registry records as a
+    descriptor rather than a numeric range, and the claim carries no threshold. So the annual
+    rate is published and nothing is said about whether it cleared anything.
+    """
+
+    return {
+        "doctrine_id": _INSTITUTIONAL_FAVORITE,
+        "binds": doctrine.binds(_INSTITUTIONAL_FAVORITE),
+        "computability": doctrine.get_claim(_INSTITUTIONAL_FAVORITE)["claim"]["computability"],
+        "latest_annual_eps_growth_pct": _annual_metric_growth(annual, "eps"),
+        "missing_inputs": ["dividend_growth_history"],
+        "unquantified": ["low_to_middle_teens_is_a_descriptor_not_a_range"],
+    }
+
+
+def _cyclical_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """Of the four signals the source lists for a cyclical's position, the one that is filed.
+
+    Earnings direction is in the filings. The price-earnings series, the dividend history and
+    the industry classification are not, and the source's reading is inverse -- a high multiple
+    when the stock is poised to rally, a low one near the end -- so naming a cycle position from
+    the earnings direction alone would invert the very reading the claim exists to warn about.
+    """
+
+    series = quarterly["eps_yoy_growth"]
+    latest = series[-1]["yoy_pct"] if series else None
+    direction = "unavailable" if latest is None else "rising" if latest > 0 else "falling" if latest < 0 else "flat"
+    return {
+        "doctrine_id": _CYCLICAL,
+        "binds": doctrine.binds(_CYCLICAL),
+        "computability": doctrine.get_claim(_CYCLICAL)["claim"]["computability"],
+        "earnings_direction": direction,
+        "latest_quarterly_eps_yoy_pct": latest,
+        "missing_inputs": ["pe_ratio_series", "dividend_history", "industry_classification"],
+    }
+
+
+def _top_competitor_boundary(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """Which two or three names lead a group is a ranking, and this evaluator holds one company."""
+
+    return {
+        "top_competitor_reading": _unread_claim(
+            _TOP_COMPETITOR,
+            ["peer_group_eps_growth", "peer_group_revenue_growth", "peer_group_margins", "peer_group_relative_strength"],
+            reason="peer_group_not_held_by_this_capability",
+            competitors_to_track=doctrine.threshold(_TOP_COMPETITOR, "top_competitors_to_track_count"),
+        )
+    }
+
+
+def _laggard_boundary(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]) -> dict[str, Any]:
+    """A laggard is defined by the group it lags, which is evidence from outside this evaluator."""
+
+    return {
+        "laggard_fundamentals_reading": _unread_claim(
+            _LAGGARD,
+            ["peer_group_eps_growth", "peer_group_revenue_growth", "relative_price_performance"],
+            reason="peer_group_not_held_by_this_capability",
+        )
+    }
+
+
+def _unread_claim(claim_id: str, missing_inputs: list[str], **extra: Any) -> dict[str, Any]:
+    """A claim named with what it needed and did not get, rather than left out of the output.
+
+    An omitted reading and an unrunnable one look the same to a reader, and only one of them is
+    a boundary of what this capability does. These are not counted as per-request gaps: no
+    filing was ever short of them.
+    """
+
+    return {
+        "doctrine_id": claim_id,
+        "binds": doctrine.binds(claim_id),
+        "computability": doctrine.get_claim(claim_id)["claim"]["computability"],
+        "state": "not_evaluated",
+        "missing_inputs": missing_inputs,
+        **extra,
+    }
+
+
+_CATEGORY_READERS = {
+    "turnaround": _turnaround_reading,
+    "market_leader": lambda quarterly, annual: {"market_leader_earnings_growth_pace": _market_leader_reading(quarterly, annual)},
+    "institutional_favorite": lambda quarterly, annual: {"institutional_favorite_growth_pace": _institutional_favorite_reading(quarterly, annual)},
+    "cyclical": lambda quarterly, annual: {"cyclical_inverse_pe_and_signals": _cyclical_reading(quarterly, annual)},
+    "top_competitor": _top_competitor_boundary,
+    "past_leader_or_laggard": _laggard_boundary,
+}
 
 
 def _margin_read(series: list[dict[str, Any]]) -> dict[str, Any]:

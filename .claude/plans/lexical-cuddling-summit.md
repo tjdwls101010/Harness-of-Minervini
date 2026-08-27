@@ -171,6 +171,8 @@
 - **4-E 인터페이스.** CLI 플래그, capabilities 프로즈, schema_sync, harness-spec.
 - **4-F 적대 리뷰 + 변이 스윕 + PR.** 결정 267에 따라 **렌즈를 고정**해서 돌린다 — 매 라운드 새 렌즈를 주면 종료 조건이 도달 불가능하다.
 
+진행표(브랜치 `feat/fundamentals-live-path`): 4-A 완료 `f0e2661` · 4-B 완료 `a0110a2`+`3ca4abc` · 4-C 착수. 4-B 종료 시점 스위트 1486 OK, `fundamentals.*` claim 22/41 결속(미결속 19개는 4-C 소관이거나 추정치 프로바이더 부재이거나, 인구 통계라 `reference` 역할상 티커 측정과 비교되지 않는 것들이다).
+
 ### Phase 5 — 시장/리더십 행동 증거
 
 파일: `scripts/minervini/market_evidence.py`, `market.py`, `operations.py`.
