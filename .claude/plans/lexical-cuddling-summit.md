@@ -508,6 +508,13 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
     - **결정 217 — 못 읽은 봉은 False를 말하지 않는다(p3f4-registry③④⑤).** NaN 저가와의 비교가 `second_close_above_first_low: false`를 만들고 있었다(없던 봉에서 나온 종목에 대한 판단), 볼륨 컬럼이 있는데 값이 NaN이면 `missing_inputs: []`가 나왔고, OHLC가 불완전한 프레임에서 블록 11개 중 2개가 통째로 사라졌다. 각각 null+이유, ratio 기준 판정, `_BLOCKS` 전체 발표로 고쳤다.
     - **결정 218 — 원하지 않은 입력과 안 읽은 입력은 다른 말이다(p3f4-registry⑥⑦).** 클라이맥스 블록이 `base_count`를 요구하는 claim을 인용하면서 그것을 읽지 않고, 베이스 카운트 면책이 `price_history`/`volume_history`를 요구하는 claim을 가격 없이 인용하고 있었다. `missing_inputs`(원했는데 없던 것)와 별개로 `claim_inputs_not_read`(claim이 요구하지만 이 읽기가 소비하지 않는 것)를 둔다.
     - **이월 #14 — `ticker.risk` 스키마에 필드 단위 `data` 계약이 없다(p3f4-registry⑧).** 생성되는 스키마가 공유 봉투 참조와 `operation.const`뿐이라 `data:{"bogus":true}`도 유효하다. 실재하는 갭이지만 **모든 capability의 공통 문제**이고(봉투 스키마가 `data: {}`), Phase 3의 경계를 넘는다. Phase 6(인터페이스/프로즈 계층)에서 전 capability에 대해 처리한다.
+    - **결정 219 — 주장된 위반은 선언된 레벨에 대한 주장이다(p3f5-levels①).** `--completed-stop-breach`가 스탑 없이 무효화만 선언된 요청에서 `completed_stop_breach` SELL을 냈다. `declares_exit_plan`은 "어떤 청산 계획이든 있는가"를 묻는데 스탑 주장은 **스탑**에 대한 주장이므로, 스탑이 선언되지 않으면 아무것도 주장되지 않은 것이다(라이브 주장도 같다).
+    - **결정 220 — 먼저 일어난 청산이 실패의 이름이다(p3f5-levels②).** 선언된 평균이 12/3에 포지션을 닫았는데 12/22의 스탑 프린트가 `failed`를 차지했다. 날짜를 가진 트리거가 둘 이상이면 **가장 이른 것**이 이름을 갖는다 — 존재하지 않는 포지션이 닿을 수 없는 레벨은 그 포지션의 청산이 아니다. 날짜가 없으면 기존 우선순위가 그대로다.
+    - **결정 221 — 방어는 실제로 유효한 레벨에서 잰다(p3f5-levels③).** 넓혀진 스탑(90)에서 손실률을 재 10%로 발표하면서 옆의 경로는 94가 계속 유효하다고 말하고, 그 94로 올리라는 액션까지 냈다. `_effective_stop`(선언 스탑과 초기 스탑 중 높은 쪽)을 쓰고 `measured_from_stop`으로 어느 레벨에서 쟀는지 발표한다.
+    - **결정 222 — 마지막 가격이 없으면 배치 가능성은 모른다(p3f5-levels④).** `current_price: null` 옆에서 `tighten_to_is_placeable: true`가 나왔다. 모름은 예가 아니므로 `null` + `current_price_unavailable`로 발표하고, 브레이크이븐 규칙도 같은 기준을 쓴다(동률은 배치 불가).
+    - **결정 223 — 블록은 자기가 읽는 것에만 무효화된다(p3f5-evidence④⑤⑥).** 갭 블록이 볼륨에, 확장·Stage 3가 200세션 전 High/Low에, 돌파 이후 행동이 나중 볼륨에 무효화되고 있었다. 각 가드를 **그 블록이 실제로 읽는 컬럼과 창**으로 좁혔다 — 진범은 넓은 창이 아니라 넓은 창이 만든 거짓 unavailable이다.
+    - **결정 224 — 모집단 통계는 더 엄격하다(p3f5-evidence③).** 볼륨 백분위가 NaN을 "최신 세션이 이긴 세션"으로 세고 있었다. 모집단에 못 읽는 세션이 하나라도 있으면 백분위는 발표하지 않고 `volume_history`를 missing으로 적는다.
+    - **결정 225 — 거절도 읽은 것을 말하고, null도 이유를 말한다(p3f5-evidence①②⑦).** 트레일의 분할 거절이 감사한 프리픽스를 빼먹었고, Stage 3가 볼륨을 `missing_inputs`(원했는데 없음)로 적었지만 실제로는 어느 히스토리에서도 읽지 않으므로 `claim_inputs_not_read`가 맞다(볼륨 있는 프레임과 없는 프레임의 측정치가 동일함을 테스트로 고정). 종가 범위가 null일 때는 어느 값이 없었는지 이름을 붙인다.
 
 - **Phase 4~7 — 미착수.**
 

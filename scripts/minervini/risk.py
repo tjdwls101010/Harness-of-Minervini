@@ -262,7 +262,11 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
 
     blocks: dict[str, Any] = {}
     market_state = _status_word(payload.get("market")) or None
-    stop = _number(payload.get("stop_price"))
+    # The level the position is actually defended by, which is not always the declared stop:
+    # a stop is never widened, so an initial stop above a later, looser one stays in force,
+    # and measuring the loss from the looser level would report a risk the trade does not run
+    # and then order a raise to the level the audit says never stopped governing.
+    stop = _effective_stop(payload)
     band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", (entry - stop) / entry * 100 if entry and stop is not None else None)
     low, high = doctrine.get_claim(_MARKET_DEFENSE)["claim"]["thresholds"]["difficult_market_loss_pct"]["range"]
     tighten_to = _reported(entry * (1 - high / 100)) if entry else None
@@ -270,17 +274,29 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     # A stop above the last price is not a tighter stop, it is a sale at the market -- which
     # is exactly what this claim says a deteriorating tape must not cause. When the range the
     # source names sits above where the stock trades, the range is reported and nothing acts.
-    placeable = tighten_to is not None and (current is None or tighten_to < current)
+    # With no last price there is nothing to establish that against, and an unknown is not a
+    # yes: placeability is reported unavailable rather than assumed.
+    placeable = None if tighten_to is None or current is None else tighten_to < current
+    reason = (
+        None
+        if placeable
+        else "entry_price_unavailable"
+        if tighten_to is None
+        else "current_price_unavailable"
+        if current is None
+        else "tightened_level_is_at_or_above_the_last_price"
+    )
     blocks["market_defense"] = {
         "doctrine_id": _MARKET_DEFENSE,
         "binds": doctrine.binds(_MARKET_DEFENSE),
         "state": "reported" if market_state is not None else "unavailable",
         "market_state": market_state,
         "stop_pct": band.get("measured"),
+        "measured_from_stop": stop,
         "difficult_market_band": band,
         "tighten_to": tighten_to,
         "tighten_to_is_placeable": placeable,
-        "not_placeable_reason": None if placeable else ("entry_price_unavailable" if tighten_to is None else "tightened_level_is_at_or_above_the_last_price"),
+        "not_placeable_reason": reason,
         "never_sells_on_market_opinion": True,
     }
     earnings_date = _iso_date(payload.get("earnings_date"))
@@ -364,6 +380,20 @@ def _exit_plan(payload: Mapping[str, Any]) -> tuple[float | None, bool]:
     return _number(invalidation.get("price")), isinstance(condition, str) and bool(condition.strip())
 
 
+def _effective_stop(payload: Mapping[str, Any]) -> float | None:
+    """The protective level actually in force: the higher of the declared and initial stops.
+
+    A stop is never widened. When a later stop sits below the one the trade started with,
+    the initial one keeps governing -- the stop audit already reads it that way -- and every
+    measurement of what the position risks has to read the same level the audit does.
+    """
+
+    stop = _number(payload.get("stop_price"))
+    initial = _number(payload.get("initial_stop_price"))
+    levels = [level for level in (stop, initial) if level is not None]
+    return max(levels) if levels else None
+
+
 def declares_exit_plan(evidence: Mapping[str, Any]) -> bool:
     """Whether an exit level or condition was actually declared.
 
@@ -393,9 +423,11 @@ def settled_breach(evidence: Mapping[str, Any]) -> bool:
     levels = [level for level in (stop, invalidation_price) if level is not None]
     live_stop = _mapping(payload.get("live_stop"))
     return (
-        (bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop))
-        or _triggered(payload.get("completed_stop"))
-        or _triggered(payload.get("stop_event"))
+        # Every asserted stop breach is about the declared stop, so with none declared there
+        # is nothing asserted and nothing settled -- the operation still fetches the bars.
+        (stop is not None and bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop))
+        or (stop is not None and _triggered(payload.get("completed_stop")))
+        or (stop is not None and _triggered(payload.get("stop_event")))
         or _triggered(payload.get("completed_price_path"))
         or (declares_exit_plan(payload) and _triggered(invalidation))
         or (current is not None and bool(levels) and current <= max(levels))
@@ -483,11 +515,15 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         anchors.append("management_average")
 
     live_stop = _mapping(payload.get("live_stop"))
-    live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop)
+    live_triggered = bool(payload.get("live_stop_check")) and live_stop.get("partial_session") is True and _triggered(live_stop) and stop is not None
     current = _number(payload.get("current_price"))
     completed_price_path = _mapping(payload.get("completed_price_path"))
     path_state = _status_word(completed_price_path)
-    completed_stop = _triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event")) or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
+    # An asserted breach is the caller telling the harness what the tape did, and it can only
+    # be asserted about a level the caller declared: "the stop was hit" with no stop declared
+    # names no level, and an invalidation plan cannot stand in for one.
+    asserted_stop = (_triggered(payload.get("completed_stop")) or _triggered(payload.get("stop_event"))) and stop is not None
+    completed_stop = asserted_stop or _triggered(completed_price_path) or (current is not None and stop is not None and current <= stop)
     invalidation_price_breach = (current is not None and invalidation_price is not None and current <= invalidation_price) or (
         _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
     )
@@ -580,7 +616,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         # both an invalidation and a stop, the trade ended at the line it crossed first, and
         # the failure has to be reported under that line.
         path_names_invalidation = _triggered(completed_price_path) and completed_price_path.get("governing_role") == "invalidation"
-        reasons = [
+        default = (
             "live_stop_breach"
             if live_triggered
             else "invalidation_breach"
@@ -592,7 +628,21 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             else "invalidation_breach"
             if invalidation_triggered
             else "management_average_exit"
+        )
+        # Two exits can both have happened, and the position ended at the first of them: a
+        # stop print three weeks after the declared average already closed the trade is a
+        # level a position that no longer existed could not have reached. Where the evidence
+        # carries dates, the earliest dated exit names the failure; where it does not, the
+        # order above stands.
+        dated = [
+            (day, word)
+            for day, word in (
+                (_iso_date(completed_price_path.get("breach_date")), "invalidation_breach" if path_names_invalidation else "completed_stop_breach"),
+                (_iso_date(selected_trail.get("breach_date")) if trail_breached else None, "management_average_exit"),
+            )
+            if day is not None
         ]
+        reasons = [min(dated)[1] if len(dated) > 1 else default]
     elif gaps:
         verdict = "INCOMPLETE"
         missing = gaps

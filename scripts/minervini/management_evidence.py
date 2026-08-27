@@ -131,6 +131,9 @@ def _closing_range(row: pd.Series) -> dict[str, Any]:
     return {
         "closing_range_pct": _reported(measured),
         "closing_range_marker": doctrine.evaluate_marker(_CLOSING_RANGE, "closing_range_midpoint_pct", measured),
+        # Which of the session's own values the range could not be computed from. A null
+        # beside no reason reads as a session with no range, which is not what happened.
+        "closing_range_missing_inputs": [name for name, value in (("session_high", row["High"]), ("session_low", row["Low"]), ("session_close", row["Close"])) if _finite(value) is None],
     }
 
 
@@ -170,8 +173,10 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
             breach = position
     if breach is None and refusal is not None:
         # Nothing had happened yet when the audit had to stop, and what came after is in
-        # another coordinate system: the reading is refused rather than called clear.
-        return refusal
+        # another coordinate system: the reading is refused rather than called clear. The
+        # sessions that were read are named, so a refusal is not mistaken for a window
+        # nothing was examined in.
+        return {**refusal, "audited_from": dates[window[0]].isoformat(), "through": dates[window[-1]].isoformat(), "bars_checked": len(window)}
     last = window[-1]
     last_average = float(average.iloc[last])
     quality: dict[str, Any] | None = None
@@ -187,8 +192,10 @@ def _trail(bars: pd.DataFrame, average: pd.Series, *, length: int, entry_date: d
             # -- a finding about the stock, from a bar that was never there.
             "second_close_above_first_low": None if _finite(lows.iloc[first]) is None else second_close > float(lows.iloc[first]),
         }
-        if _finite(lows.iloc[first]) is None:
-            quality["missing_inputs"] = ["first_session_low"]
+        missing = ["first_session_low"] if _finite(lows.iloc[first]) is None else []
+        missing += [f"breach_{name}" for name in quality["closing_range_missing_inputs"]]
+        if missing:
+            quality["missing_inputs"] = missing
     return {
         "state": "breached" if breach is not None else "clear",
         "audited_from": dates[window[0]].isoformat(),
@@ -228,10 +235,14 @@ def _moving_average_trail(bars: pd.DataFrame, *, entry_date: date, as_of: date, 
     sma = closes.rolling(sma_length).mean()
     ema21 = _trail(bars, ema, length=ema_length, entry_date=entry_date, as_of=as_of, refuse_from=ema_stop, refusal=ema_gap) if ema_gap is None or ema_stop is not None else ema_gap
     sma50 = _trail(bars, sma, length=sma_length, entry_date=entry_date, as_of=as_of, refuse_from=sma_stop, refusal=sma_gap) if sma_gap is None or sma_stop is not None else sma_gap
-    if sma_gap is not None and sma50 is sma_gap and (ema_gap is None or ema21 is ema_gap):
+    def refused(result: dict[str, Any], record: dict[str, Any] | None) -> bool:
+        return record is not None and result.get("state") == "unavailable" and result.get("reason") == record.get("reason")
+
+    if sma_gap is not None and refused(sma50, sma_gap) and (ema_gap is None or refused(ema21, ema_gap)):
         # Nothing was found before the event on either average, so the block has nothing to
-        # report and says so once, in the shape a reader of an unreadable block expects.
-        return {**sma_gap, "selected": selected}
+        # report and says so once, in the shape a reader of an unreadable block expects --
+        # carrying the sessions the audit did read before it stopped.
+        return {**sma50, "selected": selected}
     return {
         "doctrine_id": _ROLES,
         "binds": doctrine.binds(_ROLES),
@@ -627,7 +638,15 @@ def _post_breakout_behavior(bars: pd.DataFrame, *, entry_date: date, breakout_da
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
     baseline_sessions = int(doctrine.threshold(_VOLUME_STATE, "position_baseline_sessions"))
-    gap = readable.gap(max(0, window[0] - baseline_sessions), columns=("Close", "Volume")) or readable.split(max(0, window[0] - baseline_sessions))
+    # Closes over the whole window, volume only where volume is reported: the baseline before
+    # the breakout and the first sessions out of it. A NaN volume last Friday is read by
+    # nothing here, and voiding the tennis-ball reading over it hides evidence that is fine.
+    first_sessions_length = int(doctrine.parameter(_FIRST_SESSIONS, "window_sessions"))
+    gap = (
+        readable.gap(window[0], columns=("Close",))
+        or readable.gap(max(0, window[0] - baseline_sessions), window[0] + first_sessions_length, columns=("Volume",))
+        or readable.split(max(0, window[0] - baseline_sessions))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _TENNIS_BALL}
     closes = bars["Close"].astype(float)
@@ -665,7 +684,13 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
     length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
     sma_length = int(doctrine.parameter(_SLOPE, "long_average_sessions"))
     lookback = int(doctrine.parameter(_SLOPE, "slope_lookback_sessions"))
-    gap = readable.gap(len(bars) - (sma_length + lookback), columns=("High", "Low", "Close")) or readable.split(len(bars) - (sma_length + lookback))
+    # The slope reads closes back to the average's own length; the two true ranges read High
+    # and Low over their own windows, which end well inside it.
+    gap = (
+        readable.gap(len(bars) - (sma_length + lookback), columns=("Close",))
+        or readable.gap(len(bars) - (2 * length + 1), columns=("High", "Low"))
+        or readable.split(len(bars) - (sma_length + lookback))
+    )
     if gap is not None:
         return {**gap, "doctrine_id": _STAGE3}
     recent = _average_true_range(bars)
@@ -695,10 +720,10 @@ def _stage3_transition(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, 
         "sma200_lookback_sessions": lookback,
         "sma200_state": state,
         # The claim this block cites describes a price break on heavy volume, and volume is
-        # among its required inputs. Neither measurement here reads it, so the block is not
-        # withheld -- but publishing the claim as reported without saying the volume half
-        # was never available would present a partial reading as the whole one.
-        "missing_inputs": [] if "Volume" in bars.columns else ["volume_history"],
+        # among its required inputs. Neither measurement here reads it, in any history, so it
+        # is named as evidence this reading does not consume rather than evidence it wanted:
+        # the same numbers came back from a frame that had volume and one that did not.
+        "claim_inputs_not_read": ["volume_history"],
         "needs_chart": True,
     }
 
@@ -748,7 +773,9 @@ def _moving_average_extension(bars: pd.DataFrame, *, readable: _Readable) -> dic
     ema_length = int(doctrine.threshold(_ROLES, "ema_length_sessions"))
     sma_length = int(doctrine.threshold(_ROLES, "sma_length_sessions"))
     atr_length = int(doctrine.parameter(_ATR, "atr_length_sessions"))
-    gap = readable.gap(0, columns=("Close",)) or readable.gap(len(bars) - (sma_length + atr_length + 1), columns=("High", "Low", "Close")) or readable.split(0)
+    # Two windows, because two different readings: the percentile ranks every prior session's
+    # closes, and the true range reads High and Low over its own length and no further back.
+    gap = readable.gap(0, columns=("Close",)) or readable.gap(len(bars) - (atr_length + 1), columns=("High", "Low")) or readable.split(0)
     if gap is not None:
         return {**gap, "doctrine_id": _OWN_CHARACTER}
     closes = bars["Close"].astype(float)
@@ -849,7 +876,9 @@ def _gaps_since_breakout(bars: pd.DataFrame, *, entry_date: date, breakout_date:
     window = _positions_since(bars, since)
     if not window:
         return {"state": "unavailable", "reason": "insufficient_history_since_window_start"}
-    gap = readable.gap(max(0, window[0] - 1)) or readable.split(max(0, window[0] - 1))
+    # Prices only: this block compares one session's Open with the session before it and
+    # measures the run since the breakout. A broken Volume has nothing to do with either.
+    gap = readable.gap(max(0, window[0] - 1), columns=("Open", "High", "Low", "Close")) or readable.split(max(0, window[0] - 1))
     if gap is not None:
         return {**gap, "doctrine_id": _LATE_GAPS}
     opens = bars["Open"].astype(float)
@@ -899,17 +928,25 @@ def _climax(bars: pd.DataFrame, *, readable: _Readable) -> dict[str, Any]:
         else None
     )
     percentile: float | None = None
+    volume_population_complete = True
     if "Volume" in bars.columns:
         volumes = bars["Volume"].astype(float)
-        prior = [float(volumes.iloc[position]) for position in range(len(bars) - 1)]
-        percentile = (sum(1 for value in prior if value <= float(volumes.iloc[-1])) / len(prior) * 100) if prior else None
+        prior = [_finite(volumes.iloc[position]) for position in range(len(bars) - 1)]
+        last_volume = _finite(volumes.iloc[-1])
+        # The readability guard covers the return windows, and this ranking reads every prior
+        # session. A NaN inside that population counts as a session the latest volume beat --
+        # a rank against bars that were never there -- so an incomplete population produces
+        # no percentile rather than a number nobody can reproduce.
+        volume_population_complete = last_volume is not None and all(value is not None for value in prior)
+        if volume_population_complete and prior:
+            percentile = sum(1 for value in prior if value <= last_volume) / len(prior) * 100
     return {
         "doctrine_id": _CLIMAX,
         "doctrine_ids": [_CLIMAX, _WINDOWS, _CLOSING_RANGE],
         "binds": doctrine.binds(_CLIMAX),
         "state": "reported",
         "windows": {**{f"return_{window}_pct": window for window in lengths}, "gap_ups_last_10_sessions": gap_window},
-        "missing_inputs": [name for name, present in (("open_history", opens is not None), ("volume_history", "Volume" in bars.columns)) if not present],
+        "missing_inputs": [name for name, present in (("open_history", opens is not None), ("volume_history", "Volume" in bars.columns and volume_population_complete)) if not present],
         # The claim asks for the base count as well -- a climax run is read against how far
         # into the advance the stock is -- and nothing in this block reads it. That is not
         # the same as an input that was wanted and absent, so it is named separately: a

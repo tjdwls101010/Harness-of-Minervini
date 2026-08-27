@@ -106,6 +106,40 @@ class ABlockReadsOnlyItsOwnColumns(unittest.TestCase):
         self.assertEqual(result["moving_average_extension"]["reason"], "invalid_ohlc_history")
 
 
+class ABlockIsVoidedOnlyByWhatItReads(unittest.TestCase):
+    """The column-and-window matrix: each block's guard covers its own reading and no more."""
+
+    def bars(self, sessions: int = 80) -> pd.DataFrame:
+        return frame([100.0] * sessions)
+
+    def test_a_broken_late_volume_does_not_void_the_gaps_since_the_breakout(self) -> None:
+        bars = self.bars()
+        bars.iloc[-1, bars.columns.get_loc("Volume")] = float("nan")
+        result = build_management_evidence(bars, entry_date=bars.index[60].date(), as_of=bars.index[-1].date(), breakout_date=bars.index[60].date())
+
+        # Gaps compare one session's Open with the session before it. Volume is read by none
+        # of that, and by nothing the tennis-ball reading publishes after the first sessions.
+        self.assertEqual(result["gaps_since_breakout"]["gap_up_count"], 0)
+        self.assertEqual(result["post_breakout_behavior"]["sessions_since_entry"], 19)
+
+    def test_an_ancient_broken_low_does_not_void_the_true_range_windows(self) -> None:
+        bars = self.bars(224)
+        bars.iloc[50, bars.columns.get_loc("Low")] = float("nan")
+        result = build_management_evidence(bars, entry_date=bars.index[200].date(), as_of=bars.index[-1].date())
+
+        # The true range reads its own fourteen sessions, and the slope reads closes. A bad
+        # Low a hundred and fifty sessions earlier is inside neither.
+        self.assertEqual(result["stage3_transition"]["state"], "reported")
+        self.assertEqual(result["moving_average_extension"]["atr"]["value"], 2.0)
+
+    def test_a_broken_low_inside_the_true_range_window_still_voids_it(self) -> None:
+        bars = self.bars(224)
+        bars.iloc[-3, bars.columns.get_loc("Low")] = float("nan")
+        result = build_management_evidence(bars, entry_date=bars.index[200].date(), as_of=bars.index[-1].date())
+
+        self.assertEqual(result["stage3_transition"]["reason"], "invalid_ohlc_history")
+
+
 class TheFirstSessionsNameTheirGaps(unittest.TestCase):
     def test_a_breakout_too_early_for_a_volume_baseline_says_so(self) -> None:
         bars = frame([100.0] * 10)

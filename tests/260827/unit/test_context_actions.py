@@ -129,5 +129,52 @@ class BreakevenProtectionIsNeverAnUndeclaredSale(unittest.TestCase):
         self.assertEqual(action["to_at_least"], 100.0)
 
 
+class TheDefenseMeasuresTheLevelThatIsActuallyInForce(unittest.TestCase):
+    def test_a_widened_stop_is_measured_from_the_initial_level_the_audit_still_reads(self) -> None:
+        # A stop is never widened, so 94 kept governing. Measuring the loss from 90 reports a
+        # risk the trade does not run, and then orders a raise to the level the path beside
+        # it says never stopped governing.
+        payload = held(stop_price=90.0, initial_stop_price=94.0, stop_effective_date="2026-08-15", market={"state": "defensive"})
+        # Both levels audited clear over the whole position, so the verdict is a HOLD and the
+        # question is only which level everything downstream measures from.
+        payload["completed_price_path"] = {
+            "state": "clear",
+            "checked_level": 94.0,
+            "from": "2026-08-10",
+            "through": AS_OF,
+            "bars_checked": 9,
+            "audits": [
+                {"role": "stop", "level": 90.0, "state": "clear", "effective_from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
+                {"role": "initial_stop", "level": 94.0, "state": "clear", "effective_from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
+            ],
+        }
+        result = reduce_risk(payload)
+
+        defense = result["management_evidence"]["market_defense"]
+        self.assertEqual(defense["measured_from_stop"], 94.0)
+        self.assertAlmostEqual(defense["stop_pct"], 6.0)
+        self.assertEqual(defense["difficult_market_band"]["state"], "within_source_range")
+        self.assertEqual([action for action in result["management_actions"] if action["doctrine_id"] == DEFENSE], [])
+
+    def test_without_a_last_price_placeability_is_unavailable_rather_than_assumed(self) -> None:
+        # The asserted-breach path is where a verdict travels with no last price at all. The
+        # block still has to say it cannot establish placeability rather than assume it can.
+        payload = held(stop_price=80.0, market={"state": "defensive"}, completed_stop={"state": "triggered"})
+        del payload["current_price"]
+        del payload["completed_price_path"]
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "SELL")
+        defense = result["management_evidence"]["market_defense"]
+        self.assertIsNone(defense["tighten_to_is_placeable"])
+        self.assertEqual(defense["not_placeable_reason"], "current_price_unavailable")
+
+    def test_breakeven_exactly_at_the_last_close_is_not_placeable(self) -> None:
+        result = reduce_risk(held(stop_price=94.0, current_price=100.0, max_high_since_entry=118.0))
+
+        self.assertEqual([action for action in result["management_actions"] if action["doctrine_id"] == "risk.profit_protection_at_3r"], [])
+        self.assertEqual(result["risk_controls"]["breakeven_protection_not_placeable"]["current_price"], 100.0)
+
+
 if __name__ == "__main__":
     unittest.main()

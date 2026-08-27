@@ -152,6 +152,29 @@ class ACitedClaimSaysWhichHalfWasRead(unittest.TestCase):
 
 
 class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
+    def test_the_same_answer_comes_back_with_and_without_volume(self) -> None:
+        # If the block read volume, removing it would change something. It does not, so the
+        # claim's volume half is named as evidence this reading never consumes -- in both
+        # histories -- rather than appearing as missing in one of them.
+        index = pd.bdate_range(end=AS_OF, periods=224)
+        close = pd.Series([100.0] * 224, index=index, dtype=float)
+        columns = {"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close}
+        measured = []
+        for volume in (True, False):
+            frame = pd.DataFrame({**columns, **({"Volume": np.full(224, 1_000_000)} if volume else {})}, index=index)
+            snapshot = ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+            payload = execute(
+                "ticker.risk",
+                {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[200].date().isoformat(), "stop_price": 90.0},
+                runtime=Runtime(price_history=lambda ticker, as_of, snapshot=snapshot: snapshot),
+            )
+            block = payload["data"]["management_evidence"]["stage3_transition"]
+            self.assertEqual(block["claim_inputs_not_read"], ["volume_history"])
+            self.assertNotIn("missing_inputs", block)
+            measured.append((block["volatility_ratio"], block["sma200_slope_pct"]))
+
+        self.assertEqual(measured[0], measured[1])
+
     def test_a_history_without_volume_says_so_beside_the_claim(self) -> None:
         index = pd.bdate_range(end=AS_OF, periods=224)
         close = pd.Series([100.0] * 224, index=index, dtype=float)
@@ -167,7 +190,7 @@ class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
         # required inputs. Neither measurement here reads it, so the block reports what it
         # measured and names the half it never had.
         block = payload["data"]["management_evidence"]["stage3_transition"]
-        self.assertEqual(block["missing_inputs"], ["volume_history"])
+        self.assertEqual(block["claim_inputs_not_read"], ["volume_history"])
         self.assertEqual(block["doctrine_id"], "stage.stage3_characteristics")
 
 

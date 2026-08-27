@@ -101,6 +101,27 @@ class TheGoldenCase(unittest.TestCase):
         self.assertEqual(actions(result), [])
         self.assertEqual(result["management_evidence"]["twenty_day_average"]["action_withheld_reason"], "history_starts_after_breakout_date")
 
+    def test_the_earlier_exit_names_the_failure_when_both_happened(self) -> None:
+        # The declared average closed the position on the 3rd; the stop printed on the 22nd.
+        # A level a position that no longer existed could not have reached is not its exit.
+        management = measured(selected="ema21", ema21="breached", twenty="above")
+        management["moving_average_trail"]["ema21"]["breach_date"] = "2025-12-03"
+        payload = held(management_average="ema21", management=management)
+        payload["completed_price_path"] = {"state": "breached", "checked_level": 80.0, "governing_role": "stop", "from": "2025-12-01", "through": "2025-12-22", "breach_date": "2025-12-22", "bars_checked": 15}
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["verdict"], "SELL")
+        self.assertEqual(result["failed"], ["management_average_exit"])
+
+    def test_the_stop_still_names_it_when_the_stop_came_first(self) -> None:
+        management = measured(selected="ema21", ema21="breached", twenty="above")
+        management["moving_average_trail"]["ema21"]["breach_date"] = "2025-12-22"
+        payload = held(management_average="ema21", management=management)
+        payload["completed_price_path"] = {"state": "breached", "checked_level": 80.0, "governing_role": "stop", "from": "2025-12-01", "through": "2025-12-03", "breach_date": "2025-12-03", "bars_checked": 3}
+        result = reduce_risk(payload)
+
+        self.assertEqual(result["failed"], ["completed_stop_breach"])
+
     def test_the_same_structure_with_the_ema_declared_as_the_exit_plan_is_a_sell(self) -> None:
         result = reduce_risk(held(management_average="ema21", management=measured(selected="ema21", ema21="breached", twenty="below")))
 

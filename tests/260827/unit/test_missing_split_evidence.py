@@ -186,7 +186,24 @@ class TheMeasurementsRefuseTheSameWindow(unittest.TestCase):
         bars = frame(closes, splits={60: 2.0})
         result = build_management_evidence(bars, entry_date=bars.index[50].date(), as_of=bars.index[-1].date(), management_average="ema21")
 
-        self.assertEqual(result["moving_average_trail"]["reason"], "share_split_inside_window")
+        block = result["moving_average_trail"]
+        self.assertEqual(block["reason"], "share_split_inside_window")
+        # And it says which sessions it read before it had to stop.
+        self.assertEqual(block["audited_from"], bars.index[50].date().isoformat())
+        self.assertEqual(block["through"], bars.index[59].date().isoformat())
+        self.assertEqual(block["bars_checked"], 10)
+
+    def test_a_volume_the_history_could_not_fill_leaves_no_percentile(self) -> None:
+        # The percentile ranks the latest session against every prior one. A NaN inside that
+        # population counts as a session the latest volume beat -- a rank against bars that
+        # were never there -- so an incomplete population produces no number at all.
+        bars = frame([100.0] * 70)
+        bars.iloc[0, bars.columns.get_loc("Volume")] = float("nan")
+        block = build_management_evidence(bars, entry_date=bars.index[60].date(), as_of=bars.index[-1].date())["climax"]
+
+        self.assertEqual(block["state"], "reported")
+        self.assertIsNone(block["last_volume_percentile"])
+        self.assertEqual(block["missing_inputs"], ["volume_history"])
 
     def test_a_split_before_the_simple_average_s_window_does_not_void_it(self) -> None:
         # The split is a hundred sessions before the position and fifty before the first
