@@ -519,6 +519,15 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         primary_base_long_correction=request.get("primary_base_long_correction"),
     )
     result = evaluate_eligibility(EligibilityEvidence.from_mapping(measured)).to_dict()
+    # A criterion the harness could not measure is a gap, and the envelope's completeness is
+    # what a caller reads to know there is one. Status was decided from provider gaps alone, so
+    # a reading that measured seven criteria out of eight published `ok` with an empty `missing`
+    # beside `eligibility_state: incomplete` -- the envelope contradicting its own payload.
+    missing.extend(
+        {"id": signal["id"], "reason": "criterion_not_measurable", "required": True}
+        for signal in result["signals"]
+        if signal.get("state") == "unavailable"
+    )
     # A band the harness measured has to reach the caller, or the rule that every band
     # is reported with its range is prose nothing carries out.
     primary_base = measured.get("primary_base") or {}

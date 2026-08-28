@@ -195,11 +195,18 @@ def _price_evidence(frame: pd.DataFrame | None, as_of: date) -> dict[str, Any] |
     high = float(year_window["close"].max())
     if not all(isfinite(number) and number > 0 for number in (current, start, high)):
         return None
+    measured = ((current / start - 1) * 100, (1 - current / high) * 100)
+    # Three finite prices can still divide into a number that is not one. An `inf` here reaches
+    # the envelope and the CLI serialises with `allow_nan=False`, so the caller gets a traceback
+    # where the contract promises exactly one envelope -- and on the way there it ranks as the
+    # best return in the industry.
+    if not all(isfinite(number) for number in measured):
+        return None
     return {
         "provider": "yfinance",
         "as_of": as_of.isoformat(),
-        "return_3m_pct": round((current / start - 1) * 100, 4),
-        "distance_from_52_week_high_pct": round((1 - current / high) * 100, 4),
+        "return_3m_pct": round(measured[0], 4),
+        "distance_from_52_week_high_pct": round(measured[1], 4),
     }
 
 
