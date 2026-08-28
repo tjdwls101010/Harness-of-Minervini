@@ -81,6 +81,7 @@ WITHHELD_BOUNDARIES = {
     "current_classification": _withheld("yfinance", "current_classification"),
     "earnings_calendar": _withheld("yfinance", "earnings_calendar"),
     "industry_top": _withheld("ibd-rs-rating", "industry_top"),
+    "company_tickers": _withheld("sec", "company_tickers"),
 }
 
 
@@ -117,7 +118,22 @@ def measured(ledger: pathlib.Path) -> Runtime:
         current_classification=lambda symbol: ProviderSnapshot({"symbol": symbol, "sector": "Technology", "industry": "Semiconductors"}, _meta("yfinance", kind="current_classification_only", historical=False)),
         earnings_calendar=_withheld("yfinance", "earnings_calendar"),
         industry_top=lambda industry, as_of, limit: ProviderSnapshot([{"ticker": "LEAD", "rs_rating": 98, "rs_raw": 3.1}], _meta("ibd-rs-rating")),
+        company_tickers=_withheld("sec", "company_tickers"),
         ledger_factory=lambda: Ledger(ledger),
+    )
+
+
+def listed() -> Runtime:
+    """The SEC symbol list carrying this ticker, so the resolved branch is read back too.
+
+    The table below asks for this capability on a past session, where it refuses before it
+    reaches a provider -- so without this case the only envelope swept would be the one that
+    publishes none of the keys the capability declares.
+    """
+
+    return Runtime(
+        **WITHHELD_BOUNDARIES
+        | {"company_tickers": lambda: ProviderSnapshot({TICKER: {"cik": CIK, "title": "Test Registrant Inc."}}, _meta("sec", kind="mutable_current_only"))}
     )
 
 
@@ -163,6 +179,7 @@ def current() -> Runtime:
 EXTRA_CASES: list[tuple[str, str, dict[str, object]]] = [
     ("ticker.fundamentals", "filed", {"ticker": TICKER, "cik": CIK, "as_of": FILING_AS_OF}),
     ("ticker.peers", "current", {"ticker": TICKER, "limit": 10}),
+    ("ticker.cik", "listed", {"ticker": TICKER}),
     (
         "ticker.risk",
         "prospective",
@@ -186,6 +203,7 @@ REQUESTS: dict[str, dict[str, object]] = {
     "ticker.swings": {"ticker": TICKER, "as_of": AS_OF},
     "ticker.setup": {"ticker": TICKER, "as_of": AS_OF},
     "ticker.power-play": {"ticker": TICKER, "as_of": AS_OF},
+    "ticker.cik": {"ticker": TICKER, "as_of": AS_OF},
     "ticker.fundamentals": {"ticker": TICKER, "as_of": AS_OF},
     "ticker.peers": {"ticker": TICKER, "as_of": AS_OF},
     "ticker.risk": {"ticker": TICKER, "as_of": AS_OF, "mode": "active", "entry_price": 90.0, "entry_date": "2025-11-03", "stop_price": 85.0},
@@ -241,7 +259,7 @@ class AnEnvelopeValidatesAgainstItsOwnPublishedSchema(unittest.TestCase):
                     for mode in ("full", "compact"):
                         produced.append((capability, label, mode, format_payload(payload, mode)))
         for capability, label, request in EXTRA_CASES:
-            payload = execute(capability, request, runtime={"filed": filed, "current": current}.get(label, sealed)())
+            payload = execute(capability, request, runtime={"filed": filed, "current": current, "listed": listed}.get(label, sealed)())
             for mode in ("full", "compact"):
                 produced.append((capability, label, mode, format_payload(payload, mode)))
         return produced

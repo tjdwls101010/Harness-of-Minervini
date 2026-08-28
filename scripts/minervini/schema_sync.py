@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from . import SCHEMA_VERSION
 from .capabilities import CAPABILITIES, Capability
 
 
@@ -62,10 +63,19 @@ def capability_schema(capability: Capability) -> dict[str, Any]:
 def synchronize(directory: Path | None = None) -> list[Path]:
     destination = directory or Path(__file__).resolve().parents[2] / "schemas" / "v2"
     written: list[Path] = []
+    catalog: dict[str, dict[str, str]] = {}
     for name, capability in sorted(CAPABILITIES.items()):
-        path = destination / f"{name}.schema.json"
+        filename = f"{name}.schema.json"
+        path = destination / filename
         path.write_text(json.dumps(capability_schema(capability), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         written.append(path)
+        catalog[name] = {"schema_file": filename, "schema_id": capability.schema_id}
+    # The index goes out with the files it indexes. Written by hand it went stale the first time
+    # a capability was added, and running the generator then looked like bringing the directory
+    # up to date -- which is worse than a generator that writes none of it.
+    index = destination / "catalog.json"
+    index.write_text(json.dumps({"capabilities": catalog, "schema_version": SCHEMA_VERSION}, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    written.append(index)
     return written
 
 

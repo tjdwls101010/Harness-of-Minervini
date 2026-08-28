@@ -32,6 +32,10 @@
       "schema_file": "ticker.chart.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.chart.schema.json"
     },
+    "ticker.cik": {
+      "schema_file": "ticker.cik.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.cik.schema.json"
+    },
     "ticker.fundamentals": {
       "schema_file": "ticker.fundamentals.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/ticker.fundamentals.schema.json"

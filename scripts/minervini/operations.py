@@ -56,6 +56,7 @@ MarketLeaders = Callable[[str, int], ProviderSnapshot[list[dict[str, Any]]]]
 FinvizBreadth = Callable[[str], ProviderSnapshot[str]]
 CurrentClassification = Callable[[str], ProviderSnapshot[dict[str, str]]]
 EarningsCalendar = Callable[[str], ProviderSnapshot[dict[str, Any]]]
+CompanyTickers = Callable[[], ProviderSnapshot[dict[str, dict[str, str]]]]
 IndustryTop = Callable[[str, str, int], ProviderSnapshot[list[dict[str, Any]]]]
 
 
@@ -81,6 +82,25 @@ def _default_security_master(as_of: str | None) -> ProviderSnapshot[list[Securit
         return response.text
 
     return current_security_master(request)
+
+
+def _default_company_tickers() -> ProviderSnapshot[dict[str, dict[str, str]]]:
+    """The SEC's own current symbol-to-registrant list, whole.
+
+    The same fetch `_default_fundamentals_evidence` makes on the way to the filings when no
+    `--cik` was given. It was only ever reachable as a step inside something else, which is
+    how a value the interface requires came to have nowhere to come from.
+    """
+
+    user_agent = os.environ.get("MINERVINI_SEC_USER_AGENT", "")
+    if not user_agent:
+        raise ProviderUnavailable("sec", "identifiable_user_agent_required", operation="company_tickers")
+    try:
+        import requests
+    except Exception as error:
+        raise ProviderUnavailable("sec", "requests_package_unavailable", operation="company_tickers") from error
+
+    return fetch_company_tickers(request_get=requests.get, user_agent=user_agent)
 
 
 def _default_fundamentals_evidence(ticker: str, as_of: str, cik: str | None) -> ProviderSnapshot[dict[str, Any]]:
@@ -237,6 +257,7 @@ class Runtime:
     finviz_breadth: FinvizBreadth = field(default_factory=lambda: _default_finviz_breadth)
     current_classification: CurrentClassification = field(default_factory=lambda: _default_current_classification)
     earnings_calendar: EarningsCalendar = field(default_factory=lambda: _default_earnings_calendar)
+    company_tickers: CompanyTickers = field(default_factory=lambda: _default_company_tickers)
     industry_top: IndustryTop = field(default_factory=lambda: _default_industry_top)
     ledger_factory: LedgerFactory = field(default_factory=lambda: Ledger)
     reachability_probes: Mapping[str, Callable[[], None]] = field(default_factory=_default_reachability_probes)
@@ -1176,6 +1197,80 @@ def _missing_reason(item: str, evidence: Mapping[str, Any]) -> str:
     return "evidence_required"
 
 
+def _ticker_cik(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    """Resolve a symbol to the SEC filing identity `ticker.fundamentals` asks for by `--cik`.
+
+    Every refusal here is the same refusal `--cik` exists for. `company_tickers.json` is a
+    mutable current snapshot -- a symbol can be reassigned -- so answering a past session from
+    it would be current security-master data relabelled as historical, and the analyst would be
+    handed an identity the harness cannot vouch for wearing the date they asked about. It
+    answers for the current session and says what the answer is; asserting that the identity
+    held back then is what `--cik` records, and it stays the analyst's assertion.
+    """
+
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    echo = _clean_request({**request, "ticker": ticker})
+
+    def unresolved(gap: dict[str, Any], sources: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        return envelope(
+            "ticker.cik",
+            request=echo,
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker},
+            missing=[gap],
+            sources=sources or [],
+        )
+
+    if request.get("as_of") is not None and clock.date != resolve_as_of().date:
+        # `ticker.fundamentals` points here when it wants a CIK for a past session, so this
+        # refusal is where that pointer lands. Saying only that the map is current leaves the
+        # analyst to work out that dropping the date is what answers, and a gap an analyst has
+        # to infer their way out of is the gap this capability was written to close.
+        return unresolved(
+            {
+                "id": "cik",
+                "reason": "ticker_to_cik_map_is_current_only",
+                "required": True,
+                "detail": "run ticker.cik for the current session; asserting that identity also held at the requested one is what ticker.fundamentals --cik records",
+            }
+        )
+    try:
+        snapshot = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="ticker.cik",
+            provider="sec",
+            operation="company_tickers",
+            params={},
+            fetch=runtime.company_tickers,
+            # The same lifetime every other current-only snapshot here carries. Held without
+            # one, a map whose being current is the reason it cannot answer for a past session
+            # was frozen for the rest of the session anyway.
+            ttl_seconds=900,
+        )
+    except ProviderUnavailable as error:
+        return unresolved(_missing_provider(error))
+
+    record = snapshot.data.get(ticker)
+    if record is None:
+        # The source answered and this symbol is not in it, which is a different thing from no
+        # answer -- and the reason is the one an analyst can act on: no SEC registrant files
+        # under this symbol, so there is no CIK to pass rather than one this run failed to read.
+        return unresolved({"id": "cik", "reason": "ticker_not_found", "required": True}, [_source(snapshot.meta)])
+    return envelope(
+        "ticker.cik",
+        request=echo,
+        as_of=_as_of(clock),
+        status="ok",
+        data={"ticker": ticker, "cik": record["cik"], "title": record["title"]},
+        sources=[_source(snapshot.meta)],
+        next_capabilities=["ticker.fundamentals"],
+    )
+
+
 def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -1208,6 +1303,10 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
             status="needs_input",
             data={"ticker": ticker, "fundamentals_state": "incomplete"},
             missing=[{"id": "cik", "reason": "stable_historical_identity_required", "required": True}],
+            # A required value the interface does not carry is a gap an analyst cannot close by
+            # reading the envelope. Naming the capability that produces one is the whole of what
+            # was missing here -- the lookup itself was always there, one call inside this one.
+            next_capabilities=["ticker.cik"],
         )
     try:
         snapshot = _cached_provider(
@@ -3202,6 +3301,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return _setup(request, runtime)
     if operation == "ticker.power-play":
         return _power_play(request, runtime)
+    if operation == "ticker.cik":
+        return _ticker_cik(request, runtime)
     if operation == "ticker.fundamentals":
         return _fundamentals(request, runtime)
     if operation == "ticker.peers":
