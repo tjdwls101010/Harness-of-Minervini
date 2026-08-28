@@ -167,7 +167,8 @@ class OperationCompositionTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["status"], "partial")
-        self.assertEqual(payload["data"]["regime"]["judgment"], "cautious")
+        # Leaders measured from their own bars, traction supplied, index switch on.
+        self.assertEqual(payload["data"]["regime"]["judgment"], "favorable")
         self.assertEqual(payload["data"]["group_ranks"]["sectors"][0]["name"], "Zeta Technology")
         self.assertEqual(payload["data"]["leaders"][0]["ticker"], "LEAD")
         self.assertEqual({source["provider"] for source in payload["sources"]}, {"fixture-prices", "finviz", "ibd-rs-rating"})
@@ -369,7 +370,6 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual([item["ticker"] for item in payload["data"]["candidates"]], ["GOOD"])
         self.assertEqual(payload["data"]["page"]["page_size"], 1)
-        self.assertEqual(payload["data"]["page"]["recommendation_count"], 0)
         self.assertEqual(payload["data"]["exclusions"]["total_count"], 1)
         self.assertEqual(payload["data"]["exclusions"]["reason_counts"], {"etf_context_only": 1})
         self.assertEqual(len(payload["data"]["exclusions"]["samples"]), 1)

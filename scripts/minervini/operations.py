@@ -23,8 +23,8 @@ from .doctrine import get_claim, has_claim, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .ledger import Ledger
-from .market import build_market_candidates, evaluate_market_snapshot
-from .market_evidence import build_market_evidence
+from .market import build_market_candidates, evaluate_market_snapshot, evidence_quality
+from .market_evidence import build_market_evidence, carries_a_readable_bar
 from .peer_collection import collect_same_industry_peer_rows
 from .peers import compare_same_industry_peers
 from .providers import DETAIL_LIMIT, ProviderSnapshot, ProviderUnavailable, SnapshotMeta, fetch_with_one_retry, redact
@@ -1509,7 +1509,6 @@ def _candidate_row(record: SecurityRecord) -> dict[str, Any]:
         "instrument_type": record.instrument_type,
         "is_adr": record.is_adr,
         "origins": ["nasdaq_security_master"],
-        "recommendation_state": "not_recommended",
     }
 
 
@@ -1558,7 +1557,36 @@ def _market_candidates(request: Mapping[str, Any], runtime: Runtime) -> dict[str
     )
 
 
-def _qqq_rows(frame: Any) -> list[dict[str, Any]]:
+def _leaders_within_limit(rows: list[dict[str, Any]] | None, limit: int) -> list[dict[str, Any]]:
+    """Each ranked leader once, in rank order, no more of them than the caller asked for.
+
+    The limit is passed to the provider, and a provider that answers with more rows than it
+    was asked for would otherwise decide how many external calls this snapshot makes -- two
+    per name. It would also decide the reducer's denominator: the leaders past the limit are
+    published unread, and the majority the leader signal counts is a majority of the list it
+    was handed. The observations the caller asked for and the leaders the snapshot publishes
+    are the same set. The seen-set is a set because the fan-out is the one place in this
+    capability where the list can be long enough for a scan per row to matter.
+    """
+
+    bounded: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        symbol = row.get("ticker") if isinstance(row, Mapping) else None
+        if not isinstance(symbol, str) or symbol in seen:
+            continue
+        seen.add(symbol)
+        bounded.append(row)
+        if len(bounded) >= limit:
+            break
+    return bounded
+
+
+def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
+    """Completed rows from a provider frame, or none at all from anything that is not one."""
+
+    if not callable(getattr(frame, "iterrows", None)):
+        return []
     rows: list[dict[str, Any]] = []
     for index, row in frame.iterrows():
         timestamp = index.date().isoformat() if hasattr(index, "date") else str(index)
@@ -1599,6 +1627,59 @@ def _ranked_leaders(rows: list[dict[str, Any]], as_of: str) -> list[dict[str, An
         }
         for rank, row in enumerate(rows, start=1)
     ]
+
+
+def _optional_leader_read(
+    runtime: Runtime,
+    request: Mapping[str, Any],
+    clock: AnalysisClock,
+    symbol: str,
+    operation: str,
+    fetch: Callable[[], ProviderSnapshot[Any]],
+    provider_missing: list[dict[str, Any]],
+    sources: list[dict[str, Any]],
+    *,
+    ttl_seconds: int | None = None,
+) -> ProviderSnapshot[Any] | None:
+    """One leader's optional read, or that leader's gap -- never the whole snapshot's.
+
+    Reading each leader's own bars and taxonomy turned one provider call into two per name,
+    and every one of them is optional evidence. A boundary is contracted to raise
+    ProviderUnavailable, so anything else escaping is a bug rather than a gap; the bug still
+    belongs to the one leader it happened under, and its type is named in the reason so it
+    stays findable instead of being smoothed into an ordinary unavailability.
+    """
+
+    try:
+        snapshot = _cached_provider(
+            runtime,
+            request,
+            clock,
+            capability="market.snapshot",
+            provider="yfinance",
+            operation=operation,
+            params={"ticker": symbol},
+            fetch=fetch,
+            ttl_seconds=ttl_seconds,
+        )
+    except ProviderUnavailable as error:
+        withheld = _missing_provider(error, required=False)
+        withheld["ticker"] = symbol
+        provider_missing.append(withheld)
+        return None
+    except Exception as error:
+        provider_missing.append(
+            {
+                "id": f"leader_{operation}",
+                "ticker": symbol,
+                "reason": f"provider_raised_outside_its_contract:{type(error).__name__}",
+                "required": False,
+                "retryable": False,
+            }
+        )
+        return None
+    sources.append(_source(snapshot.meta))
+    return snapshot
 
 
 def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
@@ -1693,14 +1774,71 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
 
     sector_rows = _ranked_groups(sectors.data, "sector", as_of) if sectors is not None else None
     industry_rows = _ranked_groups(industries.data, "industry", as_of) if industries is not None else None
-    leader_rows = _ranked_leaders(leaders.data, as_of) if leaders is not None else None
+    leader_rows = _leaders_within_limit(_ranked_leaders(leaders.data, as_of), leader_limit) if leaders is not None else None
+    # The RS source ranks a leader and says nothing about how it is behaving, so the behavior
+    # reading has to come from the leader's own completed bars. Withheld or session-behind
+    # history is left withheld: the evidence adapter reports the gap rather than a word.
+    leader_history: dict[str, Any] = {}
+    # Group membership comes from a mutable current classification, so it can only be read for
+    # the current session. Asking for it against a past `as_of` would attach today's taxonomy
+    # to a historical snapshot, which is the one thing the classification rule forbids -- the
+    # membership is left unread instead, and every group reports that it was.
+    reads_membership = clock.date == resolve_as_of().date
+    leader_groups: dict[str, Any] = {}
+    for symbol in (row["ticker"] for row in leader_rows or []):
+        history = _optional_leader_read(
+            runtime, request, clock, symbol, "daily_bars", lambda: runtime.price_history(symbol, as_of), provider_missing, sources
+        )
+        if history is not None:
+            stale_price = _stale_price_gap(history.meta)
+            if stale_price is not None:
+                stale_price["ticker"] = symbol
+                stale_price["required"] = False
+                provider_missing.append(stale_price)
+            else:
+                rows = _ohlcv_rows(history.data)
+                if carries_a_readable_bar(rows):
+                    leader_history[symbol] = rows
+                else:
+                    # A snapshot that arrived and carried nothing readable is a gap the
+                    # payload already shows; without this the envelope counts it as read.
+                    provider_missing.append(
+                        {"id": "leader_price_history", "ticker": symbol, "reason": "daily_bars_unreadable", "required": False}
+                    )
+        if not reads_membership:
+            continue
+        classification = _optional_leader_read(
+            runtime,
+            request,
+            clock,
+            symbol,
+            "current_classification",
+            lambda: runtime.current_classification(symbol),
+            provider_missing,
+            sources,
+            ttl_seconds=900,
+        )
+        if classification is None:
+            continue
+        if isinstance(classification.data, Mapping):
+            leader_groups[symbol] = dict(classification.data)
+        else:
+            provider_missing.append(
+                {"id": "leader_classification", "ticker": symbol, "reason": "classification_not_a_record", "required": False}
+            )
+    if not reads_membership and leader_rows:
+        provider_missing.append(
+            {"id": "leader_classification", "reason": "historical_session_has_no_current_classification", "required": False}
+        )
     evidence = build_market_evidence(
-        qqq_daily_ohlcv=_qqq_rows(qqq.data) if qqq is not None else None,
+        qqq_daily_ohlcv=_ohlcv_rows(qqq.data) if qqq is not None else None,
         finviz_html=finviz.data if finviz is not None else None,
         sector_rows=sector_rows,
         industry_rows=industry_rows,
         leader_rows=leader_rows,
         trade_traction={"state": trade_traction} if trade_traction is not None else None,
+        leader_history=leader_history,
+        leader_groups=leader_groups or None,
     )
     result = evaluate_market_snapshot(evidence)
     section_missing = [
@@ -1724,16 +1862,26 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         status = "partial"
     else:
         status = "ok"
+    # The reducer graded completeness over the gaps it was handed; the envelope's list also
+    # holds every provider, classification and breadth-section gap collected here. Restating
+    # the grade over the merged list keeps one answer to one question -- before this, a
+    # response could carry status "partial" beside evidence_quality "complete".
+    data = {
+        **result,
+        "leaders": evidence["leaders"] or [],
+        "missing": missing,
+        "evidence_quality": evidence_quality(result["signal_vector"], missing),
+    }
     return envelope(
         "market.snapshot",
         request=_clean_request(request),
         as_of=_as_of(clock),
         status=status,
-        data={**result, "leaders": leader_rows or []},
+        data=data,
         signals=result["signal_vector"],
         missing=missing,
         sources=sources,
-        doctrine_ids=["scope.data_integrity"],
+        doctrine_ids=["scope.data_integrity", *sorted(_named_doctrine_ids(data) - {"scope.data_integrity"})],
         next_capabilities=["market.candidates", "ticker.qualify"] if succeeded else [],
     )
 

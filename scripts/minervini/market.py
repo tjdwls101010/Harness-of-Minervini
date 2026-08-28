@@ -8,9 +8,18 @@ market score or turn an index switch into a risk-on authorization.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+import math
 from typing import Any
 
+from . import doctrine
 
+
+_LEADING_GROUP_COUNT = "market.industry_groups_leading_bull_count"
+_LEADER_MAJORITY = "market.bottoming_signal_checklist"
+# What the harness measures against doctrine, and what only stands beside it. The order is the
+# order both lists are published in.
+_VERDICT_SIGNALS = ("leader_traction", "trade_traction")
+_CONTEXT_SIGNALS = ("qqq_21ema_switch", "market_breadth")
 _SIGNAL_STATES = frozenset(
     {
         "supports",
@@ -25,8 +34,8 @@ _SIGNAL_STATES = frozenset(
 )
 _POSITIVE = frozenset({"on", "positive", "constructive", "favorable", "pass", "passed", "supports"})
 _NEGATIVE = frozenset({"off", "negative", "destructive", "unfavorable", "fail", "failed", "contradicts"})
-_GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
-_GROUP_RANK_BASIS = (*_GROUP_METRICS, "provider_source_rank_tiebreaker")
+_GROUP_READINGS = ("new_highs", "striking_distance_names")
+_GROUP_RANK_BASIS = (*_GROUP_READINGS, "new_high_count", "provider_source_rank_tiebreaker")
 _US_EXCHANGES = frozenset({"NASDAQ", "NYSE", "NYSEAMERICAN", "NYSE ARCA", "CBOE", "IEX", "MEMX"})
 _ELIGIBLE_TYPES = frozenset({"common", "common_stock", "common stock", "adr"})
 
@@ -34,8 +43,10 @@ _ELIGIBLE_TYPES = frozenset({"common", "common_stock", "common stock", "adr"})
 def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
     """Return a transparent market-regime read from normalized provider evidence.
 
-    A favorable judgment needs convergent breadth, QQQ context, leader behavior,
-    and actual user trade traction.  The QQQ 21-EMA switch is only one signal.
+    A favorable judgment needs the two signals this harness measures against doctrine to
+    converge: the ranked leaders read from their own bars, and the trader's own realized
+    traction. Breadth and the QQQ 21-EMA switch are published beside that verdict as context
+    and never inside it -- neither produces the favorable word, and neither refuses it.
     """
     if not isinstance(evidence, Mapping):
         raise ValueError("market evidence must be a mapping")
@@ -62,17 +73,13 @@ def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
     vector.extend(_group_summary_signal("industry_leadership", industry_ranks))
 
     by_id = {signal["id"]: signal["state"] for signal in vector}
-    judgment = _regime_judgment(by_id, missing)
-    quality = _evidence_quality(vector, missing)
-    regime_evidence = [
-        {"signal_id": signal["id"], "state": signal["state"]}
-        for signal in vector
-        if signal["id"] in {"market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction"}
-    ]
+    judgment = _regime_judgment(by_id)
+    quality = evidence_quality(vector, missing)
     return {
         "regime": {
             "judgment": judgment,
-            "evidence": regime_evidence,
+            "evidence": [_regime_row(vector, identifier) for identifier in _VERDICT_SIGNALS],
+            "context": [_regime_row(vector, identifier) for identifier in _CONTEXT_SIGNALS],
             "qqq_switch_is_context_only": True,
             # Finviz publishes only a live page, so breadth is a current
             # observation standing in for the completed session, never a
@@ -89,11 +96,13 @@ def evaluate_market_snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
 def build_market_candidates(
     instruments: Iterable[Mapping[str, Any]], *, limit: int = 50, cursor: str | None = None
 ) -> dict[str, Any]:
-    """Filter a security-master universe and paginate it without selecting a quota.
+    """Filter a security-master universe and paginate it without grading any of it.
 
-    ``recommendation_state`` is optional upstream judgment.  It is counted across
-    the complete filtered universe, never set by this function and never capped
-    by the page size.
+    Nothing on this path looks at a price, so nothing on it can recommend. The
+    ``recommendation_state`` this used to stamp on every row was the same constant every
+    time, and the count beside it was always zero -- a reader takes "not recommended" for a
+    name the harness weighed and declined, when no name here has been weighed at all.
+    ``ticker.qualify`` is where a name earns a word.
     """
     if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise ValueError("limit must be a positive integer")
@@ -136,7 +145,6 @@ def build_market_candidates(
     page = universe[offset : offset + limit]
     next_offset = offset + len(page)
     next_cursor = f"offset:{next_offset}" if next_offset < len(universe) else None
-    recommendation_count = sum(item["recommendation_state"] == "recommended" for item in universe)
     return {
         "candidates": page,
         "exclusions": {
@@ -151,7 +159,6 @@ def build_market_candidates(
             "next_cursor": next_cursor,
             "returned_count": len(page),
             "candidate_count": len(universe),
-            "recommendation_count": recommendation_count,
             "exclusion_count": exclusion_total,
         },
     }
@@ -165,11 +172,36 @@ def _signal(identifier: str, value: Any, missing: list[dict[str, str]], missing_
 
 
 def _leader_signal(leaders: Any, missing: list[dict[str, str]]) -> dict[str, Any]:
+    """What the ranked leader list says, under the source's own word for it: the majority.
+
+    "The majority of leaders should hold their ground" is a statement about most of a list, so
+    it cannot be read off a minority of one. The aggregate this replaces dropped every
+    unavailable leader before deciding, which let a single measured name among nineteen unread
+    ones publish `supports` -- and the signal's own `value`, sitting beside it, still carried
+    the nineteen. A sample too small to hold a majority is a gap, not a reading.
+
+    The majority is then counted against the ranked list rather than against the answering
+    part of it: four names holding ground beside four that were never read is four of ten,
+    and two nested majorities -- most of what answered, out of most of the list -- do not add
+    up to the one majority the source asked for.
+    """
+
+    reading = {"id": "leader_traction", "doctrine_id": _LEADER_MAJORITY}
     if not isinstance(leaders, list) or not leaders:
         missing.append({"id": "leaders", "reason": "leader_evidence_missing"})
-        return {"id": "leader_traction", "state": "unavailable", "value": leaders}
+        return {**reading, "state": "unavailable", "value": leaders}
     states = [_state(item.get("behavior") if isinstance(item, Mapping) else None) for item in leaders]
-    return {"id": "leader_traction", "state": _aggregate_states(states), "value": leaders}
+    read = [state for state in states if state != "unavailable"]
+    if len(read) * 2 <= len(states):
+        missing.append({"id": "leaders", "reason": "fewer_than_a_majority_of_ranked_leaders_were_read"})
+        return {**reading, "state": "unavailable", "value": leaders, "read": len(read), "of": len(states)}
+    if read.count("supports") * 2 > len(states):
+        state = "supports"
+    elif read.count("contradicts") * 2 > len(states):
+        state = "contradicts"
+    else:
+        state = "mixed"
+    return {**reading, "state": state, "value": leaders, "read": len(read), "of": len(states)}
 
 
 def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -186,38 +218,98 @@ def _rank_groups(groups: Any, group_type: str, missing: list[dict[str, str]]) ->
         if not isinstance(group, Mapping):
             continue
         name = group.get("name") or group.get("id") or f"{group_type}-{index + 1}"
-        signals = [{"metric": metric, "state": _state(group.get(metric)), "value": group.get(metric)} for metric in _GROUP_METRICS]
+        signals = [{"metric": metric, "state": _state(group.get(metric)), "value": group.get(metric)} for metric in _GROUP_READINGS]
         source_basis = dict(group["basis"]) if isinstance(group.get("basis"), Mapping) else {}
-        ranked.append({"name": name, "signal_vector": signals, "source_basis": source_basis, "rank_basis": list(_GROUP_RANK_BASIS)})
+        ranked.append(
+            {
+                "name": name,
+                "signal_vector": signals,
+                "member_sample": group.get("member_sample"),
+                "source_basis": source_basis,
+                "rank_basis": list(_GROUP_RANK_BASIS),
+            }
+        )
 
     ranked.sort(key=_group_rank_key)
     for rank, group in enumerate(ranked, start=1):
         group["rank"] = rank
+    for metric in _GROUP_READINGS:
+        # Without this the envelope could publish "all requested evidence is available" beside
+        # a group whose reading was never taken. Every reading counts, not only the group
+        # advance: a striking-distance count that no ranked leader could be found for is as
+        # unread as a new-high count, and naming the metric says which one went missing.
+        withheld = [group["name"] for group in ranked if _reading_state(group, metric) == "unavailable"]
+        if withheld:
+            missing.append({"id": f"{missing_id}.{metric}", "reason": f"no_reading_for_{len(withheld)}_of_{len(ranked)}_groups"})
     return ranked
 
 
 def _group_summary_signal(identifier: str, ranks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """How many groups show the advance signal, and which one ranks first.
+
+    The count is read against the range the source gave for how many groups lead a new bull
+    market, and a range cannot decide, so this signal reports and never supports. Reading only
+    the top-ranked group's own states -- what this replaces -- called the whole market's group
+    leadership by one row of a list the same function had just sorted.
+    """
+
     if not ranks:
         return [{"id": identifier, "state": "unavailable", "value": []}]
-    states = [item["state"] for item in ranks[0]["signal_vector"]]
-    return [{"id": identifier, "state": _aggregate_states(states), "value": {"leading_group": ranks[0]["name"]}}]
+    advancing = _unique([group["name"] for group in ranks if _reading_state(group, "new_highs") == "supports"])
+    states = [_reading_state(group, "new_highs") for group in ranks]
+    read = [state for state in states if state not in {"unavailable", "not_applicable"}]
+    if not read:
+        # A claim the source scoped to industries is not evidence a sector withheld. Calling
+        # it unavailable filed an out-of-scope claim as a gap, which is the reading the group
+        # advance signal was just corrected not to make one row further down.
+        out_of_scope = all(state == "not_applicable" for state in states)
+        state = "not_applicable" if out_of_scope else "unavailable"
+        reason = "the_source_states_this_signal_for_an_industry" if out_of_scope else "no_group_reading_available"
+        return [{"id": identifier, "state": state, "value": {"leading_group": ranks[0]["name"], "reason": reason}}]
+    value: dict[str, Any] = {
+        "leading_group": ranks[0]["name"],
+        "groups_showing_a_group_advance": advancing,
+        "of_groups_read": len(read),
+    }
+    if identifier == "industry_leadership":
+        # The source counted industry groups and subgroups. A sector count read against that
+        # range would be a measurement wearing another measurement's citation.
+        value["count"] = doctrine.evaluate_band(_LEADING_GROUP_COUNT, "leading_industry_group_count", len(advancing))
+    return [{"id": identifier, "state": "observed", "value": value}]
 
 
-def _regime_judgment(states: Mapping[str, str], missing: list[dict[str, str]]) -> str:
-    required = ("market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction")
-    if all(states.get(identifier) == "supports" for identifier in required):
+def _reading_state(group: Mapping[str, Any], metric: str) -> str:
+    return next((item["state"] for item in group["signal_vector"] if item["metric"] == metric), "unavailable")
+
+
+def _regime_judgment(states: Mapping[str, str]) -> str:
+    """The regime word, from the signals the harness measures against doctrine.
+
+    Two signals can carry it: the ranked leaders read from their own bars, and the trader's
+    own realized traction. Nothing else does. The QQQ 21-EMA switch is one practitioner's
+    illustrative swing system and its own registry entry says not to promote it to a hard
+    gate, so it neither authorizes a favorable call nor refuses one -- an earlier draft let it
+    veto, which is a gate wearing the word "context". Breadth is scraped from a live page
+    against no registered threshold and never gates either. A gap in either is reported by
+    evidence quality, which is where completeness belongs.
+    """
+
+    if all(states.get(identifier) == "supports" for identifier in _VERDICT_SIGNALS):
         return "favorable"
-    if states.get("trade_traction") == "contradicts" and (
-        states.get("market_breadth") == "contradicts" or states.get("leader_traction") == "contradicts"
-    ):
+    if states.get("trade_traction") == "contradicts" and states.get("leader_traction") == "contradicts":
         return "defensive"
-    if missing or any(states.get(identifier) in {"unavailable", "needs_input"} for identifier in required):
+    if any(states.get(identifier) in {"unavailable", "needs_input", None} for identifier in _VERDICT_SIGNALS):
         return "incomplete"
     return "cautious"
 
 
-def _evidence_quality(vector: list[dict[str, Any]], missing: list[dict[str, str]]) -> dict[str, Any]:
-    core = {"market_breadth", "qqq_21ema_switch", "leader_traction", "trade_traction"}
+def _regime_row(vector: list[dict[str, Any]], identifier: str) -> dict[str, Any]:
+    state = next((signal["state"] for signal in vector if signal["id"] == identifier), "unavailable")
+    return {"signal_id": identifier, "state": state}
+
+
+def evidence_quality(vector: list[dict[str, Any]], missing: list[dict[str, str]]) -> dict[str, Any]:
+    core = {*_VERDICT_SIGNALS, *_CONTEXT_SIGNALS}
     core_states = {signal["id"]: signal["state"] for signal in vector if signal["id"] in core}
     if not core_states or all(state == "unavailable" for state in core_states.values()):
         status = "insufficient"
@@ -259,8 +351,10 @@ def _aggregate_states(states: list[str]) -> str:
 def _group_rank_key(group: Mapping[str, Any]) -> tuple[Any, ...]:
     order = {"supports": 0, "observed": 1, "mixed": 2, "not_applicable": 3, "needs_chart": 4, "unavailable": 5, "needs_input": 6, "contradicts": 7}
     states = tuple(order[item["state"]] for item in group["signal_vector"])
-    stage_count = next(item["value"] for item in group["signal_vector"] if item["metric"] == "stage2_candidates")
-    stage_tiebreak = -stage_count if isinstance(stage_count, (int, float)) and not isinstance(stage_count, bool) else 0
+    measured = next((item["value"] for item in group["signal_vector"] if item["metric"] == "new_highs"), None)
+    now = measured.get("measured", {}).get("now") if isinstance(measured, Mapping) else None
+    countable = isinstance(now, (int, float)) and not isinstance(now, bool) and math.isfinite(now)
+    stage_tiebreak = -now if countable else 0
     source_rank = group.get("source_basis", {}).get("rank")
     source_tiebreak = source_rank if isinstance(source_rank, (int, float)) and not isinstance(source_rank, bool) else float("inf")
     return (*states, stage_tiebreak, source_tiebreak, str(group["name"]))
@@ -298,7 +392,6 @@ def _candidate_record(row: Mapping[str, Any]) -> dict[str, Any]:
         "instrument_type": row.get("instrument_type", row.get("security_type")),
         "is_adr": bool(row.get("is_adr")) or str(row.get("instrument_type", "")).lower() == "adr",
         "origins": _origins(row),
-        "recommendation_state": row.get("recommendation_state", "not_recommended"),
     }
 
 

@@ -73,12 +73,13 @@
       }
     },
     "limitations": [
-      "QQQ versus 21 EMA is context only and cannot authorize risk-on by itself.",
-      "Finviz publishes only a live page, so breadth is a current observation standing in for the completed session; it is context evidence and the envelope discloses how long after the close it was read.",
+      "QQQ versus 21 EMA is context: the switch neither produces a favorable regime nor refuses one. The claim's own registry note forbids promoting it to a hard gate, so it is published beside the verdict and never inside it.",
+      "Finviz publishes only a live page, so breadth is a current observation standing in for the completed session; no registered threshold reads it, so it never gates a regime word, and the envelope discloses how long after the close it was read.",
       "Breadth is refused outright while a regular session is open, and an uncaptured historical page can never be reconstructed.",
+      "Group membership comes from a mutable current classification, so a snapshot taken against a past session reads no membership at all and says so rather than attaching today's taxonomy to it.",
       "A missing source remains unavailable; no web or proxy number replaces it."
     ],
-    "output": "A transparent signal vector, regime judgment, ranked groups, leader observations, missing evidence, and source metadata.",
+    "output": "A transparent signal vector, a regime judgment that names which signals carried it and which stood beside it as context, ranked groups, leader readings, missing evidence, and source metadata. Each ranked leader is read from its own completed bars -- distance from a 52-week high, whether it prints on the 52-week-low list, and how deep its correction from the last peak has run -- and each reading cites the claim it was taken under. A group is read through the ranked leaders a current classification placed inside it, so its counts are a sample of the market leaders and never a census of the group, and the sample is published beside every count.",
     "prerequisites": [],
     "side_effects": [],
     "status_meanings": {

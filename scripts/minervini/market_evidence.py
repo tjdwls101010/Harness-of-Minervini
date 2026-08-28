@@ -13,6 +13,8 @@ import math
 import re
 from typing import Any
 
+from . import doctrine
+
 
 _FINVIZ_SECTIONS = (
     ("advancing_declining", "advancing", "declining"),
@@ -20,7 +22,16 @@ _FINVIZ_SECTIONS = (
     ("sma50", "above", "below"),
     ("sma200", "above", "below"),
 )
-_GROUP_METRICS = ("price_momentum", "breadth", "high_proximity", "rs_concentration", "stage2_candidates", "leader_behavior")
+_GROUP_NEW_HIGHS = "market.group_new_highs_signal"
+_GROUP_MEMBER_READING = "convention.group_member_reading"
+_TRADING_WEEK = "convention.trading_week"
+_STRIKING_DISTANCE = "market.striking_distance_52w_high"
+_LOW_LIST = "market.avoid_52w_low_list"
+_CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
+# The 52 is the sources' own word -- "52-week high", "the 52-week-low list" -- and the sessions
+# a week holds is the registry's, so the harness converts through it rather than writing down a
+# year in sessions of its own.
+_WEEKS_IN_THE_YEAR_THE_SOURCES_NAME = 52
 _PCT_COUNT = re.compile(r"(?P<pct>\d+(?:\.\d+)?)%\s*\(\s*(?P<count>[\d,]+)\s*\)")
 _COUNT_PCT = re.compile(r"\(\s*(?P<count>[\d,]+)\s*\)\s*(?P<pct>\d+(?:\.\d+)?)%")
 
@@ -70,18 +81,22 @@ def build_market_evidence(
     industry_rows: Iterable[Mapping[str, Any]] | None,
     leader_rows: Iterable[Mapping[str, Any]] | None,
     trade_traction: Any,
+    leader_history: Mapping[str, Any] | None = None,
+    leader_groups: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Convert completed source snapshots to ``evaluate_market_snapshot`` input.
 
     ``trade_traction`` intentionally has no default: it is user feedback, never
     an inference from market, Finviz, or RS data.
     """
+    history = leader_history or {}
+    leaders = _leader_evidence(leader_rows, history, leader_groups)
     return {
         "breadth": _finviz_breadth(finviz_html),
         "qqq_21ema": _qqq_21ema_switch(qqq_daily_ohlcv),
-        "sectors": _group_evidence(sector_rows, "sector"),
-        "industries": _group_evidence(industry_rows, "industry"),
-        "leaders": _leader_evidence(leader_rows),
+        "sectors": _group_evidence(sector_rows, "sector", leaders, history, leader_groups),
+        "industries": _group_evidence(industry_rows, "industry", leaders, history, leader_groups),
+        "leaders": leaders,
         "trade_traction": trade_traction,
     }
 
@@ -246,7 +261,25 @@ def _finite_number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _group_evidence(rows: Iterable[Mapping[str, Any]] | None, group_type: str) -> list[dict[str, Any]] | None:
+def _group_evidence(
+    rows: Iterable[Mapping[str, Any]] | None,
+    group_type: str,
+    leaders: list[dict[str, Any]] | None,
+    history: Mapping[str, Any],
+    groups_read: Mapping[str, Any] | None,
+) -> list[dict[str, Any]] | None:
+    """Each ranked group, read through the market's ranked leaders that fall inside it.
+
+    The RS source publishes a group average and a member count, and no membership at all, so
+    the names a group can be read through are the leaders the snapshot already fetched. That
+    is a sample and never a census, which is why every count here is published beside the
+    names it was taken over.
+
+    A word the caller put in the source row is no longer read. Five of the six slots this
+    replaces were permanently unavailable and the sixth reported `observed` off the presence
+    of a rating -- a placeholder that made a leaderless group and a measured one look alike.
+    """
+
     if rows is None:
         return None
     if isinstance(rows, (str, bytes, Mapping)):
@@ -255,47 +288,380 @@ def _group_evidence(rows: Iterable[Mapping[str, Any]] | None, group_type: str) -
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             continue
-        basis = _basis(row)
-        name = row.get("name") or row.get(group_type) or row.get("id") or f"{group_type}-{index + 1}"
-        group = {
-            "name": str(name),
-            "basis": basis,
-            "source_row": dict(row),
-        }
-        for metric in _GROUP_METRICS:
-            explicit = row.get(metric)
-            if explicit is not None:
-                group[metric] = explicit
-            elif metric == "rs_concentration" and basis:
-                group[metric] = _observed(basis)
-            elif metric == "leader_behavior" and row.get("leader_tickers"):
-                group[metric] = _observed(basis)
-            else:
-                group[metric] = _unavailable("not_supplied_by_rs_source")
-        result.append(group)
+        name = str(row.get("name") or row.get(group_type) or row.get("id") or f"{group_type}-{index + 1}")
+        sample = _group_member_sample(name, group_type, leaders, history, groups_read)
+        result.append(
+            {
+                "name": name,
+                "basis": _basis(row),
+                "member_sample": sample,
+                "new_highs": _group_new_highs(sample, history, group_type),
+                "striking_distance_names": _group_striking_distance(sample, leaders),
+                "source_row": dict(row),
+            }
+        )
     return result
 
 
-def _leader_evidence(rows: Iterable[Mapping[str, Any]] | None) -> list[dict[str, Any]] | None:
+def _group_member_sample(
+    name: str,
+    group_type: str,
+    leaders: list[dict[str, Any]] | None,
+    history: Mapping[str, Any],
+    groups_read: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Which ranked leaders sit in this group, and which of them have a window to count over.
+
+    Classification is a current snapshot the provider refuses for a past session, so "nobody
+    was classified" and "this group holds none of the leaders" are different answers and are
+    reported as different reasons.
+    """
+
+    empty: dict[str, Any] = {"ranked_leaders_in_group": [], "not_counted": [], "unclassified": []}
+    if groups_read is None:
+        return {"state": "unavailable", "reason": "leader_classification_not_read", **empty}
+    members: list[str] = []
+    not_counted: list[dict[str, str]] = []
+    unclassified: list[str] = []
+    for ticker in _unique_tickers(leaders):
+        classification = groups_read.get(ticker)
+        if not isinstance(classification, Mapping):
+            unclassified.append(ticker)
+            continue
+        if str(classification.get(group_type, "")).casefold() != name.casefold():
+            continue
+        members.append(ticker)
+        if _countable_window(history.get(ticker)) is None:
+            not_counted.append({"ticker": ticker, "reason": "completed_sessions_insufficient"})
+    if not members:
+        # A leader nobody could classify may well belong here, so "no member" is only an
+        # answer when every ranked leader was placed. Otherwise the group has a gap, and a
+        # gap reported as an absence is missing evidence published as negative evidence.
+        reason = "no_ranked_leader_in_this_group" if not unclassified else "classification_incomplete_for_the_ranked_leaders"
+        return {"state": "unavailable", "reason": reason, **{**empty, "unclassified": unclassified}}
+    return {"state": "reported", "ranked_leaders_in_group": members, "not_counted": not_counted, "unclassified": unclassified}
+
+
+def _unique_tickers(leaders: list[dict[str, Any]] | None) -> list[str]:
+    """Each ranked ticker once. A source that prints one name twice must not count it twice."""
+
+    seen: set[str] = set()
+    tickers: list[str] = []
+    for leader in leaders or []:
+        ticker = leader.get("ticker")
+        if isinstance(ticker, str) and ticker not in seen:
+            seen.add(ticker)
+            tickers.append(ticker)
+    return tickers
+
+
+def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any], group_type: str) -> dict[str, Any]:
+    """How many of the group's ranked names print a new 52-week high now against one window ago.
+
+    The source states the signal as a direction -- a growing number of names making new highs
+    -- and names no window to measure the growth over, so the length comes from the registry
+    rather than from this module.
+    """
+
+    reading = {
+        "doctrine_id": _GROUP_NEW_HIGHS,
+        "binds": doctrine.binds(_GROUP_NEW_HIGHS),
+        # The claim states the signal; the two conventions below sized the window it is read
+        # over, and a reader following the citation needs all three to arrive at this count.
+        "window_doctrine_ids": [_GROUP_MEMBER_READING, _TRADING_WEEK],
+    }
+    if group_type != "industry":
+        # "a growing number of names in a particular industry" -- the source scoped this
+        # signal to an industry, and a sector is not one. Publishing the same count for a
+        # sector would put the claim's name on a measurement it never described.
+        return {**reading, "state": "not_applicable", "reason": "the_source_states_this_signal_for_an_industry"}
+    lookback = _growth_lookback_sessions()
+    countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker)) is not None]
+    if not countable:
+        return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_with_a_full_window"}
+    now = sum(1 for ticker in countable if _at_new_high(history[ticker], 0))
+    earlier = sum(1 for ticker in countable if _at_new_high(history[ticker], lookback))
+    return {
+        **reading,
+        "state": "supports" if now > earlier else "observed",
+        "measured": {"now": now, "earlier": earlier, "of_names_read": len(countable), "lookback_sessions": lookback},
+    }
+
+
+def _group_striking_distance(sample: Mapping[str, Any], leaders: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """How many of the group's ranked names sit inside the source's striking-distance range.
+
+    A count of names inside a range is not itself a range reading, so this reports the count
+    and the sample it came from and never a pass.
+    """
+
+    reading = {
+        "doctrine_id": _STRIKING_DISTANCE,
+        "binds": doctrine.binds(_STRIKING_DISTANCE),
+        # The claim states a per-stock distance. What licenses counting it across a group is
+        # the convention that defined the sample, so the count cites both or neither.
+        "sample_doctrine_ids": [_GROUP_MEMBER_READING],
+    }
+    members = set(sample.get("ranked_leaders_in_group", []))
+    if not members:
+        return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_in_this_group"}
+    states = [
+        leader.get("distance_from_52w_high", {}).get("state")
+        for leader in leaders or []
+        if leader.get("ticker") in members
+    ]
+    read = [state for state in states if state not in {None, "unavailable"}]
+    if not read:
+        return {**reading, "state": "unavailable", "reason": "leader_price_history_not_read"}
+    return {
+        **reading,
+        "state": "reported",
+        "measured": {"within_source_range": sum(1 for state in read if state == "within_source_range"), "of_names_read": len(read)},
+    }
+
+
+def _growth_lookback_sessions() -> int:
+    weeks = doctrine.parameter(_GROUP_MEMBER_READING, "new_high_growth_lookback_weeks")
+    return int(weeks) * _sessions_per_week()
+
+
+def _sessions_per_year() -> int:
+    return _WEEKS_IN_THE_YEAR_THE_SOURCES_NAME * _sessions_per_week()
+
+
+def _sessions_per_week() -> int:
+    return int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
+
+
+def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]] | None:
+    """The name's series, but only when it reaches back a full year before the earlier count."""
+
+    closes, _opens, highs, lows = _leader_series(bars)
+    if closes is None:
+        return None
+    return (closes, highs, lows) if len(highs) >= _sessions_per_year() + _growth_lookback_sessions() else None
+
+
+def _at_new_high(bars: Any, sessions_ago: int) -> bool:
+    """Was this name's high, that many completed sessions back, the highest of its trailing year?"""
+
+    window = _countable_window(bars)
+    if window is None:
+        return False
+    _, highs, _ = window
+    index = len(highs) - 1 - sessions_ago
+    return highs[index] >= max(highs[index - _sessions_per_year() + 1 : index + 1])
+
+
+def _leader_evidence(
+    rows: Iterable[Mapping[str, Any]] | None, history: Mapping[str, Any], groups_read: Mapping[str, Any] | None = None
+) -> list[dict[str, Any]] | None:
+    """Each ranked leader, with what its own completed bars say about how it is behaving.
+
+    The RS source ranks tickers and says nothing about behavior, so this used to stand a
+    placeholder in that slot -- and a placeholder reports `observed`, which is not `supports`.
+    The favorable regime was therefore unreachable from any live snapshot, not because the
+    market never qualified but because one of its four signals could never be met.
+
+    A caller-supplied behavior word is no longer read where the bars can answer. It was the same
+    shape as the going-concern field the fundamentals evaluator used to read off a provider that
+    never sent it: a verdict input with no evidence under it.
+    """
+
     if rows is None:
         return None
     if isinstance(rows, (str, bytes, Mapping)):
         return None
     leaders: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for row in rows:
         if not isinstance(row, Mapping):
             continue
         basis = _basis(row)
-        behavior = row.get("behavior", row.get("leader_behavior"))
+        ticker = row.get("ticker")
+        if isinstance(ticker, str):
+            if ticker in seen:
+                continue
+            seen.add(ticker)
+        classification = (groups_read or {}).get(ticker) if isinstance(ticker, str) else None
         leaders.append(
             {
-                "ticker": row.get("ticker"),
-                "behavior": behavior if behavior is not None else _observed(basis),
+                "ticker": ticker,
+                **_leader_price_behavior(history.get(ticker) if isinstance(ticker, str) else None),
+                "group": dict(classification) if isinstance(classification, Mapping) else None,
                 "basis": basis,
                 "source_row": dict(row),
             }
         )
     return leaders
+
+
+def _leader_price_behavior(bars: Any) -> dict[str, Any]:
+    """The three deterministic things this corpus says about a leader's own price.
+
+    How far it sits from a new 52-week high, whether it is printing on the 52-week-low list, and
+    how deep its correction has run. The band never carries the state alone: the depth's own
+    gate is the only reading here that can refuse, and the source's instruction about the low
+    list is a filter it stated outright.
+
+    Nothing is published until a full 52-week window has completed. A high taken over two bars
+    is not a 52-week high, and reporting one is the shape of fabrication this harness exists to
+    refuse -- the reader cannot tell a measured 3% from a 3% measured over a fortnight.
+    """
+
+    window_length = _sessions_per_year()
+    closes, opens, highs, lows = _leader_series(bars)
+    if closes is None:
+        return _unreadable_leader("leader_price_history_not_read")
+    if len(closes) < window_length:
+        return _unreadable_leader("completed_sessions_short_of_a_52_week_window")
+    window = slice(-window_length, None)
+    last, high_52w = closes[-1], max(highs[window])
+    distance = doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", _reported((high_52w - last) / high_52w * 100) if high_52w > 0 else None)
+    # What puts a ticker on the 52-week-low list is its own low being made now, so the reading
+    # is whether this session printed the lowest low of the window. Comparing the close with
+    # that low instead answered yes only when the close happened to equal the session's low.
+    on_low_list = {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "reported", "measured": bool(lows[-1] <= min(lows[window]))}
+    depth = _correction_depth(opens[window], highs[window], lows[window])
+    correction = doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", depth)
+    gate = doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", depth)
+    return {
+        "behavior": _leader_behavior_state(distance, on_low_list, gate),
+        "distance_from_52w_high": distance,
+        "on_52w_low_list": on_low_list,
+        "correction_depth": correction,
+        "correction_gate": gate,
+    }
+
+
+def _unreadable_leader(reason: str) -> dict[str, Any]:
+    return {
+        "behavior": {"state": "unavailable", "reason": reason},
+        "distance_from_52w_high": doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", None),
+        "on_52w_low_list": {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "unavailable", "measured": None},
+        "correction_depth": doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", None),
+        "correction_gate": doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", None),
+    }
+
+
+def _leader_behavior_state(distance: Mapping[str, Any], on_low_list: Mapping[str, Any], gate: Mapping[str, Any]) -> dict[str, Any]:
+    """One state from a gate and a band, in that order of authority.
+
+    A band cannot carry a verdict alone, so nearness to a new high supports only alongside a
+    correction the source's own ceiling did not refuse. The low list is a filter the source
+    stated outright -- "stay away from this list and all of its components" -- so it contradicts
+    on its own.
+    """
+
+    if on_low_list.get("measured") is True:
+        return {"state": "contradicts", "reason": "printing_on_the_52_week_low_list"}
+    if gate.get("state") == "fail":
+        return {"state": "contradicts", "reason": "correction_deeper_than_the_source_ceiling"}
+    if gate.get("state") == "pass" and distance.get("state") in {"within_source_range", "below_source_range"}:
+        return {"state": "supports"}
+    if distance.get("state") in {None, "unavailable"} or gate.get("state") in {None, "unavailable"}:
+        return {"state": "unavailable", "reason": "leader_price_history_not_read"}
+    return {"state": "observed"}
+
+
+def carries_a_readable_bar(bars: Any) -> bool:
+    """Whether these rows yield the series every leader reading is taken from.
+
+    The caller that collects a leader's history has to report a gap when the reading was never
+    taken, and "the frame was empty" is only one way for that to happen: a frame of three
+    hundred rows carrying no price at all publishes exactly as little. Both callers ask the
+    same question here so that the envelope's gap and the payload's `unavailable` cannot come
+    from two different definitions of readable.
+    """
+
+    return _leader_series(bars)[0] is not None
+
+
+def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], list[float], list[float]]:
+    """Closes, opens, highs and lows from completed rows, or nothing at all.
+
+    A history with one unreadable row is not a history with a hole to work around: every
+    measurement below reads the whole window, so a partial read would report a 52-week high the
+    ticker may never have printed. Order is checked because every index here assumes oldest to
+    newest, and a newest-first frame would report the oldest close as today's -- the same check
+    the index block a few lines up has always made. A non-positive price is refused rather than
+    divided by: a low of zero reports a hundred-percent correction on a stock that never moved.
+
+    The open is the exception the close, high and low are not: a bar missing it is still a
+    readable bar, because only the correction depth reads the open and it falls back cleanly.
+    So a missing or non-positive open becomes None for that bar rather than voiding the series.
+    """
+
+    if bars is None:
+        return None, [], [], []
+    try:
+        rows = list(bars)
+    except TypeError:
+        return None, [], [], []
+    closes: list[float] = []
+    opens: list[float | None] = []
+    highs: list[float] = []
+    lows: list[float] = []
+    dates: list[str] = []
+    for row in rows:
+        if not isinstance(row, Mapping) or row.get("completed") is False:
+            return None, [], [], []
+        close = _finite_number(row.get("close", row.get("Close")))
+        high = _finite_number(row.get("high", row.get("High")))
+        low = _finite_number(row.get("low", row.get("Low")))
+        if close is None or high is None or low is None:
+            return None, [], [], []
+        if min(close, high, low) <= 0:
+            return None, [], [], []
+        opened = _finite_number(row.get("open", row.get("Open")))
+        date_value = row.get("date", row.get("Date"))
+        if date_value is not None:
+            date_text = str(date_value)
+            if dates and date_text <= dates[-1]:
+                return None, [], [], []
+            dates.append(date_text)
+        closes.append(close)
+        opens.append(opened if opened is not None and opened > 0 else None)
+        highs.append(high)
+        lows.append(low)
+    return (closes, opens, highs, lows) if closes else (None, [], [], [])
+
+
+def _correction_depth(opens: list[float | None], highs: list[float], lows: list[float]) -> float | None:
+    """The deepest decline from a peak to a low that came after it, anywhere in the window.
+
+    Measuring from the window's highest high erased the very correction the claim is about:
+    the source's ceiling decides whether a stock is buyable "on the next new high", so a stock
+    that just made one reported a depth of zero and the reading became unreachable exactly
+    where it was needed. Running the peak forward also settles what an argmax could not --
+    which of two tied peaks to anchor on.
+
+    A daily bar never records whether its high or its low printed first, so a session's low is
+    never measured against its own high: a bar that opened low, sold off, and then ran to a new
+    high did not decline across its whole span, and reading it that way invents an ordering no
+    completed bar states. But the bar does record one order -- the open prints before both. So
+    the peak a low is measured against is the highest of the sessions before it and this bar's
+    own open, and never this bar's high. When the open is itself a new peak, the open-to-low
+    decline is one the completed bar states outright; when no open was read, the low falls back
+    to the peak the earlier sessions established.
+    """
+
+    if not highs or not lows:
+        return None
+    peak: float | None = None
+    deepest = 0.0
+    for opened, high, low in zip(opens, highs, lows):
+        anchor = peak
+        if opened is not None and opened > 0:
+            anchor = opened if anchor is None else max(anchor, opened)
+        if anchor is not None and anchor > 0:
+            deepest = max(deepest, (anchor - low) / anchor * 100)
+        peak = high if peak is None else max(peak, high)
+    return _reported(deepest)
+
+
+def _reported(value: float | None) -> float | None:
+    return None if value is None or not math.isfinite(value) else round(value, 10)
 
 
 def _basis(row: Mapping[str, Any]) -> dict[str, Any]:

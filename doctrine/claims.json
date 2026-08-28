@@ -12273,6 +12273,68 @@
         "tests/260827/unit/test_missing_split_evidence.py"
       ],
       "computability": "deterministic"
+    },
+    {
+      "id": "convention.group_member_reading",
+      "title": "How the harness reads a group's own names when it can only see the market's ranked leaders",
+      "kind": "default",
+      "layer": "harness",
+      "status": "active",
+      "context": [
+        "market_analysis"
+      ],
+      "required_inputs": [
+        "rs_group_ranking",
+        "rs_market_leaders",
+        "current_classification",
+        "price_history"
+      ],
+      "rule": {
+        "summary": "The RS source ranks groups by an average and publishes no membership, so the only names the harness can place inside a group are the market-wide ranked leaders it already read. Every group reading is therefore taken over that sample and says so; it is not a census of the group. The source says a growing number of names making new highs signals a group advance and names no window to measure the growth over, so the harness compares the count now with the count one leader-confirmation window earlier -- the low end of the 4-to-8-week window the same corpus gives for a new bull market's leaders to reveal themselves.",
+        "constraints": [
+          "read group membership only from a current classification snapshot",
+          "name the sample the count was taken over alongside the count"
+        ]
+      },
+      "thresholds": {},
+      "parameters": {
+        "new_high_growth_lookback_weeks": {
+          "value": 4,
+          "unit": "weeks",
+          "affects_verdict": true,
+          "note": "The low end of market.new_bull_leaders_first_weeks, converted to sessions through convention.trading_week. It decides which earlier count 'growing' is measured against, and a different length would move that comparison, so it is registered rather than written into the module."
+        }
+      },
+      "failure": {
+        "effect": "not_applicable",
+        "meaning": "A convention has no pass or fail."
+      },
+      "missing": {
+        "effect": "unavailable",
+        "meaning": "With no ranked leader classified into the group, or with fewer completed sessions than the lookback, the group has nothing to count and reports the gap."
+      },
+      "precedence": {
+        "tier": "execution_defaults",
+        "overrides": [
+          "narrative_context"
+        ],
+        "conflicts_with": []
+      },
+      "provenance": {
+        "quotations": [],
+        "resolution": "a harness convention; the sources describe a group advance qualitatively and name neither a membership source nor a growth window"
+      },
+      "quarantine": {
+        "is_quarantined": false,
+        "reason": null
+      },
+      "consumers": [
+        "market.snapshot"
+      ],
+      "tests": [
+        "tests/260829/unit/test_a_group_is_read_from_the_names_it_holds.py"
+      ],
+      "computability": "deterministic"
     }
   ]
 }

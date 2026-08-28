@@ -1,6 +1,6 @@
 [
-  {"instrument_id":"nasdaq:1","ticker":"AAPL","exchange":"NASDAQ","listing_country":"US","instrument_type":"common_stock","origin":"rs-screen","recommendation_state":"recommended"},
-  {"instrument_id":"nasdaq:1","ticker":"AAPL","exchange":"NASDAQ","listing_country":"US","instrument_type":"common_stock","origin":"base-screen","recommendation_state":"recommended"},
+  {"instrument_id":"nasdaq:1","ticker":"AAPL","exchange":"NASDAQ","listing_country":"US","instrument_type":"common_stock","origin":"rs-screen"},
+  {"instrument_id":"nasdaq:1","ticker":"AAPL","exchange":"NASDAQ","listing_country":"US","instrument_type":"common_stock","origin":"base-screen"},
   {"instrument_id":"nasdaq:2","ticker":"BABA","exchange":"NYSE","listing_country":"US","instrument_type":"ordinary_share","is_adr":true,"origin":"adr-screen"},
   {"instrument_id":"arcx:1","ticker":"SPY","exchange":"NYSE Arca","listing_country":"US","instrument_type":"etf","origin":"market-context"},
   {"instrument_id":"nasdaq:3","ticker":"SPAC","exchange":"NASDAQ","listing_country":"US","instrument_type":"spac","origin":"discovery"},
