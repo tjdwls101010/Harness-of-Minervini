@@ -180,6 +180,24 @@ def _year_window(bars: pd.DataFrame) -> pd.DataFrame | None:
     return bars.loc[dates >= boundary]
 
 
+def _extreme(window: pd.DataFrame | None, column: str, how: str) -> float | None:
+    """One end of the year, or nothing when a session inside the window did not carry it.
+
+    A missing price is skipped by `min` and `max`, so a year with one unknown low published a
+    definitive verdict on a floor nobody measured. Dropping that session instead would be the
+    worse repair -- measuring on the survivors is what let a history full of holes read as a
+    short one -- because a session whose prices are missing is still a session the year covers.
+
+    The two ends fail separately. An unknown low says nothing about whether the high is known,
+    and refusing both on either would withhold a reading that is there.
+    """
+
+    if window is None:
+        return None
+    prices = window[column]
+    return None if prices.isna().any() else _finite(float(getattr(prices, how)()))
+
+
 def build_eligibility_evidence(
     history: pd.DataFrame,
     *,
@@ -195,6 +213,12 @@ def build_eligibility_evidence(
     """
     if not isinstance(history, pd.DataFrame) or any(column not in history for column in _EXTREME_COLUMNS):
         raise ValueError("history must be a DataFrame with Close, High, and Low columns")
+    # A repeated column name makes the selection below return two columns under one label, and
+    # the extreme taken from it is then a Series where a price is expected. A provider
+    # flattening a multi-level header produces exactly that, and reading two more columns
+    # brought the shape here from where the shared price reader already names it.
+    if history.columns.has_duplicates:
+        raise ValueError("history repeats a column")
     # Selected by label rather than rebuilt from three Series: the columns then travel together
     # through the sort and the drop, so the window's high and low are the same sessions as its
     # closes without an index alignment that a repeated date would refuse outright.
@@ -221,8 +245,7 @@ def build_eligibility_evidence(
     # Taking the same phrase off the closing series made it mean two things in one harness,
     # and the half that decides eligibility was the looser of the two.
     window = _year_window(bars)
-    low_52 = float(window["Low"].min()) if window is not None else None
-    high_52 = float(window["High"].max()) if window is not None else None
+    low_52, high_52 = _extreme(window, "Low", "min"), _extreme(window, "High", "max")
     above_low_pct = _finite((current / low_52 - 1) * 100) if low_52 is not None and low_52 > 0 else None
     below_high_pct = _finite((1 - current / high_52) * 100) if high_52 is not None and high_52 > 0 else None
 
