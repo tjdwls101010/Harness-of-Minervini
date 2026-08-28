@@ -5,14 +5,12 @@ from __future__ import annotations
 import unittest
 
 from scripts.minervini.risk import reduce_risk
+from tests.attestations import planes
 
 
 CONVERGED = {
     "mode": "prospective",
-    "market": {"state": "pass"},
-    "eligibility": {"state": "pass"},
-    "setup": {"setup_state": "ready"},
-    "fundamentals": {"state": "pass"},
+    **planes(),
     "risk": {"state": "pass", "entry_price": 100.0, "stop_price": 94.0, "upside_price": 112.0},
 }
 

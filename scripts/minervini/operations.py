@@ -2322,6 +2322,86 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     }, current_price
 
 
+# Where each component capability keeps the word `ticker.risk` reads, alongside the plane it
+# settles. A path rather than one shared key name because these are four capabilities that
+# were designed apart, and renaming an output to make this table shorter would move a field
+# every existing reader already reads.
+_COMPONENT_PLANES = {
+    "market.snapshot": ("market", ("regime", "judgment")),
+    "ticker.qualify": ("eligibility", ("eligibility_state",)),
+    "ticker.setup": ("setup", ("setup_state",)),
+    "ticker.fundamentals": ("fundamentals", ("fundamentals_state",)),
+}
+
+
+def _attest_components(
+    evidence: dict[str, Any], attached: Any, *, ticker: str, as_of: str
+) -> list[dict[str, Any]]:
+    """Turn attached component envelopes into the attested evidence the reducer will accept.
+
+    Nothing here is trusted for being handed in. An envelope has to be one of the four
+    capabilities that settle a plane, and it has to be about this ticker and this session --
+    the two ways a real envelope goes wrong are being about another stock and being about
+    another day, and both look exactly like a good one until they are compared. The word
+    comes from the envelope's own payload rather than from anything the caller typed beside
+    it, so an envelope attached under a state word that contradicts it publishes the
+    envelope's word and not the caller's.
+
+    A refused envelope is reported rather than dropped: the plane simply goes on being
+    unattested, and the reference says which check it failed, because "your evidence did not
+    count" with no reason attached sends a reader to re-run a capability that was fine.
+    """
+
+    if not isinstance(attached, list):
+        raise RequestError("evidence must be a list of capability envelopes", "evidence")
+    references: list[dict[str, Any]] = []
+    for index, item in enumerate(attached):
+        if not isinstance(item, Mapping):
+            raise RequestError(f"evidence[{index}] is not a capability envelope", "evidence")
+        operation = item.get("operation")
+        plane_path = _COMPONENT_PLANES.get(operation if isinstance(operation, str) else "")
+        if plane_path is None:
+            raise RequestError(
+                f"evidence[{index}] is {operation!r}; ticker.risk reads {', '.join(sorted(_COMPONENT_PLANES))}",
+                "evidence",
+            )
+        plane, path = plane_path
+        payload = item.get("data")
+        payload = payload if isinstance(payload, Mapping) else {}
+        state: Any = payload
+        for key in path:
+            state = state.get(key) if isinstance(state, Mapping) else None
+        envelope_ticker = payload.get("ticker") if plane != "market" else None
+        envelope_as_of = item.get("as_of", {}).get("date") if isinstance(item.get("as_of"), Mapping) else None
+        reference = {
+            "operation": operation,
+            "ticker": envelope_ticker,
+            "as_of": envelope_as_of,
+            "status": item.get("status"),
+        }
+        refusal = None
+        if plane != "market" and envelope_ticker != ticker:
+            refusal = "envelope_is_about_another_ticker"
+        elif envelope_as_of != as_of:
+            refusal = "envelope_is_from_another_session"
+        elif item.get("status") not in {"ok", "partial"}:
+            refusal = "envelope_measured_nothing"
+        elif state is None:
+            refusal = "envelope_carries_no_state_for_this_plane"
+        if refusal is not None:
+            references.append({**reference, "plane": plane, "refused": refusal})
+            # Beside whatever the caller declared for this plane rather than over it: a
+            # refused envelope withdraws a pass and must not withdraw a declared failure,
+            # which is conservative and binds on its own terms.
+            declared = evidence.get(plane)
+            declared = dict(declared) if isinstance(declared, Mapping) else ({"state": declared} if declared is not None else {})
+            evidence[plane] = {**declared, "attestation_refused": refusal}
+            continue
+        references.append({**reference, "plane": plane, "state": state})
+        evidence[plane] = {"state": state, "attested_by": reference}
+    return references
+
+
 def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -2333,6 +2413,17 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # The reducer measures every audit window against the decision date, so it
     # cannot be the one input the operation keeps to itself.
     evidence["as_of"] = clock.date.isoformat()
+    # For the same reason, and now for one more: the reducer cross-checks every component
+    # attestation against the ticker it is reducing, and cannot do that on a ticker it was
+    # never told.
+    evidence["ticker"] = ticker
+    attached = evidence.pop("evidence", None)
+    if attached is not None:
+        references = _attest_components(evidence, attached, ticker=ticker, as_of=clock.date.isoformat())
+        # The references and not the envelopes: four whole envelopes echoed back would bury
+        # the request they were attached to, and what a reader needs is which capability,
+        # which ticker and which session vouched for each plane.
+        request = {**request, "evidence": references}
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
     _check_declared_shapes(evidence)
@@ -2659,7 +2750,18 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     result = reduce_risk(evidence)
     status = "partial" if any(item.get("required") for item in provider_missing) else "needs_input" if result["verdict"] == "INCOMPLETE" else "ok"
     provider_missing_ids = {item["id"] for item in provider_missing}
-    missing = [*provider_missing, *({"id": item, "reason": "evidence_required", "required": True} for item in result["missing"] if item not in provider_missing_ids)]
+    # A plane that came in as a word nobody measured is not the same gap as evidence that was
+    # never supplied, and the fix is different: run the capability that settles it and attach
+    # what it returns. Saying "evidence required" there sends a reader to type the word again.
+    unattested = result.get("unattested") or {}
+    missing = [
+        *provider_missing,
+        *(
+            {"id": item, "reason": unattested.get(item, "evidence_required"), "required": True}
+            for item in result["missing"]
+            if item not in provider_missing_ids
+        ),
+    ]
     data = {
         "ticker": ticker,
         **result,

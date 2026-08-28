@@ -11,15 +11,13 @@ import unittest
 
 from scripts.minervini import doctrine
 from scripts.minervini.risk import reduce_risk
+from tests.attestations import planes
 
 
 def converged(**risk: float) -> dict:
     return {
         "mode": "prospective",
-        "market": {"state": "pass"},
-        "eligibility": {"state": "pass"},
-        "setup": {"setup_state": "ready"},
-        "fundamentals": {"state": "pass"},
+        **planes(),
         "risk": {"average_gain_pct": 40.0, **risk},
     }
 

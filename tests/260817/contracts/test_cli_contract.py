@@ -3,11 +3,13 @@ import json
 import pathlib
 import subprocess
 import sys
+import tempfile
 import unittest
 
 from scripts.minervini.capabilities import CAPABILITIES
 from scripts.minervini.cli import build_parser, format_payload
 from scripts.minervini.clock import resolve_as_of
+from tests.attestations import envelopes
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -259,6 +261,36 @@ class PublicCliContractTests(unittest.TestCase):
         self.assertEqual({item["id"] for item in payload["missing"]}, {"entry_date", "stop_or_invalidation", "current_price"})
 
     def test_prospective_risk_derives_its_component_from_complete_price_inputs(self) -> None:
+        as_of = resolve_as_of().date.isoformat()
+        with tempfile.TemporaryDirectory() as directory:
+            paths = []
+            for index, item in enumerate(envelopes(ticker="TEST", as_of=as_of)):
+                path = pathlib.Path(directory) / f"{index}.json"
+                path.write_text(json.dumps(item), encoding="utf-8")
+                paths.append(str(path))
+            completed = run_pipeline(
+                "ticker",
+                "risk",
+                "TEST",
+                *(argument for path in paths for argument in ("--evidence", path)),
+                "--entry-price",
+                "100",
+                "--stop-price",
+                "94",
+                "--upside-price",
+                "112",
+                "--average-gain-pct",
+                "20",
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["data"]["verdict"], "BUY-READY")
+        self.assertEqual(payload["data"]["components"]["risk"], "pass")
+
+    def test_the_component_words_alone_do_not_reach_buy_ready_from_the_command_line(self) -> None:
+        """The whole defect, at the surface a person actually types it at."""
+
         completed = run_pipeline(
             "ticker",
             "risk",
@@ -283,8 +315,19 @@ class PublicCliContractTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         payload = json.loads(completed.stdout)
-        self.assertEqual(payload["data"]["verdict"], "BUY-READY")
-        self.assertEqual(payload["data"]["components"]["risk"], "pass")
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual(
+            {item["id"]: item["reason"] for item in payload["missing"]},
+            {plane: "unattested_state_word" for plane in ("market", "eligibility", "setup", "fundamentals")},
+        )
+
+    def test_evidence_that_is_not_a_capability_envelope_is_a_request_error(self) -> None:
+        completed = run_pipeline("ticker", "risk", "TEST", "--evidence", "no-such-file.json")
+
+        self.assertEqual(completed.returncode, 2)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertEqual(payload["data"]["error"]["field"], "evidence")
 
     def test_invalid_as_of_is_a_request_error_not_an_internal_error(self) -> None:
         completed = run_pipeline("clock", "--as-of", "not-a-date")

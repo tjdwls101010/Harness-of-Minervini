@@ -18,6 +18,7 @@ import pandas as pd
 from scripts.minervini import doctrine
 from scripts.minervini.risk import reduce_risk
 from scripts.minervini.technical import build_eligibility_evidence
+from tests.attestations import planes
 
 
 REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
@@ -65,10 +66,7 @@ def trend_signal(identifier: str, rs_rating: int, frame: pd.DataFrame | None = N
 
 CONVERGED = {
     "mode": "prospective",
-    "market": {"state": "pass"},
-    "eligibility": {"state": "pass"},
-    "setup": {"setup_state": "ready"},
-    "fundamentals": {"state": "pass"},
+    **planes(),
     "risk": {"entry_price": 100.0, "stop_price": 94.0, "upside_price": 112.0, "average_gain_pct": 20.0},
 }
 

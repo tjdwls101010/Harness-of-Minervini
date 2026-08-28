@@ -11,6 +11,7 @@ import pandas as pd
 from scripts.minervini.doctrine import get_claim
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from tests.attestations import envelopes
 
 
 AS_OF = "2025-12-31"
@@ -27,7 +28,7 @@ class ProspectiveCitesNoManagementClaims(unittest.TestCase):
     def test_a_buy_ready_prospective_envelope_cites_only_what_it_read(self) -> None:
         payload = execute(
             "ticker.risk",
-            {"ticker": "TEST", "as_of": AS_OF, "market": {"state": "favorable"}, "eligibility": {"state": "eligible"}, "setup": {"state": "ready"}, "fundamentals": {"state": "supports_convergence"}, "entry_price": 200.0, "stop_price": 188.0, "upside_price": 224.0, "average_gain_pct": 24.0},
+            {"ticker": "TEST", "as_of": AS_OF, "evidence": envelopes(), "entry_price": 200.0, "stop_price": 188.0, "upside_price": 224.0, "average_gain_pct": 24.0},
             runtime=Runtime(),
         )
 

@@ -27,6 +27,24 @@ def positive_number(value: str) -> float:
     return number
 
 
+def _read_envelope(path: str) -> Any:
+    """One component envelope, from a file or from stdin.
+
+    A file that is not there, or is not JSON, is a request error rather than a traceback:
+    the caller is naming a capability's output and the two ordinary ways to get that wrong
+    are a path that never existed and a file written by a command that failed.
+    """
+
+    try:
+        text = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
+    except OSError as error:
+        raise RequestError(f"cannot read evidence {path!r}: {error.strerror}", "evidence") from None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        raise RequestError(f"evidence {path!r} is not JSON", "evidence") from None
+
+
 class JsonArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:
         raise RequestError(message=message, field="arguments")
@@ -236,6 +254,10 @@ def build_parser() -> JsonArgumentParser:
     risk.add_argument("--base-count", type=int, metavar="N", help=_input_help("ticker.risk", "base_count"))
     risk.add_argument("--entry-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "entry_date"))
     risk.add_argument("--stop-effective-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "stop_effective_date"))
+    # Repeatable and one file per envelope, because that is the shape the analyst already
+    # has: each component capability wrote one. `-` reads one of them from stdin, so a single
+    # capability can be piped straight in without a temporary file.
+    risk.add_argument("--evidence", action="append", default=[], metavar="FILE", help=_input_help("ticker.risk", "evidence"))
     risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))
     risk.add_argument("--eligibility-state", choices=("eligible", "avoid", "incomplete"), help=_input_help("ticker.risk", "eligibility_state"))
     risk.add_argument("--setup-state", choices=("ready", "wait", "avoid", "incomplete"), help=_input_help("ticker.risk", "setup_state"))
@@ -344,6 +366,13 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
         if entry:
             request["entry"] = entry
     if operation == "ticker.risk":
+        # The flag takes paths and the capability takes envelopes, so the list is replaced
+        # rather than passed through -- and removed when it is empty, because an empty
+        # attachment list is a request that attached nothing, not one that attached nothing
+        # usable.
+        paths = request.pop("evidence", None)
+        if paths:
+            request["evidence"] = [_read_envelope(path) for path in paths]
         invalidation_price = request.pop("invalidation_price", None)
         invalidation_condition = request.pop("invalidation_condition", None)
         if invalidation_price is not None or invalidation_condition is not None:
