@@ -24,6 +24,12 @@ class Capability:
     # setup's segmentation and is the entire output of ticker.swings, so the exception has to
     # name a place: keyed on the name alone it also kept the verbose chains under `sensitivity`.
     compact_keeps: frozenset[str] = frozenset()
+    # Every top-level key this capability can put under `data`, and the subset of those that
+    # every domain envelope carries. `error` belongs to neither: any capability can be answered
+    # by `error_envelope`, which the published schema admits as the alternative shape.
+    # A key the compact filter strips can be in the vocabulary but never in the core.
+    data_keys: frozenset[str] = frozenset()
+    data_core: frozenset[str] = frozenset()
 
     @property
     def side_effecting(self) -> bool:
@@ -109,6 +115,8 @@ def _capability(
     exit_codes: dict[str, str] | None = None,
     examples: list[str] | None = None,
     compact_keeps: tuple[str, ...] = (),  # dotted paths under `data`
+    data_keys: tuple[str, ...] = (),
+    data_core: tuple[str, ...] = (),
 ) -> Capability:
     return Capability(
         name=name,
@@ -123,6 +131,8 @@ def _capability(
         exit_codes=dict(exit_codes or _EXIT_CODES),
         examples=examples or [],
         compact_keeps=frozenset(compact_keeps),
+        data_keys=frozenset(data_keys),
+        data_core=frozenset(data_core),
     )
 
 
@@ -161,6 +171,8 @@ CAPABILITIES = {
             limitations=["Future dates, weekends, exchange holidays, and known special exchange closures are rejected.", "The calendar models regular and standard early closes; it is not an intraday trading clock."],
             status_meanings={"ok": "A completed session boundary was resolved.", "needs_input": "The date is malformed or is not a completed US trading session."},
             examples=["scripts/.venv/bin/python scripts/pipeline clock", "scripts/.venv/bin/python scripts/pipeline clock --as-of 2026-08-14"],
+            data_keys=("date", "mode"),
+            data_core=("date", "mode"),
         ),
         _capability(
             "doctrine.show",

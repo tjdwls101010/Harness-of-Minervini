@@ -17,7 +17,7 @@ if [[ ! -x "$venv_dir/bin/python" ]]; then
   python3 -m venv "$venv_dir"
 fi
 
-"$venv_dir/bin/python" -m pip install --disable-pip-version-check -r "$repo_root/scripts/requirements.txt"
+"$venv_dir/bin/python" -m pip install --disable-pip-version-check -r "$repo_root/scripts/requirements.txt" -r "$repo_root/scripts/requirements-dev.txt"
 
 canonical_python="$repo_root/scripts/.venv/bin/python"
 if [[ "$venv_dir/bin/python" != "$canonical_python" ]]; then

@@ -1,0 +1,5 @@
+# Test-only dependencies. The harness itself never validates its own envelopes at
+# runtime -- the schemas in schemas/v2/ are a contract published for consumers -- so
+# the validator that proves those schemas actually reject a malformed envelope is
+# needed by the suite and by nothing the analyst runs.
+jsonschema==4.26.0
