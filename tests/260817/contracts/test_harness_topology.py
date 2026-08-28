@@ -38,6 +38,12 @@ class SharedHarnessTopologyTests(unittest.TestCase):
         text = CLAUDE.read_text(encoding="utf-8")
 
         self.assertLessEqual(len(text.splitlines()), 180)
+        # Bytes, not lines: this file is soft-wrapped prose, and one line of it once ran to
+        # 923 characters -- eight percent of the whole budget in a single line the count
+        # scored as one. The ceiling is the size the file had while the skill bodies still
+        # duplicated it, so anything added here is paid for the way the layer split paid:
+        # by moving what an interface already owns back to the interface.
+        self.assertLessEqual(len(text.encode("utf-8")), 11012)
         self.assertIn("principle", text.casefold())
         self.assertIn("scripts/.venv/bin/python scripts/pipeline capabilities", text)
         self.assertIn("describe <capability>", text)
