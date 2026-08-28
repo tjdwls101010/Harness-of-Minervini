@@ -1224,7 +1224,18 @@ def _ticker_cik(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         )
 
     if request.get("as_of") is not None and clock.date != resolve_as_of().date:
-        return unresolved({"id": "cik", "reason": "ticker_to_cik_map_is_current_only", "required": True})
+        # `ticker.fundamentals` points here when it wants a CIK for a past session, so this
+        # refusal is where that pointer lands. Saying only that the map is current leaves the
+        # analyst to work out that dropping the date is what answers, and a gap an analyst has
+        # to infer their way out of is the gap this capability was written to close.
+        return unresolved(
+            {
+                "id": "cik",
+                "reason": "ticker_to_cik_map_is_current_only",
+                "required": True,
+                "detail": "run ticker.cik for the current session; asserting that identity also held at the requested one is what ticker.fundamentals --cik records",
+            }
+        )
     try:
         snapshot = _cached_provider(
             runtime,
@@ -1235,6 +1246,10 @@ def _ticker_cik(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             operation="company_tickers",
             params={},
             fetch=runtime.company_tickers,
+            # The same lifetime every other current-only snapshot here carries. Held without
+            # one, a map whose being current is the reason it cannot answer for a past session
+            # was frozen for the rest of the session anyway.
+            ttl_seconds=900,
         )
     except ProviderUnavailable as error:
         return unresolved(_missing_provider(error))
