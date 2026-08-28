@@ -45,18 +45,30 @@ def threshold_moved(claim_id: str, name: str, **changes: object):
         doctrine._load_registry = loader
 
 
-def rising_history(sessions: int = 260) -> pd.DataFrame:
+def _bars(closes: list[float], index: pd.DatetimeIndex) -> pd.DataFrame:
+    """A closing series as bars, with no wick at all.
+
+    The evidence builder reads the year's extremes off `High` and `Low`, so a frame carrying
+    only closes is no longer a price history. Giving every bar a zero-width range keeps these
+    fixtures measuring the numbers they were written against, which is what they are about.
+    """
+
+    close = pd.Series(closes, index=index, dtype=float)
+    return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": close, "Volume": 1_000_000.0}, index=index)
+
+
+def rising_history(sessions: int = 270) -> pd.DataFrame:
     index = pd.bdate_range(end="2026-08-21", periods=sessions)
-    return pd.DataFrame({"Close": [50.0 + value * 0.4 for value in range(sessions)]}, index=index)
+    return _bars([50.0 + value * 0.4 for value in range(sessions)], index)
 
 
-def pulled_back_history(sessions: int = 260) -> pd.DataFrame:
+def pulled_back_history(sessions: int = 270) -> pd.DataFrame:
     """A rising series that gives back ground at the end, so both 52-week gates can move."""
 
     closes = [50.0 + value * 0.4 for value in range(sessions - 10)]
     peak = closes[-1]
     closes.extend(peak * (1 - 0.003 * (step + 1)) for step in range(10))
-    return pd.DataFrame({"Close": closes}, index=pd.bdate_range(end="2026-08-21", periods=sessions))
+    return _bars(closes, pd.bdate_range(end="2026-08-21", periods=sessions))
 
 
 def trend_signal(identifier: str, rs_rating: int, frame: pd.DataFrame | None = None) -> dict:

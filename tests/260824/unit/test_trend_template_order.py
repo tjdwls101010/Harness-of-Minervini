@@ -28,7 +28,10 @@ class TrendTemplateOrderTests(unittest.TestCase):
 
     def test_the_builder_emits_them_in_that_same_order(self) -> None:
         index = pd.bdate_range(end="2026-08-21", periods=260)
-        frame = pd.DataFrame({"Close": [50.0 + value * 0.4 for value in range(260)]}, index=index)
+        close = pd.Series([50.0 + value * 0.4 for value in range(260)], index=index, dtype=float)
+        # The builder reads the year's extremes off High and Low, so a frame of closes alone is
+        # no longer a price history. A zero-width bar keeps this fixture about the ordering.
+        frame = pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": close, "Volume": 1_000_000.0}, index=index)
 
         evidence = build_eligibility_evidence(frame, rs_rating=85)
 

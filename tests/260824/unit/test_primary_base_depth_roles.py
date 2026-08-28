@@ -8,6 +8,17 @@ import pandas as pd
 
 from scripts.minervini.technical import build_eligibility_evidence
 
+def _bars(closes: list[float], index: pd.DatetimeIndex) -> pd.DataFrame:
+    """A closing series as bars, with no wick at all.
+
+    The evidence builder reads the year's extremes off `High` and `Low`, so a frame carrying
+    only closes is no longer a price history. Giving every bar a zero-width range keeps these
+    fixtures measuring the numbers they were written against, which is what they are about.
+    """
+
+    close = pd.Series(closes, index=index, dtype=float)
+    return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": close, "Volume": 1_000_000.0}, index=index)
+
 
 def history(*, sessions: int, peak_position: int, peak: float, trough: float, last: float) -> pd.DataFrame:
     closes = [peak * (0.6 + 0.35 * (index + 1) / (peak_position + 1)) for index in range(peak_position)]
@@ -17,7 +28,7 @@ def history(*, sessions: int, peak_position: int, peak: float, trough: float, la
     closes.append(trough)
     closes.extend(trough + step * (index + 1) for index in range(remaining - 1))
     closes.append(last)
-    return pd.DataFrame({"Close": closes}, index=pd.bdate_range(end="2026-08-21", periods=len(closes)))
+    return _bars(closes, pd.bdate_range(end="2026-08-21", periods=len(closes)))
 
 
 def primary_base(*, peak_position: int, trough: float) -> dict:

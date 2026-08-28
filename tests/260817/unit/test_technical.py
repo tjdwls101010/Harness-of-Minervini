@@ -25,7 +25,7 @@ def history(closes: list[float]) -> pd.DataFrame:
 
 class TechnicalEvidenceTests(unittest.TestCase):
     def test_rising_leader_produces_the_canonical_eight_standard_passes(self) -> None:
-        prices = history(np.linspace(50, 150, 260).tolist())
+        prices = history(np.linspace(50, 150, 270).tolist())
 
         evidence = build_eligibility_evidence(prices, rs_rating=92)
 
@@ -36,7 +36,7 @@ class TechnicalEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["as_of"], prices.index[-1].date().isoformat())
 
     def test_missing_rs_is_unavailable_without_changing_price_gate_results(self) -> None:
-        prices = history(np.linspace(50, 150, 260).tolist())
+        prices = history(np.linspace(50, 150, 270).tolist())
 
         evidence = build_eligibility_evidence(prices, rs_rating=None)
 
@@ -45,7 +45,7 @@ class TechnicalEvidenceTests(unittest.TestCase):
         self.assertEqual(by_id["trend_template.price_above_sma_50"]["state"], "pass")
 
     def test_falling_200_day_structure_is_a_known_failure(self) -> None:
-        prices = history(np.linspace(180, 80, 260).tolist())
+        prices = history(np.linspace(180, 80, 270).tolist())
 
         evidence = build_eligibility_evidence(prices, rs_rating=95)
 
