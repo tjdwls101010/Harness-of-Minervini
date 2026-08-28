@@ -436,7 +436,7 @@ def _sessions_per_week() -> int:
 def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]] | None:
     """The name's series, but only when it reaches back a full year before the earlier count."""
 
-    closes, highs, lows = _leader_series(bars)
+    closes, _opens, highs, lows = _leader_series(bars)
     if closes is None:
         return None
     return (closes, highs, lows) if len(highs) >= _sessions_per_year() + _growth_lookback_sessions() else None
@@ -510,7 +510,7 @@ def _leader_price_behavior(bars: Any) -> dict[str, Any]:
     """
 
     window_length = _sessions_per_year()
-    closes, highs, lows = _leader_series(bars)
+    closes, opens, highs, lows = _leader_series(bars)
     if closes is None:
         return _unreadable_leader("leader_price_history_not_read")
     if len(closes) < window_length:
@@ -522,7 +522,7 @@ def _leader_price_behavior(bars: Any) -> dict[str, Any]:
     # is whether this session printed the lowest low of the window. Comparing the close with
     # that low instead answered yes only when the close happened to equal the session's low.
     on_low_list = {"doctrine_id": _LOW_LIST, "binds": doctrine.binds(_LOW_LIST), "state": "reported", "measured": bool(lows[-1] <= min(lows[window]))}
-    depth = _correction_depth(highs[window], lows[window])
+    depth = _correction_depth(opens[window], highs[window], lows[window])
     correction = doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", depth)
     gate = doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", depth)
     return {
@@ -577,8 +577,8 @@ def carries_a_readable_bar(bars: Any) -> bool:
     return _leader_series(bars)[0] is not None
 
 
-def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[float]]:
-    """Closes, highs and lows from completed rows, or nothing at all.
+def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], list[float], list[float]]:
+    """Closes, opens, highs and lows from completed rows, or nothing at all.
 
     A history with one unreadable row is not a history with a hole to work around: every
     measurement below reads the whole window, so a partial read would report a 52-week high the
@@ -586,41 +586,48 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float], list[flo
     newest, and a newest-first frame would report the oldest close as today's -- the same check
     the index block a few lines up has always made. A non-positive price is refused rather than
     divided by: a low of zero reports a hundred-percent correction on a stock that never moved.
+
+    The open is the exception the close, high and low are not: a bar missing it is still a
+    readable bar, because only the correction depth reads the open and it falls back cleanly.
+    So a missing or non-positive open becomes None for that bar rather than voiding the series.
     """
 
     if bars is None:
-        return None, [], []
+        return None, [], [], []
     try:
         rows = list(bars)
     except TypeError:
-        return None, [], []
+        return None, [], [], []
     closes: list[float] = []
+    opens: list[float | None] = []
     highs: list[float] = []
     lows: list[float] = []
     dates: list[str] = []
     for row in rows:
         if not isinstance(row, Mapping) or row.get("completed") is False:
-            return None, [], []
+            return None, [], [], []
         close = _finite_number(row.get("close", row.get("Close")))
         high = _finite_number(row.get("high", row.get("High")))
         low = _finite_number(row.get("low", row.get("Low")))
         if close is None or high is None or low is None:
-            return None, [], []
+            return None, [], [], []
         if min(close, high, low) <= 0:
-            return None, [], []
+            return None, [], [], []
+        opened = _finite_number(row.get("open", row.get("Open")))
         date_value = row.get("date", row.get("Date"))
         if date_value is not None:
             date_text = str(date_value)
             if dates and date_text <= dates[-1]:
-                return None, [], []
+                return None, [], [], []
             dates.append(date_text)
         closes.append(close)
+        opens.append(opened if opened is not None and opened > 0 else None)
         highs.append(high)
         lows.append(low)
-    return (closes, highs, lows) if closes else (None, [], [])
+    return (closes, opens, highs, lows) if closes else (None, [], [], [])
 
 
-def _correction_depth(highs: list[float], lows: list[float]) -> float | None:
+def _correction_depth(opens: list[float | None], highs: list[float], lows: list[float]) -> float | None:
     """The deepest decline from a peak to a low that came after it, anywhere in the window.
 
     Measuring from the window's highest high erased the very correction the claim is about:
@@ -629,20 +636,26 @@ def _correction_depth(highs: list[float], lows: list[float]) -> float | None:
     where it was needed. Running the peak forward also settles what an argmax could not --
     which of two tied peaks to anchor on.
 
-    The peak a low is measured against is the one the sessions before it established. A daily
-    bar records a high and a low and never which of them printed first, so measuring a session
-    against its own high invents the ordering: a bar that opened low, sold off, and then ran
-    to a new high reported the whole span as a decline that no completed bar says happened.
-    The window's first bar therefore anchors nothing -- it has no session before it.
+    A daily bar never records whether its high or its low printed first, so a session's low is
+    never measured against its own high: a bar that opened low, sold off, and then ran to a new
+    high did not decline across its whole span, and reading it that way invents an ordering no
+    completed bar states. But the bar does record one order -- the open prints before both. So
+    the peak a low is measured against is the highest of the sessions before it and this bar's
+    own open, and never this bar's high. When the open is itself a new peak, the open-to-low
+    decline is one the completed bar states outright; when no open was read, the low falls back
+    to the peak the earlier sessions established.
     """
 
     if not highs or not lows:
         return None
     peak: float | None = None
     deepest = 0.0
-    for high, low in zip(highs, lows):
-        if peak is not None and peak > 0:
-            deepest = max(deepest, (peak - low) / peak * 100)
+    for opened, high, low in zip(opens, highs, lows):
+        anchor = peak
+        if opened is not None and opened > 0:
+            anchor = opened if anchor is None else max(anchor, opened)
+        if anchor is not None and anchor > 0:
+            deepest = max(deepest, (anchor - low) / anchor * 100)
         peak = high if peak is None else max(peak, high)
     return _reported(deepest)
 

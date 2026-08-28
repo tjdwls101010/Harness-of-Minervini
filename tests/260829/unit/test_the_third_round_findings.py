@@ -1,0 +1,70 @@
+"""What the regression-only round found in the code the second round produced.
+
+The second round stopped measuring a session's low against its own high, because a daily bar
+never records whether its high or its low printed first. But a completed bar does record one
+ordering the second round threw away with the rest: the open prints before both. When the open
+is itself a new peak, the decline from that open to the same bar's low is a sequence the source's
+"peak to low" fully supports -- and the second round's fix reported it as if it never happened.
+"""
+
+from __future__ import annotations
+
+import unittest
+
+from scripts.minervini import doctrine
+from scripts.minervini.market_evidence import build_market_evidence
+
+
+SESSIONS = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
+
+
+def _bars(rows: list[tuple[float, float, float, float | None]]) -> list[dict[str, object]]:
+    """Rows of (high, low, close, open); open is omitted from the bar when it is None."""
+
+    bars: list[dict[str, object]] = []
+    for index, (high, low, close, opened) in enumerate(rows):
+        bar: dict[str, object] = {"date": f"d{index:04d}", "high": high, "low": low, "close": close, "completed": True}
+        if opened is not None:
+            bar["open"] = opened
+        bars.append(bar)
+    return bars
+
+
+def _lead(rows: list[tuple[float, float, float, float | None]]) -> dict[str, object]:
+    evidence = build_market_evidence(
+        qqq_daily_ohlcv=None,
+        finviz_html=None,
+        sector_rows=None,
+        industry_rows=None,
+        leader_rows=[{"ticker": "LEAD"}],
+        trade_traction={"state": "supports"},
+        leader_history={"LEAD": _bars(rows)},
+        leader_groups=None,
+    )
+    return evidence["leaders"][0]
+
+
+class OpenConfirmsAnIntrabarDecline(unittest.TestCase):
+    """The same last bar -- high 100, low 40, close 95 -- reads two ways, and the open is the
+    only thing that changes between them. Reported, the open is a new peak known to precede the
+    low, so 100 to 40 is a 60% decline the source's ceiling refuses. Withheld, the high and low
+    are unordered again and the low is measured only from the 70 the prior sessions established,
+    a 42.9% the ceiling passes. The second round read every such bar the withheld way."""
+
+    def test_an_open_that_makes_a_new_peak_measures_its_own_low_against_that_open(self) -> None:
+        rows = [(70.0, 69.0, 69.5, None)] * (SESSIONS - 1) + [(100.0, 40.0, 95.0, 100.0)]
+        leader = _lead(rows)
+
+        self.assertAlmostEqual(leader["correction_depth"]["measured"], 60.0, places=6)
+        self.assertEqual(leader["correction_gate"]["state"], "fail")
+
+    def test_the_same_bar_with_no_open_reported_measures_only_from_the_prior_peak(self) -> None:
+        rows = [(70.0, 69.0, 69.5, None)] * (SESSIONS - 1) + [(100.0, 40.0, 95.0, None)]
+        leader = _lead(rows)
+
+        self.assertAlmostEqual(leader["correction_depth"]["measured"], 42.8571428571, places=6)
+        self.assertEqual(leader["correction_gate"]["state"], "pass")
+
+
+if __name__ == "__main__":
+    unittest.main()
