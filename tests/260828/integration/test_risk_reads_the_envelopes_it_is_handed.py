@@ -10,27 +10,26 @@ attached to.
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from scripts.minervini.contracts import RequestError
+from scripts.minervini.contracts import envelope as build_envelope
 from scripts.minervini.operations import execute
-
-
-TICKER = "TEST"
-AS_OF = "2025-12-31"
+from tests.attestations import AS_OF, TICKER, envelopes, stub
 
 
 def envelope(operation: str, data: dict, *, as_of: str = AS_OF, status: str = "ok") -> dict:
     """A component envelope in the shape its capability returns one."""
 
-    return {
-        "schema_version": "2.0.0",
-        "operation": operation,
-        "request": {"ticker": data.get("ticker")},
-        "as_of": {"mode": "explicit", "date": as_of, "timezone": "America/New_York", "completed_session": True},
-        "status": status,
-        "data": data,
-    }
+    return build_envelope(
+        operation,
+        request={"ticker": data.get("ticker")},
+        as_of={"mode": "explicit", "date": as_of, "timezone": "America/New_York", "completed_session": True},
+        status=status,
+        data=data,
+        sources=[{"provider": "fixture-prices", "as_of": as_of, "stale": False}],
+    )
 
 
 def market(judgment: str = "favorable", **kwargs) -> dict:
@@ -71,27 +70,12 @@ class AVerdictIsReducedFromEnvelopes(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "BUY-READY")
         self.assertEqual(payload["missing"], [])
 
-    def test_the_request_echoes_which_capability_vouched_for_each_plane(self) -> None:
-        """A reader auditing the verdict needs the references, not four whole envelopes."""
-
-        payload = risk([market(), qualify(), setup(), fundamentals()])
-
-        self.assertEqual(
-            [(item["plane"], item["operation"], item["as_of"]) for item in payload["request"]["evidence"]],
-            [
-                ("market", "market.snapshot", AS_OF),
-                ("eligibility", "ticker.qualify", AS_OF),
-                ("setup", "ticker.setup", AS_OF),
-                ("fundamentals", "ticker.fundamentals", AS_OF),
-            ],
-        )
-
     def test_an_envelope_about_another_stock_leaves_its_plane_unattested(self) -> None:
         payload = risk([market(), qualify(ticker="OTHER"), setup(), fundamentals()])
 
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
-        self.assertIn("eligibility", payload["data"]["unattested"])
-        refused = [item for item in payload["request"]["evidence"] if item.get("refused")]
+        self.assertEqual(payload["data"]["unattested"]["eligibility"], "envelope_is_about_another_ticker")
+        refused = [item for item in payload["data"]["attested_evidence"] if item.get("refused")]
         self.assertEqual([item["refused"] for item in refused], ["envelope_is_about_another_ticker"])
 
     def test_an_envelope_from_another_session_leaves_its_plane_unattested(self) -> None:
@@ -121,7 +105,7 @@ class AVerdictIsReducedFromEnvelopes(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "AVOID")
         self.assertIn("eligibility", payload["data"]["failed"])
         # The envelope was read, and the reference says which word beat it.
-        yielded = [item for item in payload["request"]["evidence"] if item.get("yielded_to_declared")]
+        yielded = [item for item in payload["data"]["attested_evidence"] if item.get("yielded_to_declared")]
         self.assertEqual([(item["plane"], item["state"], item["yielded_to_declared"]) for item in yielded], [("eligibility", "eligible", "avoid")])
 
     def test_a_caller_cannot_write_the_attestation_themselves(self) -> None:
@@ -146,12 +130,103 @@ class AVerdictIsReducedFromEnvelopes(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertEqual(payload["data"]["unattested"]["eligibility"], "unattested_state_word")
 
+    def test_two_envelopes_claiming_one_plane_are_refused_rather_than_ranked(self) -> None:
+        """Attaching a stale run beside a fresh one is the ordinary way this happens.
+
+        Both are about this ticker and this session, so neither check catches it, and taking
+        the last silently hands the verdict to argument order.
+        """
+
+        with self.assertRaises(RequestError) as raised:
+            risk([market(), qualify("avoid"), qualify("eligible"), setup(), fundamentals()])
+
+        self.assertEqual(raised.exception.field, "evidence")
+        self.assertIn("eligibility", raised.exception.message)
+
+    def test_a_favorable_envelope_does_not_disarm_a_declared_market_defense(self) -> None:
+        """The same rule in active mode, where the market word is not a verdict at all.
+
+        A holder who calls the market defensive gets their stops tightened. An attached
+        market envelope replacing that word with favorable took the defense away, which is a
+        caller's own read of the market being overruled into a less careful position.
+        """
+
+        held = {
+            "ticker": TICKER,
+            "mode": "active",
+            "as_of": AS_OF,
+            "entry_price": 100.0,
+            "entry_date": "2025-10-01",
+            "stop_price": 94.0,
+            "market": {"state": "defensive"},
+        }
+        alone = execute("ticker.risk", held)
+        with_envelope = execute("ticker.risk", {**held, "evidence": [market()]})
+
+        for payload in (alone, with_envelope):
+            self.assertIn("management.market_defense_tightens_stops", json.dumps(payload["data"]))
+
     def test_a_capability_that_settles_no_plane_is_refused_by_name(self) -> None:
         with self.assertRaises(RequestError) as raised:
             risk([envelope("ticker.peers", {"ticker": TICKER})])
 
         self.assertEqual(raised.exception.field, "evidence")
         self.assertIn("ticker.peers", raised.exception.message)
+
+    def test_an_attachment_that_is_not_an_envelope_is_refused(self) -> None:
+        """Carrying the fields this capability reads is not the same as being an envelope.
+
+        A dict assembled by hand can hold the operation, the state word, the session and the
+        status while holding none of the rest, and four of those reproduce the original
+        defect exactly. What is checked is the shape the capabilities actually emit.
+        """
+
+        with self.assertRaises(RequestError) as raised:
+            risk([stub("eligibility", "eligible")])
+
+        self.assertEqual(raised.exception.field, "evidence")
+
+    def test_an_envelope_that_read_nothing_vouches_for_nothing(self) -> None:
+        """An empty `sources` list is the envelope saying it measured nothing.
+
+        This is the tell the original defect published beside its own BUY-READY, and it is
+        the one thing about an attachment that this capability can check without re-measuring.
+        """
+
+        read_nothing = [{**item, "sources": []} for item in envelopes(ticker=TICKER, as_of=AS_OF)]
+        payload = risk(read_nothing)
+
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual(
+            set(payload["data"]["unattested"].values()),
+            {"envelope_measured_nothing"},
+        )
+
+    def test_the_request_echo_is_the_envelopes_the_caller_attached(self) -> None:
+        """The declared input is `envelope[]`, so the echo has to be one, and has to re-run.
+
+        An echo that is a different shape from the field it echoes is a request nobody can
+        replay, and this capability's whole subject is evidence that survives being carried.
+        """
+
+        attached = envelopes(ticker=TICKER, as_of=AS_OF)
+        payload = risk(attached)
+
+        self.assertEqual(payload["request"]["evidence"], attached)
+        self.assertEqual(execute("ticker.risk", payload["request"])["data"]["verdict"], "BUY-READY")
+
+    def test_the_references_say_which_capability_settled_each_plane(self) -> None:
+        payload = risk(envelopes(ticker=TICKER, as_of=AS_OF))
+
+        self.assertEqual(
+            [(item["plane"], item["operation"]) for item in payload["data"]["attested_evidence"]],
+            [
+                ("market", "market.snapshot"),
+                ("eligibility", "ticker.qualify"),
+                ("setup", "ticker.setup"),
+                ("fundamentals", "ticker.fundamentals"),
+            ],
+        )
 
 
 if __name__ == "__main__":

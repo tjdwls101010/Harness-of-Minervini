@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scripts.minervini.contracts import envelope
+
 
 TICKER = "TEST"
 AS_OF = "2025-12-31"
@@ -70,16 +72,29 @@ def envelopes(*, ticker: str = TICKER, as_of: str = AS_OF, **states: str) -> lis
         state = states.get(plane, default)
         data = {"regime": {"judgment": state}} if plane == "market" else {"ticker": ticker, _STATE_FIELD[plane]: state}
         out.append(
-            {
-                "schema_version": "2.0.0",
-                "operation": _OPERATION[plane],
-                "request": {"ticker": None if plane == "market" else ticker},
-                "as_of": {"mode": "explicit", "date": as_of, "timezone": "America/New_York", "completed_session": True},
-                "status": "ok",
-                "data": data,
-            }
+            # Through the real builder, so a test envelope cannot be a shape the capabilities
+            # never produce -- which is the shape `ticker.risk` refuses.
+            envelope(
+                _OPERATION[plane],
+                request={"ticker": None if plane == "market" else ticker},
+                as_of={"mode": "explicit", "date": as_of, "timezone": "America/New_York", "completed_session": True},
+                status="ok",
+                data=data,
+                sources=[{"provider": "fixture-prices", "as_of": as_of, "stale": False}],
+            )
         )
     return out
+
+
+def stub(plane: str, state: str, *, ticker: str = TICKER, as_of: str = AS_OF) -> dict[str, Any]:
+    """The fields `ticker.risk` reads, and nothing else -- what a hand-assembled attachment is."""
+
+    return {
+        "operation": _OPERATION[plane],
+        "as_of": {"date": as_of},
+        "status": "ok",
+        "data": {"regime": {"judgment": state}} if plane == "market" else {"ticker": ticker, _STATE_FIELD[plane]: state},
+    }
 
 
 def planes(*, ticker: str = TICKER, as_of: str = AS_OF, **states: str) -> dict[str, Any]:

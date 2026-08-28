@@ -2333,6 +2333,10 @@ _COMPONENT_PLANES = {
     "ticker.fundamentals": ("fundamentals", ("fundamentals_state",)),
 }
 
+# Derived from the builder rather than listed, so a key added to the envelope contract is one
+# an attachment is required to carry without anybody remembering to come back here.
+_ENVELOPE_KEYS = frozenset(envelope("contract.probe"))
+
 
 def _attest_components(
     evidence: dict[str, Any], attached: Any, *, ticker: str, as_of: str
@@ -2356,7 +2360,11 @@ def _attest_components(
         raise RequestError("evidence must be a list of capability envelopes", "evidence")
     references: list[dict[str, Any]] = []
     for index, item in enumerate(attached):
-        if not isinstance(item, Mapping):
+        if not isinstance(item, Mapping) or not _ENVELOPE_KEYS <= set(item):
+            # Carrying the four fields this function reads is not the same as being an
+            # envelope: a dict assembled by hand can hold the operation, the word, the session
+            # and the status while holding none of the rest, and four of those reproduce the
+            # defect this channel exists to close. The shape is what the capabilities emit.
             raise RequestError(f"evidence[{index}] is not a capability envelope", "evidence")
         operation = item.get("operation")
         plane_path = _COMPONENT_PLANES.get(operation if isinstance(operation, str) else "")
@@ -2366,6 +2374,11 @@ def _attest_components(
                 "evidence",
             )
         plane, path = plane_path
+        if any(reference["plane"] == plane for reference in references):
+            # Both may be about this ticker and this session, so neither check below sees it,
+            # and keeping the last hands the verdict to argument order. Attaching a stale run
+            # beside a fresh one is the ordinary way a caller gets here.
+            raise RequestError(f"two envelopes both settle {plane}; attach one", "evidence")
         payload = item.get("data")
         payload = payload if isinstance(payload, Mapping) else {}
         state: Any = payload
@@ -2384,7 +2397,11 @@ def _attest_components(
             refusal = "envelope_is_about_another_ticker"
         elif envelope_as_of != as_of:
             refusal = "envelope_is_from_another_session"
-        elif item.get("status") not in {"ok", "partial"}:
+        elif item.get("status") not in {"ok", "partial"} or not item.get("sources"):
+            # `partial` is admissible -- a market read can be favorable with context evidence
+            # missing, and fundamentals can support convergence without every optional figure.
+            # An empty `sources` list is not: it is the envelope saying it reached no provider,
+            # and that emptiness beside a BUY-READY is the tell the original defect published.
             refusal = "envelope_measured_nothing"
         elif state is None:
             refusal = "envelope_carries_no_state_for_this_plane"
@@ -2439,12 +2456,13 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         if isinstance(declared, Mapping) and "attested_by" in declared:
             evidence[plane] = {key: value for key, value in declared.items() if key != "attested_by"}
     attached = evidence.pop("evidence", None)
+    attested_evidence: list[dict[str, Any]] = []
     if attached is not None:
-        references = _attest_components(evidence, attached, ticker=ticker, as_of=clock.date.isoformat())
-        # The references and not the envelopes: four whole envelopes echoed back would bury
-        # the request they were attached to, and what a reader needs is which capability,
-        # which ticker and which session vouched for each plane.
-        request = {**request, "evidence": references}
+        # The request keeps the envelopes it was given, unchanged: the input is declared as
+        # envelopes, and an echo of a different shape is a request nobody can replay. What a
+        # reader wants -- which capability, which ticker, which session vouched for each
+        # plane, and which attachment was refused -- is a finding, so it goes in the payload.
+        attested_evidence = _attest_components(evidence, attached, ticker=ticker, as_of=clock.date.isoformat())
     sources: list[dict[str, Any]] = []
     provider_missing: list[dict[str, Any]] = []
     _check_declared_shapes(evidence)
@@ -2786,6 +2804,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     data = {
         "ticker": ticker,
         **result,
+        "attested_evidence": attested_evidence,
         "current_price": evidence.get("current_price"),
         "max_high_since_entry": evidence.get("max_high_since_entry"),
         "max_high_date": evidence.get("max_high_date"),

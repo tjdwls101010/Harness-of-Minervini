@@ -44,6 +44,7 @@ _AVERAGES = ("ema21", "sma50")
 # ticker whose fundamentals nobody had looked at and whose Power Play nothing had measured.
 # The exception is real, but it is earned by measurement plus an approved chart, and no
 # reducer that reads caller-supplied state words is in a position to check that it was.
+
 # The four planes whose word is a verdict some other capability reached, and the capability
 # that reaches each. The comment above is about one word; the argument under it was never
 # about one word. Every plane here is a state this reducer cannot check and a caller can
@@ -61,6 +62,14 @@ _ATTESTING_OPERATION = {
     "fundamentals": "ticker.fundamentals",
 }
 
+# What each capability calls its own verdict, so a caller who pastes that payload in is read
+# correctly. The market names its regime rather than a state, and is read from `state` alone.
+_PLANE_ALIAS = {
+    "eligibility": "eligibility_state",
+    "setup": "setup_state",
+    "fundamentals": "fundamentals_state",
+}
+
 _PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence"}
 _FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
 _WAIT = {"wait", "pending", "watch", "not_triggered", "cautious", "defensive"}
@@ -71,13 +80,18 @@ def _mapping(value: Any) -> dict[str, Any]:
     return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
 
 
-def _state(value: Any, default: str = "unavailable") -> str:
+def _state(value: Any, default: str = "unavailable", alias: str | None = None) -> str:
     if isinstance(value, bool):
         return "pass" if value else "fail"
     if isinstance(value, Mapping):
-        setup_state = value.get("setup_state")
-        if setup_state is not None:
-            value = setup_state
+        # A plane's own capability names its verdict after the plane -- `setup_state`,
+        # `eligibility_state` -- so a caller pasting that payload in is understood. The alias
+        # is per plane rather than shared: read for every object, `setup_state` spoke for the
+        # risk plane too, and `{"state": "fail", "setup_state": "ready"}` turned a declared
+        # risk failure into a pass.
+        aliased = value.get(alias) if alias else None
+        if aliased is not None:
+            value = aliased
         else:
             value = value.get("state", value.get("status"))
     if value is None:
@@ -155,7 +169,7 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     unattested: dict[str, str] = {}
     for name in ("market", "eligibility", "setup", "fundamentals"):
         supplied = payload.get(name)
-        state = _state(supplied)
+        state = _state(supplied, alias=_PLANE_ALIAS.get(name))
         if state == "pass" and not _attests(supplied, name, ticker, as_of):
             # Not a failure and not a pass: nobody this reducer can name measured it. That is
             # the harness's own word for unavailable evidence, and it reaches INCOMPLETE.
