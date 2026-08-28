@@ -3176,15 +3176,18 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
 
     if not isinstance(request, Mapping):
         raise RequestError("request must be an object", "request")
-    runtime = runtime if runtime is not None else Runtime(cache=ProviderCache())
     # The registry pair answers from the registry alone, so they take no runtime and reach no
     # provider. They live here rather than only in the CLI because `execute` is a public seam
     # too, and routed in one place and not the other they came back from this one as the
-    # unimplemented-operation envelope -- under their own operation name.
+    # unimplemented-operation envelope -- under their own operation name. They answer before
+    # the default runtime is built, not merely without using it: these two are what an analyst
+    # runs when something else is already broken, and a cache directory this process cannot
+    # resolve would otherwise turn reading the interface into an internal error.
     if operation == "capabilities":
         return envelope(operation, data={"capabilities": [CAPABILITIES[name].listing() for name in sorted(CAPABILITIES)]})
     if operation == "describe":
         return _describe(request)
+    runtime = runtime if runtime is not None else Runtime(cache=ProviderCache())
     if operation == "clock":
         return _clock_operation(request)
     if operation == "health":
