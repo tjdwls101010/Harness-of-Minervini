@@ -162,6 +162,14 @@ Before accepting a harness change, run the focused RED/GREEN test, the complete 
 
 ## Change history
 
+- 2026-08-28 (v2.5 Phase 6 closed): Every item the phase named is done, and three the phase did not name were added on the way. What it set out to do was composition provenance, an integrity check on cited doctrine ids, a CIK lookup, and one pass over prose that had been written twice. What it also found was that `data` was the one envelope field with no contract at all, that four of the nine price consumers normalised their own frames, and -- from that audit -- that "52-week high" meant two different things in two modules.
+
+  The pattern across the phase is one shape found in new places: a rule stated where nothing enforces it. A word the caller typed standing in for a measurement; a schema pinning eleven fields and leaving the twelfth open; a sentence in a skill body restating the constitution it was loaded beside; a generator writing all but one of its own artifacts. Each was closed by moving the rule to a surface that is read whether or not anyone remembers it -- an envelope reference, a baked vocabulary, a shared reader, a check with its own failure message.
+
+  Suite 1,864 across nine dated directories, and the chunk sum was compared against a whole-tree collection because a suite run in chunks can pass entirely while a directory silently never runs. `validate_harness.py` clean, no spec drift, 264 of 270 quotations verified with six declared departures.
+
+  Carried forward: `--base-count` is validated and discarded on the prospective path; `doctrine._readable` refuses `out_of_scope` structurally but leaves quarantine to a sentence; `market_evidence` still counts its 52-week window in sessions where the eligibility gate now bounds it by date. And the SEC host answers 403 from this machine, so the filings path and the new lookup are unverified end to end -- an environment condition, not a code one.
+
 - 2026-08-28 (v2.5 Phase 6-F): Gave a required value somewhere to come from. `ticker.fundamentals` against a past session returns `needs_input` with `missing: [{"id": "cik", "reason": "stable_historical_identity_required"}]`, and no capability in this harness produced a CIK -- the value is required, the interface did not carry it, and `next_capabilities` was empty beside the gap, so the envelope named what was missing and left the analyst to find it somewhere the harness cannot vouch for.
 
   The lookup was always there, one call inside another. `providers.sec.fetch_company_tickers` is what the fundamentals path calls when no `--cik` is given and what the health probe uses; what did not exist was a surface a person can run. `ticker.cik` is that surface, and the gap envelope now names it.
