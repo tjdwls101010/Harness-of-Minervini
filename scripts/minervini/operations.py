@@ -40,6 +40,7 @@ from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exi
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
+from .setup_structure import read_bars, read_price_kinds
 from .setup_structure import read_bars
 from .technical import build_eligibility_evidence
 
@@ -2467,6 +2468,12 @@ def _attest_components(
     return references
 
 
+# The four columns this capability actually reads a price out of. Volume is not among them --
+# nothing here decides on it -- and the corporate-action column is an event rather than a price,
+# so it stays under the rules the split audit already holds it to.
+_AUDITED_COLUMNS = ("Open", "High", "Low", "Close")
+
+
 def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
@@ -2729,95 +2736,117 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             evidence["management"] = {key: {"state": "unavailable", "reason": "price_history_unavailable"} for key in MANAGEMENT_BLOCKS}
         else:
             sources.append(_source(prices.meta))
-            stale_price = _stale_price_gap(prices.meta)
-            if stale_price is not None:
-                provider_missing.append(stale_price)
-            current_price = None
-            # A High that was printed is a fact whether or not the history reaches as_of,
-            # so this is measured before staleness is weighed; the reducer only acts on
-            # it under a HOLD the audit has established.
-            if entry_date is not None:
-                evidence.update(_max_high_since(prices.data, entry_date=entry_date, as_of=clock.date))
-                evidence["management"] = build_management_evidence(
-                    prices.data,
-                    entry_date=entry_date,
-                    as_of=clock.date,
-                    management_average=evidence.get("management_average"),
-                    stage2_start=stage2_start,
-                    base_top=base_top,
-                    breakout_date=breakout_date,
-                )
-            if protective_plan:
-                # Runs even when the history stops early: a completed breach is
-                # irreversible, and a later missing bar cannot undo one.
-                audits: list[dict[str, Any]] = []
-                path_price = None
-                for role, level, effective, end_before in protective_plan:
-                    audit, audit_price = _completed_stop_path(
+            # The three readings below -- the stop audit, the management evidence, and the
+            # current close -- each normalised the frame separately, and each read a value
+            # that is not a price as one. A boolean Low became 1.0 and breached every stop;
+            # complex prices lost their imaginary part and sold the position; the management
+            # averages read timestamps as epoch numbers and published a breach at 1.58e15;
+            # a positional index became nanoseconds after 1970 and moved the window into a
+            # year the position did not exist in.
+            #
+            # Holes are left to the blocks, which name the bar they could not read and report
+            # the prefix they had already cleared. That is a finer answer than withholding
+            # the verdict, and it is why this reads the narrower reader rather than the one
+            # a whole-window measurement needs.
+            bars, rejection = read_price_kinds(prices.data, columns=_AUDITED_COLUMNS)
+            if bars is None:
+                provider_missing.append({"id": "usable_daily_bars", "reason": rejection, "required": not settled})
+                evidence["management"] = {key: {"state": "unavailable", "reason": rejection} for key in MANAGEMENT_BLOCKS}
+            else:
+                prices = ProviderSnapshot(bars, prices.meta)
+                stale_price = _stale_price_gap(prices.meta)
+                if stale_price is not None:
+                    provider_missing.append(stale_price)
+                current_price = None
+                # A High that was printed is a fact whether or not the history reaches as_of,
+                # so this is measured before staleness is weighed; the reducer only acts on
+                # it under a HOLD the audit has established.
+                if entry_date is not None:
+                    evidence.update(_max_high_since(prices.data, entry_date=entry_date, as_of=clock.date))
+                    evidence["management"] = build_management_evidence(
                         prices.data,
-                        effective_date=effective,
+                        entry_date=entry_date,
                         as_of=clock.date,
-                        protective_level=level,
-                        end_before=end_before,
-                        # A stop can be moved on a day the market was shut; an entry cannot happen on one.
-                        require_session=effective == entry_date,
-                        basis=_AUDIT_BASIS[role],
+                        management_average=evidence.get("management_average"),
+                        stage2_start=stage2_start,
+                        base_top=base_top,
+                        breakout_date=breakout_date,
                     )
-                    audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
-                    path_price = audit_price if audit_price is not None else path_price
-                # A price handed in is an observation dated as_of, which is the latest date any
-                # exit can carry. It stands where the bars found no breach of that level, and
-                # yields to a breach the bars printed, because that one happened first.
-                crossed_now = {item["role"]: item for item in explicit_audits if item["state"] == "breached"}
+                if protective_plan:
+                    # Runs even when the history stops early: a completed breach is
+                    # irreversible, and a later missing bar cannot undo one.
+                    audits: list[dict[str, Any]] = []
+                    path_price = None
+                    for role, level, effective, end_before in protective_plan:
+                        audit, audit_price = _completed_stop_path(
+                            prices.data,
+                            effective_date=effective,
+                            as_of=clock.date,
+                            protective_level=level,
+                            end_before=end_before,
+                            # A stop can be moved on a day the market was shut; an entry cannot happen on one.
+                            require_session=effective == entry_date,
+                            basis=_AUDIT_BASIS[role],
+                        )
+                        audits.append({**audit, "role": role, "level": level, "effective_from": effective.isoformat()})
+                        path_price = audit_price if audit_price is not None else path_price
+                    # A price handed in is an observation dated as_of, which is the latest date any
+                    # exit can carry. It stands where the bars found no breach of that level, and
+                    # yields to a breach the bars printed, because that one happened first.
+                    crossed_now = {item["role"]: item for item in explicit_audits if item["state"] == "breached"}
 
-                def with_price(audit: dict[str, Any]) -> dict[str, Any]:
-                    told = crossed_now.get(audit["role"])
-                    # A window the audit refused because it spans a corporate action is not a
-                    # window one more price can settle: the declared level is in the old
-                    # coordinate system and the price is in the new one, and comparing them is
-                    # the arithmetic that refusal exists to prevent.
-                    if told is None or audit["state"] == "breached" or audit.get("reason") in _UNCROSSABLE_REASONS:
-                        return audit
-                    # The bars still covered what they covered; the price only added what they
-                    # could not say. Both belong in one record.
-                    return {**told, **{key: value for key, value in audit.items() if key in _COVERAGE_FIELDS}}
+                    def with_price(audit: dict[str, Any]) -> dict[str, Any]:
+                        told = crossed_now.get(audit["role"])
+                        # A window the audit refused because it spans a corporate action is not a
+                        # window one more price can settle: the declared level is in the old
+                        # coordinate system and the price is in the new one, and comparing them is
+                        # the arithmetic that refusal exists to prevent.
+                        if told is None or audit["state"] == "breached" or audit.get("reason") in _UNCROSSABLE_REASONS:
+                            return audit
+                        # The bars still covered what they covered; the price only added what they
+                        # could not say. Both belong in one record.
+                        return {**told, **{key: value for key, value in audit.items() if key in _COVERAGE_FIELDS}}
 
-                audits = [with_price(audit) for audit in audits]
-                price_path = _combine_audits(audits)
-                evidence["completed_price_path"] = price_path
-                if stale_price is None:
-                    current_price = path_price
-                # Whichever observation the record was built from is the one published beside
-                # it: two different latest prices for one session tells the reader the trade
-                # ended at a price the payload denies.
-                if price_path.get("basis") == "explicit_completed_price":
-                    current_price = float(explicit_current)
-                    # The history stopping a session short is what the price was handed in
-                    # for. It is still reported, as evidence this reading did without.
-                    provider_missing = [item if item["id"] != "completed_price_evidence" else {**item, "required": False} for item in provider_missing]
-                elif price_path.get("reason") in _UNCROSSABLE_REASONS:
-                    current_price = None
-                    evidence.pop("current_price", None)
-                if price_path.get("state") == "unavailable":
-                    provider_missing.append(
-                        {
-                            "id": "completed_price_path",
-                            "provider": prices.meta.provider,
-                            "reason": price_path.get("reason", "completed_price_path_unavailable"),
-                            "required": True,
-                            "attempts": 1,
-                            "retryable": False,
-                        }
-                    )
-            elif stale_price is None:
-                # A price from an earlier session can only make a position look
-                # safer than the evidence supports, so it is withheld entirely.
-                try:
-                    current_price = float(prices.data["Close"].iloc[-1])
-                except (AttributeError, KeyError, IndexError, TypeError, ValueError):
-                    current_price = None
-            if current_price is not None:
-                evidence["current_price"] = current_price
+                    audits = [with_price(audit) for audit in audits]
+                    price_path = _combine_audits(audits)
+                    evidence["completed_price_path"] = price_path
+                    if stale_price is None:
+                        current_price = path_price
+                    # Whichever observation the record was built from is the one published beside
+                    # it: two different latest prices for one session tells the reader the trade
+                    # ended at a price the payload denies.
+                    if price_path.get("basis") == "explicit_completed_price":
+                        current_price = float(explicit_current)
+                        # The history stopping a session short is what the price was handed in
+                        # for. It is still reported, as evidence this reading did without.
+                        provider_missing = [item if item["id"] != "completed_price_evidence" else {**item, "required": False} for item in provider_missing]
+                    elif price_path.get("reason") in _UNCROSSABLE_REASONS:
+                        current_price = None
+                        evidence.pop("current_price", None)
+                    if price_path.get("state") == "unavailable":
+                        provider_missing.append(
+                            {
+                                "id": "completed_price_path",
+                                "provider": prices.meta.provider,
+                                "reason": price_path.get("reason", "completed_price_path_unavailable"),
+                                "required": True,
+                                "attempts": 1,
+                                "retryable": False,
+                            }
+                        )
+                elif stale_price is None:
+                    # A price from an earlier session can only make a position look
+                    # safer than the evidence supports, so it is withheld entirely. A price
+                    # from a *later* one is not this analysis's to report at all -- the frame
+                    # can reach past the session being analysed, and the last row was read
+                    # straight through whatever session it belonged to.
+                    through = prices.data.loc[prices.data.index <= pd.Timestamp(clock.date)]
+                    try:
+                        current_price = float(through["Close"].iloc[-1])
+                    except (AttributeError, KeyError, IndexError, TypeError, ValueError):
+                        current_price = None
+                if current_price is not None:
+                    evidence["current_price"] = current_price
     if explicit_path is not None and evidence.get("completed_price_path") is None:
         # No audit reached the levels -- the provider had nothing to give, or the request
         # declared no plan to audit. The price the caller handed in is then the whole record.

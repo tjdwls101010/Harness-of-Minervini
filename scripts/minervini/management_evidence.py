@@ -107,7 +107,11 @@ def _completed(frame: Any, as_of: date) -> pd.DataFrame | None:
     if timestamps.isna().any():
         return None
     if timestamps.tz is not None:
-        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+        # The zone is dropped and the wall clock kept, which is what `setup_structure.read_bars`
+        # does and therefore what every session date in this harness means. Converting instead
+        # renamed a UTC-stamped session to the day before, and a breach was recorded against a
+        # session nothing else agrees exists.
+        timestamps = timestamps.tz_localize(None)
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()

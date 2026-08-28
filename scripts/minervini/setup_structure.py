@@ -153,6 +153,76 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
 
 
+def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS) -> tuple[pd.DataFrame | None, str | None]:
+    """The rules about what a price is and what a session label is, and only those.
+
+    `read_bars` refuses a history with a hole in it, because every measurement it feeds reads a
+    whole window and a partial read would report a 52-week high the ticker never printed. The
+    stop audit answers a narrower question and can do better: it names the bar it could not read
+    and reports the prefix it had already cleared, which tells a holder more than refusing them a
+    verdict does. So it keeps its holes.
+
+    What it never had is the other half. A hole is a price that is absent; a boolean, a complex
+    number, a timestamp and a string are prices that are *wrong*, and `float()` turns each of
+    them into a number anyway -- 1.0, a real part, epoch nanoseconds. Those are fabricated, and
+    the audit sold and held positions on them. The same is true of an index that never carried
+    dates: `pd.to_datetime` reads a positional one as nanoseconds after 1970 and the window
+    lands in a year the position did not exist in.
+
+    Every reason here is one of `read_bars`'s own, and
+    `tests/260828/unit/test_two_readers_one_vocabulary.py` holds the two to that: what this
+    accepts, that one accepts or refuses for a rule this deliberately does not have.
+    """
+
+    if not isinstance(history, pd.DataFrame) or any(column not in history for column in columns):
+        return None, "history_missing_required_columns"
+    if history.columns.has_duplicates:
+        return None, "history_repeats_a_column"
+    if history.empty:
+        return None, "history_has_no_completed_bars"
+    # The whole frame travels, not a projection of it: this reader's callers go on to read
+    # columns it was never asked to check -- the corporate-action column the stop window audits
+    # is an event rather than a price and lives under the opposite rules.
+    bars = history.copy()
+    if any(not _holds_real_numbers(bars[column]) for column in columns):
+        return None, "history_contains_non_numeric_values"
+    for column in columns:
+        bars[column] = pd.to_numeric(bars[column], errors="coerce")
+    checked = bars.loc[:, list(columns)]
+    present = checked.notna()
+    values = checked.to_numpy(dtype=float)
+    # A hole stays a hole; an infinity does not. It is not a price the session traded at, it
+    # divides into nonsense wherever a ratio reads it, and it leaves the envelope unable to
+    # serialise -- so a caller gets no answer at all rather than a wrong one.
+    if not bool(np.isfinite(values[present.to_numpy()]).all()):
+        return None, "history_contains_non_numeric_values"
+    prices = [column for column in columns if column != "Volume"]
+    if prices and bool((checked[prices][present[prices]] <= 0).any().any()):
+        return None, "history_contains_non_positive_values"
+    if "Volume" in columns and bool((checked["Volume"][present["Volume"]] < 0).any()):
+        return None, "history_contains_non_positive_values"
+    if any(_is_a_number(label) for label in bars.index):
+        return None, "history_index_is_not_dates"
+    try:
+        index = pd.DatetimeIndex(bars.index)
+    except Exception:
+        return None, "history_index_is_not_dates"
+    if index.isna().any():
+        return None, "history_index_is_not_dates"
+    # The wall clock is kept and the zone dropped, exactly as `read_bars` does it, because a
+    # session's date is the one the exchange traded it on. The stop audit converted to New York
+    # instead, so a UTC-stamped history had every session renamed to the day before and a breach
+    # was recorded against a session the rest of the harness says does not exist.
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    # The clock time survives, where `read_bars` normalises it away. That reader refuses a
+    # repeated session outright, so the time carries nothing for it; this one's callers resolve
+    # a repeat by keeping the print that came later in the day, and dropping the time first
+    # would hand that choice to row order instead.
+    bars.index = index
+    return (bars if bars.index.is_monotonic_increasing else bars.sort_index(kind="stable")), None
+
+
 def _is_a_number(value: Any) -> bool:
     """A real number, whichever library's scalar is holding it -- booleans excepted."""
 
