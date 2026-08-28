@@ -1,16 +1,42 @@
 {
   "mode": "prospective",
+  "ticker": "TEST",
+  "as_of": "2025-12-31",
   "market": {
-    "state": "pass"
+    "state": "favorable",
+    "attested_by": {
+      "operation": "market.snapshot",
+      "ticker": null,
+      "as_of": "2025-12-31",
+      "status": "ok"
+    }
   },
   "eligibility": {
-    "state": "pass"
+    "state": "eligible",
+    "attested_by": {
+      "operation": "ticker.qualify",
+      "ticker": "TEST",
+      "as_of": "2025-12-31",
+      "status": "ok"
+    }
   },
   "setup": {
-    "setup_state": "ready"
+    "setup_state": "ready",
+    "attested_by": {
+      "operation": "ticker.setup",
+      "ticker": "TEST",
+      "as_of": "2025-12-31",
+      "status": "ok"
+    }
   },
   "fundamentals": {
-    "state": "pass"
+    "state": "supports_convergence",
+    "attested_by": {
+      "operation": "ticker.fundamentals",
+      "ticker": "TEST",
+      "as_of": "2025-12-31",
+      "status": "ok"
+    }
   },
   "risk": {
     "state": "pass",

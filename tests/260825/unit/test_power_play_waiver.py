@@ -11,14 +11,13 @@ from __future__ import annotations
 import unittest
 
 from scripts.minervini.risk import reduce_risk
+from tests.attestations import attested, planes
 
 
 def prospective(**overrides) -> dict:
     evidence = {
         "mode": "prospective",
-        "market": "favorable",
-        "eligibility": "eligible",
-        "setup": "ready",
+        **planes(),
         "entry_price": 100.0,
         "stop_price": 94.0,
         "upside_price": 112.0,
@@ -38,7 +37,7 @@ class AWaiverIsEarnedNotDeclared(unittest.TestCase):
     def test_verified_fundamentals_still_reach_the_top_verdict(self):
         """The route that was always earned is untouched."""
 
-        verdict = prospective(fundamentals="supports_convergence")
+        verdict = prospective(fundamentals=attested("fundamentals", "supports_convergence"))
 
         self.assertEqual(verdict["verdict"], "BUY-READY")
 

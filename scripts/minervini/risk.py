@@ -44,6 +44,32 @@ _AVERAGES = ("ema21", "sma50")
 # ticker whose fundamentals nobody had looked at and whose Power Play nothing had measured.
 # The exception is real, but it is earned by measurement plus an approved chart, and no
 # reducer that reads caller-supplied state words is in a position to check that it was.
+
+# The four planes whose word is a verdict some other capability reached, and the capability
+# that reaches each. The comment above is about one word; the argument under it was never
+# about one word. Every plane here is a state this reducer cannot check and a caller can
+# type, and typed together on a ticker that does not exist they returned BUY-READY with the
+# envelope's own `sources` list empty beside it. So a pass on one of these counts only when
+# the envelope that measured it is referenced here. The rule the four share is one sentence:
+# a word the caller supplies may only move the verdict toward no-trade. A declared failure
+# still fails and a declared wait still waits -- both are conservative, and doctrine already
+# reaches AVOID from a known failure. Passing is the one direction where being wrong costs
+# money, and it is the one direction a word alone no longer buys.
+_ATTESTING_OPERATION = {
+    "market": "market.snapshot",
+    "eligibility": "ticker.qualify",
+    "setup": "ticker.setup",
+    "fundamentals": "ticker.fundamentals",
+}
+
+# What each capability calls its own verdict, so a caller who pastes that payload in is read
+# correctly. The market names its regime rather than a state, and is read from `state` alone.
+_PLANE_ALIAS = {
+    "eligibility": "eligibility_state",
+    "setup": "setup_state",
+    "fundamentals": "fundamentals_state",
+}
+
 _PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence"}
 _FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
 _WAIT = {"wait", "pending", "watch", "not_triggered", "cautious", "defensive"}
@@ -54,13 +80,18 @@ def _mapping(value: Any) -> dict[str, Any]:
     return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
 
 
-def _state(value: Any, default: str = "unavailable") -> str:
+def _state(value: Any, default: str = "unavailable", alias: str | None = None) -> str:
     if isinstance(value, bool):
         return "pass" if value else "fail"
     if isinstance(value, Mapping):
-        setup_state = value.get("setup_state")
-        if setup_state is not None:
-            value = setup_state
+        # A plane's own capability names its verdict after the plane -- `setup_state`,
+        # `eligibility_state` -- so a caller pasting that payload in is understood. The alias
+        # is per plane rather than shared: read for every object, `setup_state` spoke for the
+        # risk plane too, and `{"state": "fail", "setup_state": "ready"}` turned a declared
+        # risk failure into a pass.
+        aliased = value.get(alias) if alias else None
+        if aliased is not None:
+            value = aliased
         else:
             value = value.get("state", value.get("status"))
     if value is None:
@@ -75,6 +106,45 @@ def _state(value: Any, default: str = "unavailable") -> str:
     if normalized in _MISSING:
         return "unavailable"
     return default
+
+
+def is_non_passing(value: Any) -> bool:
+    """Whether this word makes a component plane more cautious than a pass.
+
+    The vocabulary lives beside the reducer that reads it. A second copy anywhere else is a
+    second place for `avoid` to quietly stop meaning avoid. `incomplete` is not one of these:
+    it says the caller does not know, and something that does know may still answer.
+    """
+
+    return _state(value, default="") in {"fail", "wait"}
+
+
+def _attests(value: Any, plane: str, ticker: Any, as_of: Any) -> bool:
+    """Whether this evidence object references the envelope that measured its own plane.
+
+    A reference rather than a flag, and cross-checked rather than trusted: `attested: true`
+    would be the same defect one level up, another word the caller can type. The reference
+    has to name the capability that measures this plane, so a setup envelope cannot vouch
+    for eligibility, and it has to name the ticker and the session being reduced, because a
+    stale reference is the ordinary way a correct one goes wrong.
+    """
+
+    if not isinstance(value, Mapping):
+        return False
+    reference = value.get("attested_by")
+    if not isinstance(reference, Mapping):
+        return False
+    if reference.get("operation") != _ATTESTING_OPERATION.get(plane):
+        return False
+    if reference.get("status") not in {"ok", "partial"}:
+        return False
+    if not as_of or reference.get("as_of") != as_of:
+        return False
+    # The market is measured for the session and not for a ticker, so its envelope names
+    # none. Requiring one there would refuse the only shape that capability can produce.
+    if plane == "market":
+        return reference.get("ticker") is None
+    return bool(ticker) and reference.get("ticker") == ticker
 
 
 def _number(value: Any) -> float | None:
@@ -93,7 +163,27 @@ def _risk_value(payload: Mapping[str, Any], name: str) -> Any:
 
 
 def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
-    components = {name: _state(payload.get(name)) for name in ("market", "eligibility", "setup", "fundamentals")}
+    ticker = payload.get("ticker")
+    as_of = payload.get("as_of")
+    components: dict[str, str] = {}
+    unattested: dict[str, str] = {}
+    for name in ("market", "eligibility", "setup", "fundamentals"):
+        supplied = payload.get(name)
+        state = _state(supplied, alias=_PLANE_ALIAS.get(name))
+        if state == "pass" and not _attests(supplied, name, ticker, as_of):
+            # Not a failure and not a pass: nobody this reducer can name measured it. That is
+            # the harness's own word for unavailable evidence, and it reaches INCOMPLETE.
+            state = "unavailable"
+        if state == "unavailable":
+            refused = supplied.get("attestation_refused") if isinstance(supplied, Mapping) else None
+            if refused is not None:
+                # An envelope was attached and did not survive the comparison. The reason is
+                # the refusal's own, because "unattested" would send a reader to attach the
+                # envelope they already attached.
+                unattested[name] = str(refused)
+            elif _state(supplied, default="") == "pass":
+                unattested[name] = "unattested_state_word"
+        components[name] = state
     risk_input = _mapping(payload.get("risk"))
     has_risk_inputs = bool(risk_input) or any(
         payload.get(name) is not None for name in ("entry_price", "stop_price", "upside_price", "target_price", "average_gain_pct")
@@ -191,6 +281,10 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         "failed": list(dict.fromkeys(failed)),
         "missing": list(dict.fromkeys(missing)),
         "waiting": list(dict.fromkeys(waiting)),
+        # Named separately from the rest of `missing` because the two gaps are closed by
+        # different acts. An ordinary gap is closed by supplying evidence; this one is closed
+        # by running the capability that measures the plane and handing its envelope back.
+        "unattested": unattested,
     }
 
 
