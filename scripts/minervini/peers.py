@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from datetime import date
+import math
 from typing import Any
 
 
@@ -228,7 +229,21 @@ def _text(value: Any) -> str | None:
 
 
 def _number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A number a comparison can be made against, which `inf` and `nan` are not.
+
+    This is the layer that checks what the collector handed over, and it let an infinite
+    three-month return through to be ranked first and then to break the envelope's own
+    serialisation. A quantity that is not finite was not measured.
+    """
+
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        # An int too large to become a float. It is not finite in any sense this comparison
+        # needs, and raising here would trade a wrong number for no envelope at all.
+        return False
 
 
 __all__ = ["compare_same_industry_peers"]

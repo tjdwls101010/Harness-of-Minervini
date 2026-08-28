@@ -34,9 +34,11 @@ def _frame(values: np.ndarray, *, as_of: str = AS_OF) -> pd.DataFrame:
     close = pd.Series(values, index=pd.bdate_range(end=as_of, periods=len(values)))
     return pd.DataFrame(
         {
+            # The low sits under the open: a bar that opened below its own low is not a bar,
+            # and the shared reader refuses a history of them.
             "Open": close * 0.995,
             "High": close * 1.002,
-            "Low": close * 0.998,
+            "Low": close * 0.99,
             "Close": close,
             "Volume": np.full(len(close), 1_000_000),
         },
@@ -104,8 +106,8 @@ class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
         self.assertEqual(leaders["NEARHIGH"]["behavior"]["state"], "supports")
         self.assertEqual(leaders["BROKEN"]["behavior"]["state"], "contradicts")
         self.assertEqual(leaders["BROKEN"]["behavior"]["reason"], "correction_deeper_than_the_source_ceiling")
-        # The fixture's peak high is 200 x 1.002 and its trough low is 90 x 0.998.
-        self.assertAlmostEqual(leaders["BROKEN"]["correction_depth"]["measured"], 55.1796, places=3)
+        # The fixture's peak high is 200 x 1.002 and its trough low is 90 x 0.99.
+        self.assertAlmostEqual(leaders["BROKEN"]["correction_depth"]["measured"], 55.5389, places=3)
 
     def test_a_leader_whose_history_is_unavailable_is_named_in_missing_and_measured_by_nobody(self) -> None:
         rising = _frame(np.linspace(50, 150, 300))

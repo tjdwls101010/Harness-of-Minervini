@@ -153,6 +153,105 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index()), None
 
 
+def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS) -> tuple[pd.DataFrame | None, str | None]:
+    """The rules about what a price is and what a session label is, and only those.
+
+    `read_bars` refuses a history with a hole in it, because every measurement it feeds reads a
+    whole window and a partial read would report a 52-week high the ticker never printed. The
+    stop audit answers a narrower question and can do better: it names the bar it could not read
+    and reports the prefix it had already cleared, which tells a holder more than refusing them a
+    verdict does. So it keeps its holes.
+
+    What it never had is the other half. A hole is a price that is absent; a boolean, a complex
+    number, a timestamp and a string are prices that are *wrong*, and `float()` turns each of
+    them into a number anyway -- 1.0, a real part, epoch nanoseconds. Those are fabricated, and
+    the audit sold and held positions on them. The same is true of an index that never carried
+    dates: `pd.to_datetime` reads a positional one as nanoseconds after 1970 and the window
+    lands in a year the position did not exist in.
+
+    Every reason here is one of `read_bars`'s own, and
+    `tests/260828/unit/test_two_readers_one_vocabulary.py` holds the two to that: what this
+    accepts, that one accepts or refuses for a rule this deliberately does not have.
+    """
+
+    if not isinstance(history, pd.DataFrame) or any(column not in history for column in columns):
+        return None, "history_missing_required_columns"
+    if history.columns.has_duplicates:
+        return None, "history_repeats_a_column"
+    if history.empty:
+        return None, "history_has_no_completed_bars"
+    # The whole frame travels, not a projection of it: this reader's callers go on to read
+    # columns it was never asked to check -- the corporate-action column the stop window audits
+    # is an event rather than a price and lives under the opposite rules.
+    bars = history.copy()
+    if any(not _holds_real_numbers(bars[column]) for column in columns):
+        return None, "history_contains_non_numeric_values"
+    for column in columns:
+        bars[column] = pd.to_numeric(bars[column], errors="coerce")
+    checked = bars.loc[:, list(columns)]
+    present = checked.notna()
+    values = checked.to_numpy(dtype=float)
+    # A hole stays a hole; an infinity does not. It is not a price the session traded at, it
+    # divides into nonsense wherever a ratio reads it, and it leaves the envelope unable to
+    # serialise -- so a caller gets no answer at all rather than a wrong one.
+    if not bool(np.isfinite(values[present.to_numpy()]).all()):
+        return None, "history_contains_non_numeric_values"
+    prices = [column for column in columns if column != "Volume"]
+    if prices and bool((checked[prices][present[prices]] <= 0).any().any()):
+        return None, "history_contains_non_positive_values"
+    if "Volume" in columns and bool((checked["Volume"][present["Volume"]] < 0).any()):
+        return None, "history_contains_non_positive_values"
+    # The event columns are checked whether or not the caller named them: they are the one thing
+    # here the raw tape cannot say, and a corporate action moves every printed price without
+    # moving anyone's money. Only against laundering, though. A column of words cannot coerce,
+    # so the split audit already notices it and withholds itself by name -- a finer answer than
+    # refusing the history. `True` is the opposite case: it coerces to 1, 1 reads as "no split",
+    # and a halving on the tape becomes a stop breach on a position nobody stopped out of.
+    for column in (_CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN):
+        if column in bars and _launders_into_a_number(bars[column]):
+            return None, "history_contains_non_numeric_values"
+        if column in bars:
+            carried = pd.to_numeric(bars[column], errors="coerce")
+            reported = carried.notna()
+            if bool((carried[reported] < 0).any()) or not bool(np.isfinite(carried[reported].to_numpy(dtype=float)).all()):
+                return None, "history_contains_non_positive_values"
+    if any(_is_a_number(label) for label in bars.index):
+        return None, "history_index_is_not_dates"
+    try:
+        index = pd.DatetimeIndex(bars.index)
+    except Exception:
+        return None, "history_index_is_not_dates"
+    if index.isna().any():
+        return None, "history_index_is_not_dates"
+    # The wall clock is kept and the zone dropped, exactly as `read_bars` does it, because a
+    # session's date is the one the exchange traded it on. The stop audit converted to New York
+    # instead, so a UTC-stamped history had every session renamed to the day before and a breach
+    # was recorded against a session the rest of the harness says does not exist.
+    if index.tz is not None:
+        index = index.tz_localize(None)
+    # The clock time survives, where `read_bars` normalises it away. That reader refuses a
+    # repeated session outright, so the time carries nothing for it; this one's callers resolve
+    # a repeat by keeping the print that came later in the day, and dropping the time first
+    # would hand that choice to row order instead.
+    bars.index = index
+    return (bars if bars.index.is_monotonic_increasing else bars.sort_index(kind="stable")), None
+
+
+def _launders_into_a_number(column: pd.Series) -> bool:
+    """Whether this column holds something `float()` turns into a number it never was.
+
+    The three that do it silently: a boolean becomes 1.0, a complex number becomes its real
+    part, a timestamp becomes epoch nanoseconds. A word does not -- it raises, and the reader
+    downstream already reports that by name -- so this is narrower than "is not a number".
+    """
+
+    if pd.api.types.is_bool_dtype(column) or pd.api.types.is_complex_dtype(column) or pd.api.types.is_datetime64_any_dtype(column):
+        return True
+    if column.dtype != object:
+        return False
+    return any(isinstance(value, (bool, np.bool_, complex, np.complexfloating, pd.Timestamp, np.datetime64)) and not _is_a_number(value) for value in column)
+
+
 def _is_a_number(value: Any) -> bool:
     """A real number, whichever library's scalar is holding it -- booleans excepted."""
 
@@ -173,6 +272,12 @@ def _holds_real_numbers(column: pd.Series) -> bool:
         return False
     for value in column:
         if _is_a_number(value):
+            continue
+        # A hole, whichever sentinel the provider wrote it with. `nan` already passed here by
+        # being a Real, so refusing `None` made the same absence two different findings: a
+        # reader that keeps its holes lost a stop breach it had already established the moment
+        # a later bar came back `None` rather than `nan`.
+        if value is None or value is pd.NaT or value is pd.NA:
             continue
         if isinstance(value, str):
             try:

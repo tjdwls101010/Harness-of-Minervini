@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import math
 from typing import Any
 
 import pandas as pd
@@ -48,10 +49,23 @@ def _comparison(identifier: str, measured: float | None, comparator: float | Non
     return _signal(identifier, "pass" if measured > comparator else "fail", round(measured, 4), required)
 
 
+def _finite(value: float | None) -> float | None:
+    """A number the arithmetic actually produced, or nothing.
+
+    Every comparison against `nan` is False, so an average whose rolling sum left the float
+    range arrives dressed as an average the price failed to exceed -- and a history that meets
+    all eight criteria comes back AVOID on an arithmetic accident rather than on its own
+    behaviour. An `inf` is the same absence wearing the opposite sign, and it reaches the
+    envelope, which the CLI cannot then serialise at all.
+    """
+
+    return None if value is None or not math.isfinite(value) else value
+
+
 def _sma(close: pd.Series, length: int) -> float | None:
     if len(close) < length:
         return None
-    return float(close.rolling(length).mean().iloc[-1])
+    return _finite(float(close.rolling(length).mean().iloc[-1]))
 
 
 def _depth_claim(depth: float | None, duration: int | None, long_correction: str | None) -> dict[str, Any]:
@@ -158,16 +172,18 @@ def build_eligibility_evidence(
         close = close.sort_index()
 
     current = float(close.iloc[-1])
+    if not math.isfinite(current):
+        raise ValueError("history contains no completed closing prices")
     sma50, sma150, sma200 = (_sma(close, length) for length in (50, 150, 200))
     # The source states the 200-day average must have been rising for at least a month;
     # the session count is this module's reading of "a month", so it is derived here
     # rather than hard-coded beside it.
     rising_sessions = round(doctrine.threshold(DOCTRINE_TREND, "sma_200_rising_minimum_months") * _SESSIONS_PER_MONTH)
-    sma200_month_ago = float(close.iloc[:-rising_sessions].rolling(200).mean().iloc[-1]) if len(close) >= 200 + rising_sessions else None
+    sma200_month_ago = _finite(float(close.iloc[:-rising_sessions].rolling(200).mean().iloc[-1])) if len(close) >= 200 + rising_sessions else None
     window = close.tail(min(252, len(close)))
     low_52, high_52 = float(window.min()), float(window.max())
-    above_low_pct = (current / low_52 - 1) * 100 if low_52 > 0 else None
-    below_high_pct = (1 - current / high_52) * 100 if high_52 > 0 else None
+    above_low_pct = _finite((current / low_52 - 1) * 100) if low_52 > 0 else None
+    below_high_pct = _finite((1 - current / high_52) * 100) if high_52 > 0 else None
 
     first_state = "unavailable" if sma150 is None or sma200 is None else "pass" if current > sma150 and current > sma200 else "fail"
     trend = [

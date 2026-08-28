@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from .providers.nasdaq import SecurityRecord
+from .setup_structure import read_bars
 
 
 _EXCHANGE_ALIASES = {
@@ -162,15 +163,25 @@ def _rating_evidence(value: Mapping[str, Any] | int | float, as_of: date) -> dic
 
 
 def _price_evidence(frame: pd.DataFrame | None, as_of: date) -> dict[str, Any] | None:
-    if not isinstance(frame, pd.DataFrame) or "Close" not in frame:
+    # Through the reader that owns what a usable history is. Both numbers below read a whole
+    # window -- the year's highest close, and the close nearest a cutoff three months back --
+    # which is the case that reader exists for: a history read partially reports a 52-week high
+    # the ticker may never have printed, and the row that was dropped can be the peak.
+    #
+    # Coercing instead measured things that are not prices. A `Close` of booleans came back flat
+    # at its own 52-week high, which is the best value that axis takes, so a column of `True`
+    # ranked as well as a name printing new highs. Timestamps became epoch numbers; complex
+    # closes measured identically to their real parts. And the session date was converted to New
+    # York rather than stripped of its zone, so a UTC-stamped history had its last session
+    # renamed to the day before -- and this function refuses a history whose last session is not
+    # the analysis session, so a leader the harness reads perfectly well measured as nothing.
+    bars, _ = read_bars(frame)
+    if bars is None:
         return None
-    closes = pd.to_numeric(frame["Close"], errors="coerce")
-    dates = pd.to_datetime(frame.index, errors="coerce")
-    normalized = pd.DataFrame({"date": dates.to_numpy(), "close": closes.to_numpy()}).dropna()
-    if normalized.empty:
-        return None
-    if getattr(normalized["date"].dt, "tz", None) is not None:
-        normalized["date"] = normalized["date"].dt.tz_convert("America/New_York").dt.tz_localize(None)
+    # Session dates, so the three-month cutoff below is compared against the same thing a bar
+    # is stamped with. It used to be a midnight timestamp against a closing time, which excluded
+    # the cutoff session itself and reached one session further back.
+    normalized = pd.DataFrame({"date": bars.index.normalize().to_numpy(), "close": bars["Close"].to_numpy()})
     normalized = normalized[(normalized["date"].dt.date <= as_of) & (normalized["close"] > 0)].sort_values("date")
     if normalized.empty or normalized.iloc[-1]["date"].date() != as_of:
         return None
@@ -184,11 +195,18 @@ def _price_evidence(frame: pd.DataFrame | None, as_of: date) -> dict[str, Any] |
     high = float(year_window["close"].max())
     if not all(isfinite(number) and number > 0 for number in (current, start, high)):
         return None
+    measured = ((current / start - 1) * 100, (1 - current / high) * 100)
+    # Three finite prices can still divide into a number that is not one. An `inf` here reaches
+    # the envelope and the CLI serialises with `allow_nan=False`, so the caller gets a traceback
+    # where the contract promises exactly one envelope -- and on the way there it ranks as the
+    # best return in the industry.
+    if not all(isfinite(number) for number in measured):
+        return None
     return {
         "provider": "yfinance",
         "as_of": as_of.isoformat(),
-        "return_3m_pct": round((current / start - 1) * 100, 4),
-        "distance_from_52_week_high_pct": round((1 - current / high) * 100, 4),
+        "return_3m_pct": round(measured[0], 4),
+        "distance_from_52_week_high_pct": round(measured[1], 4),
     }
 
 
