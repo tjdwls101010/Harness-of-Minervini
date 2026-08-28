@@ -67,23 +67,33 @@ def _withheld(provider: str, operation: str):
     return raise_it
 
 
+# Named rather than defaulted, because a `Runtime()` in a test reaches the live providers the
+# moment the capability under it starts wanting one.
+WITHHELD_BOUNDARIES = {
+    "price_history": _withheld("yfinance", "price_history"),
+    "rs_rating": _withheld("ibd-rs-rating", "rs_rating"),
+    "security_master": _withheld("nasdaq", "security_master"),
+    "fundamentals_evidence": _withheld("sec", "fundamentals"),
+    "sector_ranking": _withheld("ibd-rs-rating", "sector_ranking"),
+    "industry_ranking": _withheld("ibd-rs-rating", "industry_ranking"),
+    "market_leaders": _withheld("ibd-rs-rating", "market_leaders"),
+    "finviz_breadth": _withheld("finviz", "raw_snapshot"),
+    "current_classification": _withheld("yfinance", "current_classification"),
+    "earnings_calendar": _withheld("yfinance", "earnings_calendar"),
+    "industry_top": _withheld("ibd-rs-rating", "industry_top"),
+}
+
+
 def withholding(ledger: pathlib.Path) -> Runtime:
     """Every boundary refuses, so each capability returns its own incomplete envelope."""
 
-    return Runtime(
-        price_history=_withheld("yfinance", "price_history"),
-        rs_rating=_withheld("ibd-rs-rating", "rs_rating"),
-        security_master=_withheld("nasdaq", "security_master"),
-        fundamentals_evidence=_withheld("sec", "fundamentals"),
-        sector_ranking=_withheld("ibd-rs-rating", "sector_ranking"),
-        industry_ranking=_withheld("ibd-rs-rating", "industry_ranking"),
-        market_leaders=_withheld("ibd-rs-rating", "market_leaders"),
-        finviz_breadth=_withheld("finviz", "raw_snapshot"),
-        current_classification=_withheld("yfinance", "current_classification"),
-        earnings_calendar=_withheld("yfinance", "earnings_calendar"),
-        industry_top=_withheld("ibd-rs-rating", "industry_top"),
-        ledger_factory=lambda: Ledger(ledger),
-    )
+    return Runtime(**WITHHELD_BOUNDARIES, ledger_factory=lambda: Ledger(ledger))
+
+
+def sealed() -> Runtime:
+    """The same, for a case that reads its evidence from the request and touches no ledger."""
+
+    return Runtime(**WITHHELD_BOUNDARIES)
 
 
 def measured(ledger: pathlib.Path) -> Runtime:
@@ -231,7 +241,7 @@ class AnEnvelopeValidatesAgainstItsOwnPublishedSchema(unittest.TestCase):
                     for mode in ("full", "compact"):
                         produced.append((capability, label, mode, format_payload(payload, mode)))
         for capability, label, request in EXTRA_CASES:
-            payload = execute(capability, request, runtime={"filed": filed, "current": current}.get(label, Runtime)())
+            payload = execute(capability, request, runtime={"filed": filed, "current": current}.get(label, sealed)())
             for mode in ("full", "compact"):
                 produced.append((capability, label, mode, format_payload(payload, mode)))
         return produced
