@@ -201,6 +201,20 @@ def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS
         return None, "history_contains_non_positive_values"
     if "Volume" in columns and bool((checked["Volume"][present["Volume"]] < 0).any()):
         return None, "history_contains_non_positive_values"
+    # The event columns are checked whether or not the caller named them: they are the one thing
+    # here the raw tape cannot say, and a corporate action moves every printed price without
+    # moving anyone's money. Only against laundering, though. A column of words cannot coerce,
+    # so the split audit already notices it and withholds itself by name -- a finer answer than
+    # refusing the history. `True` is the opposite case: it coerces to 1, 1 reads as "no split",
+    # and a halving on the tape becomes a stop breach on a position nobody stopped out of.
+    for column in (_CORPORATE_ACTION_COLUMN, _DISTRIBUTION_COLUMN):
+        if column in bars and _launders_into_a_number(bars[column]):
+            return None, "history_contains_non_numeric_values"
+        if column in bars:
+            carried = pd.to_numeric(bars[column], errors="coerce")
+            reported = carried.notna()
+            if bool((carried[reported] < 0).any()) or not bool(np.isfinite(carried[reported].to_numpy(dtype=float)).all()):
+                return None, "history_contains_non_positive_values"
     if any(_is_a_number(label) for label in bars.index):
         return None, "history_index_is_not_dates"
     try:
@@ -223,6 +237,21 @@ def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS
     return (bars if bars.index.is_monotonic_increasing else bars.sort_index(kind="stable")), None
 
 
+def _launders_into_a_number(column: pd.Series) -> bool:
+    """Whether this column holds something `float()` turns into a number it never was.
+
+    The three that do it silently: a boolean becomes 1.0, a complex number becomes its real
+    part, a timestamp becomes epoch nanoseconds. A word does not -- it raises, and the reader
+    downstream already reports that by name -- so this is narrower than "is not a number".
+    """
+
+    if pd.api.types.is_bool_dtype(column) or pd.api.types.is_complex_dtype(column) or pd.api.types.is_datetime64_any_dtype(column):
+        return True
+    if column.dtype != object:
+        return False
+    return any(isinstance(value, (bool, np.bool_, complex, np.complexfloating, pd.Timestamp, np.datetime64)) and not _is_a_number(value) for value in column)
+
+
 def _is_a_number(value: Any) -> bool:
     """A real number, whichever library's scalar is holding it -- booleans excepted."""
 
@@ -243,6 +272,12 @@ def _holds_real_numbers(column: pd.Series) -> bool:
         return False
     for value in column:
         if _is_a_number(value):
+            continue
+        # A hole, whichever sentinel the provider wrote it with. `nan` already passed here by
+        # being a Real, so refusing `None` made the same absence two different findings: a
+        # reader that keeps its holes lost a stop breach it had already established the moment
+        # a later bar came back `None` rather than `nan`.
+        if value is None or value is pd.NaT or value is pd.NA:
             continue
         if isinstance(value, str):
             try:

@@ -41,6 +41,16 @@ def with_column(name: str, value) -> pd.DataFrame:
     return frame
 
 
+def with_event(name: str, value) -> pd.DataFrame:
+    """An event column that is zero on every session but one."""
+
+    frame = clean()
+    frame[name] = 0.0 if not isinstance(value, bool) else False
+    frame[name] = frame[name].astype(object)
+    frame.iloc[10, frame.columns.get_loc(name)] = value
+    return frame
+
+
 def with_cell(name: str, position: int, value) -> pd.DataFrame:
     frame = clean()
     frame[name] = frame[name].astype(object)
@@ -60,6 +70,13 @@ FRAMES = {
     "one infinite price": (with_cell("Close", 3, np.inf), "history_contains_non_numeric_values", "history_contains_non_numeric_values"),
     "one price at zero": (with_cell("Low", 3, 0.0), "history_contains_non_positive_values", "history_contains_non_positive_values"),
     "a repeated column label": (pd.concat([clean(), clean()["Close"]], axis=1), "history_repeats_a_column", "history_repeats_a_column"),
+    # The corporate-action column is an event rather than a price -- zero on every ordinary
+    # session -- so it lives under its own rule, and both readers have to hold it to that rule.
+    # Carried unchecked, `True` became 1, and 1 reads as "no split": a halving on the tape was
+    # then a stop breach on a position nobody stopped out of.
+    "split flags written as booleans": (with_event("Stock Splits", True), "history_contains_non_numeric_values", "history_contains_non_numeric_values"),
+    "a negative split ratio": (with_event("Stock Splits", -2.0), "history_contains_non_positive_values", "history_contains_non_positive_values"),
+    "a distribution column of timestamps": (with_column("Dividends", pd.to_datetime("2020-01-01")), "history_contains_non_numeric_values", "history_contains_non_numeric_values"),
     "no rows": (clean().iloc[0:0], "history_has_no_completed_bars", "history_has_no_completed_bars"),
     "a positional index": (clean().reset_index(drop=True), "history_index_is_not_dates", "history_index_is_not_dates"),
     "an index of strings": (clean().set_index(pd.Index([str(position) for position in range(20)])), "history_index_is_not_dates", "history_index_is_not_dates"),
@@ -70,6 +87,14 @@ FRAMES = {
 # a fifth is a decision somebody makes rather than a test that quietly widens.
 ONLY_READ_BARS = {
     "a hole where a price goes": (with_cell("Low", 3, np.nan), "history_contains_non_numeric_values"),
+    # The same hole, written the other way a provider writes one. Which sentinel arrives is not
+    # a fact about the market, and the two readers disagreeing on it made an established stop
+    # breach reappear as INCOMPLETE the moment a later bar came back `None` instead of `nan`.
+    "a hole written as None": (with_cell("Low", 3, None), "history_contains_non_numeric_values"),
+    "a hole written as pandas NA": (with_cell("Low", 3, pd.NA), "history_contains_non_numeric_values"),
+    # A word in the event column cannot coerce, so the split audit downstream notices it and
+    # withholds itself by name -- which says more than refusing the history does.
+    "a split column of words": (with_event("Stock Splits", "garbage"), "history_contains_non_numeric_values"),
     "a session printed twice": (pd.concat([clean(), clean()]).sort_index(), "history_repeats_a_session"),
     "a high under its own low": (with_cell("High", 3, 1.0), "history_contains_invalid_bar_ranges"),
     "no volume column": (clean().drop(columns=["Volume"]), "history_missing_required_columns"),

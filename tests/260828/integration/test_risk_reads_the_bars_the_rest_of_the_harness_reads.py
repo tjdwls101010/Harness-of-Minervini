@@ -148,6 +148,46 @@ class TheSellDecisionIsNotAuditedAgainstUnreadableBars(unittest.TestCase):
         self.assertEqual(path["reason"], "invalid_low_in_stop_window")
         self.assertEqual(path["bars_checked"], 10)
 
+    def test_a_later_hole_does_not_take_back_a_breach_the_bars_already_printed(self) -> None:
+        """Whichever sentinel the provider wrote the hole with.
+
+        A breach is irreversible -- a bar the harness cannot read afterwards says nothing about
+        a session that already crossed the stop. The hole reached here as `None` rather than
+        `nan` on one bar, and the reading refused the whole history, so a position the market
+        had taken out came back as one nobody could rule on.
+        """
+
+        entry = list(held().index).index(pd.Timestamp(ENTRY))
+        verdicts = {}
+        for label, sentinel in (("nan", np.nan), ("None", None), ("pandas NA", pd.NA)):
+            frame = held()
+            frame.iloc[entry + 5, frame.columns.get_loc("Low")] = 90.0
+            frame["Low"] = frame["Low"].astype(object)
+            frame.iloc[entry + 20, frame.columns.get_loc("Low")] = sentinel
+            verdicts[label] = risk(frame)["data"]["verdict"]
+
+        self.assertEqual(verdicts, {"nan": "SELL", "None": "SELL", "pandas NA": "SELL"})
+
+    def test_a_split_flag_that_is_not_a_ratio_is_not_read_as_no_split(self) -> None:
+        """The event column is the one thing the raw tape cannot say, and it was carried unchecked.
+
+        `True` coerces to 1 downstream and 1 means "no split", so a price that halved because
+        the share did reads as a decline the position has to be stopped out of. A corporate
+        action moves every printed price without moving anyone's money.
+        """
+
+        frame = held()
+        halves = list(frame.index).index(pd.Timestamp(ENTRY)) + 10
+        frame.iloc[halves:, :4] = frame.iloc[halves:, :4] / 2
+        frame["Stock Splits"] = False
+        frame["Stock Splits"] = frame["Stock Splits"].astype(object)
+        frame.iloc[halves, frame.columns.get_loc("Stock Splits")] = True
+
+        payload = risk(frame)
+
+        self.assertNotEqual(payload["data"]["verdict"], "SELL")
+        self.assertEqual([item["reason"] for item in payload["missing"] if item["id"] == "usable_daily_bars"], ["history_contains_non_numeric_values"])
+
     def test_the_session_a_breach_is_recorded_against_is_the_one_the_bar_names(self) -> None:
         """A UTC-stamped history is the same history, and the audit read it a day early."""
 

@@ -236,7 +236,14 @@ def _number(value: Any) -> bool:
     serialisation. A quantity that is not finite was not measured.
     """
 
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        # An int too large to become a float. It is not finite in any sense this comparison
+        # needs, and raising here would trade a wrong number for no envelope at all.
+        return False
 
 
 __all__ = ["compare_same_industry_peers"]

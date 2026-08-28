@@ -116,6 +116,40 @@ class AnAverageThatOverflowedIsNotAnAverage(unittest.TestCase):
         self.assertTrue(payload["missing"], "an incomplete reading named no gap")
 
 
+class AnExceptionTheRouteGrantsIsNotAGap(unittest.TestCase):
+    """The other direction, and the one this fix opened before the round closed it.
+
+    The recent-IPO route exists for a stock with too little history to have a 200-day average,
+    and it reaches `eligible` on a Primary Base instead. Those five long-history criteria are
+    unavailable by the route's own design, so reporting them as required evidence makes an
+    envelope that qualified a stock and simultaneously claims required evidence is missing.
+
+    A criterion nobody could measure is a gap only where the reading needed it, which is the
+    reading that could not reach a verdict.
+    """
+
+    def test_a_stock_qualified_through_the_ipo_route_names_no_missing_evidence(self) -> None:
+        peak, trough, last = 100.0, 75.0, 99.0
+        closes = [60.0 + position for position in range(20)] + [peak, trough]
+        step = (peak * 0.99 - trough) / (120 - 20 - 3 + 1)
+        closes.extend(trough + step * (position + 1) for position in range(120 - 20 - 3))
+        closes.append(last)
+
+        payload = execute(
+            "ticker.qualify",
+            {"ticker": "TEST", "as_of": AS_OF, "primary_base_quality": "supports", "primary_base_emergence": "near_high_consolidation"},
+            runtime=Runtime(
+                price_history=lambda ticker, as_of: snapshot(frame(closes), "fixture-prices"),
+                rs_rating=lambda ticker, as_of: snapshot({"rating": 94, "rating_date": AS_OF}, "ibd-rs-rating"),
+            ),
+        )
+
+        self.assertEqual(payload["data"]["route"], "recent_ipo_primary_base")
+        self.assertEqual(payload["data"]["eligibility_state"], "eligible")
+        self.assertEqual(payload["missing"], [])
+        self.assertEqual(payload["status"], "ok")
+
+
 class ARatioThatOverflowedIsNotAReturn(unittest.TestCase):
     def test_a_peer_whose_three_month_return_left_the_float_range_measures_nothing(self) -> None:
         """Both closes are finite and positive; their ratio is not."""

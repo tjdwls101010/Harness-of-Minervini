@@ -523,11 +523,18 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # what a caller reads to know there is one. Status was decided from provider gaps alone, so
     # a reading that measured seven criteria out of eight published `ok` with an empty `missing`
     # beside `eligibility_state: incomplete` -- the envelope contradicting its own payload.
-    missing.extend(
-        {"id": signal["id"], "reason": "criterion_not_measurable", "required": True}
-        for signal in result["signals"]
-        if signal.get("state") == "unavailable"
-    )
+    #
+    # Only where the reading could not reach a verdict, though. The recent-IPO route exists for
+    # a stock with too little history to have a 200-day average and qualifies it on a Primary
+    # Base instead, so those criteria are unavailable by the route's own design; naming them
+    # would make an envelope that qualified a stock and claimed required evidence was missing
+    # in the same breath. A criterion nobody could measure is a gap where the verdict needed it.
+    if result["eligibility_state"] == "incomplete":
+        missing.extend(
+            {"id": signal["id"], "reason": "criterion_not_measurable", "required": True}
+            for signal in result["signals"]
+            if signal.get("state") == "unavailable"
+        )
     # A band the harness measured has to reach the caller, or the rule that every band
     # is reported with its range is prose nothing carries out.
     primary_base = measured.get("primary_base") or {}
