@@ -236,6 +236,10 @@ def build_parser() -> JsonArgumentParser:
     fundamentals.add_argument("--breakout-date", metavar="YYYY-MM-DD", help=_input_help("ticker.fundamentals", "breakout_date"))
     _common(fundamentals, "ticker.fundamentals")
 
+    cik = _capability_parser(ticker_sub, "cik", "ticker.cik")
+    cik.add_argument("ticker", help=_input_help("ticker.cik", "ticker"))
+    _common(cik, "ticker.cik")
+
     peers = _capability_parser(ticker_sub, "peers", "ticker.peers")
     peers.add_argument("ticker", help=_input_help("ticker.peers", "ticker"))
     peers.add_argument("--limit", type=int, default=10, metavar="N", help=_input_help("ticker.peers", "limit"))

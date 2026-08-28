@@ -162,7 +162,7 @@
     },
     "limitations": [
       "SEC facts are selected by filed_at, never period end alone.",
-      "Current ticker-to-CIK lookup is not used for historical identity; provide --cik.",
+      "Current ticker-to-CIK lookup is not used for historical identity; provide --cik, which ticker.cik resolves for the current session.",
       "This capability runs no Power Play waiver. The exception belongs to the setup surface, which is where the VCP quality it depends on is measured, so nothing here waives a fundamentals reading.",
       "The current SEC adapter reads the recent submissions index and discloses that older index files were not fetched.",
       "Every EPS figure here is as reported. Stripping a nonrecurring gain out is a footnote reading, and so are the repeated-one-time-charge and tax-disclosure red flags; all three are published as boundaries rather than run.",

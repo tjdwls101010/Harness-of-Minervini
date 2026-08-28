@@ -1,0 +1,105 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/ticker.cik.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "cik": {},
+                "ticker": {},
+                "title": {}
+              },
+              "required": [
+                "ticker"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "operation": {
+          "const": "ticker.cik"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 ticker.cik response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "MINERVINI_SEC_USER_AGENT='Name email@example.com' scripts/.venv/bin/python scripts/pipeline ticker cik AAPL"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "no_cache": {
+        "default": false,
+        "description": "Bypass both provider-cache reads and writes for this invocation.",
+        "required": false,
+        "type": "boolean"
+      },
+      "ticker": {
+        "description": "US-listed ticker symbol.",
+        "required": true,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "SEC company_tickers.json is a mutable current snapshot. A symbol can be reassigned, so today's mapping is not evidence about who filed under it at a past session, and a historical --as-of is refused rather than answered from it.",
+      "Deciding that the identity held at the session being analysed stays the analyst's assertion, which is what ticker.fundamentals --cik records.",
+      "A symbol absent from the SEC list is unavailable rather than resolved; no name-similarity match is attempted.",
+      "Only filers appear here. A US-listed instrument with no SEC registrant -- and every non-filer -- has no CIK to return."
+    ],
+    "output": "The current SEC company identity behind the symbol: its CIK and the registrant name filed under it.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "ok": "The symbol resolved to one SEC filing identity.",
+      "unavailable": "The SEC list could not be read, does not carry this symbol, or was asked about a past session."
+    },
+    "summary": "Resolve a US-listed ticker to the SEC filing identity that ticker.fundamentals asks for by --cik."
+  }
+}
