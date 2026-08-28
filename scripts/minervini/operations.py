@@ -1602,13 +1602,23 @@ def _leaders_within_limit(rows: list[dict[str, Any]] | None, limit: int) -> list
     return bounded
 
 
-def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
-    """Completed rows from a provider frame, or none at all from anything that is not one."""
+def _ohlcv_rows(frame: Any) -> tuple[list[dict[str, Any]], str | None]:
+    """Completed rows from a provider frame, or none at all and the reason there are none.
 
-    if not callable(getattr(frame, "iterrows", None)):
-        return []
+    Through the reader that owns what a usable history is, because the readers below this one
+    each defend a different part of what it checks and the gaps between them reach the regime
+    word. A frame of complex numbers lost its imaginary part on the way through `float()` and
+    read as an ordinary advance; a frame of booleans became a flat line at 1.0 sitting on its
+    own 52-week low; an index of epoch nanoseconds was published as a session date; and a
+    session printed twice at two clock times counted as two sessions, which is how a 259-session
+    history satisfied a window that wanted 260.
+    """
+
+    bars, rejection = read_bars(frame)
+    if bars is None:
+        return [], rejection
     rows: list[dict[str, Any]] = []
-    for index, row in frame.iterrows():
+    for index, row in bars.iterrows():
         timestamp = index.date().isoformat() if hasattr(index, "date") else str(index)
         rows.append(
             {
@@ -1621,7 +1631,7 @@ def _ohlcv_rows(frame: Any) -> list[dict[str, Any]]:
                 "completed": True,
             }
         )
-    return rows
+    return rows, None
 
 
 def _ranked_groups(rows: list[dict[str, Any]], group_key: str, as_of: str) -> list[dict[str, Any]]:
@@ -1816,14 +1826,17 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
                 stale_price["required"] = False
                 provider_missing.append(stale_price)
             else:
-                rows = _ohlcv_rows(history.data)
+                rows, rejection = _ohlcv_rows(history.data)
                 if carries_a_readable_bar(rows):
                     leader_history[symbol] = rows
                 else:
                     # A snapshot that arrived and carried nothing readable is a gap the
-                    # payload already shows; without this the envelope counts it as read.
+                    # payload already shows; without this the envelope counts it as read. The
+                    # reason is the reader's own, because the payload says `unavailable` for a
+                    # history that was withheld and for one that was not prices, and those are
+                    # different findings about the leader.
                     provider_missing.append(
-                        {"id": "leader_price_history", "ticker": symbol, "reason": "daily_bars_unreadable", "required": False}
+                        {"id": "leader_price_history", "ticker": symbol, "reason": rejection or "daily_bars_unreadable", "required": False}
                     )
         if not reads_membership:
             continue
@@ -1850,8 +1863,11 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
         provider_missing.append(
             {"id": "leader_classification", "reason": "historical_session_has_no_current_classification", "required": False}
         )
+    qqq_rows, qqq_rejection = _ohlcv_rows(qqq.data) if qqq is not None else ([], None)
+    if qqq_rejection is not None:
+        provider_missing.append({"id": "qqq_daily_bars", "reason": qqq_rejection, "required": False})
     evidence = build_market_evidence(
-        qqq_daily_ohlcv=_ohlcv_rows(qqq.data) if qqq is not None else None,
+        qqq_daily_ohlcv=qqq_rows if qqq is not None else None,
         finviz_html=finviz.data if finviz is not None else None,
         sector_rows=sector_rows,
         industry_rows=industry_rows,
