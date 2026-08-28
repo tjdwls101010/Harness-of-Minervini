@@ -40,6 +40,7 @@ from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exi
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
+from .setup_structure import read_bars
 from .technical import build_eligibility_evidence
 
 
@@ -469,6 +470,25 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             sources=sources,
             next_capabilities=[],
         )
+    # Through the reader that owns what a usable history is, so the hard gate measures the same
+    # bars the chart renders and the setup re-cuts. Its own reading coerced the closes and
+    # dropped what would not coerce, which is the laundering that reading exists to stop: a
+    # boolean column became a flat price, a doubled session became two sessions, and a history
+    # half of whose closes were holes was measured on the survivors -- 150 rows, below the 200
+    # the standard route needs, so a gap in the data left through the exception for a stock too
+    # young to have them.
+    bars, rejection = read_bars(prices.data)
+    if bars is None:
+        return envelope(
+            "ticker.qualify",
+            request=_clean_request({**request, "ticker": ticker}),
+            as_of=_as_of(clock),
+            status="unavailable",
+            data={"ticker": ticker, "eligibility_state": "incomplete"},
+            missing=[{"id": "usable_daily_bars", "reason": rejection, "required": True}],
+            sources=sources,
+            next_capabilities=[],
+        )
     missing: list[dict[str, Any]] = []
     rating: int | None = None
     rating_date: str | None = None
@@ -491,7 +511,7 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         sources.append(_source(rs.meta))
 
     measured = build_eligibility_evidence(
-        prices.data,
+        bars,
         rs_rating=rating,
         primary_base_quality=request.get("primary_base_quality"),
         primary_base_emergence=request.get("primary_base_emergence"),
@@ -514,7 +534,7 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
             "ticker": ticker,
             "route": result["route"],
             "eligibility_state": result["eligibility_state"],
-            "completed_session_count": len(prices.data),
+            "completed_session_count": len(bars),
             "price_as_of": measured["as_of"],
             "rs_rating": rating,
             "rs_rating_date": rating_date,
