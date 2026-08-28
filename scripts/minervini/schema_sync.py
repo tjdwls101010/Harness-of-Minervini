@@ -12,16 +12,48 @@ from .capabilities import CAPABILITIES, Capability
 SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 
+# The shape any capability can be answered by: `error_envelope` publishes the refusal under
+# the capability's own operation name, so every schema has to admit it, and it carries the
+# one key no capability's domain answer uses.
+ERROR_DATA_SCHEMA = {
+    "type": "object",
+    "properties": {"error": {"type": "object"}},
+    "required": ["error"],
+    "additionalProperties": False,
+}
+
+
+def data_schema(capability: Capability) -> dict[str, Any]:
+    """The declared vocabulary, or nothing when a capability has not declared one yet."""
+
+    if not capability.data_keys:
+        return {}
+    domain: dict[str, Any] = {
+        "type": "object",
+        "properties": {key: {} for key in sorted(capability.data_keys)},
+        "additionalProperties": False,
+    }
+    if capability.data_core:
+        domain["required"] = sorted(capability.data_core)
+    # `oneOf` rather than `anyOf`: the two shapes are disjoint by construction, so an envelope
+    # matching both is a domain answer that grew an `error` key, which is neither.
+    return {"oneOf": [ERROR_DATA_SCHEMA, domain]}
+
+
 def capability_schema(capability: Capability) -> dict[str, Any]:
     description = capability.description()
     contract = {key: value for key, value in description.items() if key not in {"name", "schema_id"}}
+    properties: dict[str, Any] = {"operation": {"const": capability.name}}
+    data = data_schema(capability)
+    if data:
+        properties["data"] = data
     return {
         "$schema": SCHEMA_DIALECT,
         "$id": capability.schema_id,
         "title": f"Harness of Minervini v2 {capability.name} response",
         "allOf": [
             {"$ref": "envelope.schema.json"},
-            {"properties": {"operation": {"const": capability.name}}, "required": ["operation"]},
+            {"properties": properties, "required": ["operation"]},
         ],
         "x-capability-contract": contract,
     }
@@ -41,4 +73,4 @@ if __name__ == "__main__":
     synchronize()
 
 
-__all__ = ["capability_schema", "synchronize"]
+__all__ = ["capability_schema", "data_schema", "synchronize"]

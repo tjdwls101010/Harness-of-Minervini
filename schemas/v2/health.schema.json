@@ -7,6 +7,42 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "configuration": {},
+                "dependencies": {},
+                "doctrine": {},
+                "python": {},
+                "reachability": {},
+                "ready": {}
+              },
+              "required": [
+                "configuration",
+                "dependencies",
+                "doctrine",
+                "python",
+                "reachability",
+                "ready"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "health"
         }
