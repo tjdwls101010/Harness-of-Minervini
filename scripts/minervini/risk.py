@@ -94,6 +94,17 @@ def _state(value: Any, default: str = "unavailable") -> str:
     return default
 
 
+def is_non_passing(value: Any) -> bool:
+    """Whether this word makes a component plane more cautious than a pass.
+
+    The vocabulary lives beside the reducer that reads it. A second copy anywhere else is a
+    second place for `avoid` to quietly stop meaning avoid. `incomplete` is not one of these:
+    it says the caller does not know, and something that does know may still answer.
+    """
+
+    return _state(value, default="") in {"fail", "wait"}
+
+
 def _attests(value: Any, plane: str, ticker: Any, as_of: Any) -> bool:
     """Whether this evidence object references the envelope that measured its own plane.
 

@@ -36,7 +36,7 @@ from .providers.yfinance import completed_daily_bars, current_classification_sna
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
 from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
-from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
+from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, is_non_passing, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
@@ -2397,6 +2397,18 @@ def _attest_components(
             declared = dict(declared) if isinstance(declared, Mapping) else ({"state": declared} if declared is not None else {})
             evidence[plane] = {**declared, "attestation_refused": refusal}
             continue
+        # The word the envelope reached, over whatever the caller typed -- except where what
+        # they typed was a failure or a wait. Those bind on their own terms and only ever make
+        # the verdict more cautious, and an envelope raising the plane back to a pass would
+        # have overruled a person who looked at this stock with a capability that did not.
+        declared = evidence.get(plane)
+        declared_state = declared.get("state") if isinstance(declared, Mapping) else declared
+        if declared_state is not None and is_non_passing(declared_state):
+            # Reported rather than silent: the envelope was read, and a reader looking at a
+            # verdict more cautious than their evidence needs to see which word did it.
+            references.append({**reference, "plane": plane, "state": state, "yielded_to_declared": declared_state})
+            evidence[plane] = {"state": declared_state}
+            continue
         references.append({**reference, "plane": plane, "state": state})
         evidence[plane] = {"state": state, "attested_by": reference}
     return references
@@ -2417,6 +2429,15 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # attestation against the ticker it is reducing, and cannot do that on a ticker it was
     # never told.
     evidence["ticker"] = ticker
+    # An attestation is minted below from an envelope and is never accepted from a request.
+    # The CLI has no flag that produces one, but `execute` is a seam too, and a reference the
+    # caller composed is the typed word this guard replaced, wearing the shape that replaced
+    # it. Cleared unconditionally: a request that attaches nothing is exactly the one where a
+    # forged reference has nothing to compete with.
+    for plane in ("market", "eligibility", "setup", "fundamentals"):
+        declared = evidence.get(plane)
+        if isinstance(declared, Mapping) and "attested_by" in declared:
+            evidence[plane] = {key: value for key, value in declared.items() if key != "attested_by"}
     attached = evidence.pop("evidence", None)
     if attached is not None:
         references = _attest_components(evidence, attached, ticker=ticker, as_of=clock.date.isoformat())

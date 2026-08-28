@@ -100,13 +100,51 @@ class AVerdictIsReducedFromEnvelopes(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
         self.assertIn("setup", payload["data"]["unattested"])
 
-    def test_the_envelope_word_wins_over_the_word_typed_beside_it(self) -> None:
+    def test_the_envelope_word_wins_over_a_pass_typed_beside_it(self) -> None:
         """The caller declares eligible; the envelope they attached says avoid."""
 
         payload = risk([market(), qualify("avoid"), setup(), fundamentals()], eligibility={"state": "eligible"})
 
         self.assertEqual(payload["data"]["verdict"], "AVOID")
         self.assertIn("eligibility", payload["data"]["failed"])
+
+    def test_an_envelope_does_not_erase_a_failure_the_caller_declared(self) -> None:
+        """The other direction, and the one the rule turns on.
+
+        A word may only move the verdict toward no-trade -- which means an attached envelope
+        raising a plane back to a pass has to leave a declared failure standing. A trader who
+        has read this stock and calls it avoid is not overruled by a capability that has not.
+        """
+
+        payload = risk([market(), qualify(), setup(), fundamentals()], eligibility={"state": "avoid"})
+
+        self.assertEqual(payload["data"]["verdict"], "AVOID")
+        self.assertIn("eligibility", payload["data"]["failed"])
+        # The envelope was read, and the reference says which word beat it.
+        yielded = [item for item in payload["request"]["evidence"] if item.get("yielded_to_declared")]
+        self.assertEqual([(item["plane"], item["state"], item["yielded_to_declared"]) for item in yielded], [("eligibility", "eligible", "avoid")])
+
+    def test_a_caller_cannot_write_the_attestation_themselves(self) -> None:
+        """`attested_by` is minted here from an envelope, never accepted from a request.
+
+        The CLI has no flag that produces one, but `execute` is a seam too, and a reference
+        the caller composed is exactly the typed word this guard exists to refuse -- wearing
+        the shape of the thing that replaced it.
+        """
+
+        forged = {
+            "operation": "ticker.qualify",
+            "ticker": TICKER,
+            "as_of": AS_OF,
+            "status": "ok",
+        }
+        payload = risk(
+            [market(), setup(), fundamentals()],
+            eligibility={"state": "eligible", "attested_by": forged},
+        )
+
+        self.assertEqual(payload["data"]["verdict"], "INCOMPLETE")
+        self.assertEqual(payload["data"]["unattested"]["eligibility"], "unattested_state_word")
 
     def test_a_capability_that_settles_no_plane_is_refused_by_name(self) -> None:
         with self.assertRaises(RequestError) as raised:
