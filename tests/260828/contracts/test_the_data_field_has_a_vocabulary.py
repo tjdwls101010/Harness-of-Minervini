@@ -21,33 +21,12 @@ envelope is either the error shape or the declared vocabulary, and never a mixtu
 
 from __future__ import annotations
 
-import json
-import pathlib
 import unittest
-
-from jsonschema import Draft202012Validator
-from referencing import Registry, Resource
 
 from scripts.minervini.contracts import RequestError, error_envelope
 from scripts.minervini.operations import execute
 
-
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-SCHEMAS = ROOT / "schemas" / "v2"
-
-
-def _registry() -> Registry:
-    """Every published schema, addressable by its own `$id` so `$ref` resolves offline."""
-
-    return Registry().with_resources(
-        (json.loads(path.read_text(encoding="utf-8"))["$id"], Resource.from_contents(json.loads(path.read_text(encoding="utf-8"))))
-        for path in sorted(SCHEMAS.glob("*.schema.json"))
-    )
-
-
-def validator(capability: str) -> Draft202012Validator:
-    schema = json.loads((SCHEMAS / f"{capability}.schema.json").read_text(encoding="utf-8"))
-    return Draft202012Validator(schema, registry=_registry())
+from tests.schemas import validator
 
 
 class TheClockDeclaresWhatItsDataHolds(unittest.TestCase):

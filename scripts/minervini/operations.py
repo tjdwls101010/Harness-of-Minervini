@@ -17,6 +17,7 @@ from typing import Any, Callable, Mapping
 import pandas as pd
 
 from .cache import ProviderCache
+from .capabilities import CAPABILITIES
 from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
 from .doctrine import get_claim, has_claim, validate as validate_doctrine
@@ -339,6 +340,14 @@ def _missing_provider(error: ProviderUnavailable, *, required: bool = True) -> d
     if error.detail:
         gap["detail"] = error.detail
     return gap
+
+
+def _describe(request: Mapping[str, Any]) -> dict[str, Any]:
+    name = request.get("capability")
+    capability = CAPABILITIES.get(name) if isinstance(name, str) else None
+    if capability is None:
+        raise RequestError(f"unknown capability: {name}", "capability")
+    return envelope("describe", request={"capability": name}, data=capability.description())
 
 
 def _clock_operation(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -3168,6 +3177,14 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
     if not isinstance(request, Mapping):
         raise RequestError("request must be an object", "request")
     runtime = runtime if runtime is not None else Runtime(cache=ProviderCache())
+    # The registry pair answers from the registry alone, so they take no runtime and reach no
+    # provider. They live here rather than only in the CLI because `execute` is a public seam
+    # too, and routed in one place and not the other they came back from this one as the
+    # unimplemented-operation envelope -- under their own operation name.
+    if operation == "capabilities":
+        return envelope(operation, data={"capabilities": [CAPABILITIES[name].listing() for name in sorted(CAPABILITIES)]})
+    if operation == "describe":
+        return _describe(request)
     if operation == "clock":
         return _clock_operation(request)
     if operation == "health":

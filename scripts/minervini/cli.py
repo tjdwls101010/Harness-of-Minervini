@@ -399,13 +399,6 @@ def _request(args: argparse.Namespace, operation: str) -> dict[str, Any]:
 
 def dispatch(args: argparse.Namespace, *, runtime: Runtime | None = None) -> dict[str, Any]:
     operation = _operation(args)
-    if operation == "capabilities":
-        return envelope(operation, data={"capabilities": [CAPABILITIES[name].listing() for name in sorted(CAPABILITIES)]})
-    if operation == "describe":
-        capability = CAPABILITIES.get(args.capability)
-        if capability is None:
-            raise RequestError(f"unknown capability: {args.capability}", "capability")
-        return envelope(operation, request={"capability": args.capability}, data=capability.description())
     return execute(operation, _request(args, operation), runtime=runtime)
 
 
