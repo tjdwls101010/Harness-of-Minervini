@@ -7,6 +7,47 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "contrast": {},
+                "declared_readings": {},
+                "doctrine_ids": {},
+                "entry": {},
+                "failed": {},
+                "measurements": {},
+                "missing": {},
+                "required_evidence": {},
+                "segmentation": {},
+                "setup_state": {},
+                "signals": {},
+                "structure": {},
+                "ticker": {},
+                "uncorroborated_verdict": {},
+                "unsatisfied": {}
+              },
+              "required": [
+                "setup_state",
+                "ticker"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "ticker.setup"
         }

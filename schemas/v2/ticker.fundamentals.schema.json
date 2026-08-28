@@ -7,6 +7,52 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "accounting_basis": {},
+                "amended_filings": {},
+                "annual_growth": {},
+                "as_of": {},
+                "category_reading": {},
+                "declared_inputs": {},
+                "discrepancies": {},
+                "earnings_quality": {},
+                "filings_used": {},
+                "fundamentals_state": {},
+                "growth": {},
+                "integrity": {},
+                "leader_category": {},
+                "missing": {},
+                "profitability": {},
+                "quality": {},
+                "quarterly": {},
+                "signals": {},
+                "ticker": {},
+                "valuation": {}
+              },
+              "required": [
+                "fundamentals_state",
+                "ticker"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "ticker.fundamentals"
         }

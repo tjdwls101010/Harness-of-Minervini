@@ -7,6 +7,68 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "awaiting_chart_under_another_top": {},
+                "chart_questions": {},
+                "contested_criteria": {},
+                "corporate_action_evidence": {},
+                "corporate_action_sessions": {},
+                "corporate_action_under_another_top": {},
+                "distribution_evidence": {},
+                "distribution_sessions": {},
+                "every_top_rejects": {},
+                "failed": {},
+                "first_non_contesting_reading": {},
+                "held_by_another_top": {},
+                "held_by_short_history": {},
+                "measured_bars": {},
+                "measured_from": {},
+                "measurements": {},
+                "missing": {},
+                "payout_decided_under_another_top": {},
+                "payout_sensitive_criteria": {},
+                "peak_identity": {},
+                "peak_is_a_confirmed_turning_point": {},
+                "power_play_state": {},
+                "reading_rejections": {},
+                "readings": {},
+                "readings_cover_other_bars": {},
+                "readings_ran_out_of_history": {},
+                "rejected_under_another_top": {},
+                "rejected_under_every_top_read": {},
+                "required_evidence": {},
+                "signals": {},
+                "structure": {},
+                "surviving_readings": {},
+                "ticker": {},
+                "unread_top": {},
+                "unread_top_may_contest": {},
+                "unreadable_readings": {}
+              },
+              "required": [
+                "power_play_state",
+                "ticker"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "ticker.power-play"
         }

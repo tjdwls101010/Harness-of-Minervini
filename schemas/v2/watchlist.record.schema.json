@@ -7,6 +7,32 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "record": {}
+              },
+              "required": [
+                "record"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "watchlist.record"
         }

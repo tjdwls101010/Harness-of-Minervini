@@ -7,6 +7,42 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "evidence_quality": {},
+                "group_ranks": {},
+                "leaders": {},
+                "missing": {},
+                "regime": {},
+                "signal_vector": {}
+              },
+              "required": [
+                "evidence_quality",
+                "group_ranks",
+                "leaders",
+                "missing",
+                "regime",
+                "signal_vector"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "market.snapshot"
         }

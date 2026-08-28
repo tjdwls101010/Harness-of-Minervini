@@ -7,6 +7,36 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "candidates": {},
+                "exclusions": {},
+                "page": {}
+              },
+              "required": [
+                "candidates",
+                "exclusions",
+                "page"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "market.candidates"
         }

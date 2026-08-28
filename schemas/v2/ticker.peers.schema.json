@@ -7,6 +7,45 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "comparison_state": {},
+                "exclusions": {},
+                "industry": {},
+                "industry_id": {},
+                "missing": {},
+                "peer_count": {},
+                "peers": {},
+                "rank_basis": {},
+                "sector": {},
+                "target": {},
+                "ticker": {}
+              },
+              "required": [
+                "comparison_state",
+                "peers",
+                "target",
+                "ticker"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "ticker.peers"
         }

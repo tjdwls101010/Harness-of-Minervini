@@ -7,6 +7,61 @@
     },
     {
       "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "attested_evidence": {},
+                "completed_price_path": {},
+                "components": {},
+                "current_price": {},
+                "failed": {},
+                "management_actions": {},
+                "management_evidence": {},
+                "max_high_date": {},
+                "max_high_since_entry": {},
+                "max_high_withheld_date": {},
+                "max_high_withheld_reason": {},
+                "missing": {},
+                "mode": {},
+                "risk_controls": {},
+                "ticker": {},
+                "unattested": {},
+                "verdict": {},
+                "waiting": {}
+              },
+              "required": [
+                "attested_evidence",
+                "current_price",
+                "failed",
+                "max_high_date",
+                "max_high_since_entry",
+                "max_high_withheld_date",
+                "max_high_withheld_reason",
+                "missing",
+                "mode",
+                "risk_controls",
+                "ticker",
+                "verdict",
+                "waiting"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "operation": {
           "const": "ticker.risk"
         }
