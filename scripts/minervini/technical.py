@@ -21,6 +21,14 @@ _SESSIONS_PER_MONTH = 21
 # Enough places to strip binary-float noise from a reported figure and far too many
 # to soften any limit the registry states.
 _REPORTED_PRECISION = 10
+# The three prices the 52-week criteria need. Close decides every other criterion; High and Low
+# are what the year's extremes are taken from.
+_EXTREME_COLUMNS = ("Close", "High", "Low")
+# "52-week" is a duration the sources state in weeks, so the window it names is bounded by a
+# date. A bar count is the same span only for a name that traded every session: counting bars
+# let a history of any length publish a "52-week" extreme, and let a name whose sessions were
+# thinned by a halt take one from a window reaching years back.
+_DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * 7
 
 
 def _signal(identifier: str, state: str, measured: Any, required: str, doctrine_id: str = DOCTRINE_TREND) -> dict[str, Any]:
@@ -150,6 +158,46 @@ def _primary_base(
     }
 
 
+def _year_window(bars: pd.DataFrame) -> pd.DataFrame | None:
+    """The trailing 52 weeks of bars, or nothing when the history does not reach back that far.
+
+    Nothing, rather than what there is. A window shorter than the one being named does not
+    make the extremes approximate, it makes them wrong in a fixed direction -- a truncated
+    window has a higher low and a lower high, so criterion 6 reads a fail a full year would
+    have passed and criterion 7 reads a pass it would have failed. The first of those is read
+    as a known failure before the recent-IPO route opens, which rejected a stock too young to
+    have a 52-week low on its 52-week low.
+    """
+
+    dates = pd.to_datetime(bars.index, errors="coerce")
+    if dates.isna().any():
+        return None
+    boundary = dates[-1] - pd.Timedelta(days=_DAYS_IN_THE_YEAR_THE_SOURCES_NAME)
+    # A bar at or before the earliest date the window admits is what makes the window full;
+    # without one the history simply starts partway into the year it is being measured over.
+    if dates[0] > boundary:
+        return None
+    return bars.loc[dates >= boundary]
+
+
+def _extreme(window: pd.DataFrame | None, column: str, how: str) -> float | None:
+    """One end of the year, or nothing when a session inside the window did not carry it.
+
+    A missing price is skipped by `min` and `max`, so a year with one unknown low published a
+    definitive verdict on a floor nobody measured. Dropping that session instead would be the
+    worse repair -- measuring on the survivors is what let a history full of holes read as a
+    short one -- because a session whose prices are missing is still a session the year covers.
+
+    The two ends fail separately. An unknown low says nothing about whether the high is known,
+    and refusing both on either would withhold a reading that is there.
+    """
+
+    if window is None:
+        return None
+    prices = window[column]
+    return None if prices.isna().any() else _finite(float(getattr(prices, how)()))
+
+
 def build_eligibility_evidence(
     history: pd.DataFrame,
     *,
@@ -163,13 +211,23 @@ def build_eligibility_evidence(
     The price provider owns session completion and as-of filtering. This
     function rejects missing OHLC evidence and never reaches a provider itself.
     """
-    if not isinstance(history, pd.DataFrame) or "Close" not in history:
-        raise ValueError("history must be a DataFrame with a Close column")
-    close = pd.to_numeric(history["Close"], errors="coerce").dropna()
-    if close.empty:
+    if not isinstance(history, pd.DataFrame) or any(column not in history for column in _EXTREME_COLUMNS):
+        raise ValueError("history must be a DataFrame with Close, High, and Low columns")
+    # A repeated column name makes the selection below return two columns under one label, and
+    # the extreme taken from it is then a Series where a price is expected. A provider
+    # flattening a multi-level header produces exactly that, and reading two more columns
+    # brought the shape here from where the shared price reader already names it.
+    if history.columns.has_duplicates:
+        raise ValueError("history repeats a column")
+    # Selected by label rather than rebuilt from three Series: the columns then travel together
+    # through the sort and the drop, so the window's high and low are the same sessions as its
+    # closes without an index alignment that a repeated date would refuse outright.
+    bars = history.loc[:, list(_EXTREME_COLUMNS)].apply(pd.to_numeric, errors="coerce").dropna(subset=["Close"])
+    if bars.empty:
         raise ValueError("history contains no completed closing prices")
-    if not close.index.is_monotonic_increasing:
-        close = close.sort_index()
+    if not bars.index.is_monotonic_increasing:
+        bars = bars.sort_index()
+    close = bars["Close"]
 
     current = float(close.iloc[-1])
     if not math.isfinite(current):
@@ -180,10 +238,16 @@ def build_eligibility_evidence(
     # rather than hard-coded beside it.
     rising_sessions = round(doctrine.threshold(DOCTRINE_TREND, "sma_200_rising_minimum_months") * _SESSIONS_PER_MONTH)
     sma200_month_ago = _finite(float(close.iloc[:-rising_sessions].rolling(200).mean().iloc[-1])) if len(close) >= 200 + rising_sessions else None
-    window = close.tail(min(252, len(close)))
-    low_52, high_52 = float(window.min()), float(window.max())
-    above_low_pct = _finite((current / low_52 - 1) * 100) if low_52 > 0 else None
-    below_high_pct = _finite((1 - current / high_52) * 100) if high_52 > 0 else None
+    # The extremes come off the whole bar. The source settles neither criterion -- it says
+    # "at least 30 percent above its 52-week low" and "within at least 25 percent of its
+    # 52-week high" and never says which price -- but this harness already answered it one
+    # module over, where a leader's distance from a 52-week high is read off `max(highs)`.
+    # Taking the same phrase off the closing series made it mean two things in one harness,
+    # and the half that decides eligibility was the looser of the two.
+    window = _year_window(bars)
+    low_52, high_52 = _extreme(window, "Low", "min"), _extreme(window, "High", "max")
+    above_low_pct = _finite((current / low_52 - 1) * 100) if low_52 is not None and low_52 > 0 else None
+    below_high_pct = _finite((1 - current / high_52) * 100) if high_52 is not None and high_52 > 0 else None
 
     first_state = "unavailable" if sma150 is None or sma200 is None else "pass" if current > sma150 and current > sma200 else "fail"
     trend = [

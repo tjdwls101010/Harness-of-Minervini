@@ -22,7 +22,7 @@ AS_OF = "2025-12-31"
 
 
 def price_snapshot(*, rising: bool = True, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
-    values = np.linspace(50, 150, 260) if rising else np.linspace(180, 80, 260)
+    values = np.linspace(50, 150, 270) if rising else np.linspace(180, 80, 270)
     index = pd.bdate_range(end=as_of, periods=len(values))
     close = pd.Series(values, index=index)
     frame = pd.DataFrame(
