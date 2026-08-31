@@ -18,15 +18,21 @@ class DoctrineRegistryTests(unittest.TestCase):
         self.assertNotIn("provenance", result["claim"])
         self.assertIn("provenance", result)
 
-    def test_the_registry_holds_no_quarantined_rule_and_the_audit_view_agrees(self) -> None:
+    def test_the_registry_holds_no_quarantined_rule_and_the_audit_view_differs_only_by_scope(self) -> None:
         # The one quarantined record, a Chapter 12 failure cascade, was deleted once
         # re-sourcing found no supporting passage in either corpus. Quarantine is for
         # material too weakly sourced to execute, not for material with no source at all.
-        active_ids = {item["claim"]["id"] for item in doctrine.list()}
-        audit_ids = {item["claim"]["id"] for item in doctrine.list(include_quarantined=True)}
+        # So the two listings differ by exactly the out-of-scope records, which are the
+        # registry's other kind of audit material and are withheld from the runtime view
+        # for the same reason: every seam that could act on one refuses it.
+        active = {item["claim"]["id"] for item in doctrine.list()}
+        audited = {item["claim"]["id"] for item in doctrine.list(include_quarantined=True)}
+        out_of_scope = {item["claim"]["id"] for item in doctrine.list(include_quarantined=True) if item["claim"].get("out_of_scope")}
 
-        self.assertEqual(active_ids, audit_ids)
-        self.assertNotIn("quarantine.ch12_failure_cascade", audit_ids)
+        self.assertEqual(audited - active, out_of_scope)
+        self.assertTrue(out_of_scope)
+        self.assertEqual([item for item in doctrine.list(include_quarantined=True) if item["claim"]["quarantine"]["is_quarantined"]], [])
+        self.assertNotIn("quarantine.ch12_failure_cascade", audited)
 
     def test_validate_reports_a_complete_registry(self) -> None:
         result = doctrine.validate()

@@ -443,7 +443,7 @@ def _annual_growth(annual: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "doctrine_id": _ANNUAL_REQUIREMENT,
         "binds": doctrine.binds(_ANNUAL_REQUIREMENT),
-        "computability": doctrine.get_claim(_ANNUAL_REQUIREMENT)["claim"]["computability"],
+        "computability": doctrine.claim(_ANNUAL_REQUIREMENT)["computability"],
         "periods": [None if prior is None else prior["period"], None if latest is None else latest["period"]],
         "eps_yoy_pct": _annual_metric_growth(prior, latest, "eps"),
         "revenue_yoy_pct": _annual_metric_growth(prior, latest, "revenue"),
@@ -624,7 +624,7 @@ def _code_33(quarterly: Mapping[str, Any]) -> dict[str, Any]:
     reading = {
         "doctrine_id": _CODE_33,
         "binds": doctrine.binds(_CODE_33),
-        "computability": doctrine.get_claim(_CODE_33)["claim"]["computability"],
+        "computability": doctrine.claim(_CODE_33)["computability"],
     }
     # The run has to reach the latest filed quarter, so a latest quarter that cannot be judged
     # at all leaves the reading unavailable. Dropping it and reporting the run behind it
@@ -700,7 +700,7 @@ def _earnings_without_sales_growth(quarterly: Mapping[str, Any]) -> dict[str, An
     reading = {
         "doctrine_id": _COST_CUTTING,
         "binds": doctrine.binds(_COST_CUTTING),
-        "computability": doctrine.get_claim(_COST_CUTTING)["claim"]["computability"],
+        "computability": doctrine.claim(_COST_CUTTING)["computability"],
         "missing_inputs": ["operating_margin_trend"],
     }
     if not eps or not revenue or eps[-1]["period"] != revenue[-1]["period"]:
@@ -739,7 +739,7 @@ def _acceleration_vs_history(quarterly: Mapping[str, Any], annual: list[dict[str
     reading = {
         "doctrine_id": _HISTORICAL_ACCELERATION,
         "binds": doctrine.binds(_HISTORICAL_ACCELERATION),
-        "computability": doctrine.get_claim(_HISTORICAL_ACCELERATION)["claim"]["computability"],
+        "computability": doctrine.claim(_HISTORICAL_ACCELERATION)["computability"],
         "periods": [series[-4][0], series[-1][0]] if len(series) >= 4 else [fact[0] for fact in series[:1] + series[-1:]],
         "trailing_3yr_eps_cagr_pct": three,
         "trailing_5yr_eps_cagr_pct": five,
@@ -872,7 +872,7 @@ def _turnaround_growth(quarterly: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "doctrine_id": _TURNAROUND_GROWTH,
         "binds": doctrine.binds(_TURNAROUND_GROWTH),
-        "computability": doctrine.get_claim(_TURNAROUND_GROWTH)["claim"]["computability"],
+        "computability": doctrine.claim(_TURNAROUND_GROWTH)["computability"],
         "window_quarters": window,
         "window": read,
         "window_quarters_passing": sum(1 for point in read if point["state"] == "pass"),
@@ -902,7 +902,7 @@ def _turnaround_criteria(quarterly: Mapping[str, Any], annual: list[dict[str, An
     return {
         "doctrine_id": _TURNAROUND_CRITERIA,
         "binds": doctrine.binds(_TURNAROUND_CRITERIA),
-        "computability": doctrine.get_claim(_TURNAROUND_CRITERIA)["claim"]["computability"],
+        "computability": doctrine.claim(_TURNAROUND_CRITERIA)["computability"],
         "strong_quarters": strong,
         "strong_means": _TURNAROUND_GROWTH,
         "gate": gate,
@@ -1062,7 +1062,7 @@ def _market_leader_reading(quarterly: Mapping[str, Any], annual: list[dict[str, 
     reading = {
         "doctrine_id": _MARKET_LEADER,
         "binds": doctrine.binds(_MARKET_LEADER),
-        "computability": doctrine.get_claim(_MARKET_LEADER)["claim"]["computability"],
+        "computability": doctrine.claim(_MARKET_LEADER)["computability"],
         "latest_annual_growth": doctrine.evaluate_marker(_MARKET_LEADER, "market_leader_min_earnings_growth_percent", _annual_metric_growth(*_prior_year(annual), "eps")),
         "best_stretch": doctrine.evaluate_band(_MARKET_LEADER, "market_leader_best_stretch_growth_percent", best),
         "best_stretch_years": doctrine.threshold(_MARKET_LEADER, "market_leader_best_stretch_years"),
@@ -1121,7 +1121,7 @@ def _institutional_favorite_reading(quarterly: Mapping[str, Any], annual: list[d
     return {
         "doctrine_id": _INSTITUTIONAL_FAVORITE,
         "binds": doctrine.binds(_INSTITUTIONAL_FAVORITE),
-        "computability": doctrine.get_claim(_INSTITUTIONAL_FAVORITE)["claim"]["computability"],
+        "computability": doctrine.claim(_INSTITUTIONAL_FAVORITE)["computability"],
         "latest_annual_eps_growth_pct": _annual_metric_growth(*_prior_year(annual), "eps"),
         "missing_inputs": ["dividend_growth_history"],
         "unquantified": ["low_to_middle_teens_is_a_descriptor_not_a_range"],
@@ -1145,7 +1145,7 @@ def _cyclical_reading(quarterly: Mapping[str, Any], annual: list[dict[str, Any]]
     return {
         "doctrine_id": _CYCLICAL,
         "binds": doctrine.binds(_CYCLICAL),
-        "computability": doctrine.get_claim(_CYCLICAL)["claim"]["computability"],
+        "computability": doctrine.claim(_CYCLICAL)["computability"],
         "earnings_direction": direction,
         "latest_quarterly_eps_yoy_pct": latest,
         "missing_inputs": ["pe_ratio_series", "dividend_history", "industry_classification"],
@@ -1188,7 +1188,7 @@ def _unread_claim(claim_id: str, missing_inputs: list[str], **extra: Any) -> dic
     return {
         "doctrine_id": claim_id,
         "binds": doctrine.binds(claim_id),
-        "computability": doctrine.get_claim(claim_id)["claim"]["computability"],
+        "computability": doctrine.claim(claim_id)["computability"],
         "state": "not_evaluated",
         "missing_inputs": missing_inputs,
         **extra,
@@ -1309,7 +1309,7 @@ def _pe_expansion(
     would shrink every expansion this claim exists to notice.
     """
 
-    reading = {"doctrine_id": _PE_EXPANSION, "binds": doctrine.binds(_PE_EXPANSION), "computability": doctrine.get_claim(_PE_EXPANSION)["claim"]["computability"]}
+    reading = {"doctrine_id": _PE_EXPANSION, "binds": doctrine.binds(_PE_EXPANSION), "computability": doctrine.claim(_PE_EXPANSION)["computability"]}
     # Name what was actually absent. Both names went out whenever either was missing, so a
     # caller who supplied a date and whose price provider came up short was told the date was
     # missing too -- while the envelope echoed it back in the request beside the reading.
@@ -1380,7 +1380,7 @@ def _return_on_equity(annual: list[dict[str, Any]]) -> dict[str, Any]:
     disagreement, and it travels with the reading rather than being resolved here.
     """
 
-    claim = doctrine.get_claim(_RETURN_ON_EQUITY)["claim"]
+    claim = doctrine.claim(_RETURN_ON_EQUITY)
     reading = {
         "doctrine_id": _RETURN_ON_EQUITY,
         "binds": doctrine.binds(_RETURN_ON_EQUITY),
@@ -1506,13 +1506,13 @@ def _practitioner_view(claim_id: str) -> dict[str, Any]:
     difference between "never looks at it" and "rarely concerns himself with it" is the point.
     """
 
-    record = doctrine.get_claim(claim_id)
+    record = doctrine.claim(claim_id)
     return {
         "doctrine_id": claim_id,
-        "attributed_to": record["claim"]["attributed_to"],
+        "attributed_to": record["attributed_to"],
         "binds": doctrine.binds(claim_id),
-        "computability": record["claim"]["computability"],
-        "quotation": record["provenance"]["quotations"][0]["text"],
+        "computability": record["computability"],
+        "quotation": doctrine.quotation(claim_id),
     }
 
 
@@ -1659,7 +1659,7 @@ def _earnings_history_lookback(quarterly: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "doctrine_id": _HISTORY_LOOKBACK,
         "binds": doctrine.binds(_HISTORY_LOOKBACK),
-        "computability": doctrine.get_claim(_HISTORY_LOOKBACK)["claim"]["computability"],
+        "computability": doctrine.claim(_HISTORY_LOOKBACK)["computability"],
         "lookback_years": years,
         "periods_examined": [point["period"] for point in read],
         "quarters_accelerating_in_both": accelerating,

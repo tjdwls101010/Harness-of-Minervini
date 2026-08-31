@@ -120,6 +120,48 @@ def get_claim(claim_id: str) -> dict[str, Any]:
     raise KeyError(f"unknown doctrine claim: {claim_id}")
 
 
+def claim(claim_id: str) -> dict[str, Any]:
+    """One claim, for code that is going to act on it.
+
+    `get_claim` is the audit accessor: it answers for anything the registry holds, including
+    the records this harness has set aside, because `doctrine.show` exists to show them. This
+    is the other half of that boundary. Everything a verdict passes through asks here, so a
+    record that may not execute is refused once, at a seam every reducer already crosses,
+    rather than at each of the twenty places one is read.
+
+    Refusing only the numbers was not enough. A claim's binding authority, its required
+    inputs, its kind and its stated rule all reach a reducer without a threshold being
+    touched: a numberless observation is published as somebody's binding standard, an early
+    entry is admitted because its claim says hard_gate, and a missing-evidence list is built
+    from inputs a withdrawn claim asked for. None of those read a number and all of them
+    execute.
+
+    Raises:
+        KeyError: If ``claim_id`` is not registered.
+        ValueError: If the claim is audit material rather than runtime doctrine.
+    """
+
+    record = get_claim(claim_id)["claim"]
+    _readable(record, claim_id)
+    return record
+
+
+def quotation(claim_id: str, index: int = 0) -> str:
+    """The source's own words, for a reading that is going to print them beside a verdict.
+
+    The quotations live in provenance, which `get_claim` hands back whole for audit. Printing
+    one into a verdict is not auditing it, so this asks the guarded accessor first: a claim
+    the harness has set aside must not have its sentence quoted as the standard being applied.
+
+    Raises:
+        KeyError: If ``claim_id`` is not registered.
+        ValueError: If the claim is audit material rather than runtime doctrine.
+    """
+
+    claim(claim_id)
+    return str(get_claim(claim_id)["provenance"]["quotations"][index]["text"])
+
+
 def required_inputs(claim_id: str) -> tuple[str, ...]:
     """The evidence a claim says it needs, in the claim's own vocabulary.
 
@@ -132,7 +174,7 @@ def required_inputs(claim_id: str) -> tuple[str, ...]:
         KeyError: If ``claim_id`` is not registered.
     """
 
-    return tuple(get_claim(claim_id)["claim"].get("required_inputs") or ())
+    return tuple(claim(claim_id).get("required_inputs") or ())
 
 
 def list(
@@ -142,16 +184,26 @@ def list(
 ) -> list[dict[str, Any]]:
     """List runtime claims, optionally narrowed to one analysis context.
 
-    Quarantined records are audit material and are excluded unless explicitly
-    requested.  Every returned item keeps the executable claim separate from
-    its provenance metadata.
+    Audit material is excluded unless explicitly requested, and there are two kinds of it:
+    a record under quarantine and one recorded out of scope. Both are refused at every seam
+    a number leaves through, so listing one here handed a caller a claim it could not then
+    read -- and an out-of-scope record listed as runtime doctrine put a position-sizing
+    figure in front of a reader who had asked what doctrine applies.
+
+    Every returned item keeps the executable claim separate from its provenance metadata.
     """
     records: Iterable[dict[str, Any]] = _load_registry()["claims"]
     if context is not None:
         records = (record for record in records if context in record["context"])
     if not include_quarantined:
-        records = (record for record in records if not record["quarantine"]["is_quarantined"])
+        records = (record for record in records if not _audit_only(record))
     return [_result(record) for record in records]
+
+
+def _audit_only(record: Mapping[str, Any]) -> bool:
+    """Whether this record is held for audit rather than applied."""
+
+    return bool(record.get("out_of_scope")) or bool((record.get("quarantine") or {}).get("is_quarantined"))
 
 
 def threshold(claim_id: str, name: str) -> Any:
@@ -165,9 +217,8 @@ def threshold(claim_id: str, name: str) -> Any:
     Raises:
         KeyError: If ``claim_id`` is unknown or does not register ``name``.
     """
-    claim = get_claim(claim_id)["claim"]
-    _readable(claim, claim_id)
-    thresholds = claim["thresholds"]
+    record = claim(claim_id)
+    thresholds = record["thresholds"]
     if name not in thresholds:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     specification = thresholds[name]
@@ -181,7 +232,7 @@ def threshold(claim_id: str, name: str) -> Any:
     if role in {"marker", "band"}:
         evaluator = "evaluate_marker" if role == "marker" else "evaluate_band"
         raise ValueError(f"{claim_id}.{name} is a {role}; read it through {evaluator} so where the measurement sits travels with it")
-    if role == "gate" and not _binds(claim):
+    if role == "gate" and not _binds(record):
         raise ValueError(f"{claim_id}.{name} is not binding on this harness; read it through evaluate_gate so it is stamped as contrast")
     return specification["value"]
 
@@ -198,20 +249,31 @@ def parameter(claim_id: str, name: str) -> Any:
     Raises:
         KeyError: If ``claim_id`` is unknown or does not register ``name`` as a parameter.
     """
-    claim = get_claim(claim_id)["claim"]
-    _readable(claim, claim_id)
-    parameters = claim.get("parameters") or {}
+    parameters = claim(claim_id).get("parameters") or {}
     if name not in parameters:
         raise KeyError(f"{claim_id} registers no parameter named {name}")
     return parameters[name]["value"]
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
-    """Refuse to hand back a number this harness is not permitted to act on."""
+    """Refuse to hand back a number this harness is not permitted to act on.
+
+    Two records reach here that a reducer must not compute with, and they are set aside for
+    different reasons: one is outside what this harness does at all, the other was withdrawn
+    from doctrine pending review. Both are still retrievable through `get_claim` and both
+    still validate, because they are audit material -- what they no longer do is supply a
+    number. The refusal has to sit at this seam rather than in prose an author reads once:
+    every other layer lets the threshold through, and a verdict citing a claim the harness
+    had already set aside reads exactly like one citing a claim it stands behind.
+    """
 
     exclusion = record.get("out_of_scope")
     if exclusion:
         raise ValueError(f"{claim_id} is recorded {exclusion} and is audit material; no capability may read its numbers")
+    quarantine = record.get("quarantine") or {}
+    if quarantine.get("is_quarantined"):
+        reason = quarantine.get("reason") or "no reason recorded"
+        raise ValueError(f"{claim_id} is under quarantine ({reason}) and is audit material; no capability may read its numbers")
 
 
 def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -223,13 +285,13 @@ def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[s
     evaluation is allowed to say, and looking it up twice invites the two answers to drift.
     """
     record = get_claim(claim_id)
-    _readable(record["claim"], claim_id)
-    specification = record["claim"]["thresholds"].get(name)
+    executable = claim(claim_id)
+    specification = executable["thresholds"].get(name)
     if specification is None:
         raise KeyError(f"{claim_id} registers no threshold named {name}")
     if specification["role"] != expected_role:
         raise ValueError(f"{claim_id}.{name} is registered as a {specification['role']}, not a {expected_role}")
-    return specification, record["claim"], record["provenance"]["quotations"][specification["quote_index"]]
+    return specification, executable, record["provenance"]["quotations"][specification["quote_index"]]
 
 
 def _measurable(measured: float | None) -> tuple[float | None, str | None]:
@@ -321,7 +383,7 @@ def binds(claim_id: str) -> bool:
     Public because reducers and evidence builders both need the answer, and an answer this
     load-bearing must have one owner.
     """
-    return _binds(get_claim(claim_id)["claim"])
+    return _binds(claim(claim_id))
 
 
 def evaluate_marker(claim_id: str, name: str, measured: float | None) -> dict[str, Any]:
@@ -488,8 +550,21 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             errors.append(f"{label}.precedence.tier is not registered")
         if record["kind"] == "quarantine" and not record["quarantine"].get("is_quarantined"):
             errors.append(f"{label} quarantine kind must be quarantined")
+        if record["quarantine"].get("is_quarantined") and record["consumers"] != ["doctrine audit"]:
+            # Same rule an out-of-scope record already lives under, for the same reason: a
+            # record set aside is audit material, and leaving a capability wired to it means
+            # the withdrawal is discovered by a verdict reaching for the number mid-run.
+            errors.append(f"{label} is under quarantine and cannot name a runtime consumer")
         if record["quarantine"].get("is_quarantined") and record["status"] != "quarantine":
             errors.append(f"{label} quarantined record must have quarantine status")
+        if record["status"] == "quarantine" and not record["quarantine"].get("is_quarantined"):
+            # The rule above read one way only, so a record could say quarantine in its
+            # status, keep is_quarantined false, and go on executing at every seam.
+            errors.append(f"{label} has quarantine status and must be quarantined")
+        if record["quarantine"].get("is_quarantined") and not str(record["quarantine"].get("reason") or "").strip():
+            # `doctrine show` is where a reader learns why something was withdrawn, and it
+            # has nothing else to tell them with.
+            errors.append(f"{label} is quarantined and must record a reason")
         if not record["quarantine"].get("is_quarantined") and not record["consumers"]:
             errors.append(f"{label} executable record requires a consumer")
         if not record["quarantine"].get("is_quarantined") and not record["tests"]:
@@ -662,6 +737,11 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             # necessary: the registry no longer refuses to record another practitioner's
             # standard, so the place the refusal has to live is the reducers' own manifest.
             errors.append(f"a reducer reads {claim_id}.{name} but that claim is not binding on this harness")
+        if _audit_only(record):
+            # Setting one of these aside is a registry that says "audit only" and "a reducer
+            # requires this number" at once. Both halves validated, and the contradiction
+            # was discovered by the next verdict raising mid-run.
+            errors.append(f"a reducer reads {claim_id}.{name} but that claim is held for audit rather than applied")
 
     return {"valid": not errors, "errors": errors, "claim_count": len(registry.get("claims", []))}
 

@@ -59,7 +59,7 @@ During market analysis do not read `.tmp/Minervini.db`, `.tmp/TraderLion.db`, or
 
 Apply doctrine in this order: scope, safety, and data integrity; Minervini qualification and risk hard gates; verified explicit exceptions; tagged TraderLion practice-layer defaults; current narrative context.
 
-SEPA hard gates are immutable. `[TL]` observations and tactics fill genuine execution gaps only where they do not conflict, a conflicting early-entry tactic stays opt-in, and a quarantined claim never executes.
+SEPA hard gates are immutable. `[TL]` observations and tactics fill genuine execution gaps only where they do not conflict, and a conflicting early-entry tactic stays opt-in.
 
 Use 50/150/200 SMA only for eligibility and stage context. A management average never substitutes for the eligibility stack.
 
