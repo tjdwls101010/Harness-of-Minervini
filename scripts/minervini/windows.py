@@ -14,7 +14,8 @@ from a 3% measured over a fortnight, and neither number carries how long it took
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, timedelta
+from datetime import timedelta
+from typing import Any
 
 
 # The 52 is the sources' own word -- "52-week high", "the 52-week-low list". Seven days a
@@ -23,7 +24,7 @@ from datetime import date, timedelta
 DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * 7
 
 
-def year_window_start(dates: Sequence[date], end: int) -> int | None:
+def year_window_start(moments: Sequence[Any], end: int) -> int | None:
     """Index where the trailing 52 weeks ending at ``end`` opens, or nothing.
 
     Nothing, rather than what there is. A window shorter than the one being named does not
@@ -31,18 +32,26 @@ def year_window_start(dates: Sequence[date], end: int) -> int | None:
     window has a higher low and a lower high, so every reading taken from it understates the
     distance to the year's high and overstates the rise from its low.
 
-    The window is full when a bar sits at or before the earliest date it admits. Without one
-    the history simply starts partway into the year it is being asked about.
+    The window is full when a bar sits at or before the earliest moment it admits. Without
+    one the history simply starts partway into the year it is being asked about.
+
+    Whatever the caller keeps its sessions as -- calendar dates, or timestamps carrying a
+    time and a zone -- is what the span is measured in. Rounding a timestamp down to its date
+    first would make two stamps 363 days and 17 hours apart read as a full year, and 52 weeks
+    is a duration rather than a pair of dates.
+
+    Ordered oldest to newest is the caller's guarantee; out of order, this returns nothing
+    rather than a boundary that means nothing.
     """
 
-    if end < 0 or end >= len(dates):
+    if end < 0 or end >= len(moments):
         return None
-    boundary = dates[end] - timedelta(days=DAYS_IN_THE_YEAR_THE_SOURCES_NAME)
-    if dates[0] > boundary:
+    if any(moments[index] > moments[index + 1] for index in range(end)):
         return None
-    # Dates are ordered oldest to newest by every caller's own reading, so the first bar
-    # inside the boundary is where the window opens.
+    boundary = moments[end] - timedelta(days=DAYS_IN_THE_YEAR_THE_SOURCES_NAME)
+    if moments[0] > boundary:
+        return None
     for index in range(end + 1):
-        if dates[index] >= boundary:
+        if moments[index] >= boundary:
             return index
     return None

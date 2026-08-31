@@ -172,8 +172,12 @@ def _year_window(bars: pd.DataFrame) -> pd.DataFrame | None:
     stamps = pd.to_datetime(bars.index, errors="coerce")
     if stamps.isna().any():
         return None
-    dates = [stamp.date() for stamp in stamps]
-    start = year_window_start(dates, len(dates) - 1)
+    # The stamps travel whole rather than as their calendar dates. Two of them 363 days and
+    # 17 hours apart are not a year, and rounding both down to a date says they are.
+    start = year_window_start(list(stamps), len(stamps) - 1)
+    # A positional slice is the window only when the parsed dates run the way the rows do.
+    # An index that sorts one way as text and another as dates -- "31-Dec-2024" after
+    # "02-Jan-2025" -- would otherwise put a peak from outside the year inside it.
     return None if start is None else bars.iloc[start:]
 
 

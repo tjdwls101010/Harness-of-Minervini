@@ -618,7 +618,7 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], l
     opens: list[float | None] = []
     highs: list[float] = []
     lows: list[float] = []
-    dates: list[date] | None = []
+    dates: list[date] = []
     for row in rows:
         if not isinstance(row, Mapping) or row.get("completed") is False:
             return None, [], [], [], None
@@ -631,41 +631,53 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], l
             return None, [], [], [], None
         opened = _finite_number(row.get("open", row.get("Open")))
         date_value = row.get("date", row.get("Date"))
-        if date_value is None:
-            # A row that never claimed a date is a row the window readings cannot use. The
-            # prices are still a series, so they are kept and the dates are dropped whole.
-            dates = None
-        else:
+        if date_value is not None:
             stamp = _session_date(date_value)
             if stamp is None:
                 # A date that is there and unreadable is a broken bar, not an undated one,
                 # and a broken bar voids the history the way an unreadable price does.
                 return None, [], [], [], None
-            if dates is not None:
-                if dates and stamp <= dates[-1]:
-                    # Every index here assumes oldest to newest, and a newest-first frame
-                    # would report the oldest close as today's.
-                    return None, [], [], [], None
-                dates.append(stamp)
+            if dates and stamp <= dates[-1]:
+                # Every index here assumes oldest to newest, and a newest-first frame would
+                # report the oldest close as today's.
+                return None, [], [], [], None
+            dates.append(stamp)
         closes.append(close)
         opens.append(opened if opened is not None and opened > 0 else None)
         highs.append(high)
         lows.append(low)
     if not closes:
         return None, [], [], [], None
+    if not dates:
+        # A history that never claimed a date is one the window readings cannot use; its
+        # prices are still a series, so they are kept and the dates come back as nothing.
+        return closes, opens, highs, lows, None
+    if len(dates) != len(closes):
+        # Rows disagreeing about whether they carry a date is a malformed history, not an
+        # undated one. Reading it undated would leave the readable-bar predicate and the
+        # leader's own reading answering differently about the same rows.
+        return None, [], [], [], None
     return closes, opens, highs, lows, dates
 
 
 def _session_date(value: Any) -> date | None:
-    """One session's calendar date, or nothing when what the row carried is not one."""
+    """One session's calendar date, or nothing when what the row carried is not one.
 
+    pandas' not-a-time is an instance of `datetime`, and calling `.date()` on it hands back
+    another not-a-time rather than a date, so the fast path returned something the ordering
+    comparison a frame up then raised on. It is caught by the one property every missing
+    value has and no moment does: it is not equal to itself.
+    """
+
+    if value != value:
+        return None
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
     try:
         return date.fromisoformat(str(value)[:10])
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
 
