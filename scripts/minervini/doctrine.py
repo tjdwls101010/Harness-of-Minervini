@@ -207,11 +207,24 @@ def parameter(claim_id: str, name: str) -> Any:
 
 
 def _readable(record: Mapping[str, Any], claim_id: str) -> None:
-    """Refuse to hand back a number this harness is not permitted to act on."""
+    """Refuse to hand back a number this harness is not permitted to act on.
+
+    Two records reach here that a reducer must not compute with, and they are set aside for
+    different reasons: one is outside what this harness does at all, the other was withdrawn
+    from doctrine pending review. Both are still retrievable through `get_claim` and both
+    still validate, because they are audit material -- what they no longer do is supply a
+    number. The refusal has to sit at this seam rather than in prose an author reads once:
+    every other layer lets the threshold through, and a verdict citing a claim the harness
+    had already set aside reads exactly like one citing a claim it stands behind.
+    """
 
     exclusion = record.get("out_of_scope")
     if exclusion:
         raise ValueError(f"{claim_id} is recorded {exclusion} and is audit material; no capability may read its numbers")
+    quarantine = record.get("quarantine") or {}
+    if quarantine.get("is_quarantined"):
+        reason = quarantine.get("reason") or "no reason recorded"
+        raise ValueError(f"{claim_id} is under quarantine ({reason}) and is audit material; no capability may read its numbers")
 
 
 def _specification(claim_id: str, name: str, expected_role: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -488,6 +501,11 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
             errors.append(f"{label}.precedence.tier is not registered")
         if record["kind"] == "quarantine" and not record["quarantine"].get("is_quarantined"):
             errors.append(f"{label} quarantine kind must be quarantined")
+        if record["quarantine"].get("is_quarantined") and record["consumers"] != ["doctrine audit"]:
+            # Same rule an out-of-scope record already lives under, for the same reason: a
+            # record set aside is audit material, and leaving a capability wired to it means
+            # the withdrawal is discovered by a verdict reaching for the number mid-run.
+            errors.append(f"{label} is under quarantine and cannot name a runtime consumer")
         if record["quarantine"].get("is_quarantined") and record["status"] != "quarantine":
             errors.append(f"{label} quarantined record must have quarantine status")
         if not record["quarantine"].get("is_quarantined") and not record["consumers"]:

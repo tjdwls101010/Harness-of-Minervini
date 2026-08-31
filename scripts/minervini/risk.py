@@ -375,7 +375,10 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
     # band about how tight a stop should be that is not the thing the band measures.
     loss_pct = (entry - stop) / entry * 100 if entry and stop is not None and stop < entry else None
     band = doctrine.evaluate_band(_MARKET_DEFENSE, "difficult_market_loss_pct", loss_pct)
-    low, high = doctrine.get_claim(_MARKET_DEFENSE)["claim"]["thresholds"]["difficult_market_loss_pct"]["range"]
+    # Read off the evaluation rather than out of the registry a second time. Indexing the
+    # threshold directly is the end-run around `threshold()`'s refusal to hand back a band
+    # raw, and it skips the out-of-scope and quarantine refusals that seam also carries.
+    low, high = band["source_range"]
     tighten_to = _reported(entry * (1 - high / 100)) if entry else None
     current = _number(payload.get("current_price"))
     # A stop above the last price is not a tighter stop, it is a sale at the market -- which
