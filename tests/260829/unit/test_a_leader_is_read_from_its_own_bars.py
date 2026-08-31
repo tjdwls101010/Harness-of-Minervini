@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.minervini import doctrine
 from scripts.minervini.market_evidence import build_market_evidence
 
 
-# A full 52-week window of completed sessions, converted the way the module converts it.
-WINDOW = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
+# Enough completed sessions for the window to span the 52 weeks it names. The window is
+# bounded by date, and a business-day range skips weekends and no holidays -- so 52 x the
+# registered trading week reaches back only 361 calendar days, three short of the year.
+WINDOW = 270
 
 
 def bars(closes: list[float], *, start: str = "2025-01-02") -> list[dict]:
@@ -80,7 +81,9 @@ class TheListToStayAwayFrom(unittest.TestCase):
         self.assertIs(leader["on_52w_low_list"]["measured"], True)
 
     def test_a_leader_off_its_low_is_not(self) -> None:
-        leader = evidence({"AAA": bars([40.0] + [100.0] * (WINDOW - 1))})["leaders"][0]
+        """The year's low is inside the window and is not this session's, which is the whole test."""
+
+        leader = evidence({"AAA": bars([100.0] * 60 + [40.0] + [100.0] * (WINDOW - 61))})["leaders"][0]
 
         self.assertIs(leader["on_52w_low_list"]["measured"], False)
 

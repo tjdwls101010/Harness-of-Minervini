@@ -10,21 +10,28 @@ from __future__ import annotations
 
 import unittest
 
+import pandas as pd
+
 from scripts.minervini import doctrine
 from scripts.minervini.market_evidence import build_market_evidence
 
 
 WEEK = doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
 LOOKBACK = doctrine.parameter("convention.group_member_reading", "new_high_growth_lookback_weeks") * WEEK
-WINDOW = 52 * WEEK
+# Enough completed sessions for the window to span the 52 weeks it names -- the window is
+# bounded by date, and 52 x the registered trading week of business days reaches back only
+# 361 calendar days. LOOKBACK stays a session count: how far back the earlier count is taken
+# is an offset the registry states in weeks, not a period an extreme is measured over.
+WINDOW = 270
 GROUP_NEW_HIGHS = "market.group_new_highs_signal"
 STRIKING_DISTANCE = "market.striking_distance_52w_high"
 
 
 def _bars(closes: list[float]) -> list[dict[str, object]]:
+    index = pd.bdate_range("2024-01-01", periods=len(closes))
     return [
-        {"date": f"2025-{1 + index // 28:02d}-{1 + index % 28:02d}", "high": value, "low": value * 0.99, "close": value, "completed": True}
-        for index, value in enumerate(closes)
+        {"date": stamp.date().isoformat(), "high": value, "low": value * 0.99, "close": value, "completed": True}
+        for stamp, value in zip(index, closes)
     ]
 
 

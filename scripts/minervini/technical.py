@@ -10,6 +10,7 @@ import pandas as pd
 
 from . import doctrine
 from .eligibility import TREND_TEMPLATE_CRITERIA
+from .windows import year_window_start
 
 
 DOCTRINE_TREND = "eligibility.standard_trend_template"
@@ -24,11 +25,6 @@ _REPORTED_PRECISION = 10
 # The three prices the 52-week criteria need. Close decides every other criterion; High and Low
 # are what the year's extremes are taken from.
 _EXTREME_COLUMNS = ("Close", "High", "Low")
-# "52-week" is a duration the sources state in weeks, so the window it names is bounded by a
-# date. A bar count is the same span only for a name that traded every session: counting bars
-# let a history of any length publish a "52-week" extreme, and let a name whose sessions were
-# thinned by a halt take one from a window reaching years back.
-_DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * 7
 
 
 def _signal(identifier: str, state: str, measured: Any, required: str, doctrine_id: str = DOCTRINE_TREND) -> dict[str, Any]:
@@ -167,17 +163,22 @@ def _year_window(bars: pd.DataFrame) -> pd.DataFrame | None:
     have passed and criterion 7 reads a pass it would have failed. The first of those is read
     as a known failure before the recent-IPO route opens, which rejected a stock too young to
     have a 52-week low on its 52-week low.
+
+    Where the window opens is `windows`' answer, not this module's: the market's leader
+    reading asks the same question about the same span, and two answers to it is what this
+    shares a reader to prevent.
     """
 
-    dates = pd.to_datetime(bars.index, errors="coerce")
-    if dates.isna().any():
+    stamps = pd.to_datetime(bars.index, errors="coerce")
+    if stamps.isna().any():
         return None
-    boundary = dates[-1] - pd.Timedelta(days=_DAYS_IN_THE_YEAR_THE_SOURCES_NAME)
-    # A bar at or before the earliest date the window admits is what makes the window full;
-    # without one the history simply starts partway into the year it is being measured over.
-    if dates[0] > boundary:
-        return None
-    return bars.loc[dates >= boundary]
+    # The stamps travel whole rather than as their calendar dates. Two of them 363 days and
+    # 17 hours apart are not a year, and rounding both down to a date says they are.
+    start = year_window_start(list(stamps), len(stamps) - 1)
+    # A positional slice is the window only when the parsed dates run the way the rows do.
+    # An index that sorts one way as text and another as dates -- "31-Dec-2024" after
+    # "02-Jan-2025" -- would otherwise put a peak from outside the year inside it.
+    return None if start is None else bars.iloc[start:]
 
 
 def _extreme(window: pd.DataFrame | None, column: str, how: str) -> float | None:

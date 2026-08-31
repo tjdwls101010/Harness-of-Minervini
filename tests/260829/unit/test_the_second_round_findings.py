@@ -8,12 +8,28 @@ from __future__ import annotations
 
 import unittest
 
+import pandas as pd
+
 from scripts.minervini import doctrine
 from scripts.minervini.market import evaluate_market_snapshot
 from scripts.minervini.market_evidence import build_market_evidence
 
 
-SESSIONS = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
+# Enough completed sessions for the window to span the 52 weeks it names. A business-day
+# range skips weekends and no holidays, so 52 x the trading week reaches back only 361
+# calendar days -- three short of the year the window is bounded by.
+SESSIONS = 270
+_FIRST_SESSION = pd.Timestamp("2025-01-02")
+
+
+def _session(index: int) -> str:
+    """The index-th business day of a run ending on a fixed session.
+
+    Ordering tokens were enough while the window was a bar count. It is bounded by date now,
+    so a fixture has to state sessions a calendar can measure a year across.
+    """
+
+    return (_FIRST_SESSION + pd.tseries.offsets.BDay(index)).date().isoformat()
 
 
 def _leaders(supports: int, contradicts: int, unavailable: int) -> list[dict[str, object]]:
@@ -58,7 +74,7 @@ class LeaderTractionMajorityTests(unittest.TestCase):
 
 def _bars(rows: list[tuple[float, float, float]]) -> list[dict[str, object]]:
     return [
-        {"date": f"d{index:04d}", "high": high, "low": low, "close": close, "completed": True}
+        {"date": _session(index), "high": high, "low": low, "close": close, "completed": True}
         for index, (high, low, close) in enumerate(rows)
     ]
 
