@@ -8,12 +8,14 @@ a weighted group score.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from datetime import date, datetime
 from html.parser import HTMLParser
 import math
 import re
 from typing import Any
 
 from . import doctrine
+from .windows import year_window_start
 
 
 _FINVIZ_SECTIONS = (
@@ -28,10 +30,6 @@ _TRADING_WEEK = "convention.trading_week"
 _STRIKING_DISTANCE = "market.striking_distance_52w_high"
 _LOW_LIST = "market.avoid_52w_low_list"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
-# The 52 is the sources' own word -- "52-week high", "the 52-week-low list" -- and the sessions
-# a week holds is the registry's, so the harness converts through it rather than writing down a
-# year in sessions of its own.
-_WEEKS_IN_THE_YEAR_THE_SOURCES_NAME = 52
 _PCT_COUNT = re.compile(r"(?P<pct>\d+(?:\.\d+)?)%\s*\(\s*(?P<count>[\d,]+)\s*\)")
 _COUNT_PCT = re.compile(r"\(\s*(?P<count>[\d,]+)\s*\)\s*(?P<pct>\d+(?:\.\d+)?)%")
 
@@ -425,21 +423,25 @@ def _growth_lookback_sessions() -> int:
     return int(weeks) * _sessions_per_week()
 
 
-def _sessions_per_year() -> int:
-    return _WEEKS_IN_THE_YEAR_THE_SOURCES_NAME * _sessions_per_week()
-
-
 def _sessions_per_week() -> int:
     return int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
 
 
-def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float]] | None:
-    """The name's series, but only when it reaches back a full year before the earlier count."""
+def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float], list[date]] | None:
+    """The name's series, but only when a full year stands behind the earlier count too.
 
-    closes, _opens, highs, lows = _leader_series(bars)
-    if closes is None:
+    Both ends of the growth reading are 52-week highs, so both need a 52-week window behind
+    them. Requiring one only at the latest session would compare a measured high with one
+    taken over however many bars happened to precede it.
+    """
+
+    closes, _opens, highs, lows, dates = _leader_series(bars)
+    if closes is None or dates is None:
         return None
-    return (closes, highs, lows) if len(highs) >= _sessions_per_year() + _growth_lookback_sessions() else None
+    earlier = len(highs) - 1 - _growth_lookback_sessions()
+    if year_window_start(dates, earlier) is None:
+        return None
+    return closes, highs, lows, dates
 
 
 def _at_new_high(bars: Any, sessions_ago: int) -> bool:
@@ -448,9 +450,12 @@ def _at_new_high(bars: Any, sessions_ago: int) -> bool:
     window = _countable_window(bars)
     if window is None:
         return False
-    _, highs, _ = window
+    _, highs, _, dates = window
     index = len(highs) - 1 - sessions_ago
-    return highs[index] >= max(highs[index - _sessions_per_year() + 1 : index + 1])
+    start = year_window_start(dates, index)
+    if start is None:
+        return False
+    return highs[index] >= max(highs[start : index + 1])
 
 
 def _leader_evidence(
@@ -507,15 +512,20 @@ def _leader_price_behavior(bars: Any) -> dict[str, Any]:
     Nothing is published until a full 52-week window has completed. A high taken over two bars
     is not a 52-week high, and reporting one is the shape of fabrication this harness exists to
     refuse -- the reader cannot tell a measured 3% from a 3% measured over a fortnight.
+
+    The window is the one the whole harness uses: bounded by date rather than by a bar count,
+    so a name whose sessions were thinned by a halt cannot reach past the year for its high.
     """
 
-    window_length = _sessions_per_year()
-    closes, opens, highs, lows = _leader_series(bars)
+    closes, opens, highs, lows, dates = _leader_series(bars)
     if closes is None:
         return _unreadable_leader("leader_price_history_not_read")
-    if len(closes) < window_length:
+    if dates is None:
+        return _unreadable_leader("leader_price_history_carries_no_session_dates")
+    start = year_window_start(dates, len(closes) - 1)
+    if start is None:
         return _unreadable_leader("completed_sessions_short_of_a_52_week_window")
-    window = slice(-window_length, None)
+    window = slice(start, None)
     last, high_52w = closes[-1], max(highs[window])
     distance = doctrine.evaluate_band(_STRIKING_DISTANCE, "striking_distance_from_52w_high", _reported((high_52w - last) / high_52w * 100) if high_52w > 0 else None)
     # What puts a ticker on the 52-week-low list is its own low being made now, so the reading
@@ -577,8 +587,8 @@ def carries_a_readable_bar(bars: Any) -> bool:
     return _leader_series(bars)[0] is not None
 
 
-def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], list[float], list[float]]:
-    """Closes, opens, highs and lows from completed rows, or nothing at all.
+def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], list[float], list[float], list[date] | None]:
+    """Closes, opens, highs, lows and session dates from completed rows, or nothing at all.
 
     A history with one unreadable row is not a history with a hole to work around: every
     measurement below reads the whole window, so a partial read would report a 52-week high the
@@ -590,41 +600,73 @@ def _leader_series(bars: Any) -> tuple[list[float] | None, list[float | None], l
     The open is the exception the close, high and low are not: a bar missing it is still a
     readable bar, because only the correction depth reads the open and it falls back cleanly.
     So a missing or non-positive open becomes None for that bar rather than voiding the series.
+
+    Dates come back too, and a history missing or misspelling one comes back with none at all
+    rather than with the dates it happened to have: what reads them is the 52-week window, and
+    a window bounded by the dates of some of its bars is not the window it says it is. The
+    prices are still returned, because a reading that does not ask what year it is -- there
+    are none here today -- would otherwise lose a series it could have used.
     """
 
     if bars is None:
-        return None, [], [], []
+        return None, [], [], [], None
     try:
         rows = list(bars)
     except TypeError:
-        return None, [], [], []
+        return None, [], [], [], None
     closes: list[float] = []
     opens: list[float | None] = []
     highs: list[float] = []
     lows: list[float] = []
-    dates: list[str] = []
+    dates: list[date] | None = []
     for row in rows:
         if not isinstance(row, Mapping) or row.get("completed") is False:
-            return None, [], [], []
+            return None, [], [], [], None
         close = _finite_number(row.get("close", row.get("Close")))
         high = _finite_number(row.get("high", row.get("High")))
         low = _finite_number(row.get("low", row.get("Low")))
         if close is None or high is None or low is None:
-            return None, [], [], []
+            return None, [], [], [], None
         if min(close, high, low) <= 0:
-            return None, [], [], []
+            return None, [], [], [], None
         opened = _finite_number(row.get("open", row.get("Open")))
         date_value = row.get("date", row.get("Date"))
-        if date_value is not None:
-            date_text = str(date_value)
-            if dates and date_text <= dates[-1]:
-                return None, [], [], []
-            dates.append(date_text)
+        if date_value is None:
+            # A row that never claimed a date is a row the window readings cannot use. The
+            # prices are still a series, so they are kept and the dates are dropped whole.
+            dates = None
+        else:
+            stamp = _session_date(date_value)
+            if stamp is None:
+                # A date that is there and unreadable is a broken bar, not an undated one,
+                # and a broken bar voids the history the way an unreadable price does.
+                return None, [], [], [], None
+            if dates is not None:
+                if dates and stamp <= dates[-1]:
+                    # Every index here assumes oldest to newest, and a newest-first frame
+                    # would report the oldest close as today's.
+                    return None, [], [], [], None
+                dates.append(stamp)
         closes.append(close)
         opens.append(opened if opened is not None and opened > 0 else None)
         highs.append(high)
         lows.append(low)
-    return (closes, opens, highs, lows) if closes else (None, [], [], [])
+    if not closes:
+        return None, [], [], [], None
+    return closes, opens, highs, lows, dates
+
+
+def _session_date(value: Any) -> date | None:
+    """One session's calendar date, or nothing when what the row carried is not one."""
+
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
 
 
 def _correction_depth(opens: list[float | None], highs: list[float], lows: list[float]) -> float | None:

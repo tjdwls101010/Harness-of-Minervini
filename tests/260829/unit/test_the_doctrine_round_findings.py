@@ -7,17 +7,33 @@ from __future__ import annotations
 
 import unittest
 
+import pandas as pd
+
 from scripts.minervini import doctrine
 from scripts.minervini.market import evaluate_market_snapshot
 from scripts.minervini.market_evidence import build_market_evidence
 
 
-SESSIONS = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
+# Enough completed sessions for the window to span the 52 weeks it names. A business-day
+# range skips weekends and no holidays, so 52 x the trading week reaches back only 361
+# calendar days -- three short of the year the window is bounded by.
+SESSIONS = 270
+_FIRST_SESSION = pd.Timestamp("2025-01-02")
+
+
+def _session(index: int) -> str:
+    """The index-th business day of a run ending on a fixed session.
+
+    Ordering tokens were enough while the window was a bar count. It is bounded by date now,
+    so a fixture has to state sessions a calendar can measure a year across.
+    """
+
+    return (_FIRST_SESSION + pd.tseries.offsets.BDay(index)).date().isoformat()
 
 
 def _bars(values: list[float], lows: list[float] | None = None) -> list[dict[str, object]]:
     return [
-        {"date": f"d{index:04d}", "high": value, "low": (lows[index] if lows else value * 0.99), "close": value, "completed": True}
+        {"date": _session(index), "high": value, "low": (lows[index] if lows else value * 0.99), "close": value, "completed": True}
         for index, value in enumerate(values)
     ]
 
@@ -36,14 +52,21 @@ def _evidence(*, leader_rows, leader_history, leader_groups=None, sector_rows=No
 
 
 class DoctrineRoundTests(unittest.TestCase):
-    def test_the_52_week_window_is_converted_through_the_registered_trading_week(self) -> None:
-        """252 was a number this module invented; the registry owns the conversion."""
+    def test_the_52_week_window_is_bounded_by_the_calendar_and_not_by_a_session_count(self) -> None:
+        """252 was a number this module invented, and 260 was the registry's conversion of it.
 
-        self.assertEqual(SESSIONS, 260)
-        history = {"LEAD": _bars([100.0] * (SESSIONS - 1))}
+        Both are bar counts, and the source names a duration. A name that traded every one of
+        260 sessions reaches back 361 calendar days -- so the count the registry converts to
+        is met here and the year it was standing in for is not.
+        """
+
+        converted = 52 * doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
+        history = {"LEAD": _bars([100.0] * converted)}
         evidence = _evidence(leader_rows=[{"ticker": "LEAD"}], leader_history=history)
 
-        self.assertEqual(evidence["leaders"][0]["behavior"]["state"], "unavailable")
+        leader = evidence["leaders"][0]
+        self.assertEqual(leader["behavior"]["reason"], "completed_sessions_short_of_a_52_week_window")
+        self.assertIsNone(leader["distance_from_52w_high"]["measured"])
 
     def test_a_history_shorter_than_a_year_publishes_no_52_week_reading(self) -> None:
         evidence = _evidence(leader_rows=[{"ticker": "LEAD"}], leader_history={"LEAD": _bars([100.0, 101.0])})
