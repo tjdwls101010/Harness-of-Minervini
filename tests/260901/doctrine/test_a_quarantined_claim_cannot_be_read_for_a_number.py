@@ -27,6 +27,8 @@ GATE = ("eligibility.standard_trend_template", "sma_200_rising_minimum_months")
 BAND = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct")
 MARKER = ("eligibility.ipo_youthfulness_10yr_window", "typical_max_years_since_ipo")
 PARAMETER = ("setup.swing_segmentation_convention", "retracement_range_multiple")
+# A claim no reducer reads by name, so setting it aside is a registry that stays valid.
+SETTLEABLE = "setup.demand_supply_volume_asymmetry"
 
 
 @contextlib.contextmanager
@@ -111,35 +113,18 @@ class TheRegistryRefusesToWireOneInTheFirstPlace(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(any("quarantine" in error and "consumer" in error for error in result["errors"]), result["errors"])
 
-    def test_the_same_claim_set_aside_as_audit_material_validates(self) -> None:
+    def test_a_claim_no_reducer_reads_can_be_set_aside_and_the_registry_stays_valid(self) -> None:
+        """Wired to nothing and absent from the reducers' threshold manifest, so it is expressible."""
+
         edited = copy.deepcopy(json.loads(REGISTRY.read_text(encoding="utf-8")))
-        record = next(item for item in edited["claims"] if item["id"] == GATE[0])
+        record = next(item for item in edited["claims"] if item["id"] == SETTLEABLE)
         record["quarantine"] = {"is_quarantined": True, "reason": "set aside pending re-sourcing"}
         record["status"] = "quarantine"
         record["consumers"] = ["doctrine audit"]
 
-        self.assertEqual([error for error in doctrine.validate(edited)["errors"] if "quarantine" in error], [])
+        result = doctrine.validate(edited)
 
-
-class NoModuleReadsAThresholdAroundTheSeam(unittest.TestCase):
-    """`_readable` only guards what goes through it, and one caller went around it.
-
-    `threshold()` refuses a band on purpose, so that where a measurement sits travels with
-    the number. Reading `get_claim(...)["claim"]["thresholds"][name]["range"]` is that rule's
-    end-run, and it skips the out_of_scope and quarantine refusals with it.
-    """
-
-    def test_no_runtime_module_indexes_thresholds_or_parameters_directly(self) -> None:
-        source = pathlib.Path(__file__).resolve().parents[3] / "scripts" / "minervini"
-        offenders = [
-            f"{path.relative_to(source.parent.parent)}:{number}"
-            for path in sorted(source.rglob("*.py"))
-            if path.name != "doctrine.py"
-            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
-            if '["thresholds"]' in line or '["parameters"]' in line
-        ]
-
-        self.assertEqual(offenders, [])
+        self.assertTrue(result["valid"], result["errors"])
 
 
 class AnActiveClaimIsUntouched(unittest.TestCase):

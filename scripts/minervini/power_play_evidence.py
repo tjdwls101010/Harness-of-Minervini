@@ -66,7 +66,7 @@ def compile_power_play_spec() -> dict[str, Any]:
 
 
 def _summary(claim_id: str) -> str:
-    return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
+    return str(doctrine.claim(claim_id)["rule"]["summary"])
 
 
 def _observation(
@@ -408,7 +408,7 @@ def _registry_digest() -> str:
     """
 
     payload = json.dumps(
-        {claim_id: doctrine.get_claim(claim_id)["claim"] for claim_id in _ASKED_UNDER},
+        {claim_id: doctrine.claim(claim_id) for claim_id in _ASKED_UNDER},
         separators=(",", ":"),
         sort_keys=True,
         default=str,

@@ -152,7 +152,7 @@ def _tactic_conditions(tactic: str) -> tuple[str, ...]:
     it, and no amount of that evidence is a moving average the stock has respected.
     """
 
-    claim = doctrine.get_claim(f"tactic.{tactic}")["claim"]
+    claim = doctrine.claim(f"tactic.{tactic}")
     return tuple(
         f"tactic.{tactic}.{name}"
         for name in claim["required_inputs"]
@@ -226,8 +226,10 @@ def _owning_claim(identifier: str) -> str | None:
     while parts:
         candidate = ".".join(parts)
         try:
-            doctrine.get_claim(candidate)
-        except KeyError:
+            doctrine.claim(candidate)
+        except (KeyError, ValueError):
+            # Unregistered and set-aside come to the same thing here: neither can own a
+            # finding, because owning one is what decides whether the finding rejects.
             parts.pop()
         else:
             return candidate
@@ -238,7 +240,7 @@ def _rejects(identifier: str) -> bool:
     """Whether a known failure here rejects rather than counting against readiness."""
 
     claim_id = _owning_claim(identifier)
-    return claim_id is not None and doctrine.get_claim(claim_id)["claim"]["kind"] == "hard_gate"
+    return claim_id is not None and doctrine.claim(claim_id)["kind"] == "hard_gate"
 
 
 def _early_entry_debt(

@@ -70,7 +70,7 @@ def compile_measurement_spec() -> dict[str, Any]:
 
 
 def _summary(claim_id: str) -> str:
-    return str(doctrine.get_claim(claim_id)["claim"]["rule"]["summary"])
+    return str(doctrine.claim(claim_id)["rule"]["summary"])
 
 
 _REPORTED_PRECISION = 10
