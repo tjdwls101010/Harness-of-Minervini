@@ -101,7 +101,7 @@ class EveryCitationIsAClaimThisCapabilityIsRegisteredFor(unittest.TestCase):
 
     def test_a_claim_named_beside_a_disclaimer_reaches_the_envelope(self) -> None:
         payload = self.payload()
-        disclaimer = payload["data"]["management_evidence"]["base_count_context"]["disclaimer_doctrine_id"]
+        disclaimer = payload["data"]["base_count_context"]["disclaimer_doctrine_id"]
 
         # It is cited under its own key rather than doctrine_id, and a collector that read
         # only that one key published a result citing a claim the envelope never listed.
@@ -147,7 +147,7 @@ class ACitedClaimSaysWhichHalfWasRead(unittest.TestCase):
             runtime=Runtime(price_history=lambda ticker, as_of: bars([100.0] * 80)),
         )
 
-        block = payload["data"]["management_evidence"]["base_count_context"]
+        block = payload["data"]["base_count_context"]
         self.assertEqual(block["disclaimer_doctrine_id"], "basecount.role_and_disclaimer")
         self.assertEqual(block["claim_inputs_not_read"], ["price_history", "volume_history"])
 

@@ -1919,7 +1919,9 @@
       "status": "active",
       "context": [
         "prospective_entry",
-        "setup"
+        "setup",
+        "active_position",
+        "trade_management"
       ],
       "required_inputs": [
         "base_count",
@@ -1982,7 +1984,9 @@
       "status": "active",
       "context": [
         "prospective_entry",
-        "setup"
+        "setup",
+        "active_position",
+        "trade_management"
       ],
       "required_inputs": [
         "base_count"

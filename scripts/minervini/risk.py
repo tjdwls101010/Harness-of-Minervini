@@ -278,6 +278,7 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
         "verdict": verdict,
         "components": {**components, "risk": risk_state},
         "risk_controls": controls,
+        "base_count_context": _base_count_context(payload),
         "failed": list(dict.fromkeys(failed)),
         "missing": list(dict.fromkeys(missing)),
         "waiting": list(dict.fromkeys(waiting)),
@@ -356,11 +357,10 @@ def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, A
 
 
 def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: float | None) -> dict[str, Any]:
-    """Context the caller declares rather than the bars carry: the tape, the calendar, the base count.
+    """Context the caller declares rather than the bars carry, for a position being managed.
 
-    None of it can sell. A deteriorating market tightens the stop the trader already has,
-    a coming report is a review, and the base count is perspective the source explicitly
-    refuses to let predict a top.
+    Neither of these can sell. A deteriorating market tightens the stop the trader already
+    has, and a coming report is a review.
     """
 
     blocks: dict[str, Any] = {}
@@ -438,24 +438,39 @@ def _context_blocks(payload: Mapping[str, Any], *, as_of: date | None, entry: fl
                 "practice": "has not held a position through an earnings release in more than ten years",
             },
         }
+    return blocks
+
+
+def _base_count_context(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Where the advance sits among its own bases, reported and never acted on.
+
+    Every mode publishes it in the same place. It travelled inside management_evidence
+    before, which is a bundle keyed to a position being managed -- so a prospective request
+    had nowhere to put it and dropped the count it had been handed, and an active request
+    that never established a position dropped it too, along with the measurements that
+    emptying is actually about. The count is a property of the advance rather than of a
+    position, and its claims are scoped to the entry decision, so it is neither of those.
+
+    It cannot act. The source attaches its own refusal to predict a top from the count to
+    the count itself, so the band reports where the measurement sat and stops there.
+    """
+
     base_count = payload.get("base_count")
     if isinstance(base_count, bool) or not isinstance(base_count, int) or base_count < 1:
-        blocks["base_count_context"] = {"state": "unavailable", "reason": "base_count_not_declared"}
-    else:
-        blocks["base_count_context"] = {
-            "doctrine_id": _BASE_COUNT,
-            "binds": doctrine.binds(_BASE_COUNT),
-            "state": "reported",
-            "base_count": base_count,
-            "band": doctrine.evaluate_band(_BASE_COUNT, "typical_base_count_before_top", base_count),
-            "disclaimer_doctrine_id": _BASE_COUNT_DISCLAIMER,
-            "disclaimer": "Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.",
-            # The disclaimer's claim also lists price and volume history, which this reading
-            # never consumes: it reports the count the caller declared against the source's
-            # band and quotes the qualification the source attached to it.
-            "claim_inputs_not_read": ["price_history", "volume_history"],
-        }
-    return blocks
+        return {"state": "unavailable", "reason": "base_count_not_declared"}
+    return {
+        "doctrine_id": _BASE_COUNT,
+        "binds": doctrine.binds(_BASE_COUNT),
+        "state": "reported",
+        "base_count": base_count,
+        "band": doctrine.evaluate_band(_BASE_COUNT, "typical_base_count_before_top", base_count),
+        "disclaimer_doctrine_id": _BASE_COUNT_DISCLAIMER,
+        "disclaimer": "Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.",
+        # The disclaimer's claim also lists price and volume history, which this reading
+        # never consumes: it reports the count the caller declared against the source's
+        # band and quotes the qualification the source attached to it.
+        "claim_inputs_not_read": ["price_history", "volume_history"],
+    }
 
 
 # Which basis an audit's clear finding can settle. A window where no Low reached a level
@@ -1093,6 +1108,7 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
         "mode": "active",
         "verdict": verdict,
         "risk_controls": controls,
+        "base_count_context": _base_count_context(payload),
         "management_actions": actions,
         # The measurements are keyed to a position the request never established -- windows
         # from an entry date that is missing, impossible, or unaudited. Every INCOMPLETE
