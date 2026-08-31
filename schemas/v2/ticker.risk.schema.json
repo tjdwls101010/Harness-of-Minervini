@@ -46,6 +46,7 @@
               },
               "required": [
                 "attested_evidence",
+                "base_count_context",
                 "current_price",
                 "failed",
                 "max_high_date",

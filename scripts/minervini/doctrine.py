@@ -246,7 +246,16 @@ def _measurable(measured: float | None) -> tuple[float | None, str | None]:
         return None, None
     if isinstance(measured, bool) or not isinstance(measured, (int, float)):
         return None, "measurement_not_a_number"
-    if not math.isfinite(float(measured)):
+    try:
+        as_float = float(measured)
+    except OverflowError:
+        # A Python int has no width limit and a binary64 does, so one wider than a float can
+        # hold arrives here as an int rather than as an infinity -- `isfinite` never sees it
+        # and the conversion raises instead. It is the same kind of non-measurement as the
+        # infinity below, and it takes the same exit: an exception escaping this seam is an
+        # internal error where the harness already has a word for evidence it cannot compare.
+        return None, "measurement_not_finite"
+    if not math.isfinite(as_float):
         return None, "measurement_not_finite"
     return measured, None
 
