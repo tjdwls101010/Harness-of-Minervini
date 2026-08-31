@@ -59,7 +59,7 @@ class TheCalendarAndTheBaseCount(unittest.TestCase):
 
         self.assertIn("earnings_ahead", reasons(payload))
         self.assertIn(EARNINGS, payload["doctrine_ids"])
-        context = payload["data"]["management_evidence"]["base_count_context"]
+        context = payload["data"]["base_count_context"]
         self.assertEqual(context["base_count"], 4)
         self.assertEqual(context["band"]["state"], "within_source_range")
         self.assertNotIn("base_count", reasons(payload))
@@ -94,6 +94,6 @@ class TheBandEdgesAreAcceptedInputs(unittest.TestCase):
     def test_a_third_base_is_a_valid_count_at_the_lower_edge(self) -> None:
         payload = run(base_count=3)
 
-        block = payload["data"]["management_evidence"]["base_count_context"]
+        block = payload["data"]["base_count_context"]
         self.assertEqual(block["base_count"], 3)
         self.assertEqual(block["band"]["state"], "within_source_range")

@@ -92,7 +92,7 @@ class BaseCountIsPerspectiveNotAVerdict(unittest.TestCase):
         result = reduce_risk(held(base_count=5))
 
         self.assertEqual(actions(result), [])
-        block = result["management_evidence"]["base_count_context"]
+        block = result["base_count_context"]
         self.assertEqual(block["base_count"], 5)
         self.assertEqual(block["band"]["state"], "within_source_range")
         self.assertEqual(block["disclaimer_doctrine_id"], "basecount.role_and_disclaimer")
@@ -101,7 +101,7 @@ class BaseCountIsPerspectiveNotAVerdict(unittest.TestCase):
         result = reduce_risk(held(base_count=6))
 
         self.assertEqual(actions(result), [])
-        self.assertEqual(result["management_evidence"]["base_count_context"]["band"]["state"], "above_source_range")
+        self.assertEqual(result["base_count_context"]["band"]["state"], "above_source_range")
 
 
 class BreakevenProtectionIsNeverAnUndeclaredSale(unittest.TestCase):
