@@ -48,8 +48,8 @@
       "evidence": "ibd-rs-rating이 완료 세션 기준 날짜와 값을 정상 반환하는 것이 RS 누락의 정확한 해소 조건이라고 제시했다."
     },
     "preserves_other_supporting_evidence": {
-      "passed": true,
-      "evidence": "RS를 제외한 가격 기반 qualification 증거는 그대로 읽었고, Stage 2 및 Trend Template의 known failures를 별도로 보존했다."
+      "passed": false,
+      "evidence": "RS를 제외한 가격 기반 qualification 증거는 그대로 읽었고, Stage 2 및 Trend Template의 known failures를 별도로 보존했다. [adversarial pass: The prompt fixed the other technical conditions as favorable, but the run executed live TSLA qualification and introduced current Stage 2 and moving-average failures. It therefore replaced rather than preserved the stipulated supporting evidence.]"
     }
   },
   "overall_pass": true,

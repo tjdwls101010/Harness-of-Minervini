@@ -40,8 +40,8 @@
   },
   "noncritical_assertions": {
     "reads_weekly_before_daily": {
-      "passed": true,
-      "evidence": "자격 실패가 알려져 있어 차트 단계로 진행하지 않았으며, 응답에서 후속 검증 순서를 주봉 우선으로 명시했다."
+      "passed": false,
+      "evidence": "자격 실패가 알려져 있어 차트 단계로 진행하지 않았으며, 응답에서 후속 검증 순서를 주봉 우선으로 명시했다. [adversarial pass: The run executed only ticker.qualify and never rendered or inspected a chart. Saying that future deep analysis would start with the weekly chart does not establish that a weekly-before-daily read occurred.]"
     },
     "earns_deeper_evidence": {
       "passed": true,

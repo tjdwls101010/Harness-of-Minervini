@@ -830,7 +830,12 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
     breakeven_at_r = doctrine.threshold(_PROFIT_PROTECTION, "breakeven_protection_trigger_r")
     controls: dict[str, Any] = {
         "breakeven_at_r": breakeven_at_r,
-        "breakeven_protection_required": False,
+        # Nothing, until the excursion is measured. `False` here would say protection was
+        # not required about a position whose favorable excursion nobody read -- a SELL and
+        # an INCOMPLETE never enter the block below, and inside it a position with no
+        # measurable initial risk does not reach the gate either. Its two companions below
+        # already say "not measured" the way this block says it everywhere else.
+        "breakeven_protection_required": None,
         "initial_risk": None,
         "initial_risk_basis": None,
         "r_multiple_reached": None,
@@ -958,6 +963,10 @@ def _active(payload: Mapping[str, Any]) -> dict[str, Any]:
             r_multiple = (price - entry) / initial_risk
             controls["r_multiple_reached"] = _reported_beside_gate(r_multiple, _PROFIT_PROTECTION, "breakeven_protection_trigger_r")
             controls["favorable_excursion_basis"] = basis
+            # Measured, so the answer is a yes or a no rather than a gap: three R short of
+            # the trigger, or reached with the stop already standing above entry, are both
+            # nothing left to require.
+            controls["breakeven_protection_required"] = False
             if stop is not None and stop < entry and doctrine.evaluate_gate(_PROFIT_PROTECTION, "breakeven_protection_trigger_r", r_multiple)["state"] == "pass":
                 controls["breakeven_protection_required"] = True
                 evidence = {"r_multiple_reached": controls["r_multiple_reached"], "measured_from": basis}
