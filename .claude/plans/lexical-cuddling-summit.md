@@ -689,9 +689,21 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
   - **고치지 않고 기록한 것 셋 — 전부 결함이 아니라 결정 대기다.** ⑥ 레지스트리가 `ticker.setup`을 `basecount.*` 소비자로 적어 뒀는데 `ticker.setup`에 그걸 읽을 입력이 없다(등록된 소비자 → 그 capability가 실제로 읽을 수 있는가를 보는 역방향 가드도 없다). ⑦ 그룹 신고가 성장 룩백이 세션 오프셋이라, 보통 종목의 20봉이 28일인데 성긴 종목은 84일이어서 한 그룹의 "지금 대 4주 전" 카운트가 종목마다 다른 날짜를 보고 합산된다 — 레지스트리 컨벤션을 같이 바꿔야 한다. ⑧ SEC 403이 이 머신에서 안 풀려 펀더멘털 평면의 라이브 종단 확인이 남아 있다(환경).
 
+- **이월 백로그 ⑥⑦ — 머지 완료** (PR #30~#31). ⑥ 베이스 길이 두 밴드(결정 312) `353e4b5` · ⑦ 성장 룩백 달력화(결정 313) `8f8e895`. 성진 결정 넷(2026-09-01, AskUserQuestion): ⑥은 **쪼갠다**, ⑦은 **달력 기준으로 바꾼다**, Phase 7은 **셋씩 세 슬라이스**, SEC는 **픽스처로 우회**.
+
+  - **결정 312 — 레지스트리가 셋을 적었는데 하나만 진실이었다(이월⑥).** 트래커에 적어 둔 것보다 내용이 하나 더 있었다. `basecount` 클레임은 셋이고, 셋째 `typical_base_duration_5_to_26_weeks`(5–26주)가 요구하는 `base_start_date`/`base_end_date`를 **`setup_evidence`가 이미 재고 있었다** — 다만 `base_duration_weeks`를 다른 클레임 `setup.consolidation_footprint_3_to_60_weeks`(3–60주)에만 대봤다. 레지스트리의 그 클레임 `note`가 직접 "두 범위는 겹치지만 같지 않으니 a reducer author should decide which applies to which check"라고 적어 뒀고, 아무도 정하지 않은 채 **넓은 쪽이 기본값으로 답하고 있었다.** 31.8주짜리 베이스가 "범위 안"으로만 읽혔다 — 헌법의 응답 표준이 금지하는 모양이고, 밴드는 어느 모서리가 좋은 쪽인지를 이름에 담고 있다. 하나의 측정이 이제 두 기준에 다 닿는다. count 클레임 둘은 `base_count`를 받을 필드도 플래그도 없고 결정 309가 카운트의 집을 정했으므로 소비자에서 뺐다. 역방향 가드를 세우되 **일부러 좁혔다** — `consumers`는 "어느 리듀서가 발행하는가"가 아니라 "어느 capability의 분석에 독트린인가"이고(169개 중 65개가 capability를 적어 두고도 어느 모듈에도 안 나온다), 그래서 검사는 "건네받아야 하는 측정에 등록된 소비자가 실제로 건네받을 수 있는가" 하나뿐이다. 적대 리뷰 2건 확정 — 밴드 상태 검사가 `assertNotEqual(within_source_range)`라 아래쪽 모서리로 뒤집혀도 통과했고(`above_source_range`로 고정), 가드 docstring이 증명 못 하는 것을 약속했다.
+
+  - **결정 313 — 길이는 봉으로, 시점은 달력으로(이월⑦).** 리뷰어의 반론이 내 근거보다 강했다는 것을 인정한 항목이고, 실제로 파 보니 **얇은 종목만의 문제가 아니었다.** 휴일이 하나 빠진 유동 종목도 20봉 뒤가 달력 4주 뒤보다 하루 더 간다 — 코덱스가 독립 재현했다(2025-12-05 기준, 부모는 추수감사절 때문에 2025-11-06을 봐 `supports`, HEAD는 2025-11-07을 봐 `observed`). 구분선은 이것이다: **`convention.trading_week`은 재는 대상의 길이를 환산한다**(6주짜리 플래그는 그 종목의 봉 수열이다). **여러 이름이 공유하는 시점의 주소는 달력에 있다.** 그 파라미터의 note가 "every one of those limits passes through this number"라고 주장하고 있었고 그 문장을 실제 소유 범위로 다시 적었다. `build_market_evidence`가 `as_of`를 유도하지 않고 받는 이유도 같다 — 가장 신선한 봉을 가진 종목에서 유도한 시점은 하니스 시계 옆의 두 번째 시계다. 적대 리뷰 3건 중 2건 확정(`session_at_or_before`가 `pd.NaT`에 예외를 냈고 `year_window_start`도 같은 구멍이라 공유 `_ordered`로 옮겼다; 재현이 얇은 종목 하나에만 기대고 있어 휴일 픽스처와 as_of 고정 테스트를 더했다), **1건은 재현되지 않았다** — 20영업일은 정확히 4주라 평일 `as_of`에서 28일과 항상 같은 날짜다(2025~2026 전 평일 차이 0건).
+
+  - **고치지 않고 기록한 것 둘.** ⑧ `setup_measurements.py:21`이 `_SESSIONS_PER_WEEK = 5`를 하드코딩하는데 `convention.trading_week`의 note는 그 환산이 중앙화돼 있다고 주장한다 — 레지스트리 값을 4로 바꿔도 측정치가 안 움직이는 것을 리뷰어가 실측했다. 결정 313과 같은 질문(베이스 길이는 봉인가 달력인가)이 붙어 있어 같이 정해야 한다. ⑨ SEC 403은 **망 차원 차단으로 확정**됐다 — UA 없이 `www.sec.gov` 루트도 403이고 `server: AkamaiGHost`, 본문 "Request Rate Threshold Exceeded"다. 하니스는 UA를 붙이고 `status: unavailable`로 정확히 degrade한다. Phase 7은 `tests/260817/fixtures/providers/sec/`의 합성 픽스처로 간다.
+
   - **슬라이스 밖에서 하나 정리했다.** `/graphify` 실행이 `CLAUDE.md`에 남긴 안내 블록이 11,012바이트 천장을 1,113 넘겨 `test_harness_topology`가 빨갛게 떠 있었다. 그 천장의 근거가 "인터페이스가 이미 가진 것은 인터페이스로 돌린다"이고 Graphify 스킬의 `description`이 이미 그 라우팅을 갖고 있어서 되돌렸다. `AGENTS.md`가 `CLAUDE.md` 심링크라 그 블록은 두 호스트의 모든 시장 분석 세션에 들어가고 있었다. 같은 커밋에서 PR #21이 쉘 리다이렉트 사고로 딸려 보낸 빈 파일 `=`를 지웠다.
 
-- **Phase 7 — 미착수.**
+- **Phase 7 — 미착수. 슬라이스 셋으로 잘라 뒀다(성진 결정 2026-09-01).** 7-A 자격·셋업(유효 BUY-READY 전 경로 / 교과서 VCP vs 유사품 / 차트가 숫자를 못 이김) · 7-B 리더십·펀더멘털(리더 vs 고RS 랙가드 / Power Play 실측 / 후기 베이스 경고) · 7-C 리스크·매도(비스탑 SELL / 부분 청산 / 어닝 근접 거부) + 크로스 호스트 재확인 + 스펙 전면 갱신 + 시범 세션.
+
+  **기계는 이미 있다(2026-09-01 확인).** `tests/260817/e2e/`에 `scenarios.json`(현재 시나리오 10개, `{id, expected_skill, prompt, critical_assertions[], noncritical_assertions[]}` 스키마, `required_runs: 3`), 시나리오당 3런 아티팩트가 들어가는 `reports/`, 그리고 다섯 게이트를 건 `test_behavioral_artifacts.py`가 있다. Phase 7은 **새 기계를 만드는 게 아니라 시나리오 9개와 27개 런 아티팩트를 채우는 일**이다.
+
+  **착수 전에 걸리는 것 둘.** ① `test_catalog_has_ten_decision_distinct_prompt_families`가 `len(scenarios) == 10`을 하드코딩한다 — 슬라이스마다 숫자를 밀지, "10 이상 + id 유일"로 다시 진술할지 정해야 한다(전자가 올바른 RED이긴 하다). ② **`test_every_scenario_has_three_independent_codex_reports`가 `report["model"] == "gpt-5.6-terra"`를 못 박아 뒀는데 지금 브리지가 도는 모델은 `gpt-5.6-sol`이다.** 새 런을 sol로 채우면 기존 10개와 충돌하므로 어서션에서 모델을 빼든지 허용 집합으로 바꾸든지 먼저 정한다.
 
 ### Phase 2가 Phase 1 덕에 줄어드는 부분
 

@@ -1,45 +1,45 @@
 # Graph Report - Harness of Minervini  (2026-09-01)
 
 ## Corpus Check
-- 395 files · ~435,414 words
+- 399 files · ~440,521 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7098 nodes · 14730 edges · 434 communities (409 shown, 25 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 311 edges (avg confidence: 0.89)
+- 7184 nodes · 14911 edges · 442 communities (412 shown, 30 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 310 edges (avg confidence: 0.89)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `79e65fa4`
+- Built from commit: `8f8e8954`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - fundamentals.py
-- evaluate_setup
+- setup.py
 - Runtime
-- segment
-- series.py
+- power_play_answers
+- measure_power_play
 - evaluate_power_play
-- Any
+- _tightness_state
 - bars_fingerprint
 - SnapshotMeta
 - operations.py
-- anchor_dates
+- measure
 - _rendered
-- power_play_series
-- power_play_evidence.py
+- build_power_play_evidence
+- read_bars
 - chart.py
-- setup_evidence.py
+- evidence
 - management_evidence.py
 - RecordingAxis
 - evaluate_fundamentals
-- minervini/__init__.py
+- capabilities.py
 - cli.py
-- sec.py
-- a_top_hidden_by_an_ambiguous_session_series
+- normalize_filed_facts
+- power_play_fingerprint
 - reduce_risk
-- base_series
+- evaluate_setup
 - x-capability-contract
 - risk.py
 - cache.py
@@ -49,23 +49,23 @@
 - build_management_evidence
 - x-capability-contract
 - market_evidence.py
-- contracts.py
+- AVerdictIsReducedFromEnvelopes
 - evaluate_eligibility
 - test_quotation_verifier.py
 - verdict
 - x-capability-contract
-- WhatThePictureSaysAboutItself
+- test_chart_draws_the_power_play.py
 - run
 - x-capability-contract
 - test_setup_reducer.py
-- Anchor
+- test_risk_measures_favorable_excursion.py
 - valuation
-- read_bars
+- read_price_kinds
 - x-capability-contract
 - yfinance.py
 - frame
-- ProviderSnapshot
-- normalize_filed_facts
+- test_a_declared_vocabulary_matches_the_envelopes.py
+- test_the_provider_sends_the_balance_sheet.py
 - test_the_provider_keeps_what_it_read.py
 - test_the_rules_the_second_sweep_reached.py
 - Ledger
@@ -74,17 +74,17 @@
 - test_setup_envelope.py
 - market.py
 - compare_same_industry_peers
-- resolve_as_of
+- PublicCliContractTests
 - build_eligibility_evidence
 - x-capability-contract
 - test_swings_capability.py
-- compile_power_play_spec
+- test_power_play_unread_tops.py
 - completed_daily_bars
-- test_power_play_abstention.py
+- two_tops_that_both_await_the_chart_series
 - build
 - test_the_fixes_that_stopped_one_step_short.py
 - FakeRS
-- test_chart_draws_the_power_play.py
+- TheRendererIsPartOfWhatTheNameClaims
 - frame
 - EveryCapabilityDeclaresWhatItsDataHolds
 - test_qualify_reads_the_bars_the_rest_of_the_harness_reads.py
@@ -93,8 +93,8 @@
 - test_binding_is_fail_closed.py
 - test_round_seven_rules.py
 - test_risk_reads_the_bars_the_rest_of_the_harness_reads.py
-- evidence
-- run
+- reading
+- power_play_series
 - held
 - clock.py
 - test_the_comparison_reads_what_was_measured.py
@@ -102,7 +102,7 @@
 - held
 - x-capability-contract
 - evaluate_market_snapshot
-- build_market_evidence
+- test_the_arithmetic_round_findings.py
 - registry
 - build
 - baseline
@@ -116,15 +116,15 @@
 - WhichSilenceIsHoldingTheCriterion
 - limitations
 - x-capability-contract
-- _power_play_spans
+- EveryTopTheCapabilityIsAskingAbout
 - .run_risk
 - history
-- OneIdeaOfAUsableBarTests
+- session_at_or_before
 - test_initial_stop_audit.py
-- _evidence
+- test_a_group_is_read_from_the_names_it_holds.py
 - year_window_start
 - test_the_second_round_findings.py
-- RequestError
+- validator
 - SecurityRecord
 - test_failure_effect_matches_role.py
 - claims
@@ -140,19 +140,19 @@
 - held
 - test_peer_price_evidence_reads_the_bars_the_rest_of_the_harness_reads.py
 - test_the_measurements_a_mutation_sweep_reached.py
-- test_one_bad_leader_does_not_take_the_snapshot.py
+- execute
 - inputs
 - test_context_inputs_cross_the_seam.py
 - test_stop_path_reports_what_it_checked.py
-- test_terminal_price_and_declared_condition.py
-- test_power_play_chart_approval.py
+- .measure
+- run
 - test_a_turnaround_is_read_differently.py
 - test_one_regime_per_measurement.py
-- test_every_cited_doctrine_id_resolves.py
+- DoctrineRegistryTests
 - test_one_question_one_answer.py
 - prospective
 - test_evidence_that_is_absent_is_not_evidence_against.py
-- test_a_group_reaches_its_names.py
+- ProviderUnavailable
 - choices
 - entry_proximity
 - chain_completeness
@@ -165,18 +165,18 @@
 - test_the_doctrine_round_findings.py
 - x-capability-contract
 - x-capability-contract
-- ProviderUnavailable
+- providers/__init__.py
 - test_primary_base_depth_roles.py
 - MarkerReportsDistanceAndNeverAVerdictTests
-- payout_that_only_moves_a_gate_series
+- test_the_envelope_says_what_the_price_was_worth.py
 - test_the_calendar_arrives_on_its_own.py
-- test_a_number_carries_where_it_came_from.py
+- ensure_default_ca_bundle
 - test_a_number_the_arithmetic_could_not_hold.py
 - test_a_per_share_rate_needs_a_steady_share_base.py
 - two_years
 - snapshot
 - test_the_other_voices_in_the_corpus.py
-- test_a_leader_reaches_its_own_bars.py
+- test_every_chart_question_has_a_picture.py
 - test_the_envelope_measures_a_year_of_whole_bars.py
 - limitations
 - required
@@ -200,11 +200,11 @@
 - limitations
 - choices
 - x-capability-contract
-- DoctrineRegistryTests
-- test_active_audit_windows.py
+- test_power_play_gaps_name_answerable_things.py
+- TheCallerSaysWhichReadingItWas
 - base
 - ParameterSeamTests
-- test_setting_a_claim_aside_reaches_every_seam.py
+- build_setup_evidence
 - TheStateAgreesWithThePrintedNumber
 - test_entry_tactic_envelope.py
 - test_what_the_equity_earned.py
@@ -212,14 +212,14 @@
 - test_a_cik_has_a_place_to_come_from.py
 - choices
 - x-capability-contract
-- _completed_stop_path
-- swings.py
+- wick_after_the_launch_series
+- TheChartCarriesTheStructureItAsksAbout
 - run
 - run_without_plotting
 - test_doctrine_ids_follow_use.py
 - test_windows_and_citations.py
 - test_a_number_with_no_source_decides_nothing.py
-- FixtureGet
+- FixtureResponse
 - test_a_52_week_extreme_is_the_whole_bar.py
 - x-capability-contract
 - x-capability-contract
@@ -239,11 +239,11 @@
 - inputs
 - inputs
 - BehavioralArtifactAcceptanceTests
-- OneBaseAtATimeTests
+- series.py
 - ARangeWithNoWidthIsNotARange
 - test_an_assertion_settles_the_verdict_not_the_record.py
 - run
-- test_the_third_round_findings.py
+- build_market_evidence
 - mode
 - market_regime
 - market_state
@@ -263,7 +263,7 @@
 - format
 - format
 - history
-- converged
+- fetch_with_one_retry
 - test_fundamentals_waiver.py
 - WhatARefusalTellsTheCallerToDo
 - TwoExitsOnOneSessionDidNotHappenAtOneMoment
@@ -274,7 +274,7 @@
 - management_average
 - primary_base_emergence
 - primary_base_quality
-- TheChartDebtItUsedToManufacture
+- test_power_play_unreadable_contesting_top.py
 - NonFiniteMeasurements
 - limitations
 - limitations
@@ -282,7 +282,7 @@
 - enum
 - management_profile
 - envelope.schema.json
-- test_both_regime_words_are_reachable.py
+- ._snapshot
 - Feed
 - limitations
 - limitations
@@ -319,7 +319,7 @@
 - V1RuntimeRetirementTests
 - ProviderCache
 - ContractTellsTheTruthTests
-- build_setup_evidence
+- base_series
 - flat
 - Harness v2 Design Record
 - limitations
@@ -397,36 +397,43 @@
 - 260828/contracts/__init__.py
 - tests/__init__.py
 - Inclusive Community Conduct
-- canonical_chain
-- test_swings.py
+- test_a_base_duration_is_read_against_both_bands_the_sources_give.py
+- AnchorOverlayTests
 - test_a_period_is_named_by_its_close.py
-- test_a_declared_base_count_is_read_where_it_was_declared.py
-- test_chart_overlay.py
+- attestations.py
+- RecordingAxis
 - qualify
-- .test_a_pause_that_broke_its_own_low_before_breaking_out_is_not_a_live_trigger
+- test_setup_gaming.py
 - test_one_52_week_window_for_the_whole_harness.py
 - _complete_rows
-- from_legs
-- TheOtherOrderIsRunRatherThanGuessed
-- test_two_readers_one_vocabulary.py
-- test_a_pointer_that_terminates.py
+- test_active_protective_level_audit.py
+- ADigestIsWhatIsAskedFor
+- test_peer_collection.py
+- AStockNobodyIsAskingAbout
 - test_an_entry_verdict_carries_the_count_it_was_given.py
-- test_prospective_average_gain_gate.py
-- .test_a_key_from_other_bars_is_refused_rather_than_ignored
+- entry_kind_choices
+- frame
 - ATrailStopsAtWhicheverTroubleComesFirst
-- AnUncomparableMeasurementIsUnavailableAndNotAnError
+- TheActionSpanCoversEverySessionAMeasurementReads
+- .test_a_fully_read_setup_over_a_segmentation_the_harness_produced_is_ready
+- AnExcludedSessionTakesNoOtherWithIt
+- AChartAlreadyReadIsNotAChartStillWaited0n
+- TheStructureHasBoundariesBesidesItsPeak
+- TheFiscalYearMapSeesOnlyWhatTheRequestSees
+- TheChainWalksStrictlyDownward
+- .test_a_peer_whose_three_month_return_left_the_float_range_measures_nothing
 
 ## God Nodes (most connected - your core abstractions)
-1. `Runtime` - 298 edges
-2. `execute()` - 263 edges
-3. `ProviderSnapshot` - 205 edges
+1. `Runtime` - 300 edges
+2. `execute()` - 265 edges
+3. `ProviderSnapshot` - 207 edges
 4. `evaluate_fundamentals()` - 198 edges
-5. `SnapshotMeta` - 179 edges
+5. `SnapshotMeta` - 181 edges
 6. `reduce_risk()` - 165 edges
-7. `base_series()` - 157 edges
+7. `base_series()` - 159 edges
 8. `power_play_series()` - 141 edges
 9. `build_power_play_evidence()` - 137 edges
-10. `anchor_dates()` - 120 edges
+10. `anchor_dates()` - 122 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Analyst Constitution` --semantically_similar_to--> `Analyst Constitution`  [INFERRED] [semantically similar]
@@ -435,10 +442,10 @@
   docs/plans/260817/harness-v2-greenfield-plan.md → CONTRIBUTING.md
 - `OperationCompositionTests` --uses--> `ProviderCache`  [INFERRED]
   tests/260817/integration/test_operations.py → scripts/minervini/cache.py
-- `TheTwoCapabilitiesCanReachDifferentBars` --uses--> `ProviderCache`  [INFERRED]
-  tests/260826/integration/test_power_play_chart_provenance.py → scripts/minervini/cache.py
 - `ACurrentSnapshotIsNotHeldStill` --uses--> `ProviderCache`  [INFERRED]
   tests/260831/integration/test_a_pointer_that_terminates.py → scripts/minervini/cache.py
+- `ADestinationThatCannotHoldArtifacts` --uses--> `UnusableOutputDirectory`  [INFERRED]
+  tests/260826/unit/test_chart_draws_the_power_play.py → scripts/minervini/chart.py
 
 ## Import Cycles
 - None detected.
@@ -448,107 +455,107 @@
 - **Shared Harness Runtime Surfaces** — agents_analyst_constitution, claude_skills_market_scan_market_scan, claude_skills_ticker_analysis_ticker_analysis [EXTRACTED 1.00]
 - **V2 Evidence Contract Stack** — claude_harness_spec_capability_registry, claude_harness_spec_doctrine_registry, claude_harness_spec_point_in_time_integrity, docs_plans_260817_harness_v2_greenfield_plan_v2_envelope [EXTRACTED 1.00]
 
-## Communities (434 total, 25 thin omitted)
+## Communities (442 total, 30 thin omitted)
 
 ### Community 0 - "fundamentals.py"
 Cohesion: 0.04
-Nodes (144): Return one registered numeric threshold. Reducers read their numbers here…, threshold(), _acceleration_vs_history(), _adjacent(), _anchored(), _annual_growth(), _annual_metric_growth(), _annual_only() (+136 more)
+Nodes (126): _acceleration_vs_history(), _accounting_basis(), _adjacent(), _annual_growth(), _annual_metric_growth(), _annual_only(), _best_stretch(), _category_reading() (+118 more)
 
-### Community 1 - "evaluate_setup"
-Cohesion: 0.08
-Nodes (29): _canonical_kind(), _early_entry_debt(), evaluate_setup(), _mapping(), _owning_claim(), _precise_level(), Any, Decide a setup state from evidence that had to be positively present. The old… (+21 more)
+### Community 1 - "setup.py"
+Cohesion: 0.20
+Nodes (16): _canonical_kind(), _early_entry_debt(), _mapping(), _owning_claim(), _precise_level(), Any, Decide a setup state from evidence that had to be positively present. The old…, The condition names this tactic requires, or None if the value names no tactic.… (+8 more)
 
 ### Community 2 - "Runtime"
-Cohesion: 0.03
-Nodes (57): execute(), Replace only external boundaries in deterministic integration tests., Execute one composable capability without printing or mutating implicit state., Runtime, OperationCompositionTests, price_snapshot(), DataFrame, A history the provider could only complete through the session before as_of. (+49 more)
+Cohesion: 0.05
+Nodes (37): Replace only external boundaries in deterministic integration tests., Runtime, ProviderSnapshot, classification_snapshot(), list_snapshot(), OperationCompositionTests, price_snapshot(), DataFrame (+29 more)
 
-### Community 3 - "segment"
-Cohesion: 0.09
-Nodes (12): A base's confirmed turning points, the leg price is in now, and what was…, segment(), DeterministicRulesTests, A provider that returns the same date twice is a data problem, not a crash. Two…, The chart accepts a halted session, so the fingerprint it is approved by must…, They are not duplicates until the time is dropped, and dropping it is what runs., One digest across the chart and the setup means one idea of a valid bar., Two sessions is not "its own fifty-day average", and it is not a quiet tape… (+4 more)
+### Community 3 - "power_play_answers"
+Cohesion: 0.08
+Nodes (19): AKeyNamesOneQuestion, AKeyOutlivesNoRegistryEdit, _issued(), An answer is to one question, and the question is not a constant. The key binds…, A hundred and twenty-eight bits, written out rather than read from the module.…, The control. Without this, every assertion below passes on a key that never…, The candidate distance is nowhere in the wording and still decides what the…, Belt and braces, and the belt is the boundaries. A different trading week gives… (+11 more)
 
-### Community 4 - "series.py"
-Cohesion: 0.03
-Nodes (73): _dated_events(), _empty(), _label(), measure_power_play(), _paid_between(), Any, DataFrame, Reduce a history to the numbers the Power Play criteria are read against.… (+65 more)
+### Community 4 - "measure_power_play"
+Cohesion: 0.06
+Nodes (27): _empty(), _label(), measure_power_play(), Any, Reduce a history to the numbers the Power Play criteria are read against.…, A reading that produced no structure, carrying whatever it did establish. The…, One session's date, or nothing when the position falls outside the loaded…, ACashDistributionMovesThePriceToo (+19 more)
 
 ### Community 5 - "evaluate_power_play"
 Cohesion: 0.03
-Nodes (51): evaluate_power_play(), Classify a measured Power Play without deciding what may be done about it. Two…, AFlagStillFormingHasNotFailed, AHistoryWithoutTheDistributionColumnHasNotSaidThereWereNone, AnUnreadableTopBlocksTheRejectionItCannotVoteOn, APayoutCanChooseTheTopItself, AReadingNobodyCouldReadIsNotAReadingThatSurvived, ATopTheBoundExcludedStillPreventsARejection (+43 more)
+Nodes (57): evaluate_power_play(), The measurement kept, the verdict withdrawn, the reason named. `unavailable`…, Classify a measured Power Play without deciding what may be done about it. Two…, _withhold(), ACorporateActionInvalidatesWhatItMoved, ADistributionDecidesOnlyWhatItActuallyMoved, AFlagStillFormingHasNotFailed, AHistoryWithoutTheDistributionColumnHasNotSaidThereWereNone (+49 more)
 
-### Community 6 - "Any"
-Cohesion: 0.07
-Nodes (25): _boundaries(), _criteria(), _decided_by_the_payout(), _observation(), Any, very tight price action that doesn't correct ... more than 10 percent, or ...…, How each criterion reads on one set of measurements, without the payloads., Everything about one walk of the tops that a distribution could have chosen.… (+17 more)
+### Community 6 - "_tightness_state"
+Cohesion: 0.16
+Nodes (9): very tight price action that doesn't correct ... more than 10 percent, or ...…, An explosive price move commences on huge volume." No magnitude is attached to…, _tightness_state(), _volume_state(), AFlagExactlyAtTheTightLimit, NoExpandedSessionAnywhereInTheAdvance, The two lines the bars decide, read exactly on the line. Both criteria hand the…, The source says huge and names no magnitude, so no ratio passes on measurement.… (+1 more)
 
 ### Community 7 - "bars_fingerprint"
-Cohesion: 0.05
-Nodes (29): bars_fingerprint(), One digest of the completed bars, so three surfaces can name the same input. A…, ADigestIsWhatIsAskedFor, ARejectionIsNotWaitingOnAPicture, BeingToldToRedrawSendsYouSomewhere, The reader has to have looked at the bars the answer is applied to. The key…, Naming the picture is not the same as naming the overlay drawn on it.…, Both halves of the event history, not just the split. A dividend inside the… (+21 more)
+Cohesion: 0.11
+Nodes (14): bars_fingerprint(), One digest of the completed bars, so three surfaces can name the same input. A…, ARejectionIsNotWaitingOnAPicture, BeingToldToRedrawSendsYouSomewhere, Naming the picture is not the same as naming the overlay drawn on it.…, Both halves of the event history, not just the split. A dividend inside the…, The digest that used to match on both sides of the failure., The vintage is only ever a reason for a criterion a chart could still close.… (+6 more)
 
 ### Community 8 - "SnapshotMeta"
-Cohesion: 0.05
-Nodes (37): Audit metadata accompanying a provider response without inventing coverage., SnapshotMeta, classification_snapshot(), list_snapshot(), rs_snapshot(), price_snapshot(), ProtectiveLevelAuditTests, DataFrame (+29 more)
+Cohesion: 0.10
+Nodes (23): Audit metadata accompanying a provider response without inventing coverage., SnapshotMeta, DataFrame, qualify(), QualifyBandReportingTests, A band the harness measured must reach the envelope, or the disclosure rule is…, recent_ipo(), ADestinationThatCannotHoldArtifacts (+15 more)
 
 ### Community 9 - "operations.py"
-Cohesion: 0.10
-Nodes (73): AnalysisClock, The completed-session boundary that every point-in-time provider receives., envelope(), _as_of(), _attest_components(), _cached_provider(), _candidate_row(), _chart() (+65 more)
-
-### Community 10 - "anchor_dates"
 Cohesion: 0.06
-Nodes (34): _baseline(), _longest_spell(), measure(), Any, DataFrame, Series, _ratio(), Measure a declared base from completed bars, with no doctrine in the room.… (+26 more)
+Nodes (101): Exception, main(), AnalysisClock, The completed-session boundary that every point-in-time provider receives., Resolve an explicit completed-session boundary or the latest completed session., resolve_as_of(), as_of_block(), envelope() (+93 more)
+
+### Community 10 - "measure"
+Cohesion: 0.08
+Nodes (24): _baseline(), _longest_spell(), measure(), Any, DataFrame, Series, _ratio(), Measure a declared base from completed bars, with no doctrine in the room.… (+16 more)
 
 ### Community 11 - "_rendered"
-Cohesion: 0.03
-Nodes (39): RuntimeError, The same contract the anchors already keep: what the picture contains, not what…, The clause is about one bar's volume, and the price panel is not where a reader…, Read off the file, because the figure is the deliverable and its dimensions are…, The price-only digest cannot see the input this overlay turns on.…, The whole failure in one assertion: same picture identity, different overlay., Same prices, different events, same directory: the second render wrote its…, Both halves of the stamp are truncated, so a name is something two inputs can… (+31 more)
-
-### Community 12 - "power_play_series"
-Cohesion: 0.03
-Nodes (60): build_power_play_evidence(), _on_one_scale(), power_play_fingerprint(), The same bars with every print put on the scale that follows all of its…, One digest of the bars *and* the events this capability reads. The shared bars…, The absence of an answer about the overlay's input, which is not the same as…, Measure a history and read the criteria against it, deciding nothing. The…, _Unstated (+52 more)
-
-### Community 13 - "power_play_evidence.py"
 Cohesion: 0.04
-Nodes (50): _chart_key(), Wire the Power Play measurements to the claim they are read against. The…, Every claim the question was asked under, whole. Numbers were not enough. A…, The name of one question, which is everything answering it would have to be…, The highs the segmentation this harness already owns calls turning points. A…, _registry_digest(), _turning_points(), Measure a Power Play from completed bars, with no doctrine in the room. The… (+42 more)
+Nodes (34): RuntimeError, Read off the file, because the figure is the deliverable and its dimensions are…, The price-only digest cannot see the input this overlay turns on.…, The whole failure in one assertion: same picture identity, different overlay., Same prices, different events, same directory: the second render wrote its…, Both halves of the stamp are truncated, so a name is something two inputs can…, Asking first and writing after leaves a window three files wide. Two colliding…, Anything watching the directory reads that name, and read mid-render it was a… (+26 more)
+
+### Community 12 - "build_power_play_evidence"
+Cohesion: 0.03
+Nodes (64): Harness of Minervini v2 runtime., _boundaries(), build_power_play_evidence(), _chart_key(), _criteria(), _decided_by_the_payout(), _how_the_tops_disagree(), _observation() (+56 more)
+
+### Community 13 - "read_bars"
+Cohesion: 0.03
+Nodes (91): _dated_events(), The highs the segmentation this harness already owns calls turning points. A…, _turning_points(), _paid_between(), DataFrame, Measure a Power Play from completed bars, with no doctrine in the room. The…, What a holder was paid in cash across a span, or nothing when the input could…, The dated events of one kind inside a span, or nothing when the input could not… (+83 more)
 
 ### Community 14 - "chart.py"
 Cohesion: 0.06
-Nodes (63): Figure, ArtifactNameTaken, _as_of_date(), _atomic_figure(), _atomic_json(), _bar_width(), _completed_daily(), _containing_bar() (+55 more)
+Nodes (66): Figure, ArtifactNameTaken, _as_of_date(), _atomic_figure(), _atomic_json(), _bar_width(), _completed_daily(), _containing_bar() (+58 more)
 
-### Community 15 - "setup_evidence.py"
-Cohesion: 0.09
-Nodes (32): _asymmetry_state(), _chain_matches_detector(), compile_measurement_spec(), _completeness_state(), _direction(), _failure_state(), _iso_day(), _observation() (+24 more)
+### Community 15 - "evidence"
+Cohesion: 0.16
+Nodes (12): DecelerationIsReportedAgainstAnExampleAndNeverAsALimit, evidence(), NothingInTheBlockCarriesANumberNoSourceGave, quarter(), Growth measured against the ranges the source actually named. Every…, One question, one answer: the verdict word comes from the readings beside it.…, The margin trend and the annual reading, which both had limits of their own. A…, TheHigherBarsAreContextBesideTheMinimum (+4 more)
 
 ### Community 16 - "management_evidence.py"
 Cohesion: 0.11
 Nodes (54): parameter(), Return one registered algorithm parameter. A parameter is not a threshold and…, _average_true_range(), _base_extension(), _climax(), _closing_range(), _closing_range_pct(), _completed() (+46 more)
 
 ### Community 17 - "RecordingAxis"
-Cohesion: 0.06
-Nodes (26): _draw_power_play(), _multiple(), The ratio at a decimal that cannot put it on the wrong side of one. One decimal…, Put the spans being asked about on the picture the volume clause is judged…, Keeps what was drawn on it and what each thing was called. The labels are the…, A weekly volume bar is five sessions added together. The clause divides one…, The multiple was the only place this rule had reached. On a real EDRY render…, The qualification belongs to the weekly alone: on a session panel the bar under… (+18 more)
+Cohesion: 0.05
+Nodes (29): _draw_power_play(), _multiple(), The ratio at a decimal that cannot put it on the wrong side of one. One decimal…, Put the spans being asked about on the picture the volume clause is judged…, Keeps what was drawn on it and what each thing was called. The labels are the…, A weekly volume bar is five sessions added together. The clause divides one…, The multiple was the only place this rule had reached. On a real EDRY render…, The qualification belongs to the weekly alone: on a session panel the bar under… (+21 more)
 
 ### Community 18 - "evaluate_fundamentals"
-Cohesion: 0.07
-Nodes (26): _accounting_basis(), _dedupe(), evaluate_fundamentals(), Evaluate normalized SEC filings available on ``as_of``. Each filing must…, FundamentalsEvaluatorTests, load_fixture(), What the removed waiver test was also covering, kept. The Power Play half of it…, ARestatementIsPerNumber (+18 more)
-
-### Community 19 - "minervini/__init__.py"
 Cohesion: 0.06
-Nodes (29): Capability, _field(), _inputs(), Any, Harness of Minervini v2 runtime., capability_schema(), data_schema(), Any (+21 more)
+Nodes (29): evaluate_fundamentals(), Evaluate normalized SEC filings available on ``as_of``. Each filing must…, FundamentalsEvaluatorTests, load_fixture(), What the removed waiver test was also covering, kept. The Power Play half of it…, ACompoundRateSpansTheYearsItClaims, AnnualGrowthNamesTheYearsItUsed, Code33CountsConsecutiveQuarters (+21 more)
+
+### Community 19 - "capabilities.py"
+Cohesion: 0.07
+Nodes (25): Capability, _field(), _inputs(), Any, capability_schema(), data_schema(), Any, Path (+17 more)
 
 ### Community 20 - "cli.py"
-Cohesion: 0.07
-Nodes (33): Namespace, build_parser(), _capability_parser(), _common(), _compact_data(), DetailedHelpFormatter, dispatch(), _group_parser() (+25 more)
-
-### Community 21 - "sec.py"
 Cohesion: 0.13
-Nodes (37): _default_company_tickers(), _default_fundamentals_evidence(), The SEC's own current symbol-to-registrant list, whole. The same fetch…, _accounting_taxonomies(), _annual_period_by_end(), _content_hash(), _duration(), fetch_company_facts() (+29 more)
+Nodes (23): Namespace, build_parser(), _capability_parser(), _common(), _compact_data(), DetailedHelpFormatter, dispatch(), _group_parser() (+15 more)
 
-### Community 22 - "a_top_hidden_by_an_ambiguous_session_series"
-Cohesion: 0.15
-Nodes (10): AScaleTheSegmenterHasNoDomainFor, OneBarThatReadsTwoWays, Valid OHLCV whose ordinary session spans a large fraction of its own close. The…, A session that both extends the advance and ends it. The segmenter records the…, Which top the other order confirms is the segmenter's answer, not a guess from…, _retracements(), a_range_too_wide_to_segment_series(), a_top_hidden_by_an_ambiguous_session_series() (+2 more)
+### Community 21 - "normalize_filed_facts"
+Cohesion: 0.11
+Nodes (40): _default_fundamentals_evidence(), _accounting_taxonomies(), _annual_period_by_end(), _content_hash(), _duration(), fetch_company_facts(), fetch_company_submissions(), fetch_company_tickers() (+32 more)
+
+### Community 22 - "power_play_fingerprint"
+Cohesion: 0.13
+Nodes (8): power_play_fingerprint(), One digest of the bars *and* the events this capability reads. The shared bars…, Where an event sits is what decides whether it touches the reading at all. A…, Absent columns are a gap, not a promise that nothing happened. Digesting them…, TheEventsArePartOfTheInput, EitherColumnMissingLeavesTheReadingUnreadable, The half that had no reading of its own. Folded in, a payout that decided a…, An empty frame has no events to digest and no prices either. Digested anyway it…
 
 ### Community 23 - "reduce_risk"
-Cohesion: 0.07
-Nodes (14): Return the only final verdict: prospective or active, from evidence objects., reduce_risk(), fixture(), RiskReducerPublicSeamTests, ActiveInvalidationPriceTests, An active invalidation level must be compared with price, not merely read as a…, PathCoverageTests, HOLD requires a path that actually audited every protective level the caller… (+6 more)
+Cohesion: 0.06
+Nodes (18): Return the only final verdict: prospective or active, from evidence objects., reduce_risk(), fixture(), RiskReducerPublicSeamTests, audit(), AuditWindowTests, NonFiniteInputTests, An audit only counts for the level and window it actually covers. (+10 more)
 
-### Community 24 - "base_series"
-Cohesion: 0.07
-Nodes (37): AnchorOverlayTests, The provenance digest and the segmentation's are the same value, or an approval…, A Tuesday low has no Tuesday bar on a weekly chart, and it still happened.…, A week is kept for the sessions it aggregates, not for the label it was given.…, BaseFailureIsNotAPivotFailureTests, ChaseAfterAGapBreakoutTests, ChaseIsAJudgementWithItsNumbersPrintedTests, CompletenessSourceIsNotACallerStringTests (+29 more)
+### Community 24 - "evaluate_setup"
+Cohesion: 0.10
+Nodes (28): evaluate_setup(), Classify measured setup evidence without making the final investment verdict., BaseFailureIsNotAPivotFailureTests, ChaseAfterAGapBreakoutTests, ChaseIsAJudgementWithItsNumbersPrintedTests, DeadBaseHasNoLiveTriggerTests, LongResetNeedsJudgingTests, OnlyTheSegmentationThatVouchedIsMeasuredTests (+20 more)
 
 ### Community 25 - "x-capability-contract"
 Cohesion: 0.04
@@ -584,11 +591,11 @@ Nodes (43): Export contains only allowed research fields and no portfolio sizing
 
 ### Community 33 - "market_evidence.py"
 Cohesion: 0.09
-Nodes (47): Pattern, _at_new_high(), _basis(), carries_a_readable_bar(), _correction_depth(), _countable_window(), _finite_number(), _finviz_breadth() (+39 more)
+Nodes (48): Pattern, _at_new_high(), _basis(), carries_a_readable_bar(), _correction_depth(), _countable_window(), _finite_number(), _finviz_breadth() (+40 more)
 
-### Community 34 - "contracts.py"
-Cohesion: 0.08
-Nodes (34): as_of_block(), Any, A gate compares what was measured, not a tidied version of it. Rounding before…, AWaiverIsEarnedNotDeclared, prospective(), The fundamentals waiver cannot be opened by saying it was opened. The Power…, The route that was always earned is untouched., AVerdictIsReducedFromEnvelopes (+26 more)
+### Community 34 - "AVerdictIsReducedFromEnvelopes"
+Cohesion: 0.15
+Nodes (18): AVerdictIsReducedFromEnvelopes, envelope(), fundamentals(), market(), qualify(), `attested_by` is minted here from an envelope, never accepted from a request.…, Attaching a stale run beside a fresh one is the ordinary way this happens. Both…, The same rule in active mode, where the market word is not a verdict at all. A… (+10 more)
 
 ### Community 35 - "evaluate_eligibility"
 Cohesion: 0.10
@@ -600,19 +607,19 @@ Nodes (20): collapse(), load_rows(), main(), The first stretch of the quotation 
 
 ### Community 37 - "verdict"
 Cohesion: 0.07
-Nodes (24): ADeclaredConditionIsAnsweredRatherThanRenamed, APriceHasToBeAPrice, AShapeNobodyCanReadIsNotADeclaration, AWordTheReducerCannotReadIsNotAPass, ConfirmationDebtIsSomethingSaidInWords, DeclaringATacticIsNotTheSameAsDenyingIt, EachTacticAsksForItsOwnEvidence, EveryTacticCanActuallyBeCompleted (+16 more)
+Nodes (25): ADeclaredConditionIsAnsweredRatherThanRenamed, APriceHasToBeAPrice, AShapeNobodyCanReadIsNotADeclaration, AWordTheReducerCannotReadIsNotAPass, ConfirmationDebtIsSomethingSaidInWords, DeclaringATacticIsNotTheSameAsDenyingIt, EachTacticAsksForItsOwnEvidence, EveryTacticCanActuallyBeCompleted (+17 more)
 
 ### Community 38 - "x-capability-contract"
 Cohesion: 0.05
 Nodes (41): --as-of stamps this read and does not time-filter events., History is keyed by recorded ticker events; stable instrument identity remains in each record., scripts/.venv/bin/python scripts/pipeline watchlist history AAPL, allOf, description, required, type, 0 (+33 more)
 
-### Community 39 - "WhatThePictureSaysAboutItself"
-Cohesion: 0.06
-Nodes (19): Every published thing that names the bundle has to name the same bundle. Three…, The title is the only thing on the picture that says which panel a reader is…, `last_bar_partial` warns that a bar aggregates fewer sessions than it will end…, Matplotlib stops the volume axis five percent above its tallest bar, and at…, A rectangle of zero width is a window the manifest reports and the picture does…, Nothing was comparing either of them with the request, so both could name some…, Completeness says the three pictures are all reported; it does not say which is…, The title and the two axis labels are the whole of what a picture says about… (+11 more)
+### Community 39 - "test_chart_draws_the_power_play.py"
+Cohesion: 0.05
+Nodes (29): _power_play_spans(), The spans the capability is currently asking a person about, and no others. An…, AClaimIsAFileNotAPathname, AQuestionThatCannotNameEveryLandmark, artifact_end(), ASpanTheQuestionCannotFullyName, _panel_index(), The Power Play approval asks a person about a structure the picture never drew.… (+21 more)
 
 ### Community 40 - "run"
-Cohesion: 0.10
-Nodes (10): ABarWhoseCloseIsBelowItsLowIsNotABar, ADateFieldHoldsADate, AHandedInRecordCrossesTheLevelItNames, AnUnreadableSplitColumnIsNotAQuietTape, APriceFieldHoldsAPrice, APriceTooSmallToPublishIsNotAPrice, AStopIsBelowTheEntryItProtects, AWordOutsideTheVocabularyIsNotANo (+2 more)
+Cohesion: 0.09
+Nodes (9): ABarWhoseCloseIsBelowItsLowIsNotABar, ADateFieldHoldsADate, AHandedInRecordCrossesTheLevelItNames, AnUnreadableSplitColumnIsNotAQuietTape, APriceFieldHoldsAPrice, APriceTooSmallToPublishIsNotAPrice, AStopIsBelowTheEntryItProtects, AWordOutsideTheVocabularyIsNotANo (+1 more)
 
 ### Community 41 - "x-capability-contract"
 Cohesion: 0.05
@@ -622,37 +629,37 @@ Nodes (39): Future dates, weekends, exchange holidays, and known special exchang
 Cohesion: 0.08
 Nodes (20): ChainGamingTests, ContrastIsolationTests, evidence_for(), GoldenDiscriminationTests, KnownFailureTests, MissingEvidenceTests, READY is a set of satisfied conditions, not the absence of failures. The old…, The defect this rewrite exists for: no base, no contraction, and a top verdict. (+12 more)
 
-### Community 43 - "Anchor"
-Cohesion: 0.20
-Nodes (9): The one judgment in the segmentation that no rule got right, and what follows…, Price alone reads the two identically, which is why the dispute is about…, WhereTheBaseBeginsIsNotSettledByTheBarsTests, Anchor, borrowed_contraction_series(), _insert_bounce_between_neighbours(), One turning point the builder pinned, so a test can name its date., A current structure with one contraction, sitting above a structure price left.… (+1 more)
+### Community 43 - "test_risk_measures_favorable_excursion.py"
+Cohesion: 0.18
+Nodes (11): a_run_to(), bars(), protection(), DataFrame, The operation measures how far a position got, so the reducer is not guessing…, A daily High cannot say whether it printed before or after the fill., Only the three-R actions; the same bars may also carry structural reviews., Round p3a: two inputs the measurement had not been asked about. (+3 more)
 
 ### Community 44 - "valuation"
 Cohesion: 0.08
 Nodes (18): ACompoundRateNeedsOneAccountingRegime, annual(), AStudysAverageIsNotThisTickersRange, DoubleTroubleNeedsThePremiseTheSourceAttached, evidence(), FiveOrTenIsTwoSpansNotSix, Three places where a source's own words were read as something narrower than…, Historical study of superperformance stocks shows... on average" describes a… (+10 more)
 
-### Community 45 - "read_bars"
-Cohesion: 0.12
-Nodes (24): completed_bars(), _holds_real_numbers(), _is_a_number(), _iso(), _launders_into_a_number(), Any, DataFrame, Series (+16 more)
+### Community 45 - "read_price_kinds"
+Cohesion: 0.18
+Nodes (13): The rules about what a price is and what a session label is, and only those.…, read_price_kinds(), clean(), DataFrame, Two readers of one price frame, and the exact list of what they are allowed to…, The invariant, over every frame above. A refusal here is a rule one of them…, The fifth difference, and the one that is not about refusing anything.…, Same dates, same order, same prices -- a tz-aware and out-of-order frame… (+5 more)
 
 ### Community 46 - "x-capability-contract"
 Cohesion: 0.05
 Nodes (37): --as-of stamps this read; it does not filter the ledger's event history., scripts/.venv/bin/python scripts/pipeline watchlist show, The ledger stores research decisions, not holdings, allocations, quantities, or account values., allOf, description, required, type, 0 (+29 more)
 
 ### Community 47 - "yfinance.py"
-Cohesion: 0.12
-Nodes (20): _default_current_classification(), _calendar_date(), current_classification_snapshot(), _current_date(), next_earnings_snapshot(), Any, date, datetime (+12 more)
+Cohesion: 0.15
+Nodes (18): _default_current_classification(), _calendar_date(), current_classification_snapshot(), _current_date(), next_earnings_snapshot(), Any, date, datetime (+10 more)
 
 ### Community 48 - "frame"
 Cohesion: 0.11
 Nodes (14): AnEventCannotUndoWhatTheMarketAlreadyDid, ARepeatedSessionIsNotADiscontinuity, ATwoForOneWithNoEventColumn, frame(), halved(), DataFrame, A history that omits its corporate actions has not said there was no split., The event column carries a factor, and not every factor is a share count… (+6 more)
 
-### Community 49 - "ProviderSnapshot"
-Cohesion: 0.06
-Nodes (48): ProviderSnapshot, AnEnvelopeValidatesAgainstItsOwnPublishedSchema, _bars(), current(), filed(), listed(), measured(), _meta() (+40 more)
+### Community 49 - "test_a_declared_vocabulary_matches_the_envelopes.py"
+Cohesion: 0.07
+Nodes (38): AnEnvelopeValidatesAgainstItsOwnPublishedSchema, _bars(), current(), filed(), listed(), measured(), _meta(), DataFrame (+30 more)
 
-### Community 50 - "normalize_filed_facts"
-Cohesion: 0.13
-Nodes (14): normalize_filed_facts(), Normalize SEC facts filed by ``as_of`` for ``evaluate_fundamentals``. The…, TheFiscalYearMapSeesOnlyWhatTheRequestSees, AnIfrsBalanceSheetReachesTheEvaluator, AnAmendedFilingKeepsItsOwnForm, company_facts(), duration(), instant() (+6 more)
+### Community 50 - "test_the_provider_sends_the_balance_sheet.py"
+Cohesion: 0.21
+Nodes (9): AnAmendedFilingKeepsItsOwnForm, company_facts(), duration(), instant(), What `normalize_filed_facts` has to carry for the earnings-quality reading to…, submissions(), TheBalanceSheetTravelsWithTheAnnualPeriodItCloses, AFiscalYearThatDoesNotEndInDecember (+1 more)
 
 ### Community 51 - "test_the_provider_keeps_what_it_read.py"
 Cohesion: 0.09
@@ -667,8 +674,8 @@ Cohesion: 0.12
 Nodes (14): Connection, Row, Ledger, Any, Path, Append a note to the newest snapshot for a symbol; this is an explicit DB write., Explicitly export current research snapshots as JSON., Resolve, but do not create, the local research-ledger database path. (+6 more)
 
 ### Community 54 - "doctrine.py"
-Cohesion: 0.08
-Nodes (46): _assert_manifest_roles(), _audit_only(), _band_position(), _binds(), claim(), evaluate_band(), evaluate_gate(), evaluate_marker() (+38 more)
+Cohesion: 0.06
+Nodes (65): _assert_manifest_roles(), _audit_only(), _band_position(), _binds(), claim(), evaluate_band(), evaluate_gate(), evaluate_marker() (+57 more)
 
 ### Community 55 - "rs.py"
 Cohesion: 0.14
@@ -676,19 +683,19 @@ Nodes (21): _as_date(), _client(), _group_snapshot(), _group_snapshot_context(),
 
 ### Community 56 - "test_setup_envelope.py"
 Cohesion: 0.06
-Nodes (29): AGapTheEngineKnowsAboutOutranksTheCallersTests, AnUnfixableGapIsNotAskedAboutTests, AVerdictIsAboutTheBaseOrItIsNotAVerdictTests, CompactFormatTests, DeclaredReadingsAreVisibleTests, EnvelopeTests, The setup envelope: measurements in the verdict, contrast beside it. `signals`…, The measurement was of another span, so what it found is not about this stock.… (+21 more)
+Nodes (25): AGapTheEngineKnowsAboutOutranksTheCallersTests, AnUnfixableGapIsNotAskedAboutTests, CompactFormatTests, DeclaredReadingsAreVisibleTests, EnvelopeTests, The setup envelope: measurements in the verdict, contrast beside it. `signals`…, A hard gate failing on an uncorroborated chain is still uncorroborated. Letting…, The same gap, answered two different ways by two capabilities. ticker.swings… (+17 more)
 
 ### Community 57 - "market.py"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (23): build_market_candidates(), _candidate_record(), _cursor_offset(), evidence_quality(), _exclusion_reasons(), _group_rank_key(), _group_summary_signal(), _leader_signal() (+15 more)
 
 ### Community 58 - "compare_same_industry_peers"
 Cohesion: 0.17
 Nodes (24): _candidate_exclusions(), compare_same_industry_peers(), _date_missing(), _exclusion_record(), _leadership_row(), _missing_record(), _number(), _price_evidence() (+16 more)
 
-### Community 59 - "resolve_as_of"
-Cohesion: 0.10
-Nodes (11): Resolve an explicit completed-session boundary or the latest completed session., resolve_as_of(), _default_security_master(), command_parser(), PublicCliContractTests, ArgumentParser, CompletedProcess, The sweeps below iterate COMMAND_PATHS, so anything missing from it is not… (+3 more)
+### Community 59 - "PublicCliContractTests"
+Cohesion: 0.14
+Nodes (7): command_parser(), PublicCliContractTests, ArgumentParser, CompletedProcess, The sweeps below iterate COMMAND_PATHS, so anything missing from it is not…, The whole defect, at the surface a person actually types it at., run_pipeline()
 
 ### Community 60 - "build_eligibility_evidence"
 Cohesion: 0.13
@@ -702,17 +709,17 @@ Nodes (28): scripts/.venv/bin/python scripts/pipeline describe ticker.setup, all
 Cohesion: 0.11
 Nodes (15): format_payload(), Reduce verbose evidence detail without changing verdict, signals, or missing…, CompactKeepsTheAnswerTests, DecidesNothingTests, DeclinesToProposeTests, ProposesAChainTests, The candidate segmentation, published so a person can look at it before it is…, Compact is allowed to drop detail. The proposal itself is not detail. (+7 more)
 
-### Community 63 - "compile_power_play_spec"
+### Community 63 - "test_power_play_unread_tops.py"
 Cohesion: 0.06
-Nodes (19): compile_power_play_spec(), The two search windows, in completed sessions., AConventionThatOnlyDefinesSomethingCannotFail, The search windows come out of the registry, not out of the module that…, A module reporting durations in weeks has to divide by what the windows…, tests/260825/unit/test_power_play.py names 30 and 40 so it can stay free of…, Where the chain stops is a choice about structure identity, not a limit the…, A registered failure effect is a promise about what a reducer will do. These… (+11 more)
+Nodes (27): compile_power_play_spec(), The two search windows, in completed sessions., AConventionThatOnlyDefinesSomethingCannotFail, The search windows come out of the registry, not out of the module that…, A module reporting durations in weeks has to divide by what the windows…, tests/260825/unit/test_power_play.py names 30 and 40 so it can stay free of…, Where the chain stops is a choice about structure identity, not a limit the…, A registered failure effect is a promise about what a reducer will do. These… (+19 more)
 
 ### Community 64 - "completed_daily_bars"
-Cohesion: 0.11
+Cohesion: 0.10
 Nodes (14): date, datetime, Preserve raw current Finviz evidence and refuse a false historical snapshot., raw_snapshot(), completed_daily_bars(), Fetch completed daily bars only, with an exclusive provider end boundary., close_only(), CoverageReportsWhatTheFrameActuallyCarries (+6 more)
 
-### Community 65 - "test_power_play_abstention.py"
-Cohesion: 0.08
-Nodes (18): _how_the_tops_disagree(), Per criterion, whether a top that may contest it failed to agree, and why.…, AnUnreadTopAbstains, APayoutAbstainsFromEitherSide, An unanswered question is not a dissent, and neither is a payout's abstention.…, The criterion cannot close while a top that may contest it has not been looked…, The comparison used to ignore only the lower reading's abstention. With the…, The gaps that close on time, on history, or on the dividend calendar. Each of… (+10 more)
+### Community 65 - "two_tops_that_both_await_the_chart_series"
+Cohesion: 0.10
+Nodes (13): AnUnreadTopAbstains, The criterion cannot close while a top that may contest it has not been looked…, The gaps that close on time, on history, or on the dividend calendar. Each of…, Twelve sessions is the least a flag can be, and no reading of the chart adds…, What it does instead -- abstain rather than dispute -- is pinned next door, in…, The honest cost of two candidate structures: a reader looks at both charts., No key is issued, so the approval has nothing to attach to and says so.…, WhatAnApprovalCanNeverClose (+5 more)
 
 ### Community 66 - "build"
 Cohesion: 0.19
@@ -722,9 +729,9 @@ Nodes (14): bar(), BaseExtension, build(), ClimaxFeatures, ExtensionFromTheAvera
 Cohesion: 0.11
 Nodes (13): AWithheldPeriodIsStillAQuarterThatWasFiled, EveryPresentTenseReadingAsksTheOneAnchor, filing(), OneAccessionCanCarryTwoRegimes, quarter(), Seven places a repair reached part of the way and no further. Each of these was…, The anchor reached the bands and stopped, and six other readings still said…, The collision rule removed the period before the anchor was derived from it. So… (+5 more)
 
-### Community 69 - "test_chart_draws_the_power_play.py"
-Cohesion: 0.08
-Nodes (18): AClaimIsAFileNotAPathname, AQuestionThatCannotNameEveryLandmark, artifact_end(), ASpanTheQuestionCannotFullyName, _panel_index(), _png_software(), The Power Play approval asks a person about a structure the picture never drew.…, A history ending on the peak has no flag low, and the picture cannot invent… (+10 more)
+### Community 69 - "TheRendererIsPartOfWhatTheNameClaims"
+Cohesion: 0.17
+Nodes (7): _png_software(), The digests name what went in; this name is claimed for what comes out. The…, Reached by hand, because the name carries the version and the two cannot…, The name and the manifest are written by this module; the stamp inside the PNG…, The durable check runs before anything is claimed, so a render already drawing…, What the PNG itself says drew it, read out of its own tEXt chunks., TheRendererIsPartOfWhatTheNameClaims
 
 ### Community 70 - "frame"
 Cohesion: 0.17
@@ -735,8 +742,8 @@ Cohesion: 0.33
 Nodes (3): EveryCapabilityDeclaresWhatItsDataHolds, An empty declaration bakes no constraint, so it is the old `data: {}` by…, A capability missing from the table is one this sweep silently never validates.
 
 ### Community 72 - "test_qualify_reads_the_bars_the_rest_of_the_harness_reads.py"
-Cohesion: 0.14
-Nodes (24): booleans(), complex_closes(), doubled(), holed(), intraday_pairs(), inverted_bar(), labelled_index(), negative_close() (+16 more)
+Cohesion: 0.07
+Nodes (33): OneIdeaOfAUsableBarTests, A picture nothing can be approved from is not a success. The chart validated…, The invariant, rather than one rule at a time. What went wrong was not any…, Each file replaces atomically; the set of them does not. Keyed only by ticker…, Its volume bar is short because the week is short, not because the stock went…, A body floor in dollars is a different floor on every stock. A five-cent name…, The date a session traded on, not the UTC day it spills into. One surface…, Discarding an imaginary part produced the same sixty-four characters. The… (+25 more)
 
 ### Community 73 - "x-capability-contract"
 Cohesion: 0.07
@@ -744,7 +751,7 @@ Nodes (26): Prospective mode should consume market.snapshot, ticker.qualify, tic
 
 ### Community 74 - "peer_collection.py"
 Cohesion: 0.16
-Nodes (20): _as_date(), collect_same_industry_peer_rows(), _industry_symbol(), _positive_number(), _price_evidence(), Any, DataFrame, date (+12 more)
+Nodes (19): _as_date(), collect_same_industry_peer_rows(), _industry_symbol(), _positive_number(), _price_evidence(), Any, DataFrame, date (+11 more)
 
 ### Community 75 - "test_binding_is_fail_closed.py"
 Cohesion: 0.09
@@ -758,13 +765,13 @@ Nodes (12): ABlockIsVoidedOnlyByWhatItReads, ABlockReadsOnlyItsOwnColumns, ARepo
 Cohesion: 0.15
 Nodes (19): an_infinite_close(), boolean_lows(), complex_prices(), epoch_index(), held(), DataFrame, The sell decision is audited against values that are not prices. `ticker.risk`…, The route that was always earned, so every refusal below is the history. (+11 more)
 
-### Community 78 - "evidence"
-Cohesion: 0.14
-Nodes (11): ACompoundRateSpansTheYearsItClaims, AnnualGrowthNamesTheYearsItUsed, Code33CountsConsecutiveQuarters, evidence(), GrowthFromALossIsNotGrowth, quarter(), Two periods either sit next to each other on the calendar or they do not, and a…, Three years where every quarter's growth rate beats the quarter before, on all… (+3 more)
+### Community 78 - "reading"
+Cohesion: 0.16
+Nodes (14): daily_history(), EveryNameAnswersForTheSameEarlierDate, liquid_history_missing_a_holiday(), A reader cannot judge the count without knowing which two moments it spans., Two things a bar offset gets wrong that a thinned name is not needed to show., Twenty of its own bars reach a day further back, and that day answers…, The same history, read at a session inside it, is a reading of that session. A…, Trades every session and has printed a new high on every one of them. (+6 more)
 
-### Community 79 - "run"
-Cohesion: 0.13
-Nodes (10): AFailureHeldBackByAnotherTopSaysSo, AGapNamesWhatWouldActuallyCloseIt, The Power Play envelope: what the bars settle, what they refuse, and what…, It moves verdicts, so it belongs in the provenance a reader audits against.…, Withholding a measured failure is not the same as waiting for a chart. A top…, The other way a rejection fails to carry, and it closes on something else…, Two gaps here are not chart readings, and calling them one is how a gate leaks.…, run() (+2 more)
+### Community 79 - "power_play_series"
+Cohesion: 0.10
+Nodes (18): AFailureHeldBackByAnotherTopSaysSo, AGapNamesWhatWouldActuallyCloseIt, The Power Play envelope: what the bars settle, what they refuse, and what…, It moves verdicts, so it belongs in the provenance a reader audits against.…, Withholding a measured failure is not the same as waiting for a chart. A top…, The other way a rejection fails to carry, and it closes on something else…, Two gaps here are not chart readings, and calling them one is how a gate leaks.…, run() (+10 more)
 
 ### Community 80 - "held"
 Cohesion: 0.19
@@ -791,12 +798,12 @@ Cohesion: 0.08
 Nodes (23): scripts/.venv/bin/python scripts/pipeline capabilities, allOf, 0, 2, 3, $id, internal_error, invalid_request (+15 more)
 
 ### Community 86 - "evaluate_market_snapshot"
-Cohesion: 0.15
+Cohesion: 0.16
 Nodes (9): evaluate_market_snapshot(), The regime word, from the signals the harness measures against doctrine. Two…, Return a transparent market-regime read from normalized provider evidence. A…, _regime_judgment(), MarketSnapshotTests, OneAnswerPerQuestionTests, _evidence(), Which market signals carry the regime verdict, and which only stand beside it.… (+1 more)
 
-### Community 87 - "build_market_evidence"
-Cohesion: 0.14
-Nodes (11): build_market_evidence(), Convert completed source snapshots to ``evaluate_market_snapshot`` input.…, MarketEvidenceTests, _bars(), _leader(), What the arithmetic and envelope lenses found in the first Phase 5 review round., The index-th business day of a run ending on a fixed session. Ordering tokens…, The window is the year; a peak older than it belongs to no reading here. (+3 more)
+### Community 87 - "test_the_arithmetic_round_findings.py"
+Cohesion: 0.20
+Nodes (11): _bars(), _leader(), date, What the arithmetic and envelope lenses found in the first Phase 5 review round., The index-th business day of a run ending on a fixed session. Ordering tokens…, The last session the fixture carries -- the date the group reading is taken at.…, The window is the year; a peak older than it belongs to no reading here., _reading_date() (+3 more)
 
 ### Community 88 - "registry"
 Cohesion: 0.13
@@ -823,8 +830,8 @@ Cohesion: 0.21
 Nodes (11): AColumnTheProviderDidNotSend, AGapFilledInsideItsOwnSession, ATieIsStillTheHighest, build(), flat(), frame(), DataFrame, What a missing column, a tie, and a same-session fill must say. (+3 more)
 
 ### Community 94 - "evidence"
-Cohesion: 0.15
-Nodes (13): bars(), EveryReadingNamesTheClaimItCameFrom, evidence(), HowDeepTheCorrectionRan, HowFarFromANewHigh, What a market leader is doing, measured, rather than a word somebody typed…, A state read off the bars, and a caller's word ignored where the bars can…, Within striking distance (5 to 15 percent) of a new 52-week high" is a… (+5 more)
+Cohesion: 0.13
+Nodes (16): bars(), EveryReadingNamesTheClaimItCameFrom, evidence(), HowDeepTheCorrectionRan, HowFarFromANewHigh, date, What a market leader is doing, measured, rather than a word somebody typed…, The year's low is inside the window and is not this session's, which is the… (+8 more)
 
 ### Community 95 - "eligibility_state"
 Cohesion: 0.10
@@ -850,45 +857,45 @@ Nodes (21): A completed breach records the breaching session's Open and whether 
 Cohesion: 0.10
 Nodes (20): scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --swing 2026-05-06 --swing 2026-05-20 --swing 2026-06-05 --swing 2026-06-19, scripts/.venv/bin/python scripts/pipeline ticker setup AAPL --swing 2026-03-19 --swing 2026-04-06 --swing 2026-04-20 --swing 2026-05-06 --swing 2026-05-20 --swing 2026-06-05 --swing 2026-06-19 --right-side-development constructive --entry-proximity at_pivot, allOf, 0, 2, 3, $id, internal_error (+12 more)
 
-### Community 101 - "_power_play_spans"
-Cohesion: 0.08
-Nodes (14): _power_play_spans(), The spans the capability is currently asking a person about, and no others. An…, An overlay a reader can see is one they can approve from, and no key exists…, EveryTopTheCapabilityIsAskingAbout, A chain of candidate tops is asked about one at a time, and the chart drew only…, The volume clause and the flag's tightness are two questions about one picture,…, A reviewer moved the heaviest-volume marker onto the advance anchor and every…, Read off the bars here rather than off the span, because the chart and the… (+6 more)
+### Community 101 - "EveryTopTheCapabilityIsAskingAbout"
+Cohesion: 0.22
+Nodes (4): EveryTopTheCapabilityIsAskingAbout, A chain of candidate tops is asked about one at a time, and the chart drew only…, The threshold case, and the ordinary one: a chain usually reads two tops. A…, The volume clause and the flag's tightness are two questions about one picture,…
 
 ### Community 102 - ".run_risk"
-Cohesion: 0.14
-Nodes (6): A breach the request already settled cannot be downgraded by prices nobody…, An audit the caller already ran must not be overwritten by a fresh fetch. A…, The operation must not decide breach or plan on its own terms., RoutingAgreesWithTheReducerTests, SuppliedPathBreachTests, TerminalBreachTests
+Cohesion: 0.06
+Nodes (15): AuditPreconditionTests, A breach the request already settled cannot be downgraded by prices nobody…, An audit the caller already ran must not be overwritten by a fresh fetch. A…, The operation must not decide breach or plan on its own terms., RoutingAgreesWithTheReducerTests, SuppliedPathBreachTests, TerminalBreachTests, AnExplicitPriceCannotOutrankAnEarlierExit (+7 more)
 
 ### Community 103 - "history"
 Cohesion: 0.20
 Nodes (10): _bars(), base_claim(), history(), LongCorrectionConfirmationTests, PrimaryBaseDepthBandTests, DataFrame, DatetimeIndex, Primary Base depth bands follow the source's three-week, three-to-five-week,… (+2 more)
 
-### Community 104 - "OneIdeaOfAUsableBarTests"
-Cohesion: 0.11
-Nodes (9): OneIdeaOfAUsableBarTests, A picture nothing can be approved from is not a success. The chart validated…, The invariant, rather than one rule at a time. What went wrong was not any…, Each file replaces atomically; the set of them does not. Keyed only by ticker…, Its volume bar is short because the week is short, not because the stock went…, A body floor in dollars is a different floor on every stock. A five-cent name…, The date a session traded on, not the UTC day it spills into. One surface…, Discarding an imaginary part produced the same sixty-four characters. The… (+1 more)
+### Community 104 - "session_at_or_before"
+Cohesion: 0.22
+Nodes (7): Index of the latest moment at or before ``target``, or nothing. What a name…, session_at_or_before(), date, The bar the name actually had at that date, which is the last one before it., A not-a-time is not a moment, and neither reader may raise on one. Both window…, TheReaderRefusesWhatItCannotOrder, TheSessionAtOrBeforeADateIsReadDirectly
 
 ### Community 105 - "test_initial_stop_audit.py"
-Cohesion: 0.20
-Nodes (10): ABreachNamesTheLevelItCrossed, bars(), DataFrame, DatetimeIndex, quiet(), The stop the trade started with stays evidence: before a raise it governed, and…, A price at or below one level says nothing about the levels below it., run() (+2 more)
+Cohesion: 0.15
+Nodes (12): ABreachNamesTheLevelItCrossed, AStopIsNeverWidened, bars(), DuplicateSessionsReadTheSameEverywhere, DataFrame, DatetimeIndex, quiet(), The stop the trade started with stays evidence: before a raise it governed, and… (+4 more)
 
-### Community 106 - "_evidence"
-Cohesion: 0.24
-Nodes (10): _at_a_high_throughout(), _bars(), _breaking_out_now(), _evidence(), _flat(), GroupReadingTests, A group's reading comes from the names the harness could place inside it. The…, A year at 100, a dip through the lookback window, and a new high on the last… (+2 more)
+### Community 106 - "test_a_group_is_read_from_the_names_it_holds.py"
+Cohesion: 0.20
+Nodes (13): _at_a_high_throughout(), _bars(), _breaking_out_now(), _evidence(), _flat(), GroupReadingTests, date, A group's reading comes from the names the harness could place inside it. The… (+5 more)
 
 ### Community 107 - "year_window_start"
-Cohesion: 0.09
-Nodes (20): Any, What "52-week" names, in one place, for every reader of it. Two modules measure…, Index where the trailing 52 weeks ending at ``end`` opens, or nothing. Nothing,…, year_window_start(), The placement above the panel is clear of the marks by construction and can…, ABrokenDateIsABrokenBar, days(), frame() (+12 more)
+Cohesion: 0.10
+Nodes (20): _ordered(), Any, What "52-week" names, in one place, for every reader of it. Two modules measure…, Is this a sequence of real moments, oldest to newest? Ordered is the caller's…, Index where the trailing 52 weeks ending at ``end`` opens, or nothing. Nothing,…, year_window_start(), Four weeks earlier" has to be one moment, or the two counts are not comparable.…, ABrokenDateIsABrokenBar (+12 more)
 
 ### Community 108 - "test_the_second_round_findings.py"
-Cohesion: 0.16
-Nodes (15): _bars(), CorrectionDepthOrderingTests, _evidence(), _group(), GroupReadingStateTests, _leaders(), LeaderTractionMajorityTests, What the second Phase 5 review round found in the code the first round… (+7 more)
+Cohesion: 0.14
+Nodes (18): _bars(), CorrectionDepthOrderingTests, _evidence(), _group(), GroupReadingStateTests, _leaders(), LeaderTractionMajorityTests, date (+10 more)
 
-### Community 109 - "RequestError"
-Cohesion: 0.13
-Nodes (18): Draft202012Validator, Exception, error_envelope(), RequestError, _chart_digest(), One of the digests an answer names the picture by, checked before anything is…, `data` is the one envelope field no schema constrains, and it carries the…, One capability with a two-key answer, carrying the mechanism the rest will use. (+10 more)
+### Community 109 - "validator"
+Cohesion: 0.16
+Nodes (12): Draft202012Validator, One capability with a two-key answer, carrying the mechanism the rest will use., `date` is what this capability is for; an envelope without it answered nothing., A refused request is published under the capability's own operation name., The two shapes are alternatives, not a menu to mix from., TheClockDeclaresWhatItsDataHolds, _published(), Any (+4 more)
 
 ### Community 110 - "SecurityRecord"
-Cohesion: 0.22
-Nodes (15): _classification(), current_security_master(), _is_footer(), _other_listed_exchange(), parse_current_security_master(), _parse_nasdaq_listed(), _parse_other_listed(), datetime (+7 more)
+Cohesion: 0.17
+Nodes (18): _classification(), current_security_master(), historical_security_master(), _is_footer(), _other_listed_exchange(), parse_current_security_master(), _parse_nasdaq_listed(), _parse_other_listed() (+10 more)
 
 ### Community 111 - "test_failure_effect_matches_role.py"
 Cohesion: 0.14
@@ -907,8 +914,8 @@ Cohesion: 0.18
 Nodes (14): AnAverageThatOverflowedIsNotAnAverage, AnExceptionTheRouteGrantsIsNotAGap, frame(), DataFrame, ndarray, qualify(), Arithmetic that ran off the end of a float is reported as a gap, not as an…, `status: ok` beside `eligibility_state: incomplete` is the envelope… (+6 more)
 
 ### Community 115 - "test_the_market_reads_the_bars_the_rest_of_the_harness_reads.py"
-Cohesion: 0.20
-Nodes (13): booleans(), complex_prices(), epoch_index(), inverted_first_bar(), one_session_printed_twice(), DataFrame, The regime word is reduced from leader histories nothing else in the harness…, The route that was always earned, so every refusal below is the history. (+5 more)
+Cohesion: 0.19
+Nodes (14): booleans(), complex_prices(), epoch_index(), inverted_first_bar(), one_session_printed_twice(), DataFrame, The regime word is reduced from leader histories nothing else in the harness…, The route that was always earned, so every refusal below is the history. (+6 more)
 
 ### Community 116 - "annual"
 Cohesion: 0.23
@@ -939,16 +946,16 @@ Cohesion: 0.16
 Nodes (7): ActionsBelongToAHeldPosition, ANumberNeverRoundsAcrossItsOwnGate, held(), HOLD is not the whole answer for a position; what to do while holding is the…, Initial risk is 6; three R is reached at 118., Round p3a: a High one part in ten billion short of 3R read as `3.0` beside…, ThreeRProtectionIsAnAction
 
 ### Community 123 - "test_peer_price_evidence_reads_the_bars_the_rest_of_the_harness_reads.py"
-Cohesion: 0.20
-Nodes (13): a_hole_in_the_closes(), APeerIsMeasuredFromPricesOrFromNothing, booleans(), complex_closes(), every_session_twice(), DataFrame, A peer's leadership numbers are measured off values that are not prices.…, It was converted to New York, which renamed every session to the day before.… (+5 more)
+Cohesion: 0.47
+Nodes (9): a_hole_in_the_closes(), booleans(), complex_closes(), every_session_twice(), DataFrame, A peer's leadership numbers are measured off values that are not prices.…, repeated_column(), rising() (+1 more)
 
 ### Community 124 - "test_the_measurements_a_mutation_sweep_reached.py"
 Cohesion: 0.17
 Nodes (13): annual(), AStretchCannotSpanAYearNobodyFiled, evidence(), NearThePeakIsNotAtThePeak, quarter(), Four measurements a mutation sweep changed without any test noticing. Each of…, `_previous_quarter` is the only thing that knows a year ends between Q4 and Q1.…, The count the source stated decides how much history Code 33 needs to say… (+5 more)
 
-### Community 125 - "test_one_bad_leader_does_not_take_the_snapshot.py"
-Cohesion: 0.20
-Nodes (9): _frame(), LeaderFanOutTests, DataFrame, The per-leader fan-out degrades one name at a time. Reading a leader's own bars…, The limit is what the caller asked to observe. Publishing every row the…, Rows arrived, so the empty-frame gap never fired; not one of them carries a…, _rs(), _runtime() (+1 more)
+### Community 125 - "execute"
+Cohesion: 0.05
+Nodes (35): execute(), Execute one composable capability without printing or mutating implicit state., PiecewiseAuditTests, price_snapshot(), DataFrame, Each protective level is audited from the date it actually became effective., One field moved ahead of the fetch and the rest stayed behind it., Validating after the fetch reports the caller's fault as a provider outage. It… (+27 more)
 
 ### Community 126 - "inputs"
 Cohesion: 0.12
@@ -962,25 +969,25 @@ Nodes (9): bars(), DataFrame, The context a caller declares -- the tape, the cal
 Cohesion: 0.20
 Nodes (12): ABreachEndsTheWindow, ASessionPrintedTwice, frame(), DataFrame, What the stop audit says it checked must be what it checked., The favorable excursion reads the same bar the stop audit reads., The same session at two timestamps is one session, and the later print is the…, A requested window is a date the caller named; the record says which bars… (+4 more)
 
-### Community 129 - "test_terminal_price_and_declared_condition.py"
-Cohesion: 0.16
-Nodes (8): AnExplicitPriceCannotOutrankAnEarlierExit, AnInvalidationIsAboutWhereTheSessionFinished, frame(), DataFrame, A price handed in says one thing about today; the history says what already…, What one price can and cannot say, when nothing else is available to say it., run(), WithNoBarsThePriceIsTheWholeRecord
+### Community 129 - ".measure"
+Cohesion: 0.13
+Nodes (8): Matplotlib stops the volume axis five percent above its tallest bar, and at…, Nothing was comparing either of them with the request, so both could name some…, The title and the two axis labels are the whole of what a picture says about…, Pinned to the upper left, the volume legend covered the tallest bar of the…, The floor that keeps a doji visible is a fraction of the bar's own range, and…, The placement above the panel is clear of the marks by construction and can…, The source's "low volume" and "high volume" have no boundary, so the bars do…, TheFailedVolumeEventNamesWhatItCouldNotSettle
 
-### Community 130 - "test_power_play_chart_approval.py"
-Cohesion: 0.09
-Nodes (17): AChartAlreadyReadIsNotAChartStillWaited0n, AFinishedAnswerCarriesItsEvidenceAndAsksNothing, AGapOnARejectedStructureIsNotAnInstruction, ARejectedStructureAsksNothing, The chart question and its answer, across the capability boundary. Everything…, The reason a reader acts on has to be the reason it actually stopped. A…, `required` and the reason both say what is left to do, so on a finished answer…, Otherwise the envelope asks forever: the key it names comes back already… (+9 more)
+### Community 130 - "run"
+Cohesion: 0.10
+Nodes (14): AFinishedAnswerCarriesItsEvidenceAndAsksNothing, AGapOnARejectedStructureIsNotAnInstruction, ARejectedStructureAsksNothing, The reason a reader acts on has to be the reason it actually stopped. A…, `required` and the reason both say what is left to do, so on a finished answer…, Otherwise the envelope asks forever: the key it names comes back already…, Both halves, because dropping either one is a different lie. Kept whole, a…, `awaited` counts unanswered questions, and both tops ask this criterion… (+6 more)
 
 ### Community 131 - "test_a_turnaround_is_read_differently.py"
 Cohesion: 0.25
 Nodes (8): evidence(), quarter(), The same earnings history read as a turnaround, which the source holds to a…, TheCategoryDecidesWhatIsRead, TheHundredPercentBar, turnaround(), two_years(), TwoStrongQuartersOrOneBigEnough
 
 ### Community 132 - "test_one_regime_per_measurement.py"
-Cohesion: 0.32
-Nodes (7): filing(), GrowthIsNotMeasuredAcrossARegimeChange, quarter(), A measurement made of two numbers needs both of them measured the same way. The…, read(), TheReturnOnEquityDividesOneRegimeByItself, TheTrailingYearIsSummedInsideOneRegime
-
-### Community 133 - "test_every_cited_doctrine_id_resolves.py"
 Cohesion: 0.22
-Nodes (13): expr, Module, _cited_nodes(), EveryCitedDoctrineIdResolves, _is_doctrine_claim_call(), _module_constants(), Every doctrine id the reducers cite must resolve to a registered claim.…, Positive control: the check is only worth trusting if it fails on a bad… (+5 more)
+Nodes (8): AnIfrsBalanceSheetReachesTheEvaluator, filing(), GrowthIsNotMeasuredAcrossARegimeChange, quarter(), A measurement made of two numbers needs both of them measured the same way. The…, read(), TheReturnOnEquityDividesOneRegimeByItself, TheTrailingYearIsSummedInsideOneRegime
+
+### Community 133 - "DoctrineRegistryTests"
+Cohesion: 0.10
+Nodes (14): expr, Module, DoctrineRegistryTests, _cited_nodes(), EveryCitedDoctrineIdResolves, _is_doctrine_claim_call(), _module_constants(), Every doctrine id the reducers cite must resolve to a registered claim.… (+6 more)
 
 ### Community 134 - "test_one_question_one_answer.py"
 Cohesion: 0.19
@@ -994,9 +1001,9 @@ Nodes (8): attested(), AWordIsNotAMeasurement, prospective(), A component word n
 Cohesion: 0.23
 Nodes (8): AnUnknownBranchDoesNotMakeADisjunctionFalse, evidence(), NoComparablePairIsNotAnAnswerOfNo, quarter(), Three blocks that answered a question nobody had the evidence to ask. The…, A quarter that was filed without the figure is not a quarter that was never…, read(), TheLatestFiledQuarterIsTheHeadlineOrThereIsNone
 
-### Community 137 - "test_a_group_reaches_its_names.py"
-Cohesion: 0.23
-Nodes (12): _breaking_out(), _classification(), _frame(), GroupMembershipTests, _held_its_high(), _price(), DataFrame, ndarray (+4 more)
+### Community 137 - "ProviderUnavailable"
+Cohesion: 0.07
+Nodes (35): _default_company_tickers(), _default_finviz_breadth(), The SEC's own current symbol-to-registrant list, whole. The same fetch…, ProviderUnavailable, A typed boundary failure callers can convert into unavailable evidence., _breaking_out(), _classification(), _frame() (+27 more)
 
 ### Community 138 - "choices"
 Cohesion: 0.13
@@ -1035,8 +1042,8 @@ Cohesion: 0.33
 Nodes (7): eight(), evidence(), quarter(), A band contributes to convergence. It never decides it. The governing contract…, ReviewIsNotRejection, TheAnnualCollapseIsNotOverruledByOneQuarter, year()
 
 ### Community 147 - "test_the_doctrine_round_findings.py"
-Cohesion: 0.12
-Nodes (13): _bars(), DoctrineRoundTests, _evidence(), LeaderMajorityTests, What the doctrine lens found in the first Phase 5 review round. Each test is…, The source states it for names in a particular industry., The second round narrowed this: the majority is of the ranked list, not of the…, tactic.market_cycle_swing_system's own note: do not promote this to a hard gate. (+5 more)
+Cohesion: 0.18
+Nodes (12): _bars(), DoctrineRoundTests, _evidence(), date, What the doctrine lens found in the first Phase 5 review round. Each test is…, The claim is about the decline preceding the next new high, so a new high…, The source states it for names in a particular industry., The index-th business day of a run ending on a fixed session. Ordering tokens… (+4 more)
 
 ### Community 148 - "x-capability-contract"
 Cohesion: 0.14
@@ -1046,9 +1053,9 @@ Nodes (14): Creates or updates the ignored SQLite ledger at .state/research-ledg
 Cohesion: 0.14
 Nodes (13): allOf, 0, 2, 3, $id, $schema, title, x-capability-contract (+5 more)
 
-### Community 150 - "ProviderUnavailable"
-Cohesion: 0.07
-Nodes (18): _default_finviz_breadth(), _default_reachability_probes(), _probe_rs(), _probe_sec(), _probe_yfinance(), Name the cheapest decisive call per probed provider. Nasdaq's security master…, fetch_with_one_retry(), ProviderUnavailable (+10 more)
+### Community 150 - "providers/__init__.py"
+Cohesion: 0.15
+Nodes (4): Space consecutive requests at a boundary that rate-limits by source address.…, RequestThrottle, FakeClock, A monotonic clock separating time the test passes from time a sleep costs.
 
 ### Community 151 - "test_primary_base_depth_roles.py"
 Cohesion: 0.24
@@ -1058,17 +1065,17 @@ Nodes (9): _bars(), depth_claim(), DepthRoleTests, history(), primary_base(), Da
 Cohesion: 0.15
 Nodes (6): MarkerReportsDistanceAndNeverAVerdictTests, A value the source named for comparison but never stated as a filter. Three…, Substitute one threshold in memory, for the cases the live registry cannot show., A marker that could say "pass" would be a gate the source declined to draw., A number given as two numbers is a range, and a range is a band., threshold_replaced()
 
-### Community 153 - "payout_that_only_moves_a_gate_series"
-Cohesion: 0.19
-Nodes (7): ADistributionDecidesOnlyWhatItActuallyMoved, APayoutWithholdsItsOwnSignalAndNothingElse, A payout is a known amount, so it does not have to invalidate everything the…, Same structure is not the same verdict. Every boundary can match on both scales…, TheSignatureHasToCoverTheAnswersToo, payout_that_only_moves_a_gate_series(), Same structure on either scale, and the advance lands on opposite sides of the…
+### Community 153 - "test_the_envelope_says_what_the_price_was_worth.py"
+Cohesion: 0.22
+Nodes (9): ADateThatNamesNoSession, ADateTheCallerGaveIsNotAMissingDate, bars(), DataFrame, What the envelope says about the price it fetched, and about the date the…, run(), snapshot(), TheExpansionMeasuresWhatItSays (+1 more)
 
 ### Community 154 - "test_the_calendar_arrives_on_its_own.py"
 Cohesion: 0.29
 Nodes (8): AForecastIsNotAHistoricalFact, bars(), block(), calendar_snapshot(), DataFrame, The coming report, fetched rather than typed -- and only when the question is…, run(), TheHarnessLooksItUp
 
-### Community 155 - "test_a_number_carries_where_it_came_from.py"
-Cohesion: 0.27
-Nodes (6): ANumberThatIsNotANumber, AZeroStartingBalanceIsNotAGrowthRate, EachNumberSaysWhichFilingItCameFrom, evidence(), filing(), Provenance is per number, and a boundary that lets a bad value through is not a…
+### Community 155 - "ensure_default_ca_bundle"
+Cohesion: 0.21
+Nodes (8): ensure_default_ca_bundle(), _exists(), Any, Point stdlib TLS at certifi when the interpreter has no usable CA bundle. The…, DefaultCaBundleTests, FakeVerifyPaths, The two fields of ssl.get_default_verify_paths() this module reads., RuntimeImportTests
 
 ### Community 156 - "test_a_number_the_arithmetic_could_not_hold.py"
 Cohesion: 0.20
@@ -1090,9 +1097,9 @@ Nodes (5): The next earnings date, which is a forecast about the future and neve
 Cohesion: 0.26
 Nodes (7): contrast(), evidence(), quarter(), What the practitioners this harness reads for contrast say about the same…, ThreeWaysToReadTheSameQuarter, two_years(), WhoElseLooksAtTheMultipleAndTheReturn
 
-### Community 161 - "test_a_leader_reaches_its_own_bars.py"
-Cohesion: 0.24
-Nodes (9): _classification(), _frame(), LeaderHistoryReachesTheSnapshotTests, DataFrame, ndarray, The market snapshot fetches each ranked leader's own history and measures from…, The market snapshot reads membership; every fixture runtime must answer for it., _rows() (+1 more)
+### Community 161 - "test_every_chart_question_has_a_picture.py"
+Cohesion: 0.13
+Nodes (7): ARejectionIsInspectableWithoutAPicture, NoQuestionIsAskedAboutAPictureThatShowsNothing, Whenever the capability asks, the chart has to be answerable. The two sides of…, An overlay a reader can see is one they can approve from, and no key exists…, A sweep where nothing is ever asked would pass the test below by saying…, Not "drew something" -- the same tops. Drawing the highest top while the…, The route that replaces the overlay a rejected reading used to get. Nothing is…
 
 ### Community 162 - "test_the_envelope_measures_a_year_of_whole_bars.py"
 Cohesion: 0.25
@@ -1123,12 +1130,12 @@ Cohesion: 0.18
 Nodes (7): BindingAuthorityTests, OneRangeIsOneThresholdTests, Whose standard decides, kept separate from what kind of statement the number…, The manifest is what the reducers say they read; `threshold()` closes the rest.…, TraderLion's "two closes below" is a real rule with a real source behind it., Splitting "3 to as many as 60 weeks" in two loses that it was ever a range.…, registry()
 
 ### Community 169 - "test_setup_round_two.py"
-Cohesion: 0.10
-Nodes (15): BreakoutIsTheFirstCrossingTests, ContractMatchesImplementationTests, EarlyEntryHasNoTriggerYetTests, ExtendedBreakoutTests, PauseLowHeldTests, PriceSpikeTests, DataFrame, The second adversarial round's counterexamples, each run against the seam it… (+7 more)
+Cohesion: 0.08
+Nodes (18): BreakoutIsTheFirstCrossingTests, ContractMatchesImplementationTests, EarlyEntryHasNoTriggerYetTests, ExtendedBreakoutTests, PauseLowHeldTests, PriceSpikeTests, DataFrame, The second adversarial round's counterexamples, each run against the seam it… (+10 more)
 
 ### Community 170 - "test_setup_round_four.py"
-Cohesion: 0.10
-Nodes (16): AdversarialDirectionTests, CompletenessCannotBeSelfCertifiedTests, PivotFailureCanRecoverTests, ProximityIsTheReadersCallTests, DataFrame, QuietingIsReportedNotDecidedTests, Round four: two readings that were flags again, and a sentence I read…, The one refusal the bars support: there is no entry above a pivot nobody… (+8 more)
+Cohesion: 0.13
+Nodes (13): CompletenessCannotBeSelfCertifiedTests, PivotFailureCanRecoverTests, ProximityIsTheReadersCallTests, DataFrame, QuietingIsReportedNotDecidedTests, Round four: two readings that were flags again, and a sentence I read…, The one refusal the bars support: there is no entry above a pivot nobody…, The claim says a pivot failure resets and recovers; the code said it never did. (+5 more)
 
 ### Community 171 - "test_a_record_shows_its_work.py"
 Cohesion: 0.24
@@ -1139,8 +1146,8 @@ Cohesion: 0.13
 Nodes (11): AnActiveClaimIsUntouched, NoNumberComesOutOfAQuarantinedClaim, quarantined(), QuarantineWithdrawsTheNumbersAndNotTheRecord, Quarantine has to refuse at the seam, the way out_of_scope already does.…, Wired to nothing and absent from the reducers' threshold manifest, so it is…, Set the named claims aside, as a reviewer would when a source stops supporting…, A parameter chooses which measurement exists, so reading one is still executing. (+3 more)
 
 ### Community 173 - "test_a_window_opens_where_it_opens.py"
-Cohesion: 0.25
-Nodes (6): frame(), DataFrame, ndarray, Where a measurement's own window starts, and at what precision its limit is…, TheAdvanceBeginsInWhicheverSystemItsFirstSessionPrinted, TheExtensionIsMeasuredFromWhereTheBaseWasDeclared
+Cohesion: 0.21
+Nodes (7): ACapIsPrintedAtThePrecisionItIsCheckedAt, frame(), DataFrame, ndarray, Where a measurement's own window starts, and at what precision its limit is…, TheAdvanceBeginsInWhicheverSystemItsFirstSessionPrinted, TheExtensionIsMeasuredFromWhereTheBaseWasDeclared
 
 ### Community 174 - "test_final_round_rules.py"
 Cohesion: 0.27
@@ -1186,9 +1193,13 @@ Nodes (12): completed_pivot, consolidation_pivot_breakout, key_moving_average_pu
 Cohesion: 0.17
 Nodes (12): scripts/.venv/bin/python scripts/pipeline ticker qualify AAPL, scripts/.venv/bin/python scripts/pipeline ticker qualify IPOX --primary-base-quality supports --primary-base-emergence near_high_consolidation, 0, 2, 3, x-capability-contract, examples, exit_codes (+4 more)
 
-### Community 186 - "test_active_audit_windows.py"
-Cohesion: 0.23
-Nodes (5): audit(), AuditWindowTests, NonFiniteInputTests, An audit only counts for the level and window it actually covers., UnauditedConditionTests
+### Community 185 - "test_power_play_gaps_name_answerable_things.py"
+Cohesion: 0.17
+Nodes (6): ATopTheBarsAlreadyThrewOut, Every gap that says "chart" has to name a key somebody can answer. A criterion…, The lower top here rejects on the six-week limit, so it is issued no key at all…, The name moved, not the verdict. A top that rejects has not agreed to anything., A signal reading `pass` or `fail` beside a gap that says the criterion is held…, snapshot()
+
+### Community 186 - "TheCallerSaysWhichReadingItWas"
+Cohesion: 0.24
+Nodes (4): AConditionTheTacticDoesNotHaveIsRefused, Free text cannot be graded, so the flag asks for the grade separately.…, A typo that goes nowhere is worse than a typo that stops you. Silently dropped,…, TheCallerSaysWhichReadingItWas
 
 ### Community 187 - "base"
 Cohesion: 0.24
@@ -1198,9 +1209,9 @@ Nodes (7): _bars(), base(), DataFrame, DatetimeIndex, The deeper allowance belon
 Cohesion: 0.21
 Nodes (5): ParameterSeamTests, A number that selects what gets computed, which none of the four roles could…, Fixtures derived from the registry test the wiring, not the numbers.…, registry(), TheValuesThemselvesArePinnedTests
 
-### Community 189 - "test_setting_a_claim_aside_reaches_every_seam.py"
-Cohesion: 0.13
-Nodes (10): OnlyTheAuditSurfaceUsesTheAuditAccessor, quarantined(), Refusing the numbers was not enough, and the numbers were not the only way in.…, The guard is an accessor boundary, so what has to hold is who calls which one.…, It serializes claims entire, thresholds included, into a key a reading depends…, It reads binding authority and the rule prose, and never touches a threshold., Wired to no consumer and still named in the reducers' own threshold manifest., `doctrine show` is the only place the withdrawal is explained; an empty reason… (+2 more)
+### Community 189 - "build_setup_evidence"
+Cohesion: 0.06
+Nodes (45): _asymmetry_state(), build_setup_evidence(), _chain_matches_detector(), compile_measurement_spec(), _completeness_state(), _direction(), _failure_state(), _iso_day() (+37 more)
 
 ### Community 190 - "TheStateAgreesWithThePrintedNumber"
 Cohesion: 0.20
@@ -1219,8 +1230,8 @@ Cohesion: 0.29
 Nodes (7): AnExtremeNeedsItsPrices, bars(), criteria(), DataFrame, Reading the extremes off two more columns made this function depend on them.…, A gap the year does not cover is not this year's gap., Two columns called High make `bars["High"]` a frame, and `float()` of one is a…
 
 ### Community 194 - "test_a_cik_has_a_place_to_come_from.py"
-Cohesion: 0.24
-Nodes (7): ACikHasAPlaceToComeFrom, The envelope asked for a CIK and named nowhere to get one.…, The source answered. This symbol is not in it, which is not the same as no…, Today's mapping is not evidence about who filed under this symbol a year ago., resolve(), runtime(), _snapshot()
+Cohesion: 0.20
+Nodes (8): ACikHasAPlaceToComeFrom, The envelope asked for a CIK and named nowhere to get one.…, The source answered. This symbol is not in it, which is not the same as no…, Today's mapping is not evidence about who filed under this symbol a year ago., resolve(), runtime(), _snapshot(), TheEnvelopeSaysWhereTheValueComesFrom
 
 ### Community 195 - "choices"
 Cohesion: 0.18
@@ -1230,13 +1241,13 @@ Nodes (11): cyclical, institutional_favorite, market_leader, past_leader_or_lagg
 Cohesion: 0.18
 Nodes (11): scripts/.venv/bin/python scripts/pipeline ticker peers NVDA --limit 10, 0, 2, 3, x-capability-contract, examples, exit_codes, output (+3 more)
 
-### Community 197 - "_completed_stop_path"
-Cohesion: 0.31
-Nodes (9): _bars_that_spoke(), _completed_stop_path(), _max_high_since(), date, Sessions no measurement may span, each with the reason it cannot be spanned.…, The highest completed High after the entry session through ``as_of``, and its…, Which bars the audit actually read. A requested window start is a date the…, Audit every completed session against ``protective_level`` from… (+1 more)
+### Community 197 - "wick_after_the_launch_series"
+Cohesion: 0.18
+Nodes (7): OneAnchorForThePriceAndTheTime, The advance's size and the advance's length have to be measured from the same…, `advance_weeks` is a distance, and a distance from an unnamed point is not…, The invariant the baseline's placement rests on, over every shape the fixture…, TheReadingNamesTheSessionItCountsFrom, The lowest low of the eight weeks prints days after the move already began.…, wick_after_the_launch_series()
 
-### Community 198 - "swings.py"
-Cohesion: 0.20
-Nodes (17): _after_the_structure_it_left(), base_chain(), _is_new_high(), _iso(), _left_behind(), _pivot_index(), Any, Series (+9 more)
+### Community 198 - "TheChartCarriesTheStructureItAsksAbout"
+Cohesion: 0.17
+Nodes (5): The same contract the anchors already keep: what the picture contains, not what…, The clause is about one bar's volume, and the price panel is not where a reader…, Not a span the chart measured for itself -- the values are the question's own,…, An approval cites the digest, so a span measured from other bars than the…, TheChartCarriesTheStructureItAsksAbout
 
 ### Community 199 - "run"
 Cohesion: 0.27
@@ -1247,8 +1258,8 @@ Cohesion: 0.33
 Nodes (6): OfflineEntrypointTests, CompletedProcess, Discovery must work on a machine that cannot import the plotting stack., _run_shadowed(), run_without_plotting(), run_without_plotting_python()
 
 ### Community 201 - "test_doctrine_ids_follow_use.py"
-Cohesion: 0.18
-Nodes (8): ACitedClaimSaysWhichHalfWasRead, ActiveCitesWhatItsPayloadNames, bars(), EveryCitationIsAClaimThisCapabilityIsRegisteredFor, DataFrame, doctrine_ids is the audit route to the claims a result actually used, not a…, Evidence a reading never consumes is named, and is not the same as evidence it…, A citation the registry does not expect from here is a contract nobody agreed…
+Cohesion: 0.14
+Nodes (10): ACitedClaimSaysWhichHalfWasRead, ActiveCitesWhatItsPayloadNames, AMarkerTravelsWithItsDistance, bars(), EveryCitationIsAClaimThisCapabilityIsRegisteredFor, ProspectiveCitesNoManagementClaims, DataFrame, doctrine_ids is the audit route to the claims a result actually used, not a… (+2 more)
 
 ### Community 202 - "test_windows_and_citations.py"
 Cohesion: 0.35
@@ -1257,10 +1268,6 @@ Nodes (7): CitationsPointAtSomething, frame(), DataFrame, Two things the audit m
 ### Community 203 - "test_a_number_with_no_source_decides_nothing.py"
 Cohesion: 0.33
 Nodes (5): AnAmendedFilingSaysSo, filings(), quarter(), Two things this evaluator was publishing that no source says. A ten-percent…, TheShareCountIsReportedAndNeverJudged
-
-### Community 204 - "FixtureGet"
-Cohesion: 0.19
-Nodes (4): fixture_hash(), FixtureGet, FixtureResponse, SecProviderTests
 
 ### Community 205 - "test_a_52_week_extreme_is_the_whole_bar.py"
 Cohesion: 0.25
@@ -1330,25 +1337,25 @@ Nodes (9): description, required, type, as_of, ticker, description, required, ty
 Cohesion: 0.22
 Nodes (9): description, required, type, condition, invalidation, description, required, type (+1 more)
 
-### Community 224 - "OneBaseAtATimeTests"
-Cohesion: 0.14
-Nodes (11): OneBaseAtATimeTests, Which structure the chain describes when the history holds more than one., A base the stock is thirty percent above is a memory, not a proposal.…, Two consolidations with a breakout between them are two bases, not one deep one., Whether a base under an older peak is one structure or two is not in the bars.…, A breakout, a shallow slip, and a quiet recovery, which the readings split on.…, A provider's history starts wherever it starts, and small highs live there. The…, bases_under_an_older_high_series() (+3 more)
+### Community 224 - "series.py"
+Cohesion: 0.04
+Nodes (63): Measure a Power Play from bars, without consulting doctrine about it. The same…, Five times the volume it traded before the move, against a fixed stale window., TheBaselineIsTheVolumeTheStockLeft, The one judgment in the segmentation that no rule got right, and what follows…, Price alone reads the two identically, which is why the dispute is about…, WhereTheBaseBeginsIsNotSettledByTheBarsTests, CanonicalChainTests, OneBaseAtATimeTests (+55 more)
 
 ### Community 225 - "ARangeWithNoWidthIsNotARange"
 Cohesion: 0.31
 Nodes (4): ARangeWithNoWidthIsNotARange, A band whose edges are equal is a single value the source named, which is a…, The validator is the gate, but nothing forces a caller to have run it, and…, The validator already refuses an inverted range, so this is the same defence…
 
 ### Community 226 - "test_an_assertion_settles_the_verdict_not_the_record.py"
-Cohesion: 0.25
+Cohesion: 0.23
 Nodes (6): AnActionMustBePlaceableAndMeasured, frame(), DataFrame, An assertion says the position ended; the bars say when, and at which line.…, run(), TheBarsAreStillRead
 
 ### Community 227 - "run"
 Cohesion: 0.31
 Nodes (5): CompletedProcess, Discovering the contract cannot depend on a provider cache neither command…, The cache is not being made optional -- only moved behind the two that never…, run(), TheRegistryAnswersWhateverTheCacheSettingSays
 
-### Community 228 - "test_the_third_round_findings.py"
-Cohesion: 0.25
-Nodes (8): _bars(), _lead(), OpenConfirmsAnIntrabarDecline, What the regression-only round found in the code the second round produced. The…, The index-th business day of a run ending on a fixed session. Ordering tokens…, Rows of (high, low, close, open); open is omitted from the bar when it is None., The same last bar -- high 100, low 40, close 95 -- reads two ways, and the open…, _session()
+### Community 228 - "build_market_evidence"
+Cohesion: 0.12
+Nodes (14): build_market_evidence(), Convert completed source snapshots to ``evaluate_market_snapshot`` input.…, MarketEvidenceTests, _bars(), _lead(), OpenConfirmsAnIntrabarDecline, date, What the regression-only round found in the code the second round produced. The… (+6 more)
 
 ### Community 229 - "mode"
 Cohesion: 0.25
@@ -1426,6 +1433,10 @@ Nodes (8): choices, default, description, required, type, format, compact, full
 Cohesion: 0.39
 Nodes (3): history(), DataFrame, TechnicalEvidenceTests
 
+### Community 248 - "fetch_with_one_retry"
+Cohesion: 0.20
+Nodes (8): _default_reachability_probes(), _probe_rs(), _probe_sec(), _probe_yfinance(), Name the cheapest decisive call per probed provider. Nasdaq's security master…, fetch_with_one_retry(), T, Make the one permitted retry at an external boundary and preserve its failure.
+
 ### Community 249 - "test_fundamentals_waiver.py"
 Cohesion: 0.32
 Nodes (5): facts(), Fundamentals does not hand out the exception on the strength of being asked for…, Every safety fact filed and clear; the growth numbers simply are not there.…, The control: this is what the missing growth data is worth on its own., TheExceptionIsNotAnArgument
@@ -1462,9 +1473,9 @@ Nodes (7): near_high_consolidation, primary_base_emergence, needs_chart, choices
 Cohesion: 0.29
 Nodes (7): primary_base_quality, contradicts, supports, choices, description, required, type
 
-### Community 259 - "TheChartDebtItUsedToManufacture"
-Cohesion: 0.29
-Nodes (3): Every question this run asked is the empty list, so naming ticker.chart would…, A signal reading `pass` or `fail` beside a gap that says the criterion is held…, TheChartDebtItUsedToManufacture
+### Community 259 - "test_power_play_unreadable_contesting_top.py"
+Cohesion: 0.20
+Nodes (5): A top the split left unreadable is not a chart anybody can go and read. No key…, Every question this run asked is the empty list, so naming ticker.chart would…, A signal reading `pass` or `fail` beside a gap that says the criterion is held…, snapshot(), TheChartDebtItUsedToManufacture
 
 ### Community 261 - "limitations"
 Cohesion: 0.33
@@ -1490,9 +1501,9 @@ Nodes (6): tl_stage12, management_profile, choices, description, required, type
 Cohesion: 0.33
 Nodes (5): additionalProperties, $id, $schema, title, type
 
-### Community 267 - "test_both_regime_words_are_reachable.py"
-Cohesion: 0.27
-Nodes (11): _advancing(), _broken(), _frame(), _price(), DataFrame, ndarray, Favorable and defensive are both reachable from provider-shaped evidence. Phase…, A peak at 200 and a slide to 100 -- past the source's 50% correction ceiling. (+3 more)
+### Community 267 - "._snapshot"
+Cohesion: 0.25
+Nodes (4): LeaderMajorityTests, The second round narrowed this: the majority is of the ranked list, not of the…, tactic.market_cycle_swing_system's own note: do not promote this to a hard gate., SwitchIsNotAGateTests
 
 ### Community 268 - "Feed"
 Cohesion: 0.40
@@ -1627,12 +1638,12 @@ Cohesion: 0.40
 Nodes (4): allOf, $id, $schema, title
 
 ### Community 302 - "ProviderCache"
-Cohesion: 0.26
-Nodes (3): ProviderCache, Session-keyed on-disk cache for JSON-safe provider snapshots., ProviderCacheIntegrationTests
+Cohesion: 0.21
+Nodes (5): ProviderCache, Session-keyed on-disk cache for JSON-safe provider snapshots., ProviderCacheIntegrationTests, A regression guard on the reason the digest is asked for at all. The provider…, TheTwoCapabilitiesCanReachDifferentBars
 
-### Community 304 - "build_setup_evidence"
-Cohesion: 0.05
-Nodes (31): build_setup_evidence(), Build the mapping :func:`setup.evaluate_setup` reads, plus the contrast beside…, BaseDepthTests, CheatRouteTests, EarlyEntryRelationshipTests, NormalisationTests, What a validated chain and a satisfied evidence list still let through. An…, The source's second named form of time compression, and it needs no ratio.… (+23 more)
+### Community 304 - "base_series"
+Cohesion: 0.04
+Nodes (47): Validate an alternating chain of swing dates against the completed bars.…, resolve_structure(), A Tuesday low has no Tuesday bar on a weekly chart, and it still happened.…, BaseDepthTests, EarlyEntryRelationshipTests, NormalisationTests, A correction of more than 50 percent is generally too much" -- a limit with a…, (Close - Low) / (High - Low), as a percentage; the source's own worked example… (+39 more)
 
 ### Community 305 - "flat"
 Cohesion: 0.50
@@ -1886,89 +1897,93 @@ Nodes (3): side_effects, items, type
 Cohesion: 0.67
 Nodes (3): signals, items, type
 
-### Community 411 - "canonical_chain"
-Cohesion: 0.20
-Nodes (8): canonical_chain(), The segmentation `ticker.setup` corroborates a declared chain against. It…, CanonicalChainTests, Which of two things moved, when a declaration that used to match stops…, The engine cannot both refuse a finer chain and vouch for one. Downstream, a…, Both runs losing the same evidence is not both finding the same thing. The…, What `ticker.setup` compares a declared chain against, chosen by the harness…, Knowing the chain moves with the parameter and passing one of them anyway is…
+### Community 411 - "test_a_base_duration_is_read_against_both_bands_the_sources_give.py"
+Cohesion: 0.36
+Nodes (5): band(), OneMeasurementReachesBothStandards, Two Minervini sentences bound a base's length, and the setup published only the…, One base has one length. Two readings that disagreed would be two measurements., run()
 
-### Community 412 - "test_swings.py"
-Cohesion: 0.14
-Nodes (10): Drawing an unstable chain would show a person a structure the engine refuses to…, A deterministic segmentation, so the caller's chart reading has something to…, A move still in progress is unconfirmed, and a breakout is exactly that move.…, RecoversTheSourcesOwnExampleTests, neighbour_only_ambiguity_series(), A decline interrupted by one bounce sized to fall between two neighbouring…, A base the detector refuses to vouch for, because neighbouring multiples cut it…, One session a neighbouring multiple cannot order, where every chain still… (+2 more)
+### Community 412 - "AnchorOverlayTests"
+Cohesion: 0.20
+Nodes (4): AnchorOverlayTests, Drawing an unstable chain would show a person a structure the engine refuses to…, The provenance digest and the segmentation's are the same value, or an approval…, A week is kept for the sessions it aggregates, not for the label it was given.…
 
 ### Community 413 - "test_a_period_is_named_by_its_close.py"
 Cohesion: 0.27
 Nodes (7): AnAmendmentCorrectsAYearRatherThanAddingOne, annual_periods(), facts(), A period's name comes from the date it closed, and two periods cannot share one…, submissions(), TwoClosesCannotShareOneName, TwoYearsThatOverlapAreNotAPair
 
-### Community 414 - "test_a_declared_base_count_is_read_where_it_was_declared.py"
-Cohesion: 0.19
-Nodes (7): ABaseCountDeclaredForAnEntryIsReported, entry(), OneModeCannotHaveTheCountAndTheOtherLoseIt, A base count declared for an entry decision has to come back out of that…, The count is not evidence the verdict rests on, so a gap elsewhere cannot…, It lived inside management_evidence, which one mode does not build and the…, INCOMPLETE empties the measurements keyed to a position. The count is not one…
+### Community 414 - "attestations.py"
+Cohesion: 0.07
+Nodes (25): converged(), GatePrecisionTests, A gate compares what was measured, not a tidied version of it. Rounding before…, evidence(), HalfAverageGainCapTests, The half-average-gain cap is a hard gate, so its input cannot go missing…, AWaiverIsEarnedNotDeclared, prospective() (+17 more)
 
-### Community 415 - "test_chart_overlay.py"
-Cohesion: 0.23
-Nodes (6): _draw_anchors(), Mark the turning points the detector will corroborate a declared chain against.…, The chart the analyst approves from has to show what they are approving. The…, Enough of an axis to say what was asked of it, and nothing else. The manifest's…, RecordingAxis, ThePivotLineFollowsThePivotTests
+### Community 415 - "RecordingAxis"
+Cohesion: 0.29
+Nodes (3): Enough of an axis to say what was asked of it, and nothing else. The manifest's…, RecordingAxis, ThePivotLineFollowsThePivotTests
 
 ### Community 416 - "qualify"
 Cohesion: 0.27
 Nodes (6): PrimaryBaseReachabilityTests, DataFrame, qualify(), Every branch the Primary Base doctrine declares must be reachable from the…, A 120-session listing: a peak at 100, a correction to ``trough``, then a…, recent_ipo_history()
 
-### Community 417 - ".test_a_pause_that_broke_its_own_low_before_breaking_out_is_not_a_live_trigger"
-Cohesion: 0.24
-Nodes (6): BaseFailureBeforeBreakoutTests, flat_tail(), DataFrame, Undercutting a prior low inside the base is a shakeout the source wants to see.…, The volume that matters is the volume on the day the stock left the base., StalePivotTests
+### Community 417 - "test_setup_gaming.py"
+Cohesion: 0.10
+Nodes (13): BaseFailureBeforeBreakoutTests, CheatRouteTests, flat_tail(), DataFrame, What a validated chain and a satisfied evidence list still let through. An…, The source's second named form of time compression, and it needs no ratio.…, much bigger on up days" is one clause; the price-spike clause is tested next…, Undercutting a prior low inside the base is a shakeout the source wants to see.… (+5 more)
 
 ### Community 418 - "test_one_52_week_window_for_the_whole_harness.py"
-Cohesion: 0.33
-Nodes (6): bars(), leader(), The market's 52-week window counted bars while the eligibility stack measured a…, 260 business days end 361 days back. The count is met and the year is not., Every third session, so 260 bars span three years. The window is still one., TheWindowIsBoundedByDateAndNotByBarCount
+Cohesion: 0.24
+Nodes (9): bars(), leader(), date, The market's 52-week window counted bars while the eligibility stack measured a…, The last session the fixture carries -- the date the group reading is taken at.…, 260 business days end 361 days back. The count is met and the year is not., Every third session, so 260 bars span three years. The window is still one., _reading_date() (+1 more)
 
 ### Community 419 - "_complete_rows"
 Cohesion: 0.29
 Nodes (8): _complete_rows(), _impossible_range(), _index_dates(), DataFrame, ndarray, Series, Mark the rows whose every present value the measurements read is a finite…, Rows whose four prices cannot all have come from one session. Only rows where…
 
-### Community 420 - "from_legs"
+### Community 420 - "test_active_protective_level_audit.py"
+Cohesion: 0.33
+Nodes (5): price_snapshot(), ProtectiveLevelAuditTests, DataFrame, The completed-price audit must cover whichever protective level is crossed…, run()
+
+### Community 421 - "ADigestIsWhatIsAskedFor"
 Cohesion: 0.25
-Nodes (5): Inside a correction, clearing an earlier rally top is what contracting looks…, What rejects a spliced history, where the left edge is not itself in dispute.…, A crossing inside the first fifty sessions, which no volume window can speak…, from_legs(), A frame from explicit price legs, for shapes no base builder produces. Each leg…
+Nodes (4): ADigestIsWhatIsAskedFor, Any non-empty string used to count, so a typo arrived as a reading of another…, A caller who names a picture is making a claim about it whether or not they…, The check strips; the comparison downstream did not. A trailing newline is what…
 
-### Community 421 - "TheOtherOrderIsRunRatherThanGuessed"
+### Community 422 - "test_peer_collection.py"
+Cohesion: 0.57
+Nodes (3): fixture(), PeerCollectionTests, security()
+
+### Community 423 - "AStockNobodyIsAskingAbout"
 Cohesion: 0.29
-Nodes (3): Every other caller keeps one chain, and it has to be the one they already had., The segmenter takes a reading of the ambiguous bar and keeps running under it.…, TheOtherOrderIsRunRatherThanGuessed
-
-### Community 422 - "test_two_readers_one_vocabulary.py"
-Cohesion: 0.46
-Nodes (7): clean(), DataFrame, Two readers of one price frame, and the exact list of what they are allowed to…, An event column that is zero on every session but one., with_cell(), with_column(), with_event()
-
-### Community 423 - "test_a_pointer_that_terminates.py"
-Cohesion: 0.32
-Nodes (5): ACurrentSnapshotIsNotHeldStill, ARefusalSaysWhatWorks, Two ways this capability's honesty leaked back out. `ticker.fundamentals` on a…, Chained with the same request, the pointer lands here. It has to terminate., _snapshot()
+Nodes (3): AStockNobodyIsAskingAbout, Drawing is not the same as claiming. The arithmetic succeeds on any history: an…, `rejection` says the arithmetic ran, not that a Power Play exists. This base…
 
 ### Community 424 - "test_an_entry_verdict_carries_the_count_it_was_given.py"
 Cohesion: 0.36
 Nodes (4): AnEntryVerdictCarriesTheCountItWasGiven, entry(), `--base-count` on a prospective request reached the envelope and left no trace.…, A band never carries a verdict; a late base is perspective, not a rejection.
 
-### Community 425 - "test_prospective_average_gain_gate.py"
-Cohesion: 0.43
-Nodes (3): evidence(), HalfAverageGainCapTests, The half-average-gain cap is a hard gate, so its input cannot go missing…
+### Community 426 - "frame"
+Cohesion: 0.38
+Nodes (4): frame(), DataFrame, Monotonic as text and not as dates. A positional slice would take a peak…, TheEligibilityWindowIsUnchangedByTheMove
 
-### Community 426 - ".test_a_key_from_other_bars_is_refused_rather_than_ignored"
-Cohesion: 0.29
-Nodes (4): AnApprovalIsBoundToWhatWasMeasured, Silently dropping it would let a caller believe they had answered something.…, The four things the prose says the key binds, each shown to actually bind.…, Same prices on the tape, different prices on one scale. The digest has to move…
+### Community 428 - "TheActionSpanCoversEverySessionAMeasurementReads"
+Cohesion: 0.33
+Nodes (4): The span checked for corporate actions has to start where the earliest reading…, The default series launches at index 59, so its baseline opens at index 19. The…, The other side of the same bound: nothing here reads it, so it is not this…, TheActionSpanCoversEverySessionAMeasurementReads
+
+### Community 434 - ".test_a_fully_read_setup_over_a_segmentation_the_harness_produced_is_ready"
+Cohesion: 0.40
+Nodes (3): CompletenessSourceIsNotACallerStringTests, The lock slice two left, opened by the detector rather than by a caller's word., _snapshot()
 
 ## Knowledge Gaps
 - **1091 isolated node(s):** `provider-readiness.sh script`, `$id`, `$schema`, `allOf`, `title` (+1086 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **25 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **30 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `reduce_risk()` connect `reduce_risk` to `Runtime`, `test_one_question_one_answer.py`, `prospective`, `operations.py`, `test_structure_extension_actions.py`, `risk.py`, `test_a_declared_base_count_is_read_where_it_was_declared.py`, `contracts.py`, `run`, `test_prospective_average_gain_gate.py`, `test_a_window_opens_where_it_opens.py`, `test_final_round_rules.py`, `test_active_audit_windows.py`, `test_round_seven_rules.py`, `held`, `held`, `held`, `position`, `test_reducer_threshold_parity.py`, `converged`, `held`, `TwoExitsOnOneSessionDidNotHappenAtOneMoment`?**
-  _High betweenness centrality (0.076) - this node is a cross-community bridge._
-- **Why does `evaluate_fundamentals()` connect `evaluate_fundamentals` to `fundamentals.py`, `test_a_turnaround_is_read_differently.py`, `test_one_regime_per_measurement.py`, `test_evidence_that_is_absent_is_not_evidence_against.py`, `operations.py`, `test_no_single_band_carries_the_verdict.py`, `test_a_number_carries_where_it_came_from.py`, `test_a_number_the_arithmetic_could_not_hold.py`, `test_a_per_share_rate_needs_a_steady_share_base.py`, `two_years`, `test_a_period_is_named_by_its_close.py`, `test_the_other_voices_in_the_corpus.py`, `valuation`, `test_earnings_quality_from_the_balance_sheet.py`, `normalize_filed_facts`, `annual`, `read`, `test_the_provider_keeps_what_it_read.py`, `test_the_rules_the_second_sweep_reached.py`, `test_the_window_the_source_named.py`, `test_what_the_equity_earned.py`, `test_the_fixes_that_stopped_one_step_short.py`, `test_a_number_with_no_source_decides_nothing.py`, `FixtureGet`, `evidence`, `test_the_comparison_reads_what_was_measured.py`, `annual`, `test_the_year_that_has_no_fourth_quarter.py`, `test_fundamentals_waiver.py`, `test_the_measurements_a_mutation_sweep_reached.py`?**
-  _High betweenness centrality (0.061) - this node is a cross-community bridge._
-- **Why does `Runtime` connect `Runtime` to `test_stop_path_reports_what_it_checked.py`, `test_terminal_price_and_declared_condition.py`, `test_power_play_chart_approval.py`, `TheChartDebtItUsedToManufacture`, `evaluate_power_play`, `test_one_question_one_answer.py`, `bars_fingerprint`, `SnapshotMeta`, `operations.py`, `test_a_group_reaches_its_names.py`, `_rendered`, `power_play_series`, `test_both_regime_words_are_reachable.py`, `cli.py`, `base_series`, `test_the_calendar_arrives_on_its_own.py`, `qualify`, `test_a_leader_reaches_its_own_bars.py`, `test_the_envelope_measures_a_year_of_whole_bars.py`, `test_a_pointer_that_terminates.py`, `run`, `test_an_entry_verdict_carries_the_count_it_was_given.py`, `test_a_record_shows_its_work.py`, `ProviderCache`, `test_final_round_rules.py`, `frame`, `ProviderSnapshot`, `Ledger`, `test_setup_envelope.py`, `test_swings_capability.py`, `test_entry_tactic_envelope.py`, `test_power_play_abstention.py`, `test_a_cik_has_a_place_to_come_from.py`, `test_chart_draws_the_power_play.py`, `test_qualify_reads_the_bars_the_rest_of_the_harness_reads.py`, `test_doctrine_ids_follow_use.py`, `test_windows_and_citations.py`, `test_risk_reads_the_bars_the_rest_of_the_harness_reads.py`, `run`, `test_strength_inputs_cross_the_seam.py`, `test_gap_through_stop.py`, `run`, `test_an_assertion_settles_the_verdict_not_the_record.py`, `.run_risk`, `test_initial_stop_audit.py`, `test_a_measurement_that_overflowed_is_not_a_measurement.py`, `test_the_market_reads_the_bars_the_rest_of_the_harness_reads.py`, `run`, `test_one_bad_leader_does_not_take_the_snapshot.py`, `test_context_inputs_cross_the_seam.py`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `reduce_risk()` connect `reduce_risk` to `Runtime`, `test_one_question_one_answer.py`, `prospective`, `operations.py`, `test_structure_extension_actions.py`, `risk.py`, `attestations.py`, `run`, `test_a_window_opens_where_it_opens.py`, `test_final_round_rules.py`, `test_round_seven_rules.py`, `held`, `held`, `held`, `test_reducer_threshold_parity.py`, `position`, `held`, `TwoExitsOnOneSessionDidNotHappenAtOneMoment`, `execute`?**
+  _High betweenness centrality (0.080) - this node is a cross-community bridge._
+- **Why does `evaluate_fundamentals()` connect `evaluate_fundamentals` to `fundamentals.py`, `test_a_turnaround_is_read_differently.py`, `test_one_regime_per_measurement.py`, `test_evidence_that_is_absent_is_not_evidence_against.py`, `operations.py`, `evidence`, `test_no_single_band_carries_the_verdict.py`, `normalize_filed_facts`, `test_a_number_the_arithmetic_could_not_hold.py`, `test_a_per_share_rate_needs_a_steady_share_base.py`, `two_years`, `test_a_period_is_named_by_its_close.py`, `test_the_other_voices_in_the_corpus.py`, `valuation`, `test_earnings_quality_from_the_balance_sheet.py`, `annual`, `read`, `test_the_provider_keeps_what_it_read.py`, `test_the_rules_the_second_sweep_reached.py`, `doctrine.py`, `test_the_window_the_source_named.py`, `test_what_the_equity_earned.py`, `test_the_fixes_that_stopped_one_step_short.py`, `test_a_number_with_no_source_decides_nothing.py`, `test_the_comparison_reads_what_was_measured.py`, `annual`, `test_the_year_that_has_no_fourth_quarter.py`, `test_fundamentals_waiver.py`, `test_the_measurements_a_mutation_sweep_reached.py`?**
+  _High betweenness centrality (0.056) - this node is a cross-community bridge._
+- **Why does `Runtime` connect `Runtime` to `test_stop_path_reports_what_it_checked.py`, `run`, `test_power_play_unreadable_contesting_top.py`, `test_one_question_one_answer.py`, `bars_fingerprint`, `SnapshotMeta`, `operations.py`, `ProviderUnavailable`, `_rendered`, `build_power_play_evidence`, `cli.py`, `evaluate_setup`, `test_the_envelope_says_what_the_price_was_worth.py`, `test_the_calendar_arrives_on_its_own.py`, `test_a_base_duration_is_read_against_both_bands_the_sources_give.py`, `qualify`, `test_the_envelope_measures_a_year_of_whole_bars.py`, `test_active_protective_level_audit.py`, `ADigestIsWhatIsAskedFor`, `test_chart_draws_the_power_play.py`, `run`, `test_an_entry_verdict_carries_the_count_it_was_given.py`, `test_a_record_shows_its_work.py`, `test_risk_measures_favorable_excursion.py`, `ProviderCache`, `test_final_round_rules.py`, `frame`, `test_a_declared_vocabulary_matches_the_envelopes.py`, `.test_a_fully_read_setup_over_a_segmentation_the_harness_produced_is_ready`, `Ledger`, `test_setup_envelope.py`, `test_power_play_gaps_name_answerable_things.py`, `test_swings_capability.py`, `test_entry_tactic_envelope.py`, `test_power_play_unread_tops.py`, `test_a_cik_has_a_place_to_come_from.py`, `test_qualify_reads_the_bars_the_rest_of_the_harness_reads.py`, `test_doctrine_ids_follow_use.py`, `test_windows_and_citations.py`, `test_risk_reads_the_bars_the_rest_of_the_harness_reads.py`, `power_play_series`, `test_strength_inputs_cross_the_seam.py`, `test_gap_through_stop.py`, `run`, `test_an_assertion_settles_the_verdict_not_the_record.py`, `.run_risk`, `test_initial_stop_audit.py`, `test_a_measurement_that_overflowed_is_not_a_measurement.py`, `test_the_market_reads_the_bars_the_rest_of_the_harness_reads.py`, `run`, `execute`, `test_context_inputs_cross_the_seam.py`?**
+  _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **Are the 66 inferred relationships involving `Runtime` (e.g. with `dispatch()` and `main()`) actually correct?**
   _`Runtime` has 66 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `provider-readiness.sh script`, `$id`, `$schema` to the rest of the system?**
   _1091 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `fundamentals.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.03524904214559387 - nodes in this community are weakly interconnected._
-- **Should `evaluate_setup` be split into smaller, more focused modules?**
-  _Cohesion score 0.08478513356562137 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0386201724784402 - nodes in this community are weakly interconnected._
+- **Should `Runtime` be split into smaller, more focused modules?**
+  _Cohesion score 0.053776079929473995 - nodes in this community are weakly interconnected._
