@@ -35,7 +35,7 @@ from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, i
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot, next_earnings_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
-from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
+from .power_play_evidence import ASKED_UNDER, CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
 from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, is_non_passing, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
@@ -597,6 +597,7 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
 _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
 _TRADING_WEEK_CONVENTION = "convention.trading_week"
+_VOLUME_STATE_CONVENTION = "setup.volume_state_convention"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
@@ -1104,15 +1105,19 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         status = "ok"
     else:
         status = "needs_input"
+    # Contrast evidence rides in the payload, never in `signals`: a reducer or a caller
+    # scanning signal states would read another practitioner's disagreement as this harness's
+    # own missing evidence. Named here rather than built inside the call because the citation
+    # list below is harvested from it -- derived from `result` instead, the harvest read a
+    # payload one key smaller than the one published, and the practitioners in that key were
+    # reported to the caller and cited to nobody.
+    data = {"ticker": ticker, **result, "contrast": evidence["contrast"]}
     return envelope(
         "ticker.setup",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        # Contrast evidence rides in the payload, never in `signals`: a reducer or a caller
-        # scanning signal states would read another practitioner's disagreement as this
-        # harness's own missing evidence.
-        data={"ticker": ticker, **result, "contrast": evidence["contrast"]},
+        data=data,
         # `signals` is the machine channel: what the verdict was built from. Measurements taken
         # off a chain nothing vouched for were not built into a verdict, and a caller or a later
         # reducer scanning states would read a hard gate's failure there as this harness's
@@ -1132,8 +1137,28 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # declared it instead of the bars measuring it.
         # The trading week joins it for the same reason: the base duration both week bands are
         # read against is a session count divided by that convention, so a reader following the
-        # citation to either band arrives at a number this claim decided the unit of.
-        doctrine_ids=sorted({*result["doctrine_ids"], _SEGMENTATION_CONVENTION, _TRADING_WEEK_CONVENTION}),
+        # citation to either band arrives at a number this claim decided the unit of. So does
+        # the volume-state convention, which sizes the two baselines every volume measurement
+        # here is a ratio against -- both are read while the spec is compiled, so neither can
+        # appear in a signal and neither is optional to the answer.
+        #
+        # And the contrast block's own names, because the reducer's list is what it reasoned
+        # from and the contrast is a reading it made beside that: practitioners this harness
+        # reads for comparison, published without their claims in the citation list, are a
+        # standard the reader is shown and cannot look up.
+        #
+        # Harvested through the echo rule, so the caller's own `entry` object -- handed back
+        # verbatim in `data` -- cannot name a claim and have this envelope report it as
+        # doctrine the setup was decided under.
+        doctrine_ids=sorted(
+            {
+                *result["doctrine_ids"],
+                *_reducer_named_doctrine_ids(data, request),
+                _SEGMENTATION_CONVENTION,
+                _TRADING_WEEK_CONVENTION,
+                _VOLUME_STATE_CONVENTION,
+            }
+        ),
         next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 
@@ -3016,11 +3041,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],
         missing=missing,
         sources=sources,
-        doctrine_ids=_risk_doctrine_ids(mode, data),
+        doctrine_ids=_risk_doctrine_ids(mode, data, request),
     )
 
 
-def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
+def _risk_doctrine_ids(mode: str, data: Mapping[str, Any], request: Mapping[str, Any]) -> list[str]:
     """The claims this result actually cites: the mode's own risk claims, plus every claim
     the payload names beside a measurement or an action. A fixed list said more than the
     result used in one mode and less than it used in the other."""
@@ -3030,7 +3055,25 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
         if mode == "prospective"
         else ["risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"]
     )
-    return base + sorted(_named_doctrine_ids(data) - set(base))
+    return base + sorted(_reducer_named_doctrine_ids(data, request) - set(base))
+
+
+def _reducer_named_doctrine_ids(data: Mapping[str, Any], request: Mapping[str, Any]) -> set[str]:
+    """The claims the payload names, minus everything the caller sent and the payload echoes.
+
+    A citation says this harness applied a claim, so a caller must not be able to add one. Both
+    `ticker.setup` and `ticker.risk` hand parts of the request straight back -- the entry
+    object, the completed price path, the reasons a high was withheld -- and a `doctrine_id`
+    planted in any of them was harvested and published as doctrine the verdict was reached
+    under. Decision 301 accepts it because it resolves, and the read-and-cited guard accepts it
+    because it only looks for citations that are missing.
+
+    A top-level key the caller sent that comes back in `data` is the definition of an echo, so
+    that is the rule rather than a list of the fields found by hand -- a list of those is a list
+    that goes stale by one the next time a field is added.
+    """
+
+    return _named_doctrine_ids({key: value for key, value in data.items() if key not in request})
 
 
 def _named_doctrine_ids(data: Mapping[str, Any]) -> set[str]:
@@ -3200,6 +3243,23 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             ["ticker.qualify", "ticker.setup"]
             + (["ticker.power-play"] if (result.get("power_play") or {}).get("spans") else [])
         ),
+        # What decided the picture. The chart publishes a drawing rather than a measurement, so
+        # none of these reaches the payload to be harvested -- but the chain it draws anchors
+        # for and the span it shades are cut by them, and a reader shown a drawn span with no
+        # citation has a picture they cannot argue with.
+        #
+        # Cited without being registered as their consumer, which is not an oversight: a
+        # consumer is a capability that can be handed what its claim requires, and this one
+        # takes no `accounting_integrity` to be given for the Power Play exception. It runs the
+        # evidence builder to find the span and then draws it; naming what cut the span is how
+        # the picture stays auditable, and it is a weaker thing to say than consuming.
+        #
+        # Taken from the list the power-play module maintains rather than copied into a literal
+        # here. A literal was written with four of the five: the convention that decides what a
+        # chart answer *is* is read only once there is a question to key, and the fixture the
+        # sweep drew had no span and therefore asked nothing. One list, in the module whose
+        # question it is, cannot go one claim out of date without that module noticing.
+        doctrine_ids=sorted(set(ASKED_UNDER)),
         side_effects=side_effects,
     )
 

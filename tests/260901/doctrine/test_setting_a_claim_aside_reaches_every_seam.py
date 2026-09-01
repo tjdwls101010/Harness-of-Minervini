@@ -133,7 +133,7 @@ class OnlyTheAuditSurfaceUsesTheAuditAccessor(unittest.TestCase):
 
         from scripts.minervini import power_play_evidence
 
-        with quarantined(next(iter(power_play_evidence._ASKED_UNDER))):
+        with quarantined(next(iter(power_play_evidence.ASKED_UNDER))):
             with self.assertRaises(ValueError):
                 power_play_evidence._registry_digest()
 
