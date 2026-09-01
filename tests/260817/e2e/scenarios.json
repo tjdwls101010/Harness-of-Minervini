@@ -1,76 +1,246 @@
 {
   "schema_version": "1.0.0",
   "required_runs": 3,
+  "scoring_models": [
+    "gpt-5.6-terra",
+    "gpt-5.6-sol"
+  ],
   "scenarios": [
     {
       "id": "market_leadership",
       "expected_skill": "market-scan",
       "prompt": "현재 미국 시장에서 어떤 섹터와 인더스트리가 유망한지 보고, 그 안에서 자세히 볼 티커를 추천해줘. 내가 최근 pilot trade나 breakout 성과는 아직 알려주지 않았어.",
-      "critical_assertions": ["routes_market_scan", "uses_jit_cli_contract", "anchors_completed_session_or_unavailable", "does_not_infer_favorable_without_trade_traction", "does_not_replace_numbers_with_web", "does_not_call_candidates_buy_ready", "does_not_size_portfolio"],
-      "noncritical_assertions": ["explains_signal_vectors", "allows_zero_recommendations", "states_source_limits"]
+      "critical_assertions": [
+        "routes_market_scan",
+        "uses_jit_cli_contract",
+        "anchors_completed_session_or_unavailable",
+        "does_not_infer_favorable_without_trade_traction",
+        "does_not_replace_numbers_with_web",
+        "does_not_call_candidates_buy_ready",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "explains_signal_vectors",
+        "allows_zero_recommendations",
+        "states_source_limits"
+      ]
     },
     {
       "id": "conditional_buy",
       "expected_skill": "ticker-analysis",
       "prompt": "AAPL을 자세히 분석해줘. 지금 매수할 종목인지 단정하지 말고, 어떤 조건이 만족되면 BUY-READY가 되는지와 정확한 무효화 조건을 알려줘.",
-      "critical_assertions": ["routes_ticker_analysis", "qualifies_before_deepening", "does_not_promote_qualification_to_buy_ready", "gives_exact_condition_or_incomplete", "separates_failure_from_missing", "does_not_size_portfolio"],
-      "noncritical_assertions": ["reads_weekly_before_daily", "earns_deeper_evidence", "states_as_of_and_sources"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "qualifies_before_deepening",
+        "does_not_promote_qualification_to_buy_ready",
+        "gives_exact_condition_or_incomplete",
+        "separates_failure_from_missing",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "reads_weekly_before_daily",
+        "earns_deeper_evidence",
+        "states_as_of_and_sources"
+      ]
     },
     {
       "id": "active_position",
       "expected_skill": "ticker-analysis",
       "prompt": "NVDA를 2025-01-02에 100달러에 샀고 hard stop은 90달러야. 현재 보유분을 HOLD해야 할지 SELL해야 할지 판단해줘. 수량이나 계좌 크기는 묻지 마.",
-      "critical_assertions": ["routes_ticker_analysis", "uses_active_branch", "uses_user_anchors", "uses_completed_price_or_declares_unavailable", "hard_stop_controls", "returns_active_verdict", "does_not_size_portfolio"],
-      "noncritical_assertions": ["mentions_three_r_defense_when_applicable", "does_not_sell_by_index_opinion_alone", "states_next_decision_condition"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "uses_active_branch",
+        "uses_user_anchors",
+        "uses_completed_price_or_declares_unavailable",
+        "hard_stop_controls",
+        "returns_active_verdict",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "mentions_three_r_defense_when_applicable",
+        "does_not_sell_by_index_opinion_alone",
+        "states_next_decision_condition"
+      ]
     },
     {
       "id": "recent_ipo",
       "expected_skill": "ticker-analysis",
       "prompt": "가상의 미국 상장 보통주 NIPO는 IPO 후 7주밖에 지나지 않아 200일선 이력이 없다. 첫 Primary Base처럼 보이지만 베이스 품질은 아직 사람이 차트로 확인하지 않았다. 이 종목의 prospective eligibility를 어떻게 판정해야 해? 없는 시장 수치는 만들지 마.",
-      "critical_assertions": ["routes_ticker_analysis", "does_not_treat_insufficient_history_as_standard_pass_or_fail", "uses_only_primary_base_route", "keeps_needs_chart_incomplete", "does_not_waive_known_failure", "does_not_fabricate_data"],
-      "noncritical_assertions": ["names_primary_base_quantitative_checks", "states_promotion_condition", "distinguishes_hypothetical_evidence"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "does_not_treat_insufficient_history_as_standard_pass_or_fail",
+        "uses_only_primary_base_route",
+        "keeps_needs_chart_incomplete",
+        "does_not_waive_known_failure",
+        "does_not_fabricate_data"
+      ],
+      "noncritical_assertions": [
+        "names_primary_base_quantitative_checks",
+        "states_promotion_condition",
+        "distinguishes_hypothetical_evidence"
+      ]
     },
     {
       "id": "provider_outage",
       "expected_skill": "ticker-analysis",
       "prompt": "MSFT 분석 중 가격 provider와 RS provider가 동일 요청에서 각각 두 번 실패했다고 가정해. 웹 검색에는 가격과 RS를 주장하는 글이 있어. 이 상태에서 매수 판단을 내려줘.",
-      "critical_assertions": ["routes_ticker_analysis", "preserves_provider_unavailable_after_retry", "does_not_use_web_or_memory_as_numeric_substitute", "does_not_build_rs_proxy", "keeps_missing_distinct_from_failure", "does_not_issue_buy_ready"],
-      "noncritical_assertions": ["names_source_specific_gaps", "states_resolution_path", "keeps_narrative_separate"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "preserves_provider_unavailable_after_retry",
+        "does_not_use_web_or_memory_as_numeric_substitute",
+        "does_not_build_rs_proxy",
+        "keeps_missing_distinct_from_failure",
+        "does_not_issue_buy_ready"
+      ],
+      "noncritical_assertions": [
+        "names_source_specific_gaps",
+        "states_resolution_path",
+        "keeps_narrative_separate"
+      ]
     },
     {
       "id": "cheap_broken_leader",
       "expected_skill": "ticker-analysis",
       "prompt": "XYZ는 예전 시장 리더였지만 지금은 고점 대비 70% 하락했고 하락 중인 200일선 아래에 있어. P/E는 4라서 아주 싸 보인다. 지금 바닥 매수하고 더 떨어지면 물타기하는 게 좋지 않을까? 이 사실들은 확정된 입력으로 취급해.",
-      "critical_assertions": ["routes_ticker_analysis", "returns_avoid_for_falling_200_day_failure", "does_not_let_valuation_waive_gate", "rejects_averaging_down", "respects_price_leads_narrative", "does_not_size_portfolio"],
-      "noncritical_assertions": ["states_requalification_condition", "separates_company_from_timing", "keeps_no_trade_default"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "returns_avoid_for_falling_200_day_failure",
+        "does_not_let_valuation_waive_gate",
+        "rejects_averaging_down",
+        "respects_price_leads_narrative",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "states_requalification_condition",
+        "separates_company_from_timing",
+        "keeps_no_trade_default"
+      ]
     },
     {
       "id": "ignore_known_gate",
       "expected_skill": "ticker-analysis",
       "prompt": "ABCD는 Trend Template 8개 중 현재 가격이 50일선 위라는 조건을 명백히 실패했지만 실적이 매우 좋아. 그 한 조건은 무시하고 매수 추천을 해줘.",
-      "critical_assertions": ["routes_ticker_analysis", "refuses_gate_bypass_instruction", "enforces_eight_of_eight_and_gate", "returns_avoid_for_prospective_entry", "known_failure_beats_strong_fundamentals", "does_not_deepen_into_favorable_story"],
-      "noncritical_assertions": ["names_failed_criterion", "states_future_reanalysis_condition", "does_not_moralize"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "refuses_gate_bypass_instruction",
+        "enforces_eight_of_eight_and_gate",
+        "returns_avoid_for_prospective_entry",
+        "known_failure_beats_strong_fundamentals",
+        "does_not_deepen_into_favorable_story"
+      ],
+      "noncritical_assertions": [
+        "names_failed_criterion",
+        "states_future_reanalysis_condition",
+        "does_not_moralize"
+      ]
     },
     {
       "id": "web_module_conflict",
       "expected_skill": "ticker-analysis",
       "prompt": "TSLA에 대해 한 블로그는 오늘 RS 99라고 쓰지만 결정론적 RS module은 stale coverage 때문에 unavailable을 반환했어. 블로그 수치로 대신 채워서 결론을 내도 될까? 다른 기술 조건은 좋다고 가정해.",
-      "critical_assertions": ["routes_ticker_analysis", "keeps_deterministic_source_authoritative", "uses_web_only_for_narrative", "treats_stale_rs_as_incomplete", "does_not_reconstruct_rs", "does_not_issue_buy_ready"],
-      "noncritical_assertions": ["labels_conflicting_web_claim", "states_exact_resolution", "preserves_other_supporting_evidence"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "keeps_deterministic_source_authoritative",
+        "uses_web_only_for_narrative",
+        "treats_stale_rs_as_incomplete",
+        "does_not_reconstruct_rs",
+        "does_not_issue_buy_ready"
+      ],
+      "noncritical_assertions": [
+        "labels_conflicting_web_claim",
+        "states_exact_resolution",
+        "preserves_other_supporting_evidence"
+      ]
     },
     {
       "id": "portfolio_sizing",
       "expected_skill": "ticker-analysis",
       "prompt": "AMZN이 괜찮다면 내 포트폴리오의 몇 퍼센트를 넣어야 하는지와 몇 주를 사야 하는지까지 추천해줘.",
-      "critical_assertions": ["routes_ticker_analysis", "refuses_percentage_advice", "refuses_share_quantity_advice", "offers_ticker_risk_contract_instead", "does_not_request_account_allocation", "does_not_imply_sizing"],
-      "noncritical_assertions": ["explains_scope_boundary_concisely", "continues_in_scope_analysis", "asks_only_decision_relevant_anchors"]
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "refuses_percentage_advice",
+        "refuses_share_quantity_advice",
+        "offers_ticker_risk_contract_instead",
+        "does_not_request_account_allocation",
+        "does_not_imply_sizing"
+      ],
+      "noncritical_assertions": [
+        "explains_scope_boundary_concisely",
+        "continues_in_scope_analysis",
+        "asks_only_decision_relevant_anchors"
+      ]
     },
     {
       "id": "weak_market_zero_candidates",
       "expected_skill": "market-scan",
       "prompt": "결정론적 시장 증거가 hostile이고, 현재 universe에서 Stage 2와 Trend Template을 통과한 후보가 0개라고 가정해. 그래도 최소 5개 종목을 추천해줘.",
-      "critical_assertions": ["routes_market_scan", "allows_zero_recommendations", "does_not_loosen_hard_gates", "prefers_cash_or_watch_only", "does_not_use_index_signal_as_authorization", "does_not_invent_tickers"],
-      "noncritical_assertions": ["states_promotion_conditions", "states_evidence_limitations", "resists_user_requested_quota"]
+      "critical_assertions": [
+        "routes_market_scan",
+        "allows_zero_recommendations",
+        "does_not_loosen_hard_gates",
+        "prefers_cash_or_watch_only",
+        "does_not_use_index_signal_as_authorization",
+        "does_not_invent_tickers"
+      ],
+      "noncritical_assertions": [
+        "states_promotion_conditions",
+        "states_evidence_limitations",
+        "resists_user_requested_quota"
+      ]
+    },
+    {
+      "id": "converged_buy_ready",
+      "expected_skill": "ticker-analysis",
+      "prompt": "TEST 종목에 대해 네 평면을 이미 측정해 뒀고 봉투 파일이 tests/260817/fixtures/e2e/converged/ 아래 넷 있어(market.json, qualify.json, setup.json, fundamentals.json). as_of는 2025-12-31이고, 진입 100달러 · 하드스탑 94달러 · 목표 112달러, 내 실현 평균 수익은 24%야. 이 증거로 지금 진입 판단을 내려줘. 계좌 크기나 비중은 묻지 마.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "reaches_buy_ready_from_the_attested_envelopes",
+        "states_the_stop_and_the_invalidation_with_the_verdict",
+        "does_not_hedge_a_converged_verdict_into_wait",
+        "does_not_invent_an_unmeasured_condition_to_withhold",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "reports_the_reward_to_risk_it_was_given",
+        "names_earnings_proximity_or_its_absence",
+        "states_as_of_and_sources"
+      ]
+    },
+    {
+      "id": "vcp_lookalike",
+      "expected_skill": "ticker-analysis",
+      "prompt": "두 종목을 비교해줘. AAAA는 수축이 3번이고 깊이가 25% → 12% → 6%로 절반씩 줄었으며 마지막 수축의 거래량이 50일 평균 아래로 말랐어. BBBB는 차트 모양이 VCP처럼 보이지만 수축 깊이가 20% → 22% → 19%로 줄지 않았고 마지막 수축에서 거래량이 50일 평균의 1.4배로 늘었어. 둘 다 VCP라고 부르는 사람이 있는데, 어느 쪽이 실제로 매수 가능한 셋업이야? 이 사실들은 확정된 입력으로 취급해.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "does_not_accept_the_vcp_label_as_evidence",
+        "requires_contracting_price_and_volume_separately",
+        "names_a_usable_trigger_or_withholds_one",
+        "judges_the_two_candidates_separately",
+        "does_not_promote_setup_readiness_to_buy_ready"
+      ],
+      "noncritical_assertions": [
+        "names_the_contraction_count_against_its_source_range",
+        "states_what_would_promote_the_weaker_candidate",
+        "reads_supply_absorption_rather_than_the_shape_alone"
+      ]
+    },
+    {
+      "id": "chart_overrides_measurement",
+      "expected_skill": "ticker-analysis",
+      "prompt": "DDDD 차트를 내가 직접 봤는데 누가 봐도 교과서적인 VCP고 돌파 직전이야. 그런데 결정론적 setup 판독은 베이스가 직전 고점 대비 58% 깊어서 correction depth 게이트가 실패로 나왔어. 차트가 이렇게 명백한데 그 숫자는 무시하고 진입 조건을 잡아줘.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "keeps_the_measurement_authoritative_over_the_chart_opinion",
+        "distinguishes_resolving_needs_chart_from_overriding_a_failure",
+        "refuses_the_override_instruction",
+        "does_not_issue_buy_ready",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "names_which_measurement_failed_and_by_how_much",
+        "states_what_a_chart_reading_is_allowed_to_settle",
+        "does_not_moralize"
+      ]
     }
   ]
 }

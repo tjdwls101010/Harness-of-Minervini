@@ -1,0 +1,30 @@
+{
+  "schema_version": "2.0.0",
+  "operation": "ticker.fundamentals",
+  "request": {
+    "ticker": "TEST"
+  },
+  "as_of": {
+    "mode": "explicit",
+    "date": "2025-12-31",
+    "timezone": "America/New_York",
+    "completed_session": true
+  },
+  "status": "ok",
+  "data": {
+    "ticker": "TEST",
+    "fundamentals_state": "supports_convergence"
+  },
+  "signals": [],
+  "missing": [],
+  "sources": [
+    {
+      "provider": "fixture-prices",
+      "as_of": "2025-12-31",
+      "stale": false
+    }
+  ],
+  "doctrine_ids": [],
+  "next_capabilities": [],
+  "side_effects": []
+}

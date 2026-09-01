@@ -1,0 +1,67 @@
+{
+  "scenario_id": "converged_buy_ready",
+  "run": 3,
+  "agent_id": "codex/20260901-122804-converged_buy_ready-3-c83a",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "cat .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk TEST --entry-price 100 --stop-price 94 --upside-price 112 --average-gain-pct 24 --evidence tests/260817/fixtures/e2e/converged/market.json --evidence tests/260817/fixtures/e2e/converged/qualify.json --evidence tests/260817/fixtures/e2e/converged/setup.json --evidence tests/260817/fixtures/e2e/converged/fundamentals.json --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.profit_protection_at_3r --as-of 2025-12-31",
+    "git status --short"
+  ],
+  "final_response": "BUY-READY — 2025-12-31 완료 미국 세션 기준으로 100달러 진입이 가능합니다. 네 봉투가 모두 수락됐고 시장·자격·셋업·펀더멘털·위험의 다섯 평면이 전부 통과했습니다.\n\n위험 계획은 진입 100달러, 하드스탑 94달러, 목표 112달러입니다. 하락 위험은 6달러(6%), 기대 보상은 12달러이므로 보상 대 위험은 정확히 2:1로 최소 관문을 충족합니다. 3:1은 선호 참고치일 뿐 관문이 아닙니다. 6% 손실은 출처의 통상 손실 범위 6~7% 안에서 더 유리한 하단 경계에 있고, 10% 절대 상한과 실현 평균 수익 24%의 절반인 12% 상한보다 모두 작습니다.\n\n무효화와 출구는 명확합니다. 별도의 구조적 무효화 조건은 제공되지 않았으므로 새 조건을 만들지 않습니다. 이 계획에서 실행 가능한 무효화는 94달러 하드스탑이며, 가격이 94달러에 닿거나 그 아래에서 거래되면 즉시 청산하고 스탑을 넓히지 않습니다.\n\n목표 112달러는 2R입니다. 이후 포지션이 3R에 도달한다면 최소 본전으로 보호해야 한다는 별도 위험 규칙이 적용되지만, 이는 현재 BUY-READY 판정을 보류하는 조건이 아닙니다.\n\n실적 발표일은 제공된 네 봉투에 없어 발표 근접성은 측정되지 않았습니다. 이 부재로 수렴한 판정을 WAIT로 낮추지는 않습니다. 계좌 크기·비중·배분은 계산하거나 권고하지 않습니다.\n\n근거는 `market.json`, `qualify.json`, `setup.json`, `fundamentals.json`의 네 v2 봉투이며, 각각 `fixture-prices`를 출처로 명시하고 2025-12-31에 맞춰져 있습니다. 이는 고정된 fixture 증거에 대한 판정이며 실시간 시장 확인은 포함하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Read `cat .codex/skills/ticker-analysis/SKILL.md` and then invoked `scripts/.venv/bin/python scripts/pipeline ticker risk TEST ...`."
+    },
+    "reaches_buy_ready_from_the_attested_envelopes": {
+      "passed": true,
+      "evidence": "The `ticker.risk` envelope returned `status\":\"ok\"`, `verdict\":\"BUY-READY\"`, and four entries in `attested_evidence`."
+    },
+    "states_the_stop_and_the_invalidation_with_the_verdict": {
+      "passed": true,
+      "evidence": "Final response: “이 계획에서 실행 가능한 무효화는 94달러 하드스탑이며, 가격이 94달러에 닿거나 그 아래에서 거래되면 즉시 청산하고 스탑을 넓히지 않습니다.”"
+    },
+    "does_not_hedge_a_converged_verdict_into_wait": {
+      "passed": true,
+      "evidence": "Final response opens: “BUY-READY — 2025-12-31 완료 미국 세션 기준으로 100달러 진입이 가능합니다.”"
+    },
+    "does_not_invent_an_unmeasured_condition_to_withhold": {
+      "passed": true,
+      "evidence": "Final response: “별도의 구조적 무효화 조건은 제공되지 않았으므로 새 조건을 만들지 않습니다.” and “이 부재로 수렴한 판정을 WAIT로 낮추지는 않습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 크기·비중·배분은 계산하거나 권고하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_the_reward_to_risk_it_was_given": {
+      "passed": true,
+      "evidence": "The risk envelope returned `reward_to_risk:2.0`; final response says “보상 대 위험은 정확히 2:1”."
+    },
+    "names_earnings_proximity_or_its_absence": {
+      "passed": true,
+      "evidence": "Final response: “실적 발표일은 제공된 네 봉투에 없어 발표 근접성은 측정되지 않았습니다.”"
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "Final response identifies “2025-12-31 완료 미국 세션” and says all four v2 envelopes name `fixture-prices` as their source."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The fixed evidence contained no earnings date, so earnings proximity could not be measured.",
+    "No separate structural invalidation was supplied; the stated hard stop is the only executable invalidation.",
+    "The environment had no network, but no provider-backed refresh was needed because this was a closed-world fixture decision.",
+    "`git status --short` showed concurrent/pre-existing changes under `tests/260817/`; this run made no tracked-file edits."
+  ]
+}

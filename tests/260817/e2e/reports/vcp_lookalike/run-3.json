@@ -1,0 +1,67 @@
+{
+  "scenario_id": "vcp_lookalike",
+  "run": 3,
+  "agent_id": "codex/20260901-122805-vcp_lookalike-3-5d6f",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n 'contraction|volume|VCP|vcp' .claude scripts src tests --glob '!harness-spec.md' --glob '!*.db' | head -n 160",
+    "sed -n '1,120p' scripts/minervini/setup_evidence.py && sed -n '400,540p' scripts/minervini/setup_evidence.py",
+    "for claim_id in setup.vcp_contraction_count setup.successive_contraction_halving setup.final_contraction_volume_dryup setup.contractions_must_contract setup.pivot_volume_contraction setup.structural_pivot_and_trigger; do scripts/.venv/bin/python scripts/pipeline doctrine show \"$claim_id\"; done",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.setup",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "git status --short"
+  ],
+  "final_response": "결론은 **AAAA = INCOMPLETE이지만 유효한 VCP 후보**, **BBBB = AVOID**입니다. 현재 주어진 사실만으로 실제 매수 가능한 종목은 둘 다 아닙니다. 다만 매수 셋업으로 발전할 자격이 있는 쪽은 AAAA입니다.\n\nAAAA는 가격과 거래량이 각각 올바른 방향입니다.\n\n- 수축 횟수는 3회입니다. 출처 범위 2–6회 안이며, 일반적으로 흔하다는 2–4회 참고 범위에도 들어갑니다. 다만 이것은 `band`와 `reference`이지 합격 판정 자체는 아닙니다.\n- 깊이는 25% → 12% → 6%로 계속 작아집니다. 마지막 깊이 비율은 6/12 = 0.5로 출처의 0.5 `marker`와 일치해 거리가 0입니다. 앞선 12/25 = 0.48도 marker보다 0.02 낮습니다. marker에 가깝다는 것은 구조를 뒷받침하지만 독립적인 통과 판정은 아닙니다.\n- 마지막 수축 거래량은 50일 평균 대비 1.0 marker 아래입니다. 방향은 유리하지만 정확한 비율이 주어지지 않아 marker까지의 거리 크기는 산출할 수 없습니다. 가격 수축과 별개로 공급이 마르는 증거가 있다는 점이 중요합니다.\n\n그러나 AAAA에는 사용할 수 있는 진입 트리거가 아직 없습니다. 구조적으로 완성된 피벗 가격도, 그 피벗을 거래량 증가와 함께 돌파한 완료 봉도 제시되지 않았습니다. 따라서 트리거를 만들어 말하지 않고 보류합니다. 피벗으로 접근할수록 거래량이 수축하고, 이후 가격이 그 피벗을 증가한 거래량으로 돌파해야 표준 진입 셋업으로 승격될 수 있습니다. VCP 기반 cheat 진입이라면 그 별도 구조와 무효화 조건이 필요합니다.\n\nBBBB는 모양과 무관하게 두 핵심 증거가 모두 반대입니다.\n\n- 수축 횟수 자체는 3회로 2–6회 범위 안이지만, 20% → 22% → 19%는 왼쪽에서 오른쪽으로 계속 작아지는 수축열이 아닙니다. 마지막 비율 19/22 ≈ 0.864는 0.5 marker보다 약 0.364 높고, 첫 수축은 오히려 확대됐습니다.\n- 마지막 수축 거래량은 50일 평균의 1.4배로, 1.0 marker보다 0.4 높습니다. 이는 공급 흡수가 아니라 피벗 부근에서 공급이 늘어난 쪽으로 읽힙니다. registry상 ‘올바른 피벗의 거래량 수축’은 hard gate입니다.\n\n따라서 “VCP처럼 보인다”거나 누군가 VCP라고 부른 사실은 증거가 아닙니다. VCP는 가격 수축과 거래량 수축을 따로 확인해야 하며, BBBB는 현재 둘 다 충족하지 못합니다. BBBB가 승격되려면 새로운 구조에서 수축 깊이가 실제로 좌→우 축소되고, 마지막 수축과 피벗 부근 거래량이 팽창하지 않고 말라야 합니다. 그 뒤에도 구조적 피벗, 거래량을 동반한 돌파 또는 명시된 cheat 트리거, 정확한 무효화 조건이 필요합니다.\n\n최종적으로도 AAAA를 BUY-READY라고 부를 수는 없습니다. Stage 2 및 8개 Trend Template 자격, 전체 가격·거래량 이력, 시장 정렬, 필요한 펀더멘털, 진입가·하드 스톱·보상대비위험이 모두 빠져 있기 때문입니다. 이 고정 입력에 대한 구조 판단의 신뢰도는 높지만, 전체 매수 판단은 불완전합니다.\n\nCLI가 기준으로 삼은 최근 완료 미국 세션은 2026-08-31입니다. 이 요청은 고정 증거의 폐쇄형 비교이므로 허구의 실시간 티커 데이터를 조회하지 않았습니다. 또한 환경에 네트워크가 없어 provider 기반 가격·시장·펀더멘털 증거를 확보할 수 없으며, 그 공백을 웹 수치나 추정치로 대체하지 않았습니다. 분석 중 연구 원장이나 추적 파일을 쓰는 부작용은 없었습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md`; final_response begins with separate prospective setup verdicts for AAAA and BBBB."
+    },
+    "does_not_accept_the_vcp_label_as_evidence": {
+      "passed": true,
+      "evidence": "Quoted final_response: “따라서 ‘VCP처럼 보인다’거나 누군가 VCP라고 부른 사실은 증거가 아닙니다.”"
+    },
+    "requires_contracting_price_and_volume_separately": {
+      "passed": true,
+      "evidence": "Quoted final_response: “VCP는 가격 수축과 거래량 수축을 따로 확인해야 하며, BBBB는 현재 둘 다 충족하지 못합니다.”"
+    },
+    "names_a_usable_trigger_or_withholds_one": {
+      "passed": true,
+      "evidence": "Quoted final_response: “구조적으로 완성된 피벗 가격도, 그 피벗을 거래량 증가와 함께 돌파한 완료 봉도 제시되지 않았습니다. 따라서 트리거를 만들어 말하지 않고 보류합니다.”"
+    },
+    "judges_the_two_candidates_separately": {
+      "passed": true,
+      "evidence": "Quoted final_response: “결론은 AAAA = INCOMPLETE이지만 유효한 VCP 후보, BBBB = AVOID입니다.” Separate following sections then evaluate each ticker's price and volume evidence."
+    },
+    "does_not_promote_setup_readiness_to_buy_ready": {
+      "passed": true,
+      "evidence": "Quoted final_response: “최종적으로도 AAAA를 BUY-READY라고 부를 수는 없습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_the_contraction_count_against_its_source_range": {
+      "passed": true,
+      "evidence": "Quoted final_response: “수축 횟수는 3회입니다. 출처 범위 2–6회 안이며, 일반적으로 흔하다는 2–4회 참고 범위에도 들어갑니다.”"
+    },
+    "states_what_would_promote_the_weaker_candidate": {
+      "passed": true,
+      "evidence": "Quoted final_response: “BBBB가 승격되려면 새로운 구조에서 수축 깊이가 실제로 좌→우 축소되고, 마지막 수축과 피벗 부근 거래량이 팽창하지 않고 말라야 합니다.”"
+    },
+    "reads_supply_absorption_rather_than_the_shape_alone": {
+      "passed": true,
+      "evidence": "Quoted final_response: “이는 공급 흡수가 아니라 피벗 부근에서 공급이 늘어난 쪽으로 읽힙니다.”"
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "No provider-backed live price, market, or fundamentals evidence was available in the networkless sandbox; none was substituted.",
+    "The stipulated AAAA volume fact says only that its ratio is below 1.0, so its exact distance below the marker cannot be quantified.",
+    "No pivot price, completed breakout, invalidation, Trend Template evidence, market alignment, fundamentals, or risk inputs were supplied.",
+    "`git status --short` showed concurrent/pre-existing changes under `tests/260817/`; this run did not edit tracked files, but a globally clean worktree could not be established."
+  ]
+}

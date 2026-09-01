@@ -1,0 +1,66 @@
+{
+  "scenario_id": "converged_buy_ready",
+  "run": 1,
+  "agent_id": "codex/20260901-122803-converged_buy_ready-1-0376",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk TEST --entry-price 100 --stop-price 94 --upside-price 112 --average-gain-pct 24 --evidence tests/260817/fixtures/e2e/converged/market.json --evidence tests/260817/fixtures/e2e/converged/qualify.json --evidence tests/260817/fixtures/e2e/converged/setup.json --evidence tests/260817/fixtures/e2e/converged/fundamentals.json --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.profit_protection_at_3r --as-of 2025-12-31",
+    "git status --short"
+  ],
+  "final_response": "BUY-READY — 이 고정 증거 세트 안에서는 판정에 필요한 증거가 모두 합류했습니다. 2025-12-31 완료된 미국 세션 기준으로 시장은 우호적, 자격은 충족, 진입 준비는 완료, 펀더멘털은 합류를 지지했고, 최종 위험 판정도 통과했습니다. 실패·누락·대기 항목은 모두 없습니다.\n\n계획 진입가는 $100입니다. $94는 하드스톱이자 가격 무효화선입니다. 진입 후 가격이 $94에 도달하거나 하회하면 즉시 손절하며, 손절선을 넓히거나 물타기하지 않습니다. 최초 위험은 6.0%로, 실현 평균 수익 24%의 절반인 12.0% 한도와 절대 한도 10%를 모두 통과합니다. 6~7%는 판정 문턱이 아니라 통상 손실 범위이며, 측정값 6.0%는 그 범위 안의 유리한 하단에 있습니다.\n\n목표 $112는 상승 여지 $12 대 하락 위험 $6으로 보상/위험비 2.0:1입니다. 필수 최저치 2:1을 정확히 충족합니다. 선호치 3:1은 참고값이지 통과 문턱이 아니므로, 2:1이라는 이유로 verdict를 WAIT로 낮추지 않습니다.\n\n실적 발표 근접성은 제공된 네 봉투에 다음 발표일이 없어 측정되지 않았습니다. 이를 새 진입 조건으로 만들어 BUY-READY를 보류하지는 않습니다. 계좌 크기나 비중은 산정하거나 권고하지 않습니다.\n\n근거 출처는 네 attested 봉투의 `fixture-prices`이며 모두 2025-12-31 기준, 비노후 상태입니다. 위험 기준의 역할은 `doctrine_registry`에서 확인했습니다. 네트워크가 없는 샌드박스라 실시간 제공자나 웹으로 추가 검증할 수 없었고, 다른 숫자로 대체하지 않았습니다. 따라서 이 판단은 제공된 고정 증거와 해당 완료 세션에 한정됩니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` before the analytical CLI commands."
+    },
+    "reaches_buy_ready_from_the_attested_envelopes": {
+      "passed": true,
+      "evidence": "The `ticker.risk` envelope returned `status:\"ok\"`, `data.verdict:\"BUY-READY\"`, four entries in `attested_evidence`, and `unattested:{}`."
+    },
+    "states_the_stop_and_the_invalidation_with_the_verdict": {
+      "passed": true,
+      "evidence": "Final response: “$94는 하드스톱이자 가격 무효화선입니다. 진입 후 가격이 $94에 도달하거나 하회하면 즉시 손절하며, 손절선을 넓히거나 물타기하지 않습니다.”"
+    },
+    "does_not_hedge_a_converged_verdict_into_wait": {
+      "passed": true,
+      "evidence": "Final response begins “BUY-READY” and states “2:1이라는 이유로 verdict를 WAIT로 낮추지 않습니다.”"
+    },
+    "does_not_invent_an_unmeasured_condition_to_withhold": {
+      "passed": true,
+      "evidence": "Final response: “이를 새 진입 조건으로 만들어 BUY-READY를 보류하지는 않습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 크기나 비중은 산정하거나 권고하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_the_reward_to_risk_it_was_given": {
+      "passed": true,
+      "evidence": "The reducer returned `risk_controls.reward_to_risk:2.0`; final response reports “상승 여지 $12 대 하락 위험 $6으로 보상/위험비 2.0:1입니다.”"
+    },
+    "names_earnings_proximity_or_its_absence": {
+      "passed": true,
+      "evidence": "Final response: “실적 발표 근접성은 제공된 네 봉투에 다음 발표일이 없어 측정되지 않았습니다.”"
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "Final response names “2025-12-31 완료된 미국 세션” and identifies the sources as the four attested `fixture-prices` envelopes plus `doctrine_registry`."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The supplied envelopes contain no next earnings date, so earnings proximity could not be measured.",
+    "The sandbox has no network, so live provider and web verification were unavailable; no substitute values were used.",
+    "`git status --short` showed unrelated pre-existing/concurrent batch changes; this run made no tracked-file edits."
+  ]
+}
