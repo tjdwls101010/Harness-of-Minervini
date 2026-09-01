@@ -9,6 +9,7 @@ is itself a new peak, the decline from that open to the same bar's low is a sequ
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 import pandas as pd
@@ -46,6 +47,23 @@ def _bars(rows: list[tuple[float, float, float, float | None]]) -> list[dict[str
     return bars
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def _lead(rows: list[tuple[float, float, float, float | None]]) -> dict[str, object]:
     evidence = build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -56,6 +74,7 @@ def _lead(rows: list[tuple[float, float, float, float | None]]) -> dict[str, obj
         trade_traction={"state": "supports"},
         leader_history={"LEAD": _bars(rows)},
         leader_groups=None,
+        as_of=_reading_date({"LEAD": _bars(rows)}),
     )
     return evidence["leaders"][0]
 

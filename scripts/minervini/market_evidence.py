@@ -8,14 +8,14 @@ a weighted group score.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 import math
 import re
 from typing import Any
 
 from . import doctrine
-from .windows import year_window_start
+from .windows import DAYS_IN_A_WEEK, session_at_or_before, year_window_start
 
 
 _FINVIZ_SECTIONS = (
@@ -26,7 +26,6 @@ _FINVIZ_SECTIONS = (
 )
 _GROUP_NEW_HIGHS = "market.group_new_highs_signal"
 _GROUP_MEMBER_READING = "convention.group_member_reading"
-_TRADING_WEEK = "convention.trading_week"
 _STRIKING_DISTANCE = "market.striking_distance_52w_high"
 _LOW_LIST = "market.avoid_52w_low_list"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
@@ -73,6 +72,7 @@ class _FinvizMarketStatsParser(HTMLParser):
 
 def build_market_evidence(
     *,
+    as_of: date,
     qqq_daily_ohlcv: Iterable[Mapping[str, Any]] | None,
     finviz_html: str | None,
     sector_rows: Iterable[Mapping[str, Any]] | None,
@@ -86,14 +86,18 @@ def build_market_evidence(
 
     ``trade_traction`` intentionally has no default: it is user feedback, never
     an inference from market, Finviz, or RS data.
+
+    ``as_of`` is the session the reading is taken at, and has no default either. The group
+    growth count compares two moments, and a moment derived from whichever name happened to
+    have the freshest bar would be a second clock beside the harness's own.
     """
     history = leader_history or {}
     leaders = _leader_evidence(leader_rows, history, leader_groups)
     return {
         "breadth": _finviz_breadth(finviz_html),
         "qqq_21ema": _qqq_21ema_switch(qqq_daily_ohlcv),
-        "sectors": _group_evidence(sector_rows, "sector", leaders, history, leader_groups),
-        "industries": _group_evidence(industry_rows, "industry", leaders, history, leader_groups),
+        "sectors": _group_evidence(sector_rows, "sector", leaders, history, leader_groups, as_of),
+        "industries": _group_evidence(industry_rows, "industry", leaders, history, leader_groups, as_of),
         "leaders": leaders,
         "trade_traction": trade_traction,
     }
@@ -265,6 +269,7 @@ def _group_evidence(
     leaders: list[dict[str, Any]] | None,
     history: Mapping[str, Any],
     groups_read: Mapping[str, Any] | None,
+    as_of: date,
 ) -> list[dict[str, Any]] | None:
     """Each ranked group, read through the market's ranked leaders that fall inside it.
 
@@ -287,13 +292,13 @@ def _group_evidence(
         if not isinstance(row, Mapping):
             continue
         name = str(row.get("name") or row.get(group_type) or row.get("id") or f"{group_type}-{index + 1}")
-        sample = _group_member_sample(name, group_type, leaders, history, groups_read)
+        sample = _group_member_sample(name, group_type, leaders, history, groups_read, as_of)
         result.append(
             {
                 "name": name,
                 "basis": _basis(row),
                 "member_sample": sample,
-                "new_highs": _group_new_highs(sample, history, group_type),
+                "new_highs": _group_new_highs(sample, history, group_type, as_of),
                 "striking_distance_names": _group_striking_distance(sample, leaders),
                 "source_row": dict(row),
             }
@@ -307,6 +312,7 @@ def _group_member_sample(
     leaders: list[dict[str, Any]] | None,
     history: Mapping[str, Any],
     groups_read: Mapping[str, Any] | None,
+    as_of: date,
 ) -> dict[str, Any]:
     """Which ranked leaders sit in this group, and which of them have a window to count over.
 
@@ -329,7 +335,7 @@ def _group_member_sample(
         if str(classification.get(group_type, "")).casefold() != name.casefold():
             continue
         members.append(ticker)
-        if _countable_window(history.get(ticker)) is None:
+        if _countable_window(history.get(ticker), _growth_lookback_start(as_of)) is None:
             not_counted.append({"ticker": ticker, "reason": "completed_sessions_insufficient"})
     if not members:
         # A leader nobody could classify may well belong here, so "no member" is only an
@@ -353,36 +359,49 @@ def _unique_tickers(leaders: list[dict[str, Any]] | None) -> list[str]:
     return tickers
 
 
-def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any], group_type: str) -> dict[str, Any]:
+def _group_new_highs(sample: Mapping[str, Any], history: Mapping[str, Any], group_type: str, as_of: date) -> dict[str, Any]:
     """How many of the group's ranked names print a new 52-week high now against one window ago.
 
     The source states the signal as a direction -- a growing number of names making new highs
     -- and names no window to measure the growth over, so the length comes from the registry
     rather than from this module.
+
+    Both counts are taken at a date rather than at an offset into each name's own bars. The
+    two numbers are only comparable if every name answered for the same two moments, and a
+    fixed count of sessions walks a thinly traded name much further back than a liquid one.
     """
 
     reading = {
         "doctrine_id": _GROUP_NEW_HIGHS,
         "binds": doctrine.binds(_GROUP_NEW_HIGHS),
-        # The claim states the signal; the two conventions below sized the window it is read
-        # over, and a reader following the citation needs all three to arrive at this count.
-        "window_doctrine_ids": [_GROUP_MEMBER_READING, _TRADING_WEEK],
+        # The claim states the signal; the convention below sized the window it is read over,
+        # and a reader following the citation needs both to arrive at this count.
+        "window_doctrine_ids": [_GROUP_MEMBER_READING],
     }
     if group_type != "industry":
         # "a growing number of names in a particular industry" -- the source scoped this
         # signal to an industry, and a sector is not one. Publishing the same count for a
         # sector would put the claim's name on a measurement it never described.
         return {**reading, "state": "not_applicable", "reason": "the_source_states_this_signal_for_an_industry"}
-    lookback = _growth_lookback_sessions()
-    countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker)) is not None]
+    earlier_date = _growth_lookback_start(as_of)
+    countable = [ticker for ticker in sample.get("ranked_leaders_in_group", []) if _countable_window(history.get(ticker), earlier_date) is not None]
     if not countable:
         return {**reading, "state": "unavailable", "reason": sample.get("reason") or "no_ranked_leader_with_a_full_window"}
-    now = sum(1 for ticker in countable if _at_new_high(history[ticker], 0))
-    earlier = sum(1 for ticker in countable if _at_new_high(history[ticker], lookback))
+    now = sum(1 for ticker in countable if _at_new_high(history[ticker], as_of))
+    earlier = sum(1 for ticker in countable if _at_new_high(history[ticker], earlier_date))
     return {
         **reading,
         "state": "supports" if now > earlier else "observed",
-        "measured": {"now": now, "earlier": earlier, "of_names_read": len(countable), "lookback_sessions": lookback},
+        "measured": {
+            "now": now,
+            "earlier": earlier,
+            "of_names_read": len(countable),
+            # The two dates travel with the count. Without them a reader cannot tell this
+            # from a count taken over some other span, and the growth is the whole signal.
+            "read_at": as_of.isoformat(),
+            "compared_with": earlier_date.isoformat(),
+            "lookback_weeks": _growth_lookback_weeks(),
+        },
     }
 
 
@@ -418,40 +437,49 @@ def _group_striking_distance(sample: Mapping[str, Any], leaders: list[dict[str, 
     }
 
 
-def _growth_lookback_sessions() -> int:
-    weeks = doctrine.parameter(_GROUP_MEMBER_READING, "new_high_growth_lookback_weeks")
-    return int(weeks) * _sessions_per_week()
+def _growth_lookback_weeks() -> int:
+    return int(doctrine.parameter(_GROUP_MEMBER_READING, "new_high_growth_lookback_weeks"))
 
 
-def _sessions_per_week() -> int:
-    return int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week"))
+def _growth_lookback_start(as_of: date) -> date:
+    """The date the earlier count is taken at.
+
+    A week here is seven days. `convention.trading_week` converts a source's weeks into a
+    stock's own sessions, which is right for the length of a flag or a base and wrong for
+    this: the window addresses a moment several names have to share, and a moment is on the
+    calendar.
+    """
+
+    return as_of - timedelta(days=_growth_lookback_weeks() * DAYS_IN_A_WEEK)
 
 
-def _countable_window(bars: Any) -> tuple[list[float], list[float], list[float], list[date]] | None:
+def _countable_window(bars: Any, earlier_date: date) -> tuple[list[float], list[float], list[float], list[date]] | None:
     """The name's series, but only when a full year stands behind the earlier count too.
 
     Both ends of the growth reading are 52-week highs, so both need a 52-week window behind
     them. Requiring one only at the latest session would compare a measured high with one
-    taken over however many bars happened to precede it.
+    taken over however many bars happened to precede it. Checking the earlier date settles
+    the later one: any session after it has at least as much history behind it.
     """
 
     closes, _opens, highs, lows, dates = _leader_series(bars)
     if closes is None or dates is None:
         return None
-    earlier = len(highs) - 1 - _growth_lookback_sessions()
-    if year_window_start(dates, earlier) is None:
+    earlier = session_at_or_before(dates, earlier_date)
+    if earlier is None or year_window_start(dates, earlier) is None:
         return None
     return closes, highs, lows, dates
 
 
-def _at_new_high(bars: Any, sessions_ago: int) -> bool:
-    """Was this name's high, that many completed sessions back, the highest of its trailing year?"""
+def _at_new_high(bars: Any, moment: date) -> bool:
+    """Was this name's high, at the last session it had on or before that date, a year's highest?"""
 
-    window = _countable_window(bars)
-    if window is None:
+    closes, _opens, highs, _lows, dates = _leader_series(bars)
+    if closes is None or dates is None:
         return False
-    _, highs, _, dates = window
-    index = len(highs) - 1 - sessions_ago
+    index = session_at_or_before(dates, moment)
+    if index is None:
+        return False
     start = year_window_start(dates, index)
     if start is None:
         return False

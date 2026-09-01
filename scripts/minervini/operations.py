@@ -1992,6 +1992,7 @@ def _market_snapshot(request: Mapping[str, Any], runtime: Runtime) -> dict[str, 
     if qqq_rejection is not None:
         provider_missing.append({"id": "qqq_daily_bars", "reason": qqq_rejection, "required": False})
     evidence = build_market_evidence(
+        as_of=clock.date,
         qqq_daily_ohlcv=qqq_rows if qqq is not None else None,
         finviz_html=finviz.data if finviz is not None else None,
         sector_rows=sector_rows,

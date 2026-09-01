@@ -45,6 +45,23 @@ def rows(index, **overrides) -> list[dict]:
     return built
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def leader(bars: list[dict]) -> dict:
     evidence = build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -54,6 +71,7 @@ def leader(bars: list[dict]) -> dict:
         leader_rows=[{"ticker": "LEAD", "rs_rating": 99}],
         leader_history={"LEAD": bars},
         trade_traction=None,
+        as_of=_reading_date({"LEAD": bars}),
     )
     return evidence["leaders"][0]
 

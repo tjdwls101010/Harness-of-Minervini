@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 import pandas as pd
@@ -42,6 +43,23 @@ def _bars(highs: list[float], lows: list[float] | None = None, *, dated: bool = 
     ]
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def _leader(history: object, rows: list[dict[str, object]] | None = None) -> dict[str, object]:
     evidence = build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -51,6 +69,7 @@ def _leader(history: object, rows: list[dict[str, object]] | None = None) -> dic
         leader_rows=rows or [{"ticker": "LEAD"}],
         trade_traction={"state": "supports"},
         leader_history={"LEAD": history},
+        as_of=_reading_date({"LEAD": history}),
     )
     return evidence["leaders"][0]
 
@@ -91,6 +110,7 @@ class SeriesGuardTests(unittest.TestCase):
         self.assertAlmostEqual(leader["correction_depth"]["measured"], 55.5555555556, places=6)
 
     def test_two_rows_for_one_ticker_are_read_as_one_leader(self) -> None:
+        _one_leader = {"LEAD": _bars([100.0 + index * 0.1 for index in range(SESSIONS)])}
         evidence = build_market_evidence(
             qqq_daily_ohlcv=None,
             finviz_html=None,
@@ -98,7 +118,8 @@ class SeriesGuardTests(unittest.TestCase):
             industry_rows=None,
             leader_rows=[{"ticker": "LEAD", "rs_rating": 99}, {"ticker": "LEAD", "rs_rating": 98}],
             trade_traction={"state": "supports"},
-            leader_history={"LEAD": _bars([100.0 + index * 0.1 for index in range(SESSIONS)])},
+            leader_history=_one_leader,
+            as_of=_reading_date(_one_leader),
         )
 
         self.assertEqual([leader["ticker"] for leader in evidence["leaders"]], ["LEAD"])
@@ -116,6 +137,7 @@ class SampleHonestyTests(unittest.TestCase):
             trade_traction={"state": "supports"},
             leader_history=history,
             leader_groups={},
+            as_of=_reading_date(history),
         )
 
         sample = evidence["industries"][0]["member_sample"]

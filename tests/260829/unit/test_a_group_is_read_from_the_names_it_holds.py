@@ -8,20 +8,23 @@ fetched, already read from their own bars -- say about the group they are classi
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 import unittest
 
 import pandas as pd
 
 from scripts.minervini import doctrine
 from scripts.minervini.market_evidence import build_market_evidence
+from scripts.minervini.windows import DAYS_IN_A_WEEK
 
 
-WEEK = doctrine.parameter("convention.trading_week", "sessions_per_trading_week")
-LOOKBACK = doctrine.parameter("convention.group_member_reading", "new_high_growth_lookback_weeks") * WEEK
+LOOKBACK_WEEKS = doctrine.parameter("convention.group_member_reading", "new_high_growth_lookback_weeks")
+# Bars, and only for placing the dip in these fixtures. The earlier count is taken at a date
+# four weeks back on the calendar; a name trading every business day has 20 bars in that
+# span, so the two coincide here and would not for a name whose sessions were thinned.
+LOOKBACK = LOOKBACK_WEEKS * 5
 # Enough completed sessions for the window to span the 52 weeks it names -- the window is
-# bounded by date, and 52 x the registered trading week of business days reaches back only
-# 361 calendar days. LOOKBACK stays a session count: how far back the earlier count is taken
-# is an offset the registry states in weeks, not a period an extreme is measured over.
+# bounded by date, and 52 x five business days reaches back only 361 calendar days.
 WINDOW = 270
 GROUP_NEW_HIGHS = "market.group_new_highs_signal"
 STRIKING_DISTANCE = "market.striking_distance_52w_high"
@@ -61,6 +64,23 @@ def _well_below_its_high(length: int = WINDOW + LOOKBACK + 20) -> list[float]:
     return values
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def _evidence(*, sector_rows, leader_rows, leader_history, leader_groups):
     return build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -71,6 +91,7 @@ def _evidence(*, sector_rows, leader_rows, leader_history, leader_groups):
         trade_traction={"state": "supports"},
         leader_history=leader_history,
         leader_groups=leader_groups,
+        as_of=_reading_date(leader_history),
     )
 
 
@@ -87,7 +108,14 @@ class GroupReadingTests(unittest.TestCase):
 
         self.assertEqual(group["new_highs"]["doctrine_id"], GROUP_NEW_HIGHS)
         self.assertEqual(group["new_highs"]["state"], "supports")
-        self.assertEqual(group["new_highs"]["measured"], {"now": 2, "earlier": 1, "of_names_read": 2, "lookback_sessions": LOOKBACK})
+        measured = group["new_highs"]["measured"]
+
+        self.assertEqual({key: measured[key] for key in ("now", "earlier", "of_names_read")}, {"now": 2, "earlier": 1, "of_names_read": 2})
+        self.assertEqual(measured["lookback_weeks"], LOOKBACK_WEEKS)
+        self.assertEqual(
+            date.fromisoformat(measured["read_at"]) - date.fromisoformat(measured["compared_with"]),
+            timedelta(days=LOOKBACK_WEEKS * DAYS_IN_A_WEEK),
+        )
 
     def test_a_group_whose_count_did_not_grow_reports_the_count_without_supporting(self) -> None:
         evidence = _evidence(
