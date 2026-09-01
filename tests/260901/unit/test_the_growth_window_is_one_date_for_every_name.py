@@ -24,7 +24,7 @@ import pandas as pd
 
 from scripts.minervini import doctrine
 from scripts.minervini.market_evidence import build_market_evidence
-from scripts.minervini.windows import DAYS_IN_A_WEEK, session_at_or_before
+from scripts.minervini.windows import DAYS_IN_A_WEEK, session_at_or_before, year_window_start
 
 
 AS_OF = date(2026, 8, 28)
@@ -65,17 +65,45 @@ def thinned_history() -> list[dict[str, object]]:
     return rows(dates, [high(day) for day in dates])
 
 
-def reading(history: dict[str, list[dict[str, object]]]) -> dict:
+THANKSGIVING = date(2025, 11, 27)
+HOLIDAY_AS_OF = date(2025, 12, 5)
+# Four weeks before that Friday. Twenty bars before it is a day earlier, because the history
+# is missing the session the exchange did not hold.
+FOUR_WEEKS_BACK = date(2025, 11, 7)
+
+
+def liquid_history_missing_a_holiday() -> list[dict[str, object]]:
+    """Trades every session the exchange held, which is one fewer than twenty business days.
+
+    It climbs to its high on 6 November, gives that up the next session, and takes out a new
+    high on the last bar. Read four weeks back on the calendar it was not at a new high; read
+    twenty of its own bars back -- one day earlier, because Thanksgiving is not in the series
+    -- it was. So the two readings disagree for a name nobody would call thinly traded.
+    """
+
+    dates = [stamp.date() for stamp in pd.bdate_range("2024-01-02", HOLIDAY_AS_OF) if stamp.date() != THANKSGIVING]
+    highs = []
+    for index, day in enumerate(dates):
+        if day < FOUR_WEEKS_BACK:
+            highs.append(50.0 + index * 0.1)
+        elif day < HOLIDAY_AS_OF:
+            highs.append(90.0)
+        else:
+            highs.append(500.0)
+    return rows(dates, highs)
+
+
+def reading(history: dict[str, list[dict[str, object]]], as_of: date = AS_OF) -> dict:
     evidence = build_market_evidence(
         qqq_daily_ohlcv=None,
         finviz_html=None,
         sector_rows=None,
-        industry_rows=[{"industry": "Semis", "avg_rs": 92.0, "count": 20, "rank": 1, "as_of": AS_OF.isoformat()}],
+        industry_rows=[{"industry": "Semis", "avg_rs": 92.0, "count": 20, "rank": 1, "as_of": as_of.isoformat()}],
         leader_rows=[{"ticker": ticker, "rs_rating": 95} for ticker in history],
         trade_traction={"state": "supports"},
         leader_history=history,
         leader_groups={ticker: {"industry": "Semis"} for ticker in history},
-        as_of=AS_OF,
+        as_of=as_of,
     )
     return evidence["industries"][0]["new_highs"]
 
@@ -136,3 +164,54 @@ class TheSessionAtOrBeforeADateIsReadDirectly(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheReaderRefusesWhatItCannotOrder(unittest.TestCase):
+    """A not-a-time is not a moment, and neither reader may raise on one.
+
+    Both window readers order their input before doing anything with it, and `pd.NaT` is an
+    instance of `datetime` that refuses every comparison. Decision 311 caught this at the one
+    caller that parses provider dates; the readers themselves still promised to return nothing
+    for a sequence they cannot order and raised instead. A gap escaping a reducer as a
+    TypeError is a gap published as an internal error.
+    """
+
+    def moments(self) -> list[object]:
+        return [date(2026, 1, 1), pd.NaT, date(2026, 1, 3)]
+
+    def test_a_not_a_time_between_two_sessions_is_refused_rather_than_raised(self) -> None:
+        self.assertIsNone(session_at_or_before(self.moments(), date(2026, 1, 2)))
+
+    def test_the_year_window_refuses_the_same_sequence(self) -> None:
+        self.assertIsNone(year_window_start(self.moments(), 2))
+
+    def test_a_not_a_time_at_the_end_is_refused(self) -> None:
+        self.assertIsNone(session_at_or_before([date(2026, 1, 1), pd.NaT], date(2026, 1, 3)))
+
+
+class TheDateComesFromTheClockAndNotFromTheBars(unittest.TestCase):
+    """Two things a bar offset gets wrong that a thinned name is not needed to show."""
+
+    def test_a_liquid_name_missing_one_holiday_is_still_read_four_weeks_back(self) -> None:
+        """Twenty of its own bars reach a day further back, and that day answers differently."""
+
+        measured = reading({"LIQUID": liquid_history_missing_a_holiday()}, HOLIDAY_AS_OF)["measured"]
+
+        self.assertEqual(measured["compared_with"], FOUR_WEEKS_BACK.isoformat())
+        self.assertEqual(measured["now"], 1)
+        self.assertEqual(measured["earlier"], 0)
+
+    def test_the_reading_answers_for_the_date_it_was_given_and_not_the_last_bar(self) -> None:
+        """The same history, read at a session inside it, is a reading of that session.
+
+        A date derived from whichever bar happened to be newest would ignore the argument
+        entirely and answer here exactly as it answers above.
+        """
+
+        history = {"LIQUID": liquid_history_missing_a_holiday()}
+        measured = reading(history, FOUR_WEEKS_BACK)["measured"]
+
+        self.assertEqual(measured["read_at"], FOUR_WEEKS_BACK.isoformat())
+        # On that session it had already given up its high, so nothing was at one.
+        self.assertEqual(measured["now"], 0)
+        self.assertEqual(reading(history, HOLIDAY_AS_OF)["measured"]["now"], 1)

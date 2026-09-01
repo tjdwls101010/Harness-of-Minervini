@@ -28,6 +28,26 @@ DAYS_IN_A_WEEK = 7
 DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * DAYS_IN_A_WEEK
 
 
+def _ordered(moments: Sequence[Any]) -> bool:
+    """Is this a sequence of real moments, oldest to newest?
+
+    Ordered is the caller's guarantee and this is where it stops being taken on trust. A
+    not-a-time refuses every comparison it is given -- `pd.NaT` is an instance of `datetime`
+    and raises rather than answering -- so the ordering check has to establish that each
+    moment is a moment before it can compare any two. The one property every missing value
+    has is that it is not equal to itself.
+
+    False, rather than an exception, because both readers answer a question about a history
+    and a history that cannot be ordered has no answer in it. A gap that escapes as a
+    TypeError is a gap published as an internal error.
+    """
+
+    for moment in moments:
+        if moment != moment:
+            return False
+    return all(moments[index] <= moments[index + 1] for index in range(len(moments) - 1))
+
+
 def year_window_start(moments: Sequence[Any], end: int) -> int | None:
     """Index where the trailing 52 weeks ending at ``end`` opens, or nothing.
 
@@ -50,7 +70,7 @@ def year_window_start(moments: Sequence[Any], end: int) -> int | None:
 
     if end < 0 or end >= len(moments):
         return None
-    if any(moments[index] > moments[index + 1] for index in range(end)):
+    if not _ordered(moments[: end + 1]):
         return None
     boundary = moments[end] - timedelta(days=DAYS_IN_THE_YEAR_THE_SOURCES_NAME)
     if moments[0] > boundary:
@@ -78,9 +98,7 @@ def session_at_or_before(moments: Sequence[Any], target: Any) -> int | None:
     Ordered oldest to newest is the caller's guarantee; out of order, this returns nothing.
     """
 
-    if not moments:
-        return None
-    if any(moments[index] > moments[index + 1] for index in range(len(moments) - 1)):
+    if not moments or not _ordered(moments):
         return None
     if moments[0] > target:
         return None
