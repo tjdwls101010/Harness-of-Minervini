@@ -45,6 +45,7 @@ _VOLUME_STATE = "setup.volume_state_convention"
 _CLOSING_RANGE = "setup.closing_range_formula"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
 _FOOTPRINT = "setup.consolidation_footprint_3_to_60_weeks"
+_STAGE_TWO_BASE = "basecount.typical_base_duration_5_to_26_weeks"
 _FAILURE_RESET = "setup.failure_reset_types"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
@@ -445,6 +446,12 @@ def build_setup_evidence(
         doctrine.evaluate_gate(_CORRECTION_DEPTH, "correction_failure_threshold", measurements["peak_to_low_correction_pct"]),
         doctrine.evaluate_band(_CORRECTION_DEPTH, "healthy_correction_range", measurements["peak_to_low_correction_pct"]),
         doctrine.evaluate_band(_FOOTPRINT, "consolidation_footprint_duration_weeks", measurements["base_duration_weeks"]),
+        # Two sentences bound a base's length and they are not the same sentence: the footprint
+        # above is the general consolidation range, this is the one stated for base patterns
+        # inside a stage 2 advance. One length read against both, because a base past 26 weeks
+        # is inside 3-60 and outside the range that describes what this stock is doing, and the
+        # wider band alone reports that as within range.
+        doctrine.evaluate_band(_STAGE_TWO_BASE, "typical_base_duration_weeks", measurements["base_duration_weeks"]),
         _observation(
             _OVERHEAD_SUPPLY,
             _quieting_state(measurements),
