@@ -22,11 +22,17 @@ import contextlib
 import functools
 import importlib
 import pathlib
+import sys
 import tempfile
 import unittest
+from collections.abc import Mapping
+from datetime import datetime, timezone
 
 from scripts.minervini import doctrine
-from scripts.minervini.operations import execute
+from scripts.minervini.operations import Runtime, execute
+from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
+from tests.series import power_play_series
 
 
 # The whole-capability driver already exists, with the request table and the two provider
@@ -34,10 +40,15 @@ from scripts.minervini.operations import execute
 # dotted path an `import` statement can spell.
 _VOCABULARY = importlib.import_module("tests.260828.contracts.test_a_declared_vocabulary_matches_the_envelopes")
 
-# Every accessor that hands back what a claim says. `has_claim` is absent on purpose: asking
-# whether the registry holds an id is a membership test, not a reading of doctrine.
+# Every accessor that hands back what a claim says, and takes the claim as its first argument.
+# `has_claim` is absent on purpose: asking whether the registry holds an id is a membership
+# test, not a reading of doctrine, and `validate` checks the registry's own structure rather
+# than answering about one claim. `doctrine.list` returns claim contents but is addressed by
+# filter rather than by id, so there is nothing to record a citation against; it has no runtime
+# caller today, and one appearing is a reason to give this guard a way to see it.
 _READS = (
     "claim",
+    "get_claim",
     "required_inputs",
     "threshold",
     "parameter",
@@ -65,13 +76,25 @@ def recording() -> "list[str]":
 
         return recorder
 
-    for name, function in originals.items():
-        setattr(doctrine, name, wrap(function))
+    wrapped = {name: wrap(function) for name, function in originals.items()}
+
+    # Rebound wherever the function object is reachable, not only on `doctrine`. A module that
+    # wrote `from .doctrine import get_claim` holds the original directly and would keep calling
+    # it -- `operations` does exactly that, so patching the module alone left `doctrine.show`
+    # reading a claim invisibly, and deleting its citation would have passed this guard.
+    bindings = [
+        (module, name)
+        for module in [value for key, value in sys.modules.items() if key.startswith("scripts.minervini") and value]
+        for name, function in originals.items()
+        if getattr(module, name, None) is function
+    ]
+    for module, name in bindings:
+        setattr(module, name, wrapped[name])
     try:
         yield read
     finally:
-        for name, function in originals.items():
-            setattr(doctrine, name, function)
+        for module, name in bindings:
+            setattr(module, name, originals[name])
 
 
 def _envelopes():
@@ -86,20 +109,67 @@ def _envelopes():
                 with recording() as read:
                     payload = execute(capability, {**request, **extra}, runtime=runtime)
                 yield label, capability, read, payload
+    # The branches the table's two runtimes cannot reach, which that module maintains for the
+    # same reason this one needs them: the prospective half of a reducer that has two, and
+    # readings that come from another fixture session. A read hiding in a status the sweep
+    # never produces is a read this guard would certify.
+    for capability, label, request in _VOCABULARY.EXTRA_CASES:
+        runtime = {"filed": _VOCABULARY.filed, "current": _VOCABULARY.current, "listed": _VOCABULARY.listed}.get(label, _VOCABULARY.sealed)()
+        with recording() as read:
+            payload = execute(capability, request, runtime=runtime)
+        yield label, capability, read, payload
+
+    # And a chart that found a span to shade. The table's bars are a straight line, so they
+    # produce no power-play span and therefore no chart questions -- and the claim the question
+    # keys are hashed under is read only when there is a question to key. A chart drawn over a
+    # real advance is the ordinary case, not an edge one, and it was the case nothing ran.
+    frame = power_play_series()
+    snapshot = ProviderSnapshot(
+        frame,
+        SnapshotMeta(
+            provider="fixture-prices",
+            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+            as_of=frame.index[-1].date(),
+            coverage={"completed_only": True},
+        ),
+    )
+    with tempfile.TemporaryDirectory() as temporary:
+        with recording() as read:
+            payload = execute(
+                "ticker.chart",
+                {
+                    "ticker": _VOCABULARY.TICKER,
+                    "as_of": frame.index[-1].date().isoformat(),
+                    "output_dir": temporary,
+                    "no_cache": True,
+                },
+                runtime=Runtime(price_history=lambda ticker, requested: snapshot),
+            )
+        yield "power_play", "ticker.chart", read, payload
+
+
+def _incomplete(payload: Mapping[str, object]) -> bool:
+    return (payload.get("data") or {}).get("verdict") == "INCOMPLETE"
 
 
 # A read whose reading reaches no reader, declared one at a time with the reason, the way the
 # quotation verifier declares its departures. The rule stays "read it, cite it"; what an entry
 # here says is that this particular reading was built and then withheld whole, so citing it
 # would tell a reader a standard governed an answer it had no part in.
+#
+# Each entry carries the condition under which that is true, not just the pair. Keyed by
+# capability and claim alone, the departure declared below for an INCOMPLETE risk verdict also
+# forgave the HOLD envelope, which publishes `management_evidence.market_defense` and does put
+# that band in front of a reader -- so dropping its citation there would have been permanently
+# excused by an exemption written for a different branch.
 _WITHHELD = {
-    (
-        "ticker.risk",
-        "management.market_defense_tightens_stops",
-    ): "an INCOMPLETE verdict publishes no management readings at all -- `management_evidence` "
-    "is emptied wholesale, which tests/260827/integration/test_windows_and_citations.py pins "
-    "as 'nothing was established, so nothing is measured about it' -- so the block this band "
-    "was evaluated for reaches nobody",
+    ("ticker.risk", "management.market_defense_tightens_stops"): (
+        _incomplete,
+        "an INCOMPLETE verdict publishes no management readings at all -- `management_evidence` "
+        "is emptied wholesale, which tests/260827/integration/test_windows_and_citations.py pins "
+        "as 'nothing was established, so nothing is measured about it' -- so the block this band "
+        "was evaluated for reaches nobody",
+    ),
 }
 
 
@@ -109,10 +179,30 @@ class EveryClaimReadIsCited(unittest.TestCase):
         for label, capability, read, payload in _envelopes():
             cited = set(payload.get("doctrine_ids") or [])
             for claim_id in sorted(set(read) - cited):
-                if (capability, claim_id) in _WITHHELD:
+                declared = _WITHHELD.get((capability, claim_id))
+                if declared is not None and declared[0](payload):
                     continue
                 uncited.append(f"{capability} ({label}, status={payload.get('status')}) read {claim_id}")
         self.assertEqual(uncited, [], "claims read and never cited:\n" + "\n".join(uncited))
+
+    def test_a_departure_does_not_reach_the_branch_that_publishes_the_reading(self) -> None:
+        """The same capability, the same claim, the other verdict.
+
+        `ticker.risk` under HOLD publishes `management_evidence.market_defense`, so the band is
+        in front of a reader and its claim has to be cited. This is the case an exemption keyed
+        by capability and claim alone would have forgiven for good.
+        """
+
+        holds = [
+            payload
+            for _, capability, _, payload in _envelopes()
+            if capability == "ticker.risk" and (payload.get("data") or {}).get("verdict") == "HOLD"
+        ]
+        self.assertTrue(holds, "the sweep produced no HOLD risk envelope, so this proves nothing")
+        for payload in holds:
+            self.assertFalse(_incomplete(payload))
+            self.assertIn("market_defense", payload["data"]["management_evidence"])
+            self.assertIn("management.market_defense_tightens_stops", payload["doctrine_ids"])
 
     def test_every_declared_departure_is_still_one(self) -> None:
         """A departure nobody takes any more is a sentence that reads as permission and grants
@@ -122,6 +212,7 @@ class EveryClaimReadIsCited(unittest.TestCase):
             (capability, claim_id)
             for _, capability, read, payload in _envelopes()
             for claim_id in set(read) - set(payload.get("doctrine_ids") or [])
+            if (declared := _WITHHELD.get((capability, claim_id))) is not None and declared[0](payload)
         }
         self.assertEqual(sorted(set(_WITHHELD) - taken), [], "declared departures nothing exercises any more")
 
@@ -144,7 +235,10 @@ class EveryClaimReadIsCited(unittest.TestCase):
             doctrine.claim("convention.trading_week")
             with self.assertRaises(KeyError):
                 doctrine.claim("market.correction_depth_healthy_leader.correction_failure_threshold")
-        self.assertEqual(read, ["convention.trading_week"])
+        # Deduped, not counted: `claim` is `get_claim` plus the execution refusal, and both are
+        # wrapped, so one reading of one claim arrives twice. What the comparison uses is the
+        # set, and what this control is about is which ids are in it.
+        self.assertEqual(set(read), {"convention.trading_week"})
 
     def test_the_recorder_puts_the_registry_back(self) -> None:
         before = {name: getattr(doctrine, name) for name in _READS}

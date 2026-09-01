@@ -391,7 +391,7 @@ _CHART_KEY_LENGTH = 32
 # happens to be load-bearing today. `_READING` is the convention that decides what an answer *is*
 # -- which words are admissible, what one settles and how far -- and it was the one missing: it
 # registers no threshold and no parameter, so a digest of numbers alone could not see it change.
-_ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION, _READING)
+ASKED_UNDER = (_CLAIM, _WEEK, _TOPS, _SEGMENTATION, _READING)
 
 
 def _registry_digest() -> str:
@@ -408,7 +408,7 @@ def _registry_digest() -> str:
     """
 
     payload = json.dumps(
-        {claim_id: doctrine.claim(claim_id) for claim_id in _ASKED_UNDER},
+        {claim_id: doctrine.claim(claim_id) for claim_id in ASKED_UNDER},
         separators=(",", ":"),
         sort_keys=True,
         default=str,

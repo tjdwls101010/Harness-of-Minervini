@@ -35,7 +35,7 @@ from .providers.rs import REQUIRED_PACKAGE_VERSION, industry_ranking_snapshot, i
 from .providers.sec import fetch_company_facts, fetch_company_submissions, fetch_company_tickers, normalize_filed_facts
 from .providers.yfinance import completed_daily_bars, current_classification_snapshot, next_earnings_snapshot
 from .power_play import FLAG_STILL_FORMING, evaluate_power_play
-from .power_play_evidence import CHART_READING_WORDS, build_power_play_evidence
+from .power_play_evidence import ASKED_UNDER, CHART_READING_WORDS, build_power_play_evidence
 from .management_evidence import AVERAGES as MANAGEMENT_AVERAGES, BLOCKS as MANAGEMENT_BLOCKS, SPLIT_COLUMN as _SPLIT_COLUMN, build_management_evidence, impossible_bar_relations, split_sized_discontinuities
 from .risk import AUDIT_BASIS as _AUDIT_BASIS, crosses as _crosses, declares_exit_plan, is_non_passing, reduce_risk, settled_breach, supplied_price_path, triggered_state as _triggered_state
 from .setup import evaluate_setup
@@ -598,8 +598,6 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
 _TRADING_WEEK_CONVENTION = "convention.trading_week"
 _VOLUME_STATE_CONVENTION = "setup.volume_state_convention"
-_POWER_PLAY_TOP = "convention.power_play_top_candidates"
-_POWER_PLAY_EXCEPTION = "fundamentals.power_play_exception"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
@@ -1144,14 +1142,19 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # here is a ratio against -- both are read while the spec is compiled, so neither can
         # appear in a signal and neither is optional to the answer.
         #
-        # And the payload's own names, because the reducer's list is what it reasoned from and
-        # the payload holds more than that: the contrast block reports practitioners this
-        # harness reads for comparison, and a reading published without its claim in the
-        # citation list is a standard the reader is shown and cannot look up.
+        # And the contrast block's own names, because the reducer's list is what it reasoned
+        # from and the contrast is a reading it made beside that: practitioners this harness
+        # reads for comparison, published without their claims in the citation list, are a
+        # standard the reader is shown and cannot look up.
+        #
+        # That block and not the whole payload. `data` carries the caller's `entry` object back
+        # verbatim, so harvesting it let a request name any registered claim and have this
+        # envelope report it as doctrine the setup was decided under -- a citation says this
+        # harness applied something, and nothing the caller writes can make that true.
         doctrine_ids=sorted(
             {
                 *result["doctrine_ids"],
-                *_named_doctrine_ids(data),
+                *_named_doctrine_ids({"contrast": evidence["contrast"]}),
                 _SEGMENTATION_CONVENTION,
                 _TRADING_WEEK_CONVENTION,
                 _VOLUME_STATE_CONVENTION,
@@ -3223,14 +3226,23 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
             ["ticker.qualify", "ticker.setup"]
             + (["ticker.power-play"] if (result.get("power_play") or {}).get("spans") else [])
         ),
-        # What decided the picture. The chart cites nothing it measured, because it measures
-        # nothing -- but the chain it draws anchors for and the span it shades are cut by
-        # these four, and a reader shown a drawn span with no citation has a picture they
-        # cannot argue with. Named here rather than harvested, because none of the four
-        # reaches the payload: the drawing consumed the readings and published the drawing.
-        doctrine_ids=sorted(
-            {_SEGMENTATION_CONVENTION, _TRADING_WEEK_CONVENTION, _POWER_PLAY_TOP, _POWER_PLAY_EXCEPTION}
-        ),
+        # What decided the picture. The chart publishes a drawing rather than a measurement, so
+        # none of these reaches the payload to be harvested -- but the chain it draws anchors
+        # for and the span it shades are cut by them, and a reader shown a drawn span with no
+        # citation has a picture they cannot argue with.
+        #
+        # Cited without being registered as their consumer, which is not an oversight: a
+        # consumer is a capability that can be handed what its claim requires, and this one
+        # takes no `accounting_integrity` to be given for the Power Play exception. It runs the
+        # evidence builder to find the span and then draws it; naming what cut the span is how
+        # the picture stays auditable, and it is a weaker thing to say than consuming.
+        #
+        # Taken from the list the power-play module maintains rather than copied into a literal
+        # here. A literal was written with four of the five: the convention that decides what a
+        # chart answer *is* is read only once there is a question to key, and the fixture the
+        # sweep drew had no span and therefore asked nothing. One list, in the module whose
+        # question it is, cannot go one claim out of date without that module noticing.
+        doctrine_ids=sorted(set(ASKED_UNDER)),
         side_effects=side_effects,
     )
 
