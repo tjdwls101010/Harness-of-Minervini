@@ -483,7 +483,7 @@
         "tests/260824/doctrine/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
-      "note": "Re-mining found no book sentence stating 'at least two months of trading history' or any specific session/day count for minimum trading history — that figure was the harness's own invention in the prior registry version and has been dropped as a standalone condition; the 40-session threshold that replaces it is explicitly marked exact:false for the same reason. | Second confirmed case of mined_existing.json's unsupported_parts being wrong rather than the harness inventing something; treated its other unsupported_parts as leads, re-checked against quote text, found no further errors.",
+      "note": "Re-mining found no book sentence stating 'at least two months of trading history' or any specific session/day count for minimum trading history — that figure was the harness's own invention in the prior registry version and has been dropped as a standalone condition; the 40-session threshold that replaces it is explicitly marked exact:false for the same reason. | Second confirmed case of mined_existing.json's unsupported_parts being wrong rather than the harness inventing something; treated its other unsupported_parts as leads, re-checked against quote text, found no further errors. | The two session thresholds are the source's own weeks converted at convention.trading_week's five sessions and recorded here as sessions: three weeks or longer is fifteen, and the year-long exception's five weeks is twenty-five. Both are exact:false because the conversion is this harness's and the source counted weeks.",
       "attributed_to": "Minervini"
     },
     {
@@ -10226,7 +10226,7 @@
           "value": 5,
           "unit": "sessions",
           "affects_verdict": true,
-          "note": "Sources state durations in weeks and this harness measures a duration in completed sessions, so a limit on how long something lasted passes through this number. It converts a length, not a date: a six-week flag is that stock's own run of bars, and asking how many of them fit is what this answers. A window stated in weeks that instead addresses a moment -- one several names have to answer for at once, the way convention.group_member_reading's growth lookback does -- is measured on the calendar and does not come here, because a fixed count of sessions walks a thinly traded name much further back than a liquid one. It is registered rather than written into the modules that convert because it decides verdicts: a Power Play flag is disqualified past six weeks, and whether a thirty-one session flag is inside or outside that limit is this parameter's answer. Five is the regular US session count for a full week; holiday weeks trade four, so a flag measured in sessions runs slightly long against a calendar reading of the same span, and the direction of that error is toward rejecting rather than qualifying."
+          "note": "Sources state durations in weeks and this harness measures a duration in completed sessions, so a limit on how long something lasted passes through this number. It converts a length, not a date: a six-week flag is that stock's own run of bars, and asking how many of them fit is what this answers. A window stated in weeks that instead addresses a moment -- one several names have to answer for at once, the way convention.group_member_reading's growth lookback does -- is measured on the calendar and does not come here, because a fixed count of sessions walks a thinly traded name much further back than a liquid one. A week-stated limit reaches the bars two ways, and both are in use. Some claims record the converted number as their own -- eligibility.recent_ipo_primary_base holds fifteen sessions because its source says three weeks -- and there the conversion happened once, when the claim was written, and this parameter is its provenance rather than its reader. Elsewhere the claim keeps the source's weeks and a reducer converts at read time: power_play_evidence turns the registered eight- and six-week limits into the forty and thirty session windows it searches, and setup_evidence divides a base's sessions by this number before reporting it against two week bands. Those runtime conversions are what read here. It is registered rather than written into those modules because it decides verdicts: a Power Play flag is disqualified past six weeks, and whether a thirty-one session flag is inside or outside that limit is this parameter's answer. Five is the regular US session count for a full week; holiday weeks trade four, so a flag measured in sessions runs slightly long against a calendar reading of the same span, and the direction of that error is toward rejecting rather than qualifying."
         }
       },
       "failure": {
@@ -10256,7 +10256,8 @@
         "reason": null
       },
       "consumers": [
-        "ticker.power-play"
+        "ticker.power-play",
+        "ticker.setup"
       ],
       "tests": [
         "tests/260825/doctrine/test_power_play_spec.py"

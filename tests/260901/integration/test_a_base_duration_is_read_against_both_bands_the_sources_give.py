@@ -82,6 +82,17 @@ class OneMeasurementReachesBothStandards(unittest.TestCase):
         self.assertEqual(stage_two["state"], "above_source_range")
         self.assertEqual(stage_two["source_range"], [5, 26])
 
+    def test_the_convention_that_set_the_unit_is_cited_beside_both_bands(self) -> None:
+        """A claim a verdict was measured through is doctrine the answer used.
+
+        Both bands are read in weeks and the measurement is a session count divided by
+        `convention.trading_week`. Reading a registered parameter without citing it leaves
+        `doctrine_ids` short of a claim the number passed through, which is decision 313's
+        finding with the sign flipped -- there a claim was cited and no longer read.
+        """
+
+        self.assertIn("convention.trading_week", run()["doctrine_ids"])
+
     def test_the_stage_two_band_carries_the_sentence_it_came_from(self) -> None:
         reading = band(run(), STAGE_TWO_BASE)
 

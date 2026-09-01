@@ -18,7 +18,9 @@ from scripts.minervini.setup_structure import resolve_structure
 from tests.series import anchor_dates, base_series
 
 
-SPEC = {"volume_baseline_sessions": 50, "breakout_volume_baseline_sessions": (20, 30, 50)}
+# The trading week travels with the windows now: it is the one conversion these
+# measurements perform, and it is registered because it moves a verdict.
+SPEC = {"volume_baseline_sessions": 50, "breakout_volume_baseline_sessions": (20, 30, 50), "sessions_per_trading_week": 5}
 
 
 def measured(**kwargs) -> dict:

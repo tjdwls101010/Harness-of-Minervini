@@ -596,6 +596,7 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
 
 _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
+_TRADING_WEEK_CONVENTION = "convention.trading_week"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
@@ -1129,7 +1130,10 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # The reducer's own list rather than a second derivation of it: the declared tactic is a
         # claim this verdict was reached under, and it appears in no signal because the caller
         # declared it instead of the bars measuring it.
-        doctrine_ids=sorted({*result["doctrine_ids"], _SEGMENTATION_CONVENTION}),
+        # The trading week joins it for the same reason: the base duration both week bands are
+        # read against is a session count divided by that convention, so a reader following the
+        # citation to either band arrives at a number this claim decided the unit of.
+        doctrine_ids=sorted({*result["doctrine_ids"], _SEGMENTATION_CONVENTION, _TRADING_WEEK_CONVENTION}),
         next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 
