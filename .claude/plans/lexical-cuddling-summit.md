@@ -703,7 +703,7 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
   **기계는 이미 있다(2026-09-01 확인).** `tests/260817/e2e/`에 `scenarios.json`(현재 시나리오 10개, `{id, expected_skill, prompt, critical_assertions[], noncritical_assertions[]}` 스키마, `required_runs: 3`), 시나리오당 3런 아티팩트가 들어가는 `reports/`, 그리고 다섯 게이트를 건 `test_behavioral_artifacts.py`가 있다. Phase 7은 **새 기계를 만드는 게 아니라 시나리오 9개와 27개 런 아티팩트를 채우는 일**이다.
 
-  **착수 전에 걸리는 것 둘.** ① `test_catalog_has_ten_decision_distinct_prompt_families`가 `len(scenarios) == 10`을 하드코딩한다 — 슬라이스마다 숫자를 밀지, "10 이상 + id 유일"로 다시 진술할지 정해야 한다(전자가 올바른 RED이긴 하다). ② **`test_every_scenario_has_three_independent_codex_reports`가 `report["model"] == "gpt-5.6-terra"`를 못 박아 뒀는데 지금 브리지가 도는 모델은 `gpt-5.6-sol`이다.** 새 런을 sol로 채우면 기존 10개와 충돌하므로 어서션에서 모델을 빼든지 허용 집합으로 바꾸든지 먼저 정한다.
+  **착수 전에 걸리는 것 둘.** ① `test_catalog_has_ten_decision_distinct_prompt_families`가 `len(scenarios) == 10`을 하드코딩한다 — 슬라이스마다 숫자를 밀지, "10 이상 + id 유일"로 다시 진술할지 정해야 한다(전자가 올바른 RED이긴 하다). ② **채점 모델을 무엇으로 할지가 정해져야 한다.** `test_every_scenario_has_three_independent_codex_reports`가 `report["model"] == "gpt-5.6-terra"`를 못 박아 뒀고 기존 30개 아티팩트가 전부 terra다. 반면 위 검증 전략 절은 **sol, xhigh**를 적어 뒀고 지금 브리지의 기본값도 `gpt-5.6-sol`이다. **막히는 것은 아니다** — terra는 카탈로그에 그대로 있어서 `--model gpt-5.6-terra`로 새 런을 채우면 어서션이 그대로 산다(2026-09-01 `codex_bridge.py models` 확인). 선택지 셋이고 비용이 다르다: (가) 새 9개를 terra로 채운다 — 27런, 코퍼스가 한 모델로 통일되지만 계획이 적어 둔 sol과 어긋난다. (나) sol로 채우고 어서션을 "고정"에서 "기록"으로 바꾼다 — 27런, 계획과 맞지만 19개 시나리오가 두 모델로 갈린다. (다) 19개 전부 sol로 다시 돌린다 — 57런, 통일되고 계획과도 맞지만 가장 비싸다.
 
 ### Phase 2가 Phase 1 덕에 줄어드는 부분
 
