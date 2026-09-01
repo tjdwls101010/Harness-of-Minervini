@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["skill_used", "commands", "final_response", "critical_assertions", "noncritical_assertions", "overall_pass", "limitations"],
+  "properties": {
+    "skill_used": {"type": "string", "description": "The skill you actually routed to, e.g. ticker-analysis or market-scan. Empty string if you routed to none."},
+    "commands": {"type": "array", "items": {"type": "string"}, "description": "Every shell command you actually ran, in order, verbatim."},
+    "final_response": {"type": "string", "description": "The complete analysis you would give the user, in the language they asked in. This is the artifact being judged."},
+    "critical_assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "passed", "evidence"],
+        "properties": {
+          "id": {"type": "string"},
+          "passed": {"type": "boolean"},
+          "evidence": {"type": "string", "description": "Concrete evidence from what you actually did: a command, an envelope field and value, or a quoted sentence of your own final_response. Never a restatement of the assertion."}
+        }
+      }
+    },
+    "noncritical_assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "passed", "evidence"],
+        "properties": {
+          "id": {"type": "string"},
+          "passed": {"type": "boolean"},
+          "evidence": {"type": "string"}
+        }
+      }
+    },
+    "overall_pass": {"type": "boolean"},
+    "limitations": {"type": "array", "items": {"type": "string"}, "description": "What you could not read or verify in this environment."}
+  }
+}

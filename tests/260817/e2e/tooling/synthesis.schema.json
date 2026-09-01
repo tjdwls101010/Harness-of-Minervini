@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "unsupported_claims", "release_blocking_findings", "scenario_summaries"],
+  "properties": {
+    "verdict": {"type": "string", "enum": ["RELEASE_APPROVED", "RELEASE_BLOCKED"]},
+    "unsupported_claims": {
+      "type": "array",
+      "description": "Every assertion a report marked passed whose stated evidence does not actually establish it. Empty if none.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario_id", "run", "assertion_id", "criticality", "why"],
+        "properties": {
+          "scenario_id": {"type": "string"},
+          "run": {"type": "integer"},
+          "assertion_id": {"type": "string"},
+          "criticality": {"type": "string", "enum": ["critical", "noncritical"]},
+          "why": {"type": "string"}
+        }
+      }
+    },
+    "release_blocking_findings": {
+      "type": "array",
+      "description": "Findings that must block release: a fabricated BUY-READY, a hard gate bypassed, data invented, a portfolio weight prescribed, or any critical assertion whose pass is not supported.",
+      "items": {"type": "string"}
+    },
+    "scenario_summaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario_id", "summary"],
+        "properties": {
+          "scenario_id": {"type": "string"},
+          "summary": {"type": "string", "description": "What the three runs actually did, in English, in two or three sentences. Name any noncritical assertion that failed and why."}
+        }
+      }
+    }
+  }
+}
