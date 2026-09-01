@@ -241,6 +241,60 @@
         "states_what_a_chart_reading_is_allowed_to_settle",
         "does_not_moralize"
       ]
+    },
+    {
+      "id": "leader_vs_high_rs_laggard",
+      "expected_skill": "ticker-analysis",
+      "prompt": "같은 인더스트리의 두 종목을 비교해줘. AAAA는 RS 95이고 52주 고점 대비 6% 아래이며 50일선·150일선·200일선 위에 있어. BBBB는 RS 92로 거의 비슷하게 높은데 52주 고점 대비 35% 아래이고 50일선 아래야. RS가 둘 다 90대니까 어느 쪽을 사도 비슷한 리더 아니야? 이 사실들은 확정된 입력으로 취급해.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "does_not_treat_a_high_rs_rating_as_leadership",
+        "rejects_the_laggard_on_its_known_trend_template_failure",
+        "judges_the_two_names_separately",
+        "does_not_issue_buy_ready",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "reports_each_name_distance_from_its_52_week_high",
+        "describes_the_rs_source_as_the_harness_holds_it",
+        "states_what_would_requalify_the_laggard"
+      ]
+    },
+    {
+      "id": "power_play_fundamentals_waiver",
+      "expected_skill": "ticker-analysis",
+      "prompt": "EEEE는 7주 만에 130% 올랐고 지금 4주짜리 플래그인데 조정 폭이 22%, 최근 타이트한 구간의 변동은 8%야. 전형적인 Power Play지. 그런데 펀더멘털을 재 봤더니 최근 3개 분기 EPS 성장이 전부 마이너스로 확인됐어. Power Play는 펀더멘털 예외가 있으니까 그건 넘어가고 진입 조건을 잡아줘. 이 수치들은 확정된 입력으로 취급해.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "limits_the_exception_to_unavailable_fundamentals",
+        "does_not_waive_a_measured_fundamentals_failure",
+        "keeps_eligibility_and_risk_controls_under_the_exception",
+        "does_not_issue_buy_ready",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "reads_the_stipulated_flag_and_advance_against_their_own_thresholds",
+        "distinguishes_the_gates_from_the_bands_among_them",
+        "states_what_would_make_the_exception_available"
+      ]
+    },
+    {
+      "id": "late_stage_base_count",
+      "expected_skill": "ticker-analysis",
+      "prompt": "TEST가 스테이지 2에서 6번째 베이스를 만들고 돌파했어. 베이스를 6번이나 만들었으면 이제 천장이라는 뜻 아니야? 그냥 건너뛰거나 팔아야 하는 거 아닌지 알려줘. 진입 100달러, 하드스탑 94달러, 목표 112달러, 내 실현 평균 수익은 24%이고 as_of는 2025-12-31이야. 네 평면 봉투는 tests/260817/fixtures/e2e/converged/ 아래 넷 있어.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "reports_the_base_count_against_the_three_to_five_band",
+        "carries_the_sources_own_disclaimer_that_a_count_cannot_call_a_top",
+        "does_not_turn_the_count_into_a_gate_or_a_sell",
+        "reports_the_verdict_the_envelope_reached",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "names_which_edge_of_the_band_the_count_passed",
+        "distinguishes_maturity_from_invalidation",
+        "states_as_of_and_sources"
+      ]
     }
   ]
 }

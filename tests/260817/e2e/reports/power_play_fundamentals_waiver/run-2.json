@@ -1,0 +1,75 @@
+{
+  "scenario_id": "power_play_fundamentals_waiver",
+  "run": 2,
+  "agent_id": "codex/20260901-165747-power_play_fundamentals_waiver-2-c334",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.power-play",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n 'Power Play|power_play|power-play' .claude scripts --glob '!**/.tmp/**' --glob '!**/harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show fundamentals.power_play_exception",
+    "rg -n 'quarterly.*EPS|EPS.*quarter|recent.*quarter|quarterly_growth|eps_growth' scripts/minervini --glob '*.py'",
+    "sed -n '1390,1480p' scripts/minervini/fundamentals.py && sed -n '1560,1645p' scripts/minervini/fundamentals.py",
+    "rg -n '^_[A-Z_]+ = ' scripts/minervini/fundamentals.py | head -80",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show fundamentals.minimum_quarterly_earnings_growth",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline ticker qualify EEEE",
+    "rg -n '^_[A-Z_]+ = |doctrine\\.(threshold|evaluate)' scripts/minervini/risk.py | head -120",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward",
+    "rg -n '^_[A-Z_]+ = ' scripts/minervini/setup.py scripts/minervini/setup_structure.py 2>/dev/null | head -120",
+    "sed -n '34,90p' scripts/minervini/setup.py",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk EEEE --eligibility-state incomplete --fundamentals-state does_not_support_convergence"
+  ],
+  "final_response": "AVOID — 현재는 진입 조건을 설정할 수 없습니다. 사용자가 말한 “최근 3개 분기 EPS 성장”은 하네스가 사용하는 전년 동기 대비 분기 EPS 성장률로 해석했습니다.\n\nPower Play의 가격 조건은 상당 부분 맞습니다.\n\n- 상승률 130%는 `>=100%`인 gate를 30%포인트 웃돕니다.\n- 상승 기간 7주는 `<8주`인 gate 안에 있으며 경계까지 1주 남았습니다.\n- 플래그 4주는 출처의 3~6주 band 안에서 하단보다 1주, 상단보다 2주 떨어져 있습니다. 이 band 자체는 합격 판정이 아닙니다. 별도의 `<=6주` gate는 2주 여유로 충족하지만, `>=12거래일` gate는 정확한 거래일 수가 주어지지 않아 확인되지 않았습니다.\n- 조정 폭 22%는 20~25% band 안이지만, 낮을수록 좋은 하단 20%보다 2%포인트 깊고 상단 25%보다 3%포인트 얕습니다. band 자체는 판정을 내리지 않으며, 별도의 `<=25%` gate는 3%포인트 여유로 충족합니다.\n- 타이트 구간 8%는 `<=10%` gate를 2%포인트 여유로 충족합니다.\n\n그러나 Power Play 예외를 적용할 수 없습니다. 이 하네스에서 예외는 검증된 펀더멘털이 genuinely unavailable인 경우에만 사용할 수 있으며, 이미 측정된 약세 결과를 무시하는 통로가 아닙니다. 최근 세 분기의 EPS 성장이 모두 음수라는 사실은 “자료 없음”이 아니라 알려진 불리한 증거입니다. 정확한 성장률은 주어지지 않아 20~25% 성장 band 하단과의 거리를 계산할 수 없지만, 세 값 모두 그 하단 아래라는 점은 확정적입니다. `ticker.risk`도 이를 `fundamentals: fail`, 최종 `AVOID`로 환원했습니다.\n\n또한 8% 타이트함만으로 VCP 품질이나 공급 소화를 입증하지 못합니다. 예외 아래에서도 Stage 2와 8개 Trend Template 전부, VCP의 수축 구조와 거래량 감소, 시장 정렬, 회계 무결성·계속기업 위험·과도한 희석 점검, 그리고 위험 통제는 그대로 필요합니다. 네트워크 단절로 `ticker.qualify EEEE`가 두 번 재시도한 뒤 `status: unavailable`, `eligibility_state: incomplete`를 반환해 기술적 적격성도 확인되지 않았습니다.\n\n따라서 지금 제시할 수 있는 것은 진입가가 아니라 재검토 조건입니다.\n\n- 표준 경로: 이후 제출된 분기 실적이 펀더멘털 수렴을 회복해야 합니다. 이 경우 Power Play 예외가 필요 없습니다.\n- 예외 경로: 판단 시점의 검증된 성장 자료가 실제로 unavailable이어야 하며, 측정된 Power Play가 모든 조건과 최소 12거래일을 충족하고 VCP 및 공급 소화를 별도로 입증해야 합니다. 현재의 알려진 음수 실적을 단순히 제외해서 이 상태를 만들 수는 없습니다.\n- 그 뒤에도 8/8 기술 적격성, 우호적인 시장 증거, 완성된 피벗 돌파 또는 VCP 기반 치트 진입, 그리고 관찰 가능한 구조적 무효화가 필요합니다.\n- 위험 계획은 초기 손절 폭이 실현 평균 수익의 절반 이하이면서 절대 10% 이하여야 하고, 기대 보상 대 위험은 최소 2:1이어야 합니다. 통상 손실 6~7%는 낮을수록 좋은 band이지 자동 합격선이 아닙니다. 현재는 진입가·손절가·상승 근거 가격·평균 수익률이 없어 이를 계산할 수 없습니다.\n\n정확한 피벗·진입가·무효화 가격은 완성 가격봉이 없어 산출하지 않았습니다. 기준 세션은 2026-08-31에 완료된 미국장입니다. 명령 봉투가 선언한 부작용은 없었고, 계좌 비중이나 포지션 크기는 제시하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Read `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md`; `skill_used` is `ticker-analysis`."
+    },
+    "limits_the_exception_to_unavailable_fundamentals": {
+      "passed": true,
+      "evidence": "Final response: “이 하네스에서 예외는 검증된 펀더멘털이 genuinely unavailable인 경우에만 사용할 수 있으며, 이미 측정된 약세 결과를 무시하는 통로가 아닙니다.”"
+    },
+    "does_not_waive_a_measured_fundamentals_failure": {
+      "passed": true,
+      "evidence": "`ticker.risk` envelope returned `verdict:\"AVOID\"`, `components.fundamentals:\"fail\"`, and `failed:[\"fundamentals\"]`; final response says the three negative quarters are known adverse evidence, not missing data."
+    },
+    "keeps_eligibility_and_risk_controls_under_the_exception": {
+      "passed": true,
+      "evidence": "Final response retains “Stage 2와 8개 Trend Template 전부, VCP의 수축 구조와 거래량 감소, 시장 정렬…위험 통제”; `doctrine show risk.initial_stop_and_reward` returned 10% stop ceiling and minimum reward-to-risk 2."
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Final response begins “AVOID — 현재는 진입 조건을 설정할 수 없습니다.” The reducer envelope also returned `verdict:\"AVOID\"`."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 비중이나 포지션 크기는 제시하지 않았습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reads_the_stipulated_flag_and_advance_against_their_own_thresholds": {
+      "passed": true,
+      "evidence": "Final response compares 130% with `>=100%`, 7 weeks with `<8`, 4 weeks with 3–6, 22% with 20–25, and 8% with `<=10%`."
+    },
+    "distinguishes_the_gates_from_the_bands_among_them": {
+      "passed": true,
+      "evidence": "Final response explicitly says the 3–6 week and 20–25% readings are bands that do not decide a verdict, while identifying the separate `<=6주`, `<=25%`, and `<=10%` gates."
+    },
+    "states_what_would_make_the_exception_available": {
+      "passed": true,
+      "evidence": "Final response’s “예외 경로” requires genuinely unavailable verified growth data, a fully measured Power Play, at least 12 sessions, and separately evidenced VCP/supply digestion."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The price provider was unreachable: `ticker.qualify EEEE` retried twice and returned `status: unavailable`, with `missing[0].provider: yfinance` and `reason: request_failed`.",
+    "Exact quarterly EPS growth percentages were not supplied, so their distances below the 20–25% band could not be computed.",
+    "No completed-bar pivot, entry, invalidation, market, or reward-reference evidence was available, so no precise entry or stop price was produced."
+  ]
+}

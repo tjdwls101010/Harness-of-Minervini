@@ -1,0 +1,70 @@
+{
+  "scenario_id": "late_stage_base_count",
+  "run": 1,
+  "agent_id": "codex/20260901-170331-late_stage_base_count-1-bef1",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "cat .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "rg --files tests/260817/fixtures/e2e/converged",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "for f in tests/260817/fixtures/e2e/converged/*.json; do jq -c . \"$f\"; done",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk TEST --entry-price 100 --stop-price 94 --upside-price 112 --average-gain-pct 24 --base-count 6 --evidence tests/260817/fixtures/e2e/converged/qualify.json --evidence tests/260817/fixtures/e2e/converged/setup.json --evidence tests/260817/fixtures/e2e/converged/fundamentals.json --evidence tests/260817/fixtures/e2e/converged/market.json --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.profit_protection_at_3r --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show basecount.typical_top_after_3_to_5_bases --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show basecount.role_and_disclaimer --as-of 2025-12-31",
+    "git status --short"
+  ],
+  "final_response": "BUY-READY — 제공된 고정 증거에서는 6번째 베이스라는 이유만으로 TEST를 건너뛰거나 매도할 근거가 없습니다. 진입일과 보유 중 가격 경로가 없으므로, 100달러를 계획 진입가로 둔 신규 진입 판단으로 해석했습니다.\n\n6회는 출처가 제시한 3~5회 범위에서 상단 5회를 1회 넘어선 `above_source_range`입니다. 낮을수록 유리한 범위이므로 후기 베이스에 해당하며, 추세의 성숙과 급작스러운 실패 위험이 커졌다는 경고는 맞습니다. 그러나 이 기준의 역할은 탈락 조건이 아닌 `band`입니다. 출처도 “베이스 횟수는 스테이지 2 진행 위치에 대한 관점을 줄 뿐, 그것만으로 천장을 쳤다고 말할 수 없다”고 명시합니다. 즉 성숙도 경고와 실제 무효화는 별개이며, 6회 자체는 `SELL`도 `AVOID`도 만들지 않습니다.\n\n위험 조건은 통과했습니다.\n\n- 진입 100달러와 하드스탑 94달러의 초기 위험은 6.0%입니다. 출처 범위 6~7% 안에서 유리한 하단 6%에 정확히 놓이며, 절대 상한 10%와 실현 평균 수익 24%의 절반인 12% 상한보다도 좁습니다.\n- 목표 112달러까지 보상은 12달러, 위험은 6달러여서 보상대비위험은 정확히 2:1입니다. 필수 최소치 2:1은 충족하지만 선호 기준 3:1에는 1R 못 미쳐 여유는 없습니다.\n- 네 봉투는 각각 시장 `favorable`, 자격 `eligible`, 설정 `ready`, 펀더멘털 `supports_convergence`를 확정했고, 리듀서는 실패·대기·누락 없이 최종 `BUY-READY`를 냈습니다.\n\n따라서 아직 진입 전이라면 100달러 진입과 94달러 하드스탑이라는 조건에서는 진입 가능 판정입니다. 다만 후기 베이스인 만큼 돌파 뒤 즉시 힘을 보이지 않거나 실제 진입가가 100달러보다 높아져 2:1이 깨지면 다시 평가해야 합니다. 이미 보유 중이어도 베이스 횟수만으로 팔지는 않으며, 94달러 하드스탑이 체결 조건에 닿으면 협상 없이 실행하고 넓히지 않아야 합니다. 현재 자료는 보유 포지션의 완료된 가격 경로가 아니므로 별도의 `HOLD` 또는 `SELL` 판정은 내리지 않았습니다. 계좌 비중이나 자금 배분은 제안하지 않습니다.\n\n기준 시점은 완료된 미국 세션 2025-12-31입니다. 종목·시장 판정의 출처는 네 고정 봉투에 기록된 `fixture-prices`이고, 위험 및 베이스 기준은 `doctrine_registry`의 Minervini 근거입니다. 리듀서 자체의 `sources`는 비어 있으며, 베이스 횟수에는 가격·거래량 이력이 읽히지 않았습니다. 네트워크가 없는 환경이라 실시간 가격, 돌파 후 가격·거래량 행동, 차트 또는 외부 제공자 데이터로 보강하지 않았고 어떤 숫자도 대체하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "`skill_used` is `ticker-analysis`, and the first command was `cat .codex/skills/ticker-analysis/SKILL.md`."
+    },
+    "reports_the_base_count_against_the_three_to_five_band": {
+      "passed": true,
+      "evidence": "The ticker.risk envelope returned `base_count_context.base_count: 6`, `source_range: [3,5]`, and `state: \"above_source_range\"`; final_response says “6회는 출처가 제시한 3~5회 범위에서 상단 5회를 1회 넘어선 `above_source_range`입니다.”"
+    },
+    "carries_the_sources_own_disclaimer_that_a_count_cannot_call_a_top": {
+      "passed": true,
+      "evidence": "The envelope returned `base_count_context.disclaimer: \"Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.\"`; final_response carries this as “그것만으로 천장을 쳤다고 말할 수 없다”."
+    },
+    "does_not_turn_the_count_into_a_gate_or_a_sell": {
+      "passed": true,
+      "evidence": "`doctrine.show basecount.typical_top_after_3_to_5_bases` returned threshold role `band` and failure effect `needs_review`; final_response says “6회 자체는 `SELL`도 `AVOID`도 만들지 않습니다.”"
+    },
+    "reports_the_verdict_the_envelope_reached": {
+      "passed": true,
+      "evidence": "The ticker.risk envelope returned `data.verdict: \"BUY-READY\"`, and final_response begins “BUY-READY”."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final_response explicitly says “계좌 비중이나 자금 배분은 제안하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_which_edge_of_the_band_the_count_passed": {
+      "passed": true,
+      "evidence": "Final_response says “상단 5회를 1회 넘어선” and identifies the band direction as “낮을수록 유리”."
+    },
+    "distinguishes_maturity_from_invalidation": {
+      "passed": true,
+      "evidence": "Final_response says “성숙도 경고와 실제 무효화는 별개” and separately names the 94달러 hard-stop condition."
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "Final_response says “기준 시점은 완료된 미국 세션 2025-12-31입니다” and names `fixture-prices` plus `doctrine_registry`; the input envelopes each had source provider `fixture-prices`, `as_of: 2025-12-31`, `stale: false`."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The fixed component envelopes contained only their plane verdicts; no underlying chart, price history, volume history, or post-breakout behavior was available.",
+    "Network access was unavailable, so no provider-backed or current narrative evidence was added.",
+    "`git status --short` showed tracked and untracked changes from concurrent batch runs; this run did not edit them, and every analytical envelope reported an empty `side_effects` list."
+  ]
+}

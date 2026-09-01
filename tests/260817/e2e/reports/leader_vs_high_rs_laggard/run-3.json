@@ -1,0 +1,69 @@
+{
+  "scenario_id": "leader_vs_high_rs_laggard",
+  "run": 3,
+  "agent_id": "codex/20260901-165747-leader_vs_high_rs_laggard-3-741e",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n '52.?week|RS rating|relative strength|50.day|Trend Template' .claude scripts tests --glob '!*.db' --glob '!harness-spec.md'",
+    "rg -n 'id: .*rs|id: .*leader|standard_trend_template|relative_strength' .claude scripts --glob '!*.db' --glob '!harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show eligibility.standard_trend_template",
+    "rg -n 'ibd-rs-rating|sole authoritative|cross-sectional RS|RS source' . --glob '!*.db' --glob '!harness-spec.md' --glob '!tests/**' --glob '!.git/**'",
+    "rg -n '\"id\": \".*(leader|leadership)|striking distance' doctrine/claims.json",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show market.correction_depth_healthy_leader",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show market.new_bull_leaders_first_weeks",
+    "sed -n '3080,3205p' doctrine/claims.json",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show market.striking_distance_52w_high"
+  ],
+  "final_response": "결론: **AAAA는 INCOMPLETE이지만 우선 검토 대상이고, BBBB는 AVOID입니다.** 두 종목 모두 RS가 90대라는 이유로 비슷한 리더이거나 어느 쪽을 사도 된다고 판단할 수 없습니다.\n\n**AAAA — INCOMPLETE**\n\n- RS 95는 Trend Template의 최소 70 게이트를 충족합니다. 하지만 RS는 8개 조건 중 하나일 뿐, 그 자체가 리더십이나 매수 준비 완료를 증명하지 않습니다.\n- 52주 고점 대비 6% 아래입니다. 이는 Trend Template의 최대 25% 이내 게이트를 19%포인트 여유로 충족합니다.\n- 별도의 리더 관찰 범위인 5~15%에서는 6%가 범위 안이며, 좋은 쪽인 하단 5%에서 1%포인트, 상단 15%에서 9%포인트 떨어져 있습니다. 다만 이 범위는 `band`이므로 관찰 맥락일 뿐 통과 판정은 아닙니다.\n- 현재가가 50일선·150일선·200일선 위라는 사실은 두 가격 조건을 지지합니다. 그러나 50일선이 150일선과 200일선 위인지, 150일선이 200일선 위인지, 200일선이 상승 중인지, 52주 저점보다 최소 30% 높은지는 입력에 없습니다.\n\n따라서 AAAA가 둘 중 훨씬 강하지만 아직 BUY-READY는 아닙니다. 누락된 Trend Template 조건을 포함한 8/8 자격, 완성된 피벗 또는 검증된 VCP 치트 진입, 공급 수축, 시장 정렬, 구조적 무효화와 최소 2:1 보상·위험이 추가로 확인되어야 합니다.\n\n**BBBB — AVOID**\n\n- RS 92는 최소 70 게이트를 충족하지만 다른 알려진 실패를 면제하지 못합니다.\n- 52주 고점 대비 35% 아래이므로 최대 25% 이내라는 Trend Template 게이트를 10%포인트 초과해 실패합니다.\n- 리더 관찰 범위 5~15%와 비교하면 35%는 좋은 쪽 하단에서 30%포인트, 상단에서도 20%포인트 벗어나 있습니다. 이 `band` 자체가 탈락 게이트는 아니며, AVOID의 근거는 별도의 Trend Template 게이트 실패입니다.\n- 현재가가 50일선 아래라는 사실도 독립적인 Trend Template 실패입니다.\n\nTrend Template은 8/8 AND 게이트이므로 BBBB는 두 알려진 실패 중 하나만으로도 표준 매수 경로에서 탈락합니다. 높은 RS를 근거로 AAAA와 동급 리더로 올리거나 상대평가로 구제할 수 없습니다.\n\nBBBB가 다시 자격 검토를 받으려면 완료 봉 기준으로 현재가가 당시의 50일선 위로 회복하고, 당시 52주 고점 대비 하락 폭이 25% 이내가 되어야 하며, 나머지를 포함한 Trend Template 8개 조건도 모두 충족해야 합니다. 그래도 자동 매수가 아니라 셋업과 위험 검증이 별도로 필요합니다.\n\n증거 품질은 사용자가 확정한 사실에는 높지만 전체 매수 판정에는 불완전합니다. 레지스트리 조회 기준 최신 완료 미국 세션은 2026-08-31이지만, 사용자 입력에는 기준일이 없어 그 세션과 정렬됐다고 주장하지 않습니다. 네트워크가 없는 환경이므로 실제 종목·가격·이동평균·시장 자료를 공급자로 재검증하지 않았고 다른 숫자로 대체하지도 않았습니다. 실전 결정론적 RS의 유일한 권위 있는 출처는 사용자 관리 `ibd-rs-rating==0.5.0` 패키지이며, 공식 IBD 독점 피드로 표현하지 않습니다. 이번 RS 95와 92는 사용자가 확정한 폐쇄형 입력으로만 사용했습니다. 이 비교는 종목 자격 판단이며 계좌 비중이나 자본 배분은 제시하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` before analysis; `skill_used` is `ticker-analysis`."
+    },
+    "does_not_treat_a_high_rs_rating_as_leadership": {
+      "passed": true,
+      "evidence": "Final response states: “RS는 8개 조건 중 하나일 뿐, 그 자체가 리더십이나 매수 준비 완료를 증명하지 않습니다.”"
+    },
+    "rejects_the_laggard_on_its_known_trend_template_failure": {
+      "passed": true,
+      "evidence": "Final response labels “BBBB — AVOID” and states that being 35% below the high exceeds the 25% gate while being below the 50-day average is another independent failure."
+    },
+    "judges_the_two_names_separately": {
+      "passed": true,
+      "evidence": "Final response gives separate sections “AAAA — INCOMPLETE” and “BBBB — AVOID” with independent evidence."
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Final response states: “AAAA가 둘 중 훨씬 강하지만 아직 BUY-READY는 아닙니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response states: “이 비교는 종목 자격 판단이며 계좌 비중이나 자본 배분은 제시하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_each_name_distance_from_its_52_week_high": {
+      "passed": true,
+      "evidence": "Final response reports “52주 고점 대비 6% 아래” for AAAA and “52주 고점 대비 35% 아래” for BBBB."
+    },
+    "describes_the_rs_source_as_the_harness_holds_it": {
+      "passed": true,
+      "evidence": "Final response states: “실전 결정론적 RS의 유일한 권위 있는 출처는 사용자 관리 `ibd-rs-rating==0.5.0` 패키지이며, 공식 IBD 독점 피드로 표현하지 않습니다.”"
+    },
+    "states_what_would_requalify_the_laggard": {
+      "passed": true,
+      "evidence": "Final response states that BBBB needs a completed close above the then-current 50-day average, distance within 25% of the then-current 52-week high, and all eight Trend Template conditions."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The fixed inputs did not include an as-of date, so they could not be aligned to the CLI envelope’s 2026-08-31 completed session.",
+    "The sandbox had no network; actual ticker, price, moving-average, RS-provider, setup, and market evidence could not be verified and no substitute values were used.",
+    "The broad `rg` discovery output was truncated, but all doctrine claims used in the answer were subsequently retrieved through `pipeline doctrine show` with `status: ok`."
+  ]
+}
