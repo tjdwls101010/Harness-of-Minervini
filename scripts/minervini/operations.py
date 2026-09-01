@@ -1147,14 +1147,13 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # reads for comparison, published without their claims in the citation list, are a
         # standard the reader is shown and cannot look up.
         #
-        # That block and not the whole payload. `data` carries the caller's `entry` object back
-        # verbatim, so harvesting it let a request name any registered claim and have this
-        # envelope report it as doctrine the setup was decided under -- a citation says this
-        # harness applied something, and nothing the caller writes can make that true.
+        # Harvested through the echo rule, so the caller's own `entry` object -- handed back
+        # verbatim in `data` -- cannot name a claim and have this envelope report it as
+        # doctrine the setup was decided under.
         doctrine_ids=sorted(
             {
                 *result["doctrine_ids"],
-                *_named_doctrine_ids({"contrast": evidence["contrast"]}),
+                *_reducer_named_doctrine_ids(data, request),
                 _SEGMENTATION_CONVENTION,
                 _TRADING_WEEK_CONVENTION,
                 _VOLUME_STATE_CONVENTION,
@@ -3042,11 +3041,11 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         ] + [{"id": item, "state": "not_triggered"} for item in result["waiting"]],
         missing=missing,
         sources=sources,
-        doctrine_ids=_risk_doctrine_ids(mode, data),
+        doctrine_ids=_risk_doctrine_ids(mode, data, request),
     )
 
 
-def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
+def _risk_doctrine_ids(mode: str, data: Mapping[str, Any], request: Mapping[str, Any]) -> list[str]:
     """The claims this result actually cites: the mode's own risk claims, plus every claim
     the payload names beside a measurement or an action. A fixed list said more than the
     result used in one mode and less than it used in the other."""
@@ -3056,7 +3055,25 @@ def _risk_doctrine_ids(mode: str, data: Mapping[str, Any]) -> list[str]:
         if mode == "prospective"
         else ["risk.hard_stop_and_no_average_down", "risk.profit_protection_at_3r"]
     )
-    return base + sorted(_named_doctrine_ids(data) - set(base))
+    return base + sorted(_reducer_named_doctrine_ids(data, request) - set(base))
+
+
+def _reducer_named_doctrine_ids(data: Mapping[str, Any], request: Mapping[str, Any]) -> set[str]:
+    """The claims the payload names, minus everything the caller sent and the payload echoes.
+
+    A citation says this harness applied a claim, so a caller must not be able to add one. Both
+    `ticker.setup` and `ticker.risk` hand parts of the request straight back -- the entry
+    object, the completed price path, the reasons a high was withheld -- and a `doctrine_id`
+    planted in any of them was harvested and published as doctrine the verdict was reached
+    under. Decision 301 accepts it because it resolves, and the read-and-cited guard accepts it
+    because it only looks for citations that are missing.
+
+    A top-level key the caller sent that comes back in `data` is the definition of an echo, so
+    that is the rule rather than a list of the fields found by hand -- a list of those is a list
+    that goes stale by one the next time a field is added.
+    """
+
+    return _named_doctrine_ids({key: value for key, value in data.items() if key not in request})
 
 
 def _named_doctrine_ids(data: Mapping[str, Any]) -> set[str]:

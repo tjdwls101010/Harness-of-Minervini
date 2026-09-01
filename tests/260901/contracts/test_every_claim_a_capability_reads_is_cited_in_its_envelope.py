@@ -18,12 +18,14 @@ as a claim this harness reads, and no registry holds it.
 
 from __future__ import annotations
 
+import builtins
 import contextlib
 import functools
 import importlib
 import pathlib
 import sys
 import tempfile
+import types
 import unittest
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -78,23 +80,32 @@ def recording() -> "list[str]":
 
     wrapped = {name: wrap(function) for name, function in originals.items()}
 
-    # Rebound wherever the function object is reachable, not only on `doctrine`. A module that
-    # wrote `from .doctrine import get_claim` holds the original directly and would keep calling
-    # it -- `operations` does exactly that, so patching the module alone left `doctrine.show`
-    # reading a claim invisibly, and deleting its citation would have passed this guard.
+    # Rebound on every module attribute that holds one of these functions, not only on
+    # `doctrine`. A module that wrote `from .doctrine import get_claim` holds the original
+    # directly and would keep calling it -- `operations` does exactly that, so patching the
+    # module alone left `doctrine.show` reading a claim invisibly, and deleting its citation
+    # would have passed this guard. Matched by identity rather than by name, so an import
+    # bound under an alias is caught too.
+    #
+    # What this does not reach: a reference captured in a closure, held in a default argument
+    # or stored in a container, and a module imported for the first time inside the block. None
+    # of those is how this harness calls doctrine today, and each would make a read invisible
+    # here -- so the claim is "every module-level binding that exists when recording starts",
+    # not "everywhere the function is reachable".
+    by_identity = {id(function): name for name, function in originals.items()}
     bindings = [
-        (module, name)
+        (module, attribute, by_identity[id(value)])
         for module in [value for key, value in sys.modules.items() if key.startswith("scripts.minervini") and value]
-        for name, function in originals.items()
-        if getattr(module, name, None) is function
+        for attribute, value in builtins.list(vars(module).items())
+        if id(value) in by_identity
     ]
-    for module, name in bindings:
-        setattr(module, name, wrapped[name])
+    for module, attribute, name in bindings:
+        setattr(module, attribute, wrapped[name])
     try:
         yield read
     finally:
-        for module, name in bindings:
-            setattr(module, name, originals[name])
+        for module, attribute, name in bindings:
+            setattr(module, attribute, originals[name])
 
 
 def _envelopes():
@@ -148,8 +159,18 @@ def _envelopes():
         yield "power_play", "ticker.chart", read, payload
 
 
-def _incomplete(payload: Mapping[str, object]) -> bool:
-    return (payload.get("data") or {}).get("verdict") == "INCOMPLETE"
+def _market_defense_withheld(payload: Mapping[str, object]) -> bool:
+    """The absence itself, not the verdict that produces it today.
+
+    Written as `verdict == "INCOMPLETE"` the predicate described the branch rather than the
+    reason, so a payload that published `management_evidence.market_defense` under an
+    INCOMPLETE verdict would have been forgiven -- and forgiven by the liveness check too,
+    which would count the departure as taken. What justifies the departure is that the reading
+    reaches nobody, so that is what is asked.
+    """
+
+    evidence = ((payload.get("data") or {}).get("management_evidence")) or {}
+    return "market_defense" not in evidence
 
 
 # A read whose reading reaches no reader, declared one at a time with the reason, the way the
@@ -164,7 +185,7 @@ def _incomplete(payload: Mapping[str, object]) -> bool:
 # excused by an exemption written for a different branch.
 _WITHHELD = {
     ("ticker.risk", "management.market_defense_tightens_stops"): (
-        _incomplete,
+        _market_defense_withheld,
         "an INCOMPLETE verdict publishes no management readings at all -- `management_evidence` "
         "is emptied wholesale, which tests/260827/integration/test_windows_and_citations.py pins "
         "as 'nothing was established, so nothing is measured about it' -- so the block this band "
@@ -200,7 +221,7 @@ class EveryClaimReadIsCited(unittest.TestCase):
         ]
         self.assertTrue(holds, "the sweep produced no HOLD risk envelope, so this proves nothing")
         for payload in holds:
-            self.assertFalse(_incomplete(payload))
+            self.assertFalse(_market_defense_withheld(payload))
             self.assertIn("market_defense", payload["data"]["management_evidence"])
             self.assertIn("management.market_defense_tightens_stops", payload["doctrine_ids"])
 
@@ -239,6 +260,22 @@ class EveryClaimReadIsCited(unittest.TestCase):
         # wrapped, so one reading of one claim arrives twice. What the comparison uses is the
         # set, and what this control is about is which ids are in it.
         self.assertEqual(set(read), {"convention.trading_week"})
+
+    def test_an_import_bound_under_another_name_is_still_recorded(self) -> None:
+        """Matching by name would miss `from .doctrine import claim as read_the_claim`, and the
+        binding that motivated this was itself a direct import -- the next one need not keep
+        the accessor's name for the recorder to have to see it."""
+
+        module = types.ModuleType("scripts.minervini._alias_probe")
+        module.read_the_claim = doctrine.claim
+        sys.modules[module.__name__] = module
+        try:
+            with recording() as read:
+                module.read_the_claim("convention.trading_week")
+            self.assertEqual(set(read), {"convention.trading_week"})
+            self.assertIs(module.read_the_claim, doctrine.claim)
+        finally:
+            del sys.modules[module.__name__]
 
     def test_the_recorder_puts_the_registry_back(self) -> None:
         before = {name: getattr(doctrine, name) for name in _READS}

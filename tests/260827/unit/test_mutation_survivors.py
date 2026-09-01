@@ -55,13 +55,15 @@ class ANewHighHasToBeHigher(unittest.TestCase):
 
 class CitationsAreCheckedAgainstTheRegistry(unittest.TestCase):
     def test_an_unregistered_id_anywhere_in_the_payload_is_dropped(self) -> None:
-        cited = _risk_doctrine_ids("active", {"management_evidence": {"anything": {"doctrine_id": "not.a.registered.claim", "doctrine_ids": ["also.not.registered"]}}})
+        # An empty request: what these two are about is the registry filter, and the echo rule
+        # the third argument carries has its own tests beside the guard that motivated it.
+        cited = _risk_doctrine_ids("active", {"management_evidence": {"anything": {"doctrine_id": "not.a.registered.claim", "doctrine_ids": ["also.not.registered"]}}}, {})
 
         self.assertNotIn("not.a.registered.claim", cited)
         self.assertNotIn("also.not.registered", cited)
 
     def test_a_registered_id_beside_a_measurement_is_kept(self) -> None:
-        cited = _risk_doctrine_ids("active", {"management_evidence": {"twenty_day_average": {"doctrine_id": "management.close_below_20_day_average_lowers_probability"}}})
+        cited = _risk_doctrine_ids("active", {"management_evidence": {"twenty_day_average": {"doctrine_id": "management.close_below_20_day_average_lowers_probability"}}}, {})
 
         self.assertIn("management.close_below_20_day_average_lowers_probability", cited)
 
