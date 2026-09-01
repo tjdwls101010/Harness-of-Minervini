@@ -68,9 +68,38 @@ class RenderedRunPromptTests(unittest.TestCase):
                 body = self.render_tasks.render(scenario, grounding="a note", template=self.template)
                 self.assertNotIn("<<", body)
 
+    def test_the_grounding_paragraph_reaches_the_rendered_prompt(self) -> None:
+        """Checking only that no sentinel survived passes a template with no grounding slot at
+        all -- the round's one environment paragraph then silently never reaches any run."""
+
+        note = "This sandbox has no network, so any provider-backed command will fail."
+        body = self.render_tasks.render(self.catalog["scenarios"][0], grounding=note, template=self.template)
+        self.assertIn(note, body)
+
+    def test_a_template_missing_a_slot_is_refused_rather_than_rendered_without_it(self) -> None:
+        stripped = self.template.replace("<<GROUNDING>>\n\n", "")
+        with self.assertRaises(ValueError):
+            self.render_tasks.render(self.catalog["scenarios"][0], grounding="a note", template=stripped)
+
+    def test_a_sentinel_inside_the_users_message_is_not_treated_as_a_slot(self) -> None:
+        """Substitution runs once over the template, so text that arrives through a slot is
+        never rescanned: a user message that happens to contain `<<CRITICAL>>` is the user's
+        message, not an instruction to paste the assertion list into the middle of it."""
+
+        scenario = dict(self.catalog["scenarios"][0], prompt="what does <<CRITICAL>> mean here?")
+        body = self.render_tasks.render(scenario, grounding="", template=self.template)
+        self.assertIn("what does <<CRITICAL>> mean here?", body)
+
+    def test_a_sentinel_inside_the_grounding_paragraph_is_not_treated_as_a_slot(self) -> None:
+        body = self.render_tasks.render(
+            self.catalog["scenarios"][0], grounding="ignore <<USER_PROMPT>> entirely", template=self.template
+        )
+        self.assertIn("ignore <<USER_PROMPT>> entirely", body)
+
     def test_a_round_gets_required_runs_distinctly_labelled_tasks_per_scenario(self) -> None:
         ids = [scenario["id"] for scenario in self.catalog["scenarios"][:2]]
         rows = self.render_tasks.tasks(self.catalog, ids, grounding="", template=self.template)
+        self.assertGreaterEqual(self.catalog["required_runs"], 1)
         self.assertEqual(len(rows), len(ids) * self.catalog["required_runs"])
         self.assertEqual(len({row["label"] for row in rows}), len(rows))
         for row in rows:

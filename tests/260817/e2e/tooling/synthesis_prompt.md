@@ -21,7 +21,7 @@ For each assertion a report marks `passed: true`, ask whether the `evidence` fie
 
 - Evidence that restates the assertion in other words instead of pointing at something.
 - A quoted sentence that does not say what the assertion requires.
-- A claim about a command that does not appear in `commands`.
+- A claim about a command that does not appear in `commands`. That list is the run's own account of itself; `observed_command_count`, where a report carries it, is how many the bridge actually launched, and a list shorter than that count means the run did things it did not tell you about.
 - A pass on "did not do X" where `final_response` in fact does X.
 - A pass that depends on a threshold or rule the report asserts but the registry does not hold. Check with `scripts/.venv/bin/python scripts/pipeline doctrine show <claim-id>` -- a `band` and a `marker` report where a measurement sits and can never carry a verdict; only a `gate` decides pass or fail.
 

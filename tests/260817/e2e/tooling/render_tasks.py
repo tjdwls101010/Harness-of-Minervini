@@ -10,7 +10,7 @@ network, or that a stated threshold has to be checked against the registry befor
 treated as a gate. It is per round rather than per scenario because it describes the
 environment the round is run in, not the question being asked.
 
-    python tests/260817/e2e/tooling/render_tasks.py --out /tmp/tasks.jsonl \
+    python3 tests/260817/e2e/tooling/render_tasks.py --out /tmp/tasks.jsonl \
         --grounding-file tests/260817/e2e/tooling/grounding/no_network.md scenario_id ...
 """
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import sys
 from typing import Sequence
 
@@ -37,20 +38,36 @@ def load_template() -> str:
     return TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+SLOTS = ("USER_PROMPT", "GROUNDING", "CRITICAL", "NONCRITICAL")
+_SLOT = re.compile("<<(" + "|".join(SLOTS) + ")>>")
+
+
 def _bullets(assertion_ids: Sequence[str]) -> str:
     return "\n".join(f"- `{assertion_id}`" for assertion_id in assertion_ids)
 
 
 def render(scenario: dict, *, grounding: str, template: str) -> str:
     """One run's prompt. Sentinels rather than `str.format` because the template is prose that
-    is free to contain a brace, and a template that has to escape itself is one nobody edits."""
+    is free to contain a brace, and a template that has to escape itself is one nobody edits.
 
-    note = grounding.strip()
-    body = template.replace("<<GROUNDING>>\n\n", f"{note}\n\n" if note else "")
-    body = body.replace("<<USER_PROMPT>>", scenario["prompt"])
-    body = body.replace("<<CRITICAL>>", _bullets(scenario["critical_assertions"]))
-    body = body.replace("<<NONCRITICAL>>", _bullets(scenario["noncritical_assertions"]))
-    return body
+    Substituted in one pass, so nothing that arrives through a slot is rescanned: a user
+    message that happens to contain `<<CRITICAL>>` stays the user's message. A slot the
+    template does not have is refused rather than skipped -- a template that lost its grounding
+    line still renders, and the round's one environment paragraph then reaches no run at all.
+    """
+
+    values = {
+        "USER_PROMPT": scenario["prompt"],
+        "GROUNDING": grounding.strip(),
+        "CRITICAL": _bullets(scenario["critical_assertions"]),
+        "NONCRITICAL": _bullets(scenario["noncritical_assertions"]),
+    }
+    absent = sorted(name for name in SLOTS if f"<<{name}>>" not in template)
+    if absent:
+        raise ValueError(f"the run prompt template has no slot for {', '.join(absent)}")
+    body = _SLOT.sub(lambda match: values[match.group(1)], template)
+    # An empty grounding leaves the blank lines that framed its own paragraph behind.
+    return re.sub(r"\n{3,}", "\n\n", body)
 
 
 def tasks(catalog: dict, scenario_ids: Sequence[str], *, grounding: str, template: str) -> list[dict]:
