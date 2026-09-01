@@ -699,11 +699,18 @@ codex 실증 프로브(run `20260824-211802-harness-usability-probe`, gpt-5.6-so
 
   - **슬라이스 밖에서 하나 정리했다.** `/graphify` 실행이 `CLAUDE.md`에 남긴 안내 블록이 11,012바이트 천장을 1,113 넘겨 `test_harness_topology`가 빨갛게 떠 있었다. 그 천장의 근거가 "인터페이스가 이미 가진 것은 인터페이스로 돌린다"이고 Graphify 스킬의 `description`이 이미 그 라우팅을 갖고 있어서 되돌렸다. `AGENTS.md`가 `CLAUDE.md` 심링크라 그 블록은 두 호스트의 모든 시장 분석 세션에 들어가고 있었다. 같은 커밋에서 PR #21이 쉘 리다이렉트 사고로 딸려 보낸 빈 파일 `=`를 지웠다.
 
-- **Phase 7 — 미착수. 슬라이스 셋으로 잘라 뒀다(성진 결정 2026-09-01).** 7-A 자격·셋업(유효 BUY-READY 전 경로 / 교과서 VCP vs 유사품 / 차트가 숫자를 못 이김) · 7-B 리더십·펀더멘털(리더 vs 고RS 랙가드 / Power Play 실측 / 후기 베이스 경고) · 7-C 리스크·매도(비스탑 SELL / 부분 청산 / 어닝 근접 거부) + 크로스 호스트 재확인 + 스펙 전면 갱신 + 시범 세션.
+- **Phase 7 — 머지 완료** (PR #34~#36). 7-A 자격·셋업(결정 314) `9df6c24` · 7-B 리더십·펀더멘털(결정 315) `5feb18d` · 7-C 리스크·매도(결정 316). 카탈로그 10 → 19 가족, 시나리오당 독립 3런, 아티팩트 57개. 크리티컬 348/348, 논크리티컬 167/171, 적대 종합 `RELEASE_APPROVED`.
 
-  **기계는 이미 있다(2026-09-01 확인).** `tests/260817/e2e/`에 `scenarios.json`(현재 시나리오 10개, `{id, expected_skill, prompt, critical_assertions[], noncritical_assertions[]}` 스키마, `required_runs: 3`), 시나리오당 3런 아티팩트가 들어가는 `reports/`, 그리고 다섯 게이트를 건 `test_behavioral_artifacts.py`가 있다. Phase 7은 **새 기계를 만드는 게 아니라 시나리오 9개와 27개 런 아티팩트를 채우는 일**이다.
+  - **결정 314 — 항상 거부하는 하네스가 열 개를 다 통과한다(7-A).** 기존 열 가족이 전부 거부를 시험했다. `converged_buy_ready`가 그 구멍이고, 봉투 넷이 붙었을 때 BUY-READY가 안 나오면 실패다. 결정 302 이후 그게 BUY-READY에 이르는 유일한 경로이므로 픽스처 봉투는 우회가 아니라 설계된 길이다. **행동 게이트가 유닛 1,936개가 못 잡은 결함을 잡았다** — `risk_controls.breakeven_protection_required`가 `False`로 초기화되고 3R 블록은 HOLD 분기에만 있어서, SELL이 "재지 않은 통제"를 "필요 없음"으로 발행했고 두 런이 그걸 근거로 측정된 적 없는 시간 순서를 지어냈다. 블록이 안 돈 곳에서는 `None`이다. **프로브 한 번이 내 시나리오 전제도 잡았다** — `setup.vcp_contraction_count`의 [2,6]은 밴드라 "수축 2개 실패"는 이 하네스가 못 내는 실패였고, 9런이 허구를 놓고 심의할 뻔했다. 이후 모든 확정 수치를 `doctrine show`에 먼저 대본다.
 
-  **착수 전에 걸리는 것 둘.** ① `test_catalog_has_ten_decision_distinct_prompt_families`가 `len(scenarios) == 10`을 하드코딩한다 — 슬라이스마다 숫자를 밀지, "10 이상 + id 유일"로 다시 진술할지 정해야 한다(전자가 올바른 RED이긴 하다). ② **채점 모델을 무엇으로 할지가 정해져야 한다.** `test_every_scenario_has_three_independent_codex_reports`가 `report["model"] == "gpt-5.6-terra"`를 못 박아 뒀고 기존 30개 아티팩트가 전부 terra다. 반면 위 검증 전략 절은 **sol, xhigh**를 적어 뒀고 지금 브리지의 기본값도 `gpt-5.6-sol`이다. **막히는 것은 아니다** — terra는 카탈로그에 그대로 있어서 `--model gpt-5.6-terra`로 새 런을 채우면 어서션이 그대로 산다(2026-09-01 `codex_bridge.py models` 확인). 선택지 셋이고 비용이 다르다: (가) 새 9개를 terra로 채운다 — 27런, 코퍼스가 한 모델로 통일되지만 계획이 적어 둔 sol과 어긋난다. (나) sol로 채우고 어서션을 "고정"에서 "기록"으로 바꾼다 — 27런, 계획과 맞지만 19개 시나리오가 두 모델로 갈린다. (다) 19개 전부 sol로 다시 돌린다 — 57런, 통일되고 계획과도 맞지만 가장 비싸다.
+  - **결정 315 — 높은 숫자는 리더십이 아니고, 예외는 결측만 덮는다(7-B).** RS 92짜리 랙가드는 52주 고점 대비 35% 아래라 Trend Template 7번을 명백히 실패한다. Power Play 예외는 구조가 자격을 갖춰도 **재 봤더니 나빴던 것**은 못 덮는다. `late_stage_base_count`는 두 가지가 동시에 참이어야 하는 유일한 가족이다 — 6번째 베이스는 3–5 밴드 상단을 넘었고 판정은 여전히 봉투가 도달한 BUY-READY다. 첫 실행에서 셋이 갈렸는데 내가 티커를 FFFF로 쓰고 봉투는 TEST라 CLI가 거부한 것이었고, **한 런이 그걸 별칭으로 취급해 봉투가 도달하지 않은 판정을 냈는데 어서션 어디에도 그걸 잡는 것이 없었다.** `reports_the_verdict_the_envelope_reached`를 크리티컬로 더했다.
+
+  - **결정 316 — 밴드를 평면 실패로 타이핑하는 길이 열려 있었다(7-C).** 세 케이스(선언한 매도 계획에 의한 비스탑 SELL, 분율을 계좌 금액으로 환산 거부, 사용자가 빼 달라 해도 실적을 홀드 옆에 붙이기) 자체는 한 번에 통과했다. 걸린 것은 7-B의 Power Play 가족이었다 — 세 런이 `fundamentals.minimum_quarterly_earnings_growth`(failure effect `needs_review`)를 근거로 티커 판정을 AVOID로 냈고, 게이트는 하나도 안 깨졌으며 다른 평면은 안 재진 상태였다. **인터페이스가 이걸 못 막는다** — 선언 플래그는 결정 302에 따라 더 신중한 단어를 설계상 항상 받아 준다. 그래서 규칙이 `ticker-analysis` 절차로 갔다: 평면 상태 선언은 주장이고 그것을 허가하는 것은 게이트뿐이다. 수정 후 셋이 전부 INCOMPLETE로 수렴했다 — **재실행이 아니라 하네스 수정이 고쳤다.**
+
+  - **Phase 7의 설계 제약.** 행동 런은 네트워크 없는 격리 샌드박스에서 돈다. 라이브 프로바이더에 의존하는 가족은 provider-unavailable 경로로 퇴화하고, `active_position`이 실제로 그렇게 됐다(크리티컬은 통과하지만 원래 재려던 보유 관리 판단은 더는 안 잰다 — `provider_outage`와 겹치는 대신 active 분기의 증거 부재를 재는 가족이 됐다). 새 가족 아홉은 전부 확정 입력이거나 픽스처 봉투 기반이다.
+
+  - **크로스 호스트는 이 57개 아티팩트 자체가 증거다.** 모든 런이 codex 격리 세션이고, `AGENTS.md → CLAUDE.md`와 `.codex/skills → ../.claude/skills`만으로 스킬을 라우팅해(`skill_used: ticker-analysis`) 같은 판단에 도달했다. 별도 확인 절차가 필요 없다.
+
 
 ### Phase 2가 Phase 1 덕에 줄어드는 부분
 

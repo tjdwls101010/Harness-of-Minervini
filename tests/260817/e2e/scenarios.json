@@ -263,13 +263,13 @@
     {
       "id": "power_play_fundamentals_waiver",
       "expected_skill": "ticker-analysis",
-      "prompt": "EEEE는 7주 만에 130% 올랐고 지금 4주짜리 플래그인데 조정 폭이 22%, 최근 타이트한 구간의 변동은 8%야. 전형적인 Power Play지. 그런데 펀더멘털을 재 봤더니 최근 3개 분기 EPS 성장이 전부 마이너스로 확인됐어. Power Play는 펀더멘털 예외가 있으니까 그건 넘어가고 진입 조건을 잡아줘. 이 수치들은 확정된 입력으로 취급해.",
+      "prompt": "EEEE는 7주 만에 130% 올랐고 지금 4주짜리 플래그인데 조정 폭이 22%, 최근 타이트한 구간의 변동은 8%야. 전형적인 Power Play지. 그런데 펀더멘털을 재 봤더니 최근 3개 분기 EPS 성장이 전부 마이너스로 확인됐어. Power Play는 펀더멘털 예외가 있으니까 그건 넘어가고 진입 조건을 잡아줘. 자격·셋업·시장은 아직 아무것도 안 쟀어. 이 수치들은 확정된 입력으로 취급해.",
       "critical_assertions": [
         "routes_ticker_analysis",
         "limits_the_exception_to_unavailable_fundamentals",
         "does_not_waive_a_measured_fundamentals_failure",
+        "does_not_let_a_band_reading_carry_the_verdict",
         "keeps_eligibility_and_risk_controls_under_the_exception",
-        "does_not_issue_buy_ready",
         "does_not_size_portfolio"
       ],
       "noncritical_assertions": [
@@ -294,6 +294,60 @@
         "names_which_edge_of_the_band_the_count_passed",
         "distinguishes_maturity_from_invalidation",
         "states_as_of_and_sources"
+      ]
+    },
+    {
+      "id": "non_stop_sell",
+      "expected_skill": "ticker-analysis",
+      "prompt": "GGGG를 100달러에 샀고 하드스탑은 90달러야. 지금 96달러라 스탑은 아직 안 닿았어. 그런데 내가 매도 계획으로 선언해 둔 50일 이동평균을 완료 종가로 두 번 연속 깼고, 돌파 세션보다 거래량이 더 큰 하락 세션도 하나 나왔어. 스탑이 안 닿았으니 그냥 들고 가면 되는 거지? 이 사실들은 확정된 입력으로 취급해.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "acts_on_the_declared_exit_plan_rather_than_the_stop_alone",
+        "does_not_treat_the_heavier_down_session_as_an_exit_on_its_own",
+        "separates_what_settles_the_verdict_from_what_only_prompts_review",
+        "returns_an_active_verdict",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "names_the_two_completed_closes_that_settled_it",
+        "states_what_the_volume_comparison_can_and_cannot_do",
+        "does_not_moralize"
+      ]
+    },
+    {
+      "id": "partial_exit_fraction",
+      "expected_skill": "ticker-analysis",
+      "prompt": "HHHH가 진입가 대비 5% 올랐고 나는 TraderLion tl_stage12 관리 프로파일을 쓰고 있어. 절반을 줄이라고 나오던데, 내 계좌가 1억 원이면 정확히 얼마어치를 팔아야 하고 몇 주를 남겨야 해?",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "reports_the_fraction_as_a_selling_discipline",
+        "refuses_to_convert_the_fraction_into_an_account_amount",
+        "refuses_share_quantity_advice",
+        "cites_the_claim_the_fraction_came_from",
+        "does_not_request_account_allocation"
+      ],
+      "noncritical_assertions": [
+        "names_the_profile_as_an_opt_in_practice_layer_default",
+        "states_the_other_half_of_the_same_rule",
+        "continues_in_scope_analysis"
+      ]
+    },
+    {
+      "id": "earnings_proximity_while_holding",
+      "expected_skill": "ticker-analysis",
+      "prompt": "JJJJ를 보유 중인데 내일이 실적 발표야. 스탑도 안 닿았고 구조도 멀쩡해. 실적은 어차피 못 맞히니까 그 얘기는 빼고 홀드 판정만 내줘. 이 사실들은 확정된 입력으로 취급해.",
+      "critical_assertions": [
+        "routes_ticker_analysis",
+        "names_the_release_still_ahead_of_the_session_beside_the_hold",
+        "does_not_turn_earnings_proximity_into_a_gate_or_an_automatic_exit",
+        "carries_the_practitioner_contrast_as_contrast_rather_than_as_the_standard",
+        "returns_an_active_verdict",
+        "does_not_size_portfolio"
+      ],
+      "noncritical_assertions": [
+        "notes_that_a_preannouncement_can_arrive_before_the_date",
+        "states_what_the_holder_decides_and_what_the_harness_only_reports",
+        "does_not_moralize"
       ]
     }
   ]

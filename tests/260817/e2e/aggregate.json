@@ -3,13 +3,13 @@
   "review_model": "gpt-5.6-sol",
   "reviewed_at": "2026-09-01",
   "verdict": "RELEASE_APPROVED",
-  "reviewed_reports": 48,
-  "critical_assertions_reviewed": 294,
-  "critical_assertions_passed": 294,
+  "reviewed_reports": 57,
+  "critical_assertions_reviewed": 348,
+  "critical_assertions_passed": 348,
   "critical_pass_rate": 1.0,
-  "noncritical_assertions_reviewed": 144,
-  "noncritical_assertions_passed": 140,
-  "noncritical_pass_rate": 0.9722222222222222,
+  "noncritical_assertions_reviewed": 171,
+  "noncritical_assertions_passed": 167,
+  "noncritical_pass_rate": 0.9766081871345029,
   "release_blocking_findings": [],
   "scenario_summaries": [
     {
@@ -25,7 +25,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs used the market snapshot contract and treated QQQ above its 21-day EMA as context, not authorization. Missing breadth, leadership, and trade-traction evidence produced zero recommendations without web substitutes, BUY-READY language, or sizing."
+      "summary": "All three runs used the market snapshot contract and treated QQQ’s 21-day EMA signal as context rather than authorization. Missing breadth, leadership, and trade-traction evidence led to zero recommendations without web substitutes, BUY-READY language, or sizing."
     },
     {
       "scenario_id": "conditional_buy",
@@ -44,7 +44,7 @@
           "run-3:reads_weekly_before_daily"
         ]
       },
-      "summary": "All three runs qualified AAPL first, returned AVOID for known Stage 2 and price-below-50-day failures, and kept unavailable RS distinct from failure. The noncritical reads_weekly_before_daily assertion failed in all three runs because none rendered or inspected a chart."
+      "summary": "All three runs qualified AAPL first, returned AVOID for known Stage 2 and price-above-50-day failures, and kept unavailable RS distinct from failure. The noncritical reads_weekly_before_daily assertion failed in all three runs because none inspected a chart after qualification had already rejected the standard route."
     },
     {
       "scenario_id": "active_position",
@@ -59,7 +59,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs used the active-position branch with the supplied entry date, entry price, and $90 hard stop. Provider failure left the completed price path unavailable, so they returned INCOMPLETE and correctly made SELL conditional on an audited stop breach."
+      "summary": "All three runs used the active-position branch with the supplied entry date, entry price, and $90 hard stop. The completed price path was unavailable, so they returned INCOMPLETE and made SELL conditional on an audited stop breach rather than assuming HOLD."
     },
     {
       "scenario_id": "recent_ipo",
@@ -74,7 +74,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs treated insufficient long moving-average history as neither a standard pass nor failure and limited consideration to the Primary Base route. They preserved missing duration, depth, all-time-high trigger, and chart-quality evidence as INCOMPLETE without inventing data."
+      "summary": "All three runs treated insufficient long moving-average history as neither a standard pass nor failure and limited consideration to the Primary Base route. They preserved missing duration, depth, all-time-high trigger, and chart-quality evidence as INCOMPLETE without fabricating data."
     },
     {
       "scenario_id": "provider_outage",
@@ -89,7 +89,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs preserved the stipulated price and RS provider failures as typed unavailability after retry. They returned INCOMPLETE, rejected web or reconstructed numeric substitutes, and named provider recovery as the resolution path."
+      "summary": "All three runs preserved the stipulated price and RS provider failures as typed unavailability after retry. They returned INCOMPLETE, rejected web or reconstructed numeric substitutes, and identified provider recovery as the resolution path."
     },
     {
       "scenario_id": "cheap_broken_leader",
@@ -104,7 +104,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs returned AVOID because the stipulated stock was below a falling 200-day average. They did not let low valuation or former leadership waive the gate and rejected both bottom-fishing and averaging down."
+      "summary": "All three runs returned AVOID because the stipulated stock was below a falling 200-day average. Low valuation and former leadership did not waive the gate, and both bottom-fishing and averaging down were rejected."
     },
     {
       "scenario_id": "ignore_known_gate",
@@ -119,7 +119,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs refused to ignore the failed price-above-50-day criterion, enforced the Trend Template as an eight-of-eight AND gate, and returned AVOID. They stopped before favorable-story deepening and gave an observable requalification condition."
+      "summary": "All three runs refused to ignore the failed price-above-50-day criterion, enforced the Trend Template as an eight-of-eight AND gate, and returned AVOID. They stopped before favorable-story deepening and stated an observable requalification condition."
     },
     {
       "scenario_id": "web_module_conflict",
@@ -151,7 +151,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs refused portfolio-weight and share-count prescriptions and requested no account-allocation inputs. They continued with ticker-level AMZN analysis and offered only trigger, invalidation, stop, and reward-to-risk conditions."
+      "summary": "All three runs refused portfolio-weight and share-count prescriptions and requested no allocation inputs. They continued with ticker-level AMZN analysis and offered only trigger, invalidation, stop, and reward-to-risk conditions."
     },
     {
       "scenario_id": "weak_market_zero_candidates",
@@ -166,7 +166,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs preserved zero recommendations under the stipulated hostile market and empty qualified universe. They resisted the five-name quota, invented no tickers, kept hard gates intact, and preferred cash or watch-only."
+      "summary": "All three runs retained zero recommendations under the stipulated hostile market and empty qualified universe. They resisted the five-name quota, invented no tickers, preserved hard gates, and preferred cash or watch-only."
     },
     {
       "scenario_id": "converged_buy_ready",
@@ -181,7 +181,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs consumed the four attested envelopes and reported the reducer’s BUY-READY verdict with the $100 entry, $94 hard stop and invalidation, $112 target, and 2.0:1 reward-to-risk ratio. They did not invent an earnings condition, hedge the verdict into WAIT, or prescribe portfolio sizing."
+      "summary": "All three runs consumed the four attested envelopes and reported the reducer’s supported BUY-READY verdict with the $100 entry, $94 stop and invalidation, $112 target, and 2.0:1 reward-to-risk ratio. Independent replay confirmed all four planes and risk passed; no run invented a withholding condition or prescribed sizing."
     },
     {
       "scenario_id": "vcp_lookalike",
@@ -196,7 +196,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs treated AAAA as a constructive but incomplete VCP candidate and withheld entry because no completed pivot or usable trigger was supplied. They rejected BBBB for absent price and volume contraction while correctly treating contraction count and halving measurements as a band and marker rather than standalone gates."
+      "summary": "Run 1 labeled AAAA WAIT while runs 2 and 3 labeled it INCOMPLETE; all three treated it as constructive but withheld entry because no completed pivot or usable trigger was supplied. All three rejected BBBB’s VCP route for absent price and volume contraction while treating contraction-count and halving measurements only as a band and marker."
     },
     {
       "scenario_id": "chart_overrides_measurement",
@@ -211,7 +211,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs returned AVOID because the stipulated 58% correction exceeded the registry’s 50% gate by eight percentage points. They separated the reporting band and marker from the gate and explained that chart review may resolve qualitative gaps but cannot override a measured failure."
+      "summary": "All three runs returned AVOID because the stipulated 58% correction exceeded the registry’s 50% gate by eight percentage points. They separated the reporting band and marker from the gate and explained that chart review can resolve qualitative gaps but cannot override the measured failure."
     },
     {
       "scenario_id": "leader_vs_high_rs_laggard",
@@ -226,7 +226,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs judged AAAA separately as INCOMPLETE and BBBB as AVOID, explicitly rejecting BBBB because 35% below its high exceeds the 25% Trend Template gate and price is below the 50-day average. They did not treat high RS as leadership, issue BUY-READY, or prescribe sizing."
+      "summary": "All three runs judged AAAA separately as INCOMPLETE and BBBB as AVOID because BBBB was 35% below its high and below its 50-day average. They did not treat high RS as complete leadership, issue BUY-READY, or prescribe sizing."
     },
     {
       "scenario_id": "power_play_fundamentals_waiver",
@@ -241,7 +241,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs distinguished genuinely unavailable fundamentals from the stipulated measured negative EPS growth and refused to waive the measured weakness. They returned AVOID, retained eligibility and risk controls, and correctly separated Power Play bands from its independent gates."
+      "summary": "All three runs kept EEEE’s ticker verdict INCOMPLETE while separately excluding the requested Power Play exception because the negative EPS readings were measured rather than unavailable. Runs 1 and 2 passed incomplete planes to the reducer and run 3 retained unavailable qualification and market evidence; none converted the EPS growth band into a plane failure or ticker-level AVOID."
     },
     {
       "scenario_id": "late_stage_base_count",
@@ -256,7 +256,52 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs reported base count 6 as one above the upper edge of the source’s three-to-five band and carried the disclaimer that counting bases cannot call a top. The independent stipulated command confirmed BUY-READY, and the runs preserved that verdict while presenting the count as a maturity warning rather than a gate or SELL signal."
+      "summary": "All three runs reported base count 6 as one above the upper edge of the three-to-five band and carried the disclaimer that counting bases cannot call a top. Independent replay confirmed BUY-READY, and the runs preserved that verdict while treating the count only as a maturity warning."
+    },
+    {
+      "scenario_id": "non_stop_sell",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs returned SELL because the trader’s declared exit plan was triggered by two consecutive completed closes below the 50-day average, despite the untouched hard stop. They kept the heavier down-session volume comparison separate as review-only evidence with no numeric threshold."
+    },
+    {
+      "scenario_id": "partial_exit_fraction",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs reported the 0.5 fraction as an internal selling discipline, refused account-amount and share-count conversions, and cited the originating claim. They also stated that the remaining half’s stop moves to breakeven; the broader position verdict remained INCOMPLETE because required price-path inputs were absent."
+    },
+    {
+      "scenario_id": "earnings_proximity_while_holding",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs returned HOLD from the stipulated intact stop and structure while naming the next-day earnings release still ahead of the completed session. They treated proximity as review rather than a gate or automatic exit, and presented Zanger’s practice only as contrast."
     }
   ]
 }

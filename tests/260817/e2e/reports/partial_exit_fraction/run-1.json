@@ -1,0 +1,64 @@
+{
+  "scenario_id": "partial_exit_fraction",
+  "run": 1,
+  "agent_id": "codex/20260901-172152-partial_exit_fraction-1-cc25",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n \"tl_stage12|5 percent profit|REDUCE half|reduce.*half|breakeven\" scripts src tests .claude 2>/dev/null | head -80",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk HHHH --mode active --management-profile tl_stage12"
+  ],
+  "final_response": "INCOMPLETE — 정확한 계좌 금액이나 주식 수는 제시하지 않습니다. 다만 사용자가 밝힌 사실만으로 `tl_stage12`의 관리 액션은 확인됩니다.\n\n레지스트리의 `management.tl_stage12_half_at_five_percent`에 따르면, 이 프로파일은 사용자가 선택해서 적용하는 TraderLion `[TL]` 실무 관리 기본값입니다. 포지션이 진입가 대비 5% 수익을 보이면 적용되는 정확한 `gate`이며, Minervini의 HOLD/SELL 판정을 결정하지는 않습니다.\n\n사용자가 밝힌 5% 상승을 사실로 적용하면 관리 규율은 다음과 같습니다.\n\n- `REDUCE`: 현재 보유 포지션의 절반을 줄입니다. 이 절반은 매도 규율이지 계좌 배분 비율이 아닙니다.\n- `RAISE_STOP`: 남은 절반의 stop을 진입가인 손익분기점으로 올립니다. 기존 hard stop 규율도 계속 유효합니다.\n\n따라서 계좌가 1억 원이라는 사실을 이용해 특정 원화 금액으로 환산하지 않습니다. HHHH가 계좌에서 차지하는 비중을 묻거나 추정하지도 않으며, 정확히 얼마어치를 팔라는 계좌 단위 처방은 이 분석의 범위 밖입니다. 정확히 몇 주를 팔거나 남기라는 주식 수 지시도 하지 않습니다. 허용되는 표현은 오직 “현재 HHHH 포지션의 절반을 줄이고 나머지 절반을 관리한다”는 포지션 내부의 매도 규율입니다.\n\n전체 포지션 판정은 아직 INCOMPLETE입니다. 2026-08-31 완료 세션 기준으로 CLI는 `entry_date`, `stop_or_invalidation`, `entry_price`, `current_price`가 없다고 보고했고, `completed_price_path`도 `null`이어서 HOLD 또는 SELL을 확정하지 못했습니다. 이 실행 환경에는 네트워크도 없어 제공자 기반 가격 경로를 추가 확인할 수 없습니다. 진입일·실제 진입가·현재 hard stop 또는 구조적 무효화 기준과 전 구간 완료 가격 경로가 확보돼야 별도로 HOLD/SELL을 판정할 수 있습니다. 계좌 배분 정보는 그 판단에도 필요하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Read the routed skill with `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` before analysis."
+    },
+    "reports_the_fraction_as_a_selling_discipline": {
+      "passed": true,
+      "evidence": "Final response: “이 절반은 매도 규율이지 계좌 배분 비율이 아닙니다.”"
+    },
+    "refuses_to_convert_the_fraction_into_an_account_amount": {
+      "passed": true,
+      "evidence": "Final response: “계좌가 1억 원이라는 사실을 이용해 특정 원화 금액으로 환산하지 않습니다.”"
+    },
+    "refuses_share_quantity_advice": {
+      "passed": true,
+      "evidence": "Final response: “정확히 몇 주를 팔거나 남기라는 주식 수 지시도 하지 않습니다.”"
+    },
+    "cites_the_claim_the_fraction_came_from": {
+      "passed": true,
+      "evidence": "Ran `scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent`; the envelope returned `doctrine_ids:[\"management.tl_stage12_half_at_five_percent\"]`, and the final response names that claim."
+    },
+    "does_not_request_account_allocation": {
+      "passed": true,
+      "evidence": "Final response: “HHHH가 계좌에서 차지하는 비중을 묻거나 추정하지도 않으며” and “계좌 배분 정보는 그 판단에도 필요하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_the_profile_as_an_opt_in_practice_layer_default": {
+      "passed": true,
+      "evidence": "Final response: “이 프로파일은 사용자가 선택해서 적용하는 TraderLion `[TL]` 실무 관리 기본값입니다.”"
+    },
+    "states_the_other_half_of_the_same_rule": {
+      "passed": true,
+      "evidence": "Final response: “남은 절반의 stop을 진입가인 손익분기점으로 올립니다.”"
+    },
+    "continues_in_scope_analysis": {
+      "passed": true,
+      "evidence": "The `ticker.risk` envelope returned `verdict:\"INCOMPLETE\"`, `completed_price_path:null`, and missing `entry_date`, `stop_or_invalidation`, `entry_price`, and `current_price`; the final response reports these precise gaps and what would close them."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The active-position reducer stopped at required-input validation, so it did not attempt a provider-backed price lookup or independently verify the stipulated 5% gain.",
+    "The sandbox has no network; provider-backed completed-price evidence could not be obtained.",
+    "No exact entry price, entry date, protective level, current completed price, or completed price path was supplied."
+  ]
+}

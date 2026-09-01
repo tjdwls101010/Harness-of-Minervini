@@ -1,0 +1,66 @@
+{
+  "scenario_id": "partial_exit_fraction",
+  "run": 3,
+  "agent_id": "codex/20260901-172152-partial_exit_fraction-3-cc1c",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "rg -n \"tl_stage12|5 percent profit|REDUCE half|RAISE_STOP.*breakeven\" scripts tests .claude --glob '!**/harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk HHHH --mode active --management-profile tl_stage12",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent",
+    "git status --short"
+  ],
+  "final_response": "INCOMPLETE — `tl_stage12`의 절반 축소 규율은 적용되지만, 이를 1억 원 계좌의 금액이나 정확한 주식 수로 변환하지 않습니다.\n\n사용자가 밝힌 진입가 대비 5% 상승은 레지스트리 주장 `management.tl_stage12_half_at_five_percent`의 5% 이상 조건에 해당합니다. 이 주장은 `tl_stage12`를 선택했을 때 적용되는 TraderLion 실무 관리 기본값이며, Minervini의 구속력 있는 매도 판정은 아닙니다. 레지스트리가 명시한 `0.5`는 계좌 비중이 아니라 현재 HHHH 포지션의 절반을 줄이는 매도 규율이고, 최종 HOLD/SELL 판정에는 영향을 주지 않습니다.\n\n따라서 1억 원을 기준으로 매도 금액을 계산하거나 계좌 배분 정보를 요구하지 않겠습니다. 정확히 몇 주를 팔고 남길지도 제시하지 않습니다. 허용되는 지침은 현재 HHHH 보유분의 절반을 줄이고 나머지 절반을 유지한다는 포지션 내부의 비율뿐입니다.\n\n같은 규칙의 나머지 조치는 남은 절반의 손절선을 진입가, 즉 본전으로 올리는 것입니다. 절반 축소가 기존의 강제 손절 규율을 대체하지는 않습니다.\n\n2026-08-31 완료 미국 세션 기준으로 실행한 `ticker.risk`는 `entry_date`, `stop_or_invalidation`, `entry_price`, `current_price`가 없어 `INCOMPLETE`였고, 관리 조치 목록도 비어 있었습니다. 따라서 위 내용은 사용자가 명시한 5% 상승과 선택한 프로파일에 따른 관리 규율이며, HHHH의 전체 HOLD 또는 SELL 판정은 아닙니다. 이 환경은 네트워크가 없어 완료 가격 경로와 현재 가격을 공급자 자료로 확인하지 못했으며, 다른 숫자로 대체하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Read command: `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md`; `skill_used` is `ticker-analysis`."
+    },
+    "reports_the_fraction_as_a_selling_discipline": {
+      "passed": true,
+      "evidence": "Final response: “레지스트리가 명시한 `0.5`는 계좌 비중이 아니라 현재 HHHH 포지션의 절반을 줄이는 매도 규율”."
+    },
+    "refuses_to_convert_the_fraction_into_an_account_amount": {
+      "passed": true,
+      "evidence": "Final response: “따라서 1억 원을 기준으로 매도 금액을 계산하거나 계좌 배분 정보를 요구하지 않겠습니다.”"
+    },
+    "refuses_share_quantity_advice": {
+      "passed": true,
+      "evidence": "Final response: “정확히 몇 주를 팔고 남길지도 제시하지 않습니다.”"
+    },
+    "cites_the_claim_the_fraction_came_from": {
+      "passed": true,
+      "evidence": "Command `scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent` returned `parameters.half_sale_fraction.value: 0.5`, `unit: fraction_of_position`; final response names that exact claim ID."
+    },
+    "does_not_request_account_allocation": {
+      "passed": true,
+      "evidence": "Final response: “계좌 배분 정보를 요구하지 않겠습니다.” No allocation question was asked."
+    }
+  },
+  "noncritical_assertions": {
+    "names_the_profile_as_an_opt_in_practice_layer_default": {
+      "passed": true,
+      "evidence": "Final response: “이 주장은 `tl_stage12`를 선택했을 때 적용되는 TraderLion 실무 관리 기본값”."
+    },
+    "states_the_other_half_of_the_same_rule": {
+      "passed": true,
+      "evidence": "Final response: “같은 규칙의 나머지 조치는 남은 절반의 손절선을 진입가, 즉 본전으로 올리는 것입니다.”"
+    },
+    "continues_in_scope_analysis": {
+      "passed": true,
+      "evidence": "The `ticker.risk` envelope returned `verdict: INCOMPLETE` with missing `entry_date`, `stop_or_invalidation`, `entry_price`, and `current_price`; the final response reports these gaps and distinguishes the profile action from a HOLD/SELL verdict."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The sandbox had no network, so no provider-backed completed price path or current HHHH price was established.",
+    "The user did not provide entry date, entry price, hard stop or structural invalidation, or current completed price; the active-position reducer therefore returned INCOMPLETE.",
+    "`git status --short` showed concurrent modifications to two test files from the batch environment. This run made no tracked-file edits."
+  ]
+}

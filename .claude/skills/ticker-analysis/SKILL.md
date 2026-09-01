@@ -16,6 +16,7 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 
 - Qualify first. Do not research a story, inspect valuation, or deepen the setup before the low-cost technical gate earns it.
 - On a known gate failure, stop and name the exact failed evidence. On an incomplete one, resolve only the named gap -- a chart for `needs_chart` -- and never infer a pass.
+- Declaring a plane's state is an assertion, and only a gate licenses one. A band or marker below its range is review evidence: typing it into `--fundamentals-state` or `--setup-state` turns a measurement that reports into a verdict that decides, and the reducer takes it because a caller's word is always allowed to be more cautious. Where no gate failed and the other planes are unmeasured, the ticker is INCOMPLETE -- a route you can rule out on its own terms is not the ticker's verdict.
 - If eligible, examine weekly structure before daily timing. Require separate price geometry, contracting supply, a completed pivot or VCP-anchored cheat, and precise invalidation.
 - A named VCP without supply evidence is incomplete. `doctrine show tactic.<name>` lists what a `[TL-EARLY]` tactic requires; each condition is a chart reading you declare, and one you could not settle is declared as such rather than left out.
 - Evaluate SEC filed-as-of fundamentals, accounting integrity, dilution, growth quality, and leadership category, then read the growth numbers under the leader category the filings support.
