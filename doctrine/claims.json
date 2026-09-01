@@ -1963,7 +1963,6 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup",
         "ticker.risk"
       ],
       "tests": [
@@ -2044,7 +2043,6 @@
         "reason": null
       },
       "consumers": [
-        "ticker.setup",
         "ticker.risk"
       ],
       "tests": [
