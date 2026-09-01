@@ -77,7 +77,9 @@ class OneMeasurementReachesBothStandards(unittest.TestCase):
 
         self.assertGreater(stage_two["measured"], 26)
         self.assertEqual(footprint["state"], "within_source_range")
-        self.assertNotEqual(stage_two["state"], "within_source_range")
+        # Which edge, not merely that an edge was passed. A base short of five weeks and one
+        # past twenty-six are opposite findings, and "not within range" cannot tell them apart.
+        self.assertEqual(stage_two["state"], "above_source_range")
         self.assertEqual(stage_two["source_range"], [5, 26])
 
     def test_the_stage_two_band_carries_the_sentence_it_came_from(self) -> None:

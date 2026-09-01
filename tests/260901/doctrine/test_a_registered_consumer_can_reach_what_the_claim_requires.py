@@ -6,11 +6,20 @@ in `consumers` on both base-count claims while the harness had no route to hand 
 no `base_count` field on the capability, no such flag on the CLI. A registry entry no
 interface can honour reads to an auditor exactly like one that works.
 
-The check comes from the interface rather than from a list kept beside it. A `required_input`
-that some capability declares as a field is one a caller supplies; a consumer of a claim
-needing it must declare the same field or it can never be handed the measurement. Names no
-capability declares -- `price_history`, `base_start_date` -- are read from a provider or
-derived from the bars, and say nothing about which capability may cite the claim.
+What this proves is narrow, and the narrowness is the registry's rather than this test's.
+`consumers` names which capability's analysis a claim is doctrine for, not which reducer
+emits it: 65 of the 169 claims name a capability and appear in no module under
+`scripts/minervini`, because a chart-assisted or qualitative claim is doctrine an analyst
+reads off the envelope. So "registered but never cited" is the registry's ordinary state and
+cannot be the check. What can be checked is the case where the claim is a measurement
+compared against a standard and the measurement has to be handed in: a consumer that does
+not declare the field can never receive it, whoever is doing the reading.
+
+The vocabulary comes from the interface rather than from a list kept beside it. A
+`required_input` that some capability declares as a field is one a caller supplies. Names no
+capability declares -- `price_history`, `base_start_date`, `intraday_volume_so_far` -- are
+read from a provider, derived from the bars, or simply not spelled the way any field is, and
+this check says nothing about them either way.
 
 Scoped to the kinds that measure. A `constitution` claim is cited as a restraint on what a
 verdict may conclude, so `market.snapshot` naming the two practitioner claims about selling
@@ -48,7 +57,7 @@ def declared_fields() -> dict[str, set[str]]:
 
 
 class ARegisteredConsumerCanBeHandedWhatItCites(unittest.TestCase):
-    def test_no_capability_is_registered_for_a_measurement_it_cannot_be_given(self) -> None:
+    def test_no_capability_is_registered_for_a_measurement_it_cannot_be_handed(self) -> None:
         fields = declared_fields()
         unreachable = set()
         for record in claims():
