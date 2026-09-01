@@ -18,8 +18,6 @@ from typing import Any
 import pandas as pd
 
 
-_SESSIONS_PER_WEEK = 5
-
 
 def _window(bars: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     return bars.loc[pd.Timestamp(start) : pd.Timestamp(end)]
@@ -228,7 +226,7 @@ def measure(bars: pd.DataFrame, structure: Mapping[str, Any], spec: Mapping[str,
         "peak_date": peak_label.date().isoformat(),
         "peak_to_low_correction_low_date": through_base.loc[peak_label:, "Low"].idxmin().date().isoformat(),
         "peak_high": peak,
-        "base_duration_weeks": round(int(base["duration_sessions"]) / _SESSIONS_PER_WEEK, 4),
+        "base_duration_weeks": round(int(base["duration_sessions"]) / int(spec["sessions_per_trading_week"]), 4),
         "final_contraction_volume_baseline_sessions": baseline_sessions,
         "final_contraction_volume_ratio": _ratio(float(final_window["Volume"].mean()) if len(final_window) else None, baseline),
         **volume_sides,

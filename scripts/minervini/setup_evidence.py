@@ -46,6 +46,7 @@ _CLOSING_RANGE = "setup.closing_range_formula"
 _CORRECTION_DEPTH = "market.correction_depth_healthy_leader"
 _FOOTPRINT = "setup.consolidation_footprint_3_to_60_weeks"
 _STAGE_TWO_BASE = "basecount.typical_base_duration_5_to_26_weeks"
+_TRADING_WEEK = "convention.trading_week"
 _FAILURE_RESET = "setup.failure_reset_types"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
@@ -67,6 +68,11 @@ def compile_measurement_spec() -> dict[str, Any]:
     return {
         "volume_baseline_sessions": int(doctrine.threshold(_DRYUP, "volume_baseline_sessions")),
         "breakout_volume_baseline_sessions": (swing, position),
+        # The one of these that is a conversion rather than a window. The sources bound a base
+        # in weeks and the bars arrive as sessions, and the registry holds that number because
+        # it decides verdicts -- the same base reads differently against the 3-to-60 and the
+        # 5-to-26 week bands when it changes.
+        "sessions_per_trading_week": int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week")),
     }
 
 
