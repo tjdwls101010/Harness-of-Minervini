@@ -597,6 +597,9 @@ def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 
 _SEGMENTATION_CONVENTION = "setup.swing_segmentation_convention"
 _TRADING_WEEK_CONVENTION = "convention.trading_week"
+_VOLUME_STATE_CONVENTION = "setup.volume_state_convention"
+_POWER_PLAY_TOP = "convention.power_play_top_candidates"
+_POWER_PLAY_EXCEPTION = "fundamentals.power_play_exception"
 _CHAIN_COMPLETENESS = "setup.declared_chain_completeness"
 
 
@@ -1104,15 +1107,19 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         status = "ok"
     else:
         status = "needs_input"
+    # Contrast evidence rides in the payload, never in `signals`: a reducer or a caller
+    # scanning signal states would read another practitioner's disagreement as this harness's
+    # own missing evidence. Named here rather than built inside the call because the citation
+    # list below is harvested from it -- derived from `result` instead, the harvest read a
+    # payload one key smaller than the one published, and the practitioners in that key were
+    # reported to the caller and cited to nobody.
+    data = {"ticker": ticker, **result, "contrast": evidence["contrast"]}
     return envelope(
         "ticker.setup",
         request=_clean_request({**request, "ticker": ticker}),
         as_of=_as_of(clock),
         status=status,
-        # Contrast evidence rides in the payload, never in `signals`: a reducer or a caller
-        # scanning signal states would read another practitioner's disagreement as this
-        # harness's own missing evidence.
-        data={"ticker": ticker, **result, "contrast": evidence["contrast"]},
+        data=data,
         # `signals` is the machine channel: what the verdict was built from. Measurements taken
         # off a chain nothing vouched for were not built into a verdict, and a caller or a later
         # reducer scanning states would read a hard gate's failure there as this harness's
@@ -1132,8 +1139,24 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         # declared it instead of the bars measuring it.
         # The trading week joins it for the same reason: the base duration both week bands are
         # read against is a session count divided by that convention, so a reader following the
-        # citation to either band arrives at a number this claim decided the unit of.
-        doctrine_ids=sorted({*result["doctrine_ids"], _SEGMENTATION_CONVENTION, _TRADING_WEEK_CONVENTION}),
+        # citation to either band arrives at a number this claim decided the unit of. So does
+        # the volume-state convention, which sizes the two baselines every volume measurement
+        # here is a ratio against -- both are read while the spec is compiled, so neither can
+        # appear in a signal and neither is optional to the answer.
+        #
+        # And the payload's own names, because the reducer's list is what it reasoned from and
+        # the payload holds more than that: the contrast block reports practitioners this
+        # harness reads for comparison, and a reading published without its claim in the
+        # citation list is a standard the reader is shown and cannot look up.
+        doctrine_ids=sorted(
+            {
+                *result["doctrine_ids"],
+                *_named_doctrine_ids(data),
+                _SEGMENTATION_CONVENTION,
+                _TRADING_WEEK_CONVENTION,
+                _VOLUME_STATE_CONVENTION,
+            }
+        ),
         next_capabilities=[] if status == "unavailable" else ["ticker.chart"] if status == "needs_input" else ["ticker.risk"],
     )
 
@@ -3199,6 +3222,14 @@ def _chart_envelope(result: Mapping[str, Any], request: Mapping[str, Any], ticke
         next_capabilities=(
             ["ticker.qualify", "ticker.setup"]
             + (["ticker.power-play"] if (result.get("power_play") or {}).get("spans") else [])
+        ),
+        # What decided the picture. The chart cites nothing it measured, because it measures
+        # nothing -- but the chain it draws anchors for and the span it shades are cut by
+        # these four, and a reader shown a drawn span with no citation has a picture they
+        # cannot argue with. Named here rather than harvested, because none of the four
+        # reaches the payload: the drawing consumed the readings and published the drawing.
+        doctrine_ids=sorted(
+            {_SEGMENTATION_CONVENTION, _TRADING_WEEK_CONVENTION, _POWER_PLAY_TOP, _POWER_PLAY_EXCEPTION}
         ),
         side_effects=side_effects,
     )
