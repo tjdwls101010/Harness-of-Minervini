@@ -39,7 +39,9 @@ def load_template() -> str:
 
 
 SLOTS = ("USER_PROMPT", "GROUNDING", "CRITICAL", "NONCRITICAL")
-_SLOT = re.compile("<<(" + "|".join(SLOTS) + ")>>")
+# The optional trailing blank line belongs to the slot: a slot that renders to nothing has to
+# take the paragraph break that framed it with it, and only that one.
+_SLOT = re.compile("<<(" + "|".join(SLOTS) + ")>>(\n\n)?")
 
 
 def _bullets(assertion_ids: Sequence[str]) -> str:
@@ -51,9 +53,10 @@ def render(scenario: dict, *, grounding: str, template: str) -> str:
     is free to contain a brace, and a template that has to escape itself is one nobody edits.
 
     Substituted in one pass, so nothing that arrives through a slot is rescanned: a user
-    message that happens to contain `<<CRITICAL>>` stays the user's message. A slot the
-    template does not have is refused rather than skipped -- a template that lost its grounding
-    line still renders, and the round's one environment paragraph then reaches no run at all.
+    message that happens to contain `<<CRITICAL>>` stays the user's message, and so does one
+    that happens to contain a wide gap. A slot the template does not have is refused rather
+    than skipped -- a template that lost its grounding line still renders, and the round's one
+    environment paragraph then reaches no run at all.
     """
 
     values = {
@@ -65,9 +68,11 @@ def render(scenario: dict, *, grounding: str, template: str) -> str:
     absent = sorted(name for name in SLOTS if f"<<{name}>>" not in template)
     if absent:
         raise ValueError(f"the run prompt template has no slot for {', '.join(absent)}")
-    body = _SLOT.sub(lambda match: values[match.group(1)], template)
-    # An empty grounding leaves the blank lines that framed its own paragraph behind.
-    return re.sub(r"\n{3,}", "\n\n", body)
+    def fill(match: re.Match) -> str:
+        value = values[match.group(1)]
+        return f"{value}{match.group(2) or ''}" if value else ""
+
+    return _SLOT.sub(fill, template)
 
 
 def tasks(catalog: dict, scenario_ids: Sequence[str], *, grounding: str, template: str) -> list[dict]:

@@ -34,7 +34,14 @@ def require_full_coverage(review: dict, catalog: dict) -> None:
     is not something a JSON schema can state; it is stated here.
     """
 
-    written = {s["scenario_id"] for s in review["scenario_summaries"] if s["summary"].strip()}
+    summaries = review["scenario_summaries"]
+    named = [s["scenario_id"] for s in summaries]
+    repeated = sorted({name for name in named if named.count(name) > 1})
+    if repeated:
+        # Keyed by id below, last one wins, so a family written once properly and once as
+        # whitespace passes a check that asks only whether some entry was nonempty.
+        raise SystemExit(f"the review summarised {', '.join(repeated)} more than once")
+    written = {s["scenario_id"] for s in summaries if s["summary"].strip()}
     absent = sorted({s["id"] for s in catalog["scenarios"]} - written)
     if absent:
         raise SystemExit(f"the review summarised no family named {', '.join(absent)}")
@@ -54,34 +61,40 @@ def apply_demotions(claims: list[dict], reports_root: pathlib.Path) -> tuple[lis
     the schema and the round README say it is not.
     """
 
-    loaded: list[tuple[dict, pathlib.Path, dict]] = []
+    reports: dict[pathlib.Path, dict] = {}
     for claim in claims:
         path = reports_root / claim["scenario_id"] / f"run-{claim['run']}.json"
         if not path.is_file():
             raise SystemExit(f"the review names {path}, which does not exist")
-        report = json.loads(path.read_text(encoding="utf-8"))
-        block = report[f"{claim['criticality']}_assertions"]
-        if claim["assertion_id"] not in block:
+        # One loaded report per path, not per claim: two claims against the same run would
+        # otherwise each start from their own copy, and the second write would put back the
+        # assertion the first had just failed while both were still reported as demoted.
+        report = reports.setdefault(path, json.loads(path.read_text(encoding="utf-8")))
+        if claim["assertion_id"] not in report[f"{claim['criticality']}_assertions"]:
             raise SystemExit(
                 f"the review names {claim['criticality']} assertion {claim['assertion_id']!r} in "
                 f"{claim['scenario_id']} run {claim['run']}, which that report does not hold"
             )
-        loaded.append((claim, path, report))
 
     demoted: list[str] = []
     blocking: list[str] = []
-    for claim, path, report in loaded:
+    touched: set[pathlib.Path] = set()
+    for claim in claims:
+        path = reports_root / claim["scenario_id"] / f"run-{claim['run']}.json"
+        report = reports[path]
         entry = report[f"{claim['criticality']}_assertions"][claim["assertion_id"]]
         if not entry["passed"]:
             continue
         entry["passed"] = False
         entry["evidence"] = f"{entry['evidence']} [adversarial pass: {claim['why']}]"
         report["overall_pass"] = all(v["passed"] for v in report["critical_assertions"].values())
-        path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        touched.add(path)
         line = f"{claim['scenario_id']} run {claim['run']}: {claim['assertion_id']}"
         demoted.append(line)
         if claim["criticality"] == "critical":
             blocking.append(line)
+    for path in sorted(touched):
+        path.write_text(json.dumps(reports[path], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return demoted, blocking
 
 

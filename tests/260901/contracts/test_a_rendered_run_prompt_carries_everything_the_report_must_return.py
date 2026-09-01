@@ -68,6 +68,23 @@ class RenderedRunPromptTests(unittest.TestCase):
                 body = self.render_tasks.render(scenario, grounding="a note", template=self.template)
                 self.assertNotIn("<<", body)
 
+    def test_a_wide_gap_in_the_users_message_survives_the_empty_grounding_case(self) -> None:
+        """Removing the blank line an empty grounding paragraph left behind is a job for the
+        slot it belongs to, not for a pass over the whole prompt: a user who wrote a wide gap
+        into their message gets it closed up, and the message is no longer what they sent."""
+
+        gapped = "첫 줄\n\n\n한참 뒤의 둘째 줄"
+        scenario = dict(self.catalog["scenarios"][0], prompt=gapped)
+        for grounding in ("", "a round note"):
+            with self.subTest(grounding=grounding or "empty"):
+                self.assertIn(gapped, self.render_tasks.render(scenario, grounding=grounding, template=self.template))
+
+    def test_an_empty_grounding_leaves_no_blank_paragraph_behind(self) -> None:
+        with_note = self.render_tasks.render(self.catalog["scenarios"][0], grounding="note", template=self.template)
+        without = self.render_tasks.render(self.catalog["scenarios"][0], grounding="", template=self.template)
+        self.assertNotIn("\n\n\n", without)
+        self.assertEqual(without, with_note.replace("note\n\n", ""))
+
     def test_the_grounding_paragraph_reaches_the_rendered_prompt(self) -> None:
         """Checking only that no sentinel survived passes a template with no grounding slot at
         all -- the round's one environment paragraph then silently never reaches any run."""

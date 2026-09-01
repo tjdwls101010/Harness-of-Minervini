@@ -29,7 +29,10 @@ def _call(*args: str) -> dict:
         raise SystemExit(f"no codex bridge at {BRIDGE}; set CODEX_BRIDGE to its path")
     completed = subprocess.run([sys.executable, str(BRIDGE), *args], capture_output=True, text=True)
     if completed.returncode != 0:
-        raise SystemExit(f"bridge {' '.join(args)} exited {completed.returncode}\n{completed.stderr.strip()}")
+        # The bridge explains a bad selector on stdout -- a label is not one of them, only an
+        # id, a prefix of one, or a thread id -- so dropping stdout hides the actionable half.
+        said = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part)
+        raise SystemExit(f"bridge {' '.join(args)} exited {completed.returncode}\n{said}")
     return json.loads(completed.stdout)
 
 

@@ -102,6 +102,34 @@ class DemotionCriticalityTests(unittest.TestCase):
         self.assertEqual(demoted, [])
         self.assertEqual(blocking, [])
 
+    def test_two_demotions_against_one_report_both_survive(self) -> None:
+        """Loading the report per claim gives each claim its own copy of the file, so the second
+        write puts back the assertion the first had just failed -- and both are still reported
+        as demoted, which is the shape that leaves the aggregate's rate above the artifacts."""
+
+        demoted, _ = self.module.apply_demotions(
+            [self._claim("critical", "routes_market_scan"), self._claim("noncritical", "allows_zero_recommendations")],
+            self.root,
+        )
+        self.assertEqual(len(demoted), 2)
+        report = json.loads((self.root / "weak_market_zero_candidates/run-1.json").read_text(encoding="utf-8"))
+        self.assertFalse(report["critical_assertions"]["routes_market_scan"]["passed"])
+        self.assertFalse(report["noncritical_assertions"]["allows_zero_recommendations"]["passed"])
+
+    def test_a_family_summarised_twice_does_not_launder_a_blank_summary(self) -> None:
+        """The builder keys summaries by scenario id and keeps the last, so a family written
+        once properly and once as whitespace passes a coverage check that asks only whether
+        some entry was nonempty, and lands in the aggregate blank."""
+
+        catalog = {"scenarios": [{"id": "a"}, {"id": "b"}], "required_runs": 3}
+        review = {"scenario_summaries": [
+            {"scenario_id": "a", "summary": "real"},
+            {"scenario_id": "a", "summary": "   "},
+            {"scenario_id": "b", "summary": "real"},
+        ]}
+        with self.assertRaises(SystemExit):
+            self.module.require_full_coverage(review, catalog)
+
     def test_a_bad_claim_stops_the_run_before_any_artifact_is_touched(self) -> None:
         """Validation is a pass of its own, ahead of every write. Demoting until the bad claim
         is reached leaves the reports moved and the aggregate not rebuilt, and the suite reads

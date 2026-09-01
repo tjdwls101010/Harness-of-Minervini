@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import tempfile
 import unittest
 
 
@@ -74,6 +75,14 @@ class CollectedReportTests(unittest.TestCase):
     def test_a_report_scored_against_another_schema_is_refused(self) -> None:
         with self.assertRaises(SystemExit):
             self.module.build_report(SCENARIO, _payload(schema_path="/tmp/some_other.schema.json"), run=1)
+
+    def test_a_schema_that_merely_shares_the_name_is_refused(self) -> None:
+        """Matching on the file name lets any `report.schema.json` anywhere on disk stand in for
+        this round's, and a schema is what decides whether `passed: "false"` was rejected."""
+
+        elsewhere = str(pathlib.Path(tempfile.mkdtemp()) / "report.schema.json")
+        with self.assertRaises(SystemExit):
+            self.module.build_report(SCENARIO, _payload(schema_path=elsewhere), run=1)
 
     def test_a_duplicate_assertion_id_is_refused_rather_than_letting_the_last_one_win(self) -> None:
         body = _payload()["json"]

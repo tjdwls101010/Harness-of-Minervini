@@ -30,7 +30,11 @@ Collect each member once the group is done, one at a time -- `result --group` do
 python3 tests/260817/e2e/tooling/write_report.py my_new_family 1 <run_id>
 ```
 
-Then fill in `synthesis_prompt.md` and run it read-only against the same model:
+`synthesis_prompt.md` is a fill-in-the-blank document rather than a template a script renders, because its round-specific section is prose about what is new this round. Copy it, fill in `<<REPO>>`, the two counts and the `This round` section, and run the copy read-only against the same model:
+
+```bash
+cp tests/260817/e2e/tooling/synthesis_prompt.md /tmp/synthesis.md   # then edit /tmp/synthesis.md
+```
 
 ```bash
 python3 ~/.claude/skills/codex/scripts/codex_bridge.py start --label synthesis --sandbox read-only \
@@ -65,7 +69,7 @@ scripts/.venv/bin/python -m unittest discover -s tests/260817/e2e -t . -p 'test_
 
 **Probe one run before starting the round.** A scenario premise can be one this harness cannot produce, and the round will not tell you -- it will produce `families x required_runs` articulate runs answering a question that does not exist. The first Phase 7 draft failed a candidate "because there were only two contractions"; `setup.vcp_contraction_count`'s [2, 6] is a **band**, so no such failure exists. `pipeline doctrine show <claim-id>` settles it: only a `gate` decides pass or fail.
 
-**An isolated codex run has no network.** Every provider-backed command fails after its retries. A family therefore reasons from facts the prompt stipulates, or from fixture envelopes under `../../fixtures/e2e/`, and the grounding paragraph has to say so -- otherwise the run reads the outage as the harness being broken and spends its answer on that.
+**An isolated codex run has no network.** A provider-backed command fails after its retries unless the ignored provider cache happens to hold the answer, which makes the gap intermittent rather than absent -- a family cannot rely on either outcome. A family therefore reasons from facts the prompt stipulates, or from fixture envelopes under `../../fixtures/e2e/`, and the grounding paragraph has to say so -- otherwise the run reads the outage as the harness being broken and spends its answer on that.
 
 **A scenario that hands over fixture envelopes must use the ticker those envelopes are about.** `--evidence` refuses a mismatch with `envelope_is_about_another_ticker`, and a run has been observed reading that refusal as an alias and reporting a verdict the envelope never reached. Nothing in the assertion list caught it until one was added that names the verdict the envelope actually holds.
 

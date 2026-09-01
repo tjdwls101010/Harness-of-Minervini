@@ -67,8 +67,8 @@ def build_report(scenario: dict, payload: dict, run: int) -> dict:
     where = f"{scenario_id} run {run}"
 
     scored_against = pathlib.Path(payload["schema_path"]).resolve()
-    if scored_against.name != REPORT_SCHEMA.name:
-        raise SystemExit(f"{where}: scored against {scored_against}, not this round's {REPORT_SCHEMA.name}")
+    if scored_against != REPORT_SCHEMA.resolve():
+        raise SystemExit(f"{where}: scored against {scored_against}, not this round's {REPORT_SCHEMA}")
 
     observed = payload["commands"]
     reported = len(body["commands"])
