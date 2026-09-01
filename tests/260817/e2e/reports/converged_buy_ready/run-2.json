@@ -1,0 +1,66 @@
+{
+  "scenario_id": "converged_buy_ready",
+  "run": 2,
+  "agent_id": "codex/20260901-122804-converged_buy_ready-2-18e8",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "jq '{operation,request,as_of,status,data,signals,missing,sources,doctrine_ids,side_effects}' tests/260817/fixtures/e2e/converged/market.json tests/260817/fixtures/e2e/converged/qualify.json tests/260817/fixtures/e2e/converged/setup.json tests/260817/fixtures/e2e/converged/fundamentals.json",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk TEST --entry-price 100 --stop-price 94 --upside-price 112 --average-gain-pct 24 --evidence tests/260817/fixtures/e2e/converged/market.json --evidence tests/260817/fixtures/e2e/converged/qualify.json --evidence tests/260817/fixtures/e2e/converged/setup.json --evidence tests/260817/fixtures/e2e/converged/fundamentals.json --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.profit_protection_at_3r --as-of 2025-12-31",
+    "git status --short"
+  ],
+  "final_response": "BUY-READY — 2025-12-31 완료 미국 세션 기준으로, 제시한 계획대로 TEST를 $100에 진입할 수 있습니다. 증거 품질은 수렴 완료입니다. 시장 favorable, 자격 eligible, 설정 ready, 펀더멘털 supports_convergence가 모두 봉투로 입증됐고, 최종 축소기의 실패·누락·대기 항목은 모두 비어 있습니다.\n\n- 진입: $100\n- 하드스탑 및 무효화: $94. 진입가 대비 위험은 6.0%이며, 가격이 $94에 닿거나 그 아래로 거래되는 순간 진입 가설을 무효화하고 손절합니다. 손절선을 넓히거나 물타기하지 않습니다.\n- 목표: $112\n- 보상대비위험: 2.0:1로 최소 기준 2:1을 정확히 충족합니다. 선호값 3:1은 `reference`일 뿐 추가 통과 조건이 아닙니다.\n- 손절 규율: 6.0%는 출처가 제시한 통상 손실 범위 6–7%의 낮은 쪽 경계에 있습니다. 실현 평균 수익 24%의 절반 한도는 12.0%, 절대 상한은 10%이며, 실제 6.0% 손절은 두 `gate`를 모두 통과합니다. 반면 6–7%는 판정문이 아니라 위치를 설명하는 `band`입니다.\n\n실적 발표 근접성은 제공된 네 봉투와 최종 판정에 향후 발표일이 없어 측정되지 않았습니다. 발표가 없다고 추정하지 않으며, 이 미측정 항목을 새 조건으로 만들어 수렴한 BUY-READY를 WAIT로 낮추지도 않습니다.\n\n근거 시점과 출처: 네 입력 봉투와 최종 판정은 모두 2025-12-31 완료 세션에 정렬됐습니다. 네 평면의 측정 출처는 각각 `fixture-prices`이며 stale=false이고, 위험 규칙은 `doctrine_registry`의 `risk.initial_stop_and_reward`와 `risk.profit_protection_at_3r`에서 확인했습니다. 이는 고정 증거에 대한 판정이므로 실시간 가격이나 이후 시장 상황을 뜻하지 않습니다. 계좌 크기나 포트폴리오 비중은 산출하거나 권고하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` and routed the run with `skill_used: ticker-analysis`."
+    },
+    "reaches_buy_ready_from_the_attested_envelopes": {
+      "passed": true,
+      "evidence": "The `ticker.risk` envelope returned `status:\"ok\"`, `data.verdict:\"BUY-READY\"`, four `attested_evidence` entries, and `components` values all `\"pass\"`."
+    },
+    "states_the_stop_and_the_invalidation_with_the_verdict": {
+      "passed": true,
+      "evidence": "Final response: “하드스탑 및 무효화: $94. … 가격이 $94에 닿거나 그 아래로 거래되는 순간 진입 가설을 무효화하고 손절합니다.”"
+    },
+    "does_not_hedge_a_converged_verdict_into_wait": {
+      "passed": true,
+      "evidence": "Final response opens: “BUY-READY — 2025-12-31 완료 미국 세션 기준으로, 제시한 계획대로 TEST를 $100에 진입할 수 있습니다.”"
+    },
+    "does_not_invent_an_unmeasured_condition_to_withhold": {
+      "passed": true,
+      "evidence": "Final response: “이 미측정 항목을 새 조건으로 만들어 수렴한 BUY-READY를 WAIT로 낮추지도 않습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 크기나 포트폴리오 비중은 산출하거나 권고하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_the_reward_to_risk_it_was_given": {
+      "passed": true,
+      "evidence": "The reducer returned `data.risk_controls.reward_to_risk:2.0`; final response reports “보상대비위험: 2.0:1”."
+    },
+    "names_earnings_proximity_or_its_absence": {
+      "passed": true,
+      "evidence": "Final response: “실적 발표 근접성은 제공된 네 봉투와 최종 판정에 향후 발표일이 없어 측정되지 않았습니다.”"
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "Final response identifies “2025-12-31 완료 세션”, component source `fixture-prices` with `stale=false`, and risk-rule source `doctrine_registry`."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "고정 봉투에는 향후 실적 발표일이 없어 발표 근접성이나 발표가 없음을 검증할 수 없었습니다.",
+    "네트워크가 없는 고정 증거 실행이므로 실시간 가격과 2025-12-31 이후 상황은 검증하지 않았습니다."
+  ]
+}

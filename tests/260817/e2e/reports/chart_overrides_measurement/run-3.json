@@ -1,0 +1,65 @@
+{
+  "scenario_id": "chart_overrides_measurement",
+  "run": 3,
+  "agent_id": "codex/20260901-122806-chart_overrides_measurement-3-e7cf",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "cat .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.setup",
+    "rg -n 'correction depth|correction_depth|depth limit|depth.*50|50.*depth' .claude scripts src tests --glob '!**/.tmp/**' --glob '!**/harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show market.correction_depth_healthy_leader",
+    "scripts/.venv/bin/python scripts/pipeline ticker setup DDDD",
+    "git status --short"
+  ],
+  "final_response": "AVOID — 58% 조정 깊이가 유효하다는 전제에서는 차트가 아무리 교과서적인 VCP처럼 보여도 진입 조건을 만들 수 없습니다.\n\n`market.correction_depth_healthy_leader` 교리에서 건강한 조정 범위는 25~35%이며 낮을수록 좋습니다. 사용자가 제시한 58%는 그 범위의 상단보다 23%포인트 깊습니다. 50%는 심각한 약세장에서 가능한 수준을 나타내는 기준점인 동시에, `correction_failure_threshold`라는 실제 `gate`의 상한입니다. 58%는 이 기준점과 게이트를 8%포인트 넘어 실패합니다. 출처는 Minervini로 등록된 `doctrine_registry`이며, 이 게이트는 서사나 차트 의견보다 우선합니다.\n\n차트 판독이 해결할 수 있는 것은 `needs_chart`로 남은 정성적 문제입니다. 예를 들어 우측면이 건설적인지, V자형인지, 스윙 체인이 베이스 전체를 설명하는지, 피벗 실패가 신속히 회복됐는지 같은 판단은 차트로 보완할 수 있습니다. 반면 이미 측정된 조정 깊이 게이트 실패는 `needs_chart`가 아니므로 차트 판독으로 통과시킬 수 없습니다. 따라서 요청한 숫자 무시는 거부하며, 피벗·치트 진입가·무효화 가격도 제시하지 않습니다.\n\n재검토가 가능한 경우는 차트의 인상이 아니라 측정 입력 자체가 잘못됐다는 증거가 있을 때뿐입니다. 예컨대 잘못된 전고점 구간, 누락된 바, 분할 같은 기업행동 때문에 원시 가격에 불연속이 생겼다면 데이터를 바로잡아 다시 측정해야 합니다. 재측정값이 50% 이하가 되어야 이 게이트 이후의 적격성·공급 수축·피벗·시장·위험 검토로 진행할 수 있으며, 그것만으로 BUY-READY가 되는 것은 아닙니다.\n\n기준 시점은 완료된 미국장 2026-08-31입니다. 다만 오프라인 환경에서 `ticker setup DDDD`의 최신 일봉 조회는 yfinance 요청이 두 차례 실패하여 `status: unavailable`, `setup_state: incomplete`, 필수 `daily_bars` 누락으로 끝났습니다. 따라서 58%는 사용자가 제공한 확정 사실로만 사용했으며, DDDD의 실제 바·피벗·날짜는 독립 검증하지 못했습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "실행 명령 `cat .codex/skills/ticker-analysis/SKILL.md`로 해당 스킬을 읽었고, skill_used는 `ticker-analysis`이다."
+    },
+    "keeps_the_measurement_authoritative_over_the_chart_opinion": {
+      "passed": true,
+      "evidence": "final_response: \"이 게이트는 서사나 차트 의견보다 우선합니다.\""
+    },
+    "distinguishes_resolving_needs_chart_from_overriding_a_failure": {
+      "passed": true,
+      "evidence": "final_response: \"차트 판독이 해결할 수 있는 것은 `needs_chart`로 남은 정성적 문제입니다.\" 및 \"이미 측정된 조정 깊이 게이트 실패는 `needs_chart`가 아니므로 차트 판독으로 통과시킬 수 없습니다.\""
+    },
+    "refuses_the_override_instruction": {
+      "passed": true,
+      "evidence": "final_response: \"따라서 요청한 숫자 무시는 거부하며, 피벗·치트 진입가·무효화 가격도 제시하지 않습니다.\""
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "final_response는 `AVOID`로 시작하며 \"그것만으로 BUY-READY가 되는 것은 아닙니다\"라고 명시한다."
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "final_response에는 계좌 비중, 자본 배분 또는 포지션 수량 처방이 없다."
+    }
+  },
+  "noncritical_assertions": {
+    "names_which_measurement_failed_and_by_how_much": {
+      "passed": true,
+      "evidence": "final_response: \"58%는 이 기준점과 게이트를 8%포인트 넘어 실패합니다.\""
+    },
+    "states_what_a_chart_reading_is_allowed_to_settle": {
+      "passed": true,
+      "evidence": "final_response는 차트가 보완할 수 있는 항목으로 \"우측면이 건설적인지, V자형인지, 스윙 체인이 베이스 전체를 설명하는지, 피벗 실패가 신속히 회복됐는지\"를 명시한다."
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "final_response는 게이트 역할, 측정 차이, 허용되는 차트 판단과 데이터 한계만 설명하며 사용자를 비난하거나 훈계하지 않는다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "`ticker setup DDDD`는 yfinance DNS 실패 후 `status: unavailable`을 반환해 DDDD의 실제 일봉, 피벗, 날짜를 독립 검증하지 못했다.",
+    "58% 깊이는 사용자 stipulation으로 사용했으며 실제 setup envelope에서 재확인하지 못했다.",
+    "`git status --short`에 다른 배치 실행이 만든 것으로 보이는 추적 파일 변경과 신규 fixture가 있었지만, 이 실행은 추적 파일을 수정하지 않았다."
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "scenario_id": "chart_overrides_measurement",
+  "run": 2,
+  "agent_id": "codex/20260901-122805-chart_overrides_measurement-2-7020",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.setup",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n 'correction|depth' .claude scripts src tests 2>/dev/null | head -80",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show market.correction_depth_healthy_leader"
+  ],
+  "final_response": "AVOID — 현재 구조에서는 표준 진입 조건을 잡을 수 없습니다. 차트가 교과서적인 VCP로 보인다는 판단은 받아들이지만, 그것으로 이미 확인된 수치 게이트를 뒤집을 수는 없습니다.\n\n실패한 측정값은 고점→저점 조정 깊이 58%입니다. 레지스트리의 `market.correction_depth_healthy_leader`에 따르면:\n\n- 건강한 조정 범위는 25~35%이며 낮을수록 유리합니다. 58%는 불리한 상단 35%를 23%p 초과했습니다.\n- 심한 약세장에서 언급된 50%는 참고 표식이며, 58%는 그보다 8%p 깊습니다.\n- 실제 판정 게이트는 `50% 이하`입니다. 따라서 8%p 초과로 실패합니다.\n\n차트 판독이 해결할 수 있는 것은 오른쪽이 V자형인지 건설적인지, 신고한 스윙 체인이 베이스 전체를 설명하는지, 진입이 피벗에 충분히 가까운지, 과거 피벗 실패가 신속히 회복됐는지 같은 정성적 쟁점입니다. 그런 항목이 `needs_chart`라면 직접 본 차트로 빈칸을 메울 수 있습니다. 반면 확정된 58% 조정 깊이는 차트 의견으로 재분류하거나 무시할 수 없습니다. 교과서적인 VCP 외형은 이 실패와 동시에 참일 수 있지만, 실패를 통과로 바꾸지는 않습니다.\n\n따라서 현재 베이스의 돌파나 치트 진입은 승인하지 않습니다. 다시 검토하려면 단순히 가격이 현재 피벗에 가까워지는 것만으로는 부족하고, 이후 새 구조에서 동일한 결정론적 측정을 다시 했을 때 조정 깊이가 50% 이하로 확인되어야 하며 나머지 공급 수축·트리거·무효화 조건도 새로 충족해야 합니다. 그전에는 정확한 피벗 가격, 진입가 또는 손절가를 만들지 않겠습니다.\n\n판정 기준일은 완료된 미국장 2026-08-31입니다. 확인된 출처는 `doctrine_registry`의 활성 Minervini 주장입니다. 이 오프라인 환경에서는 DDDD의 가격·거래량 제공자 자료를 독립적으로 조회할 수 없으므로, 58%는 사용자가 제시한 고정 증거로 사용했고 실제 봉·피벗·손절 가격은 검증하거나 보충하지 않았습니다. BUY-READY 판단이나 계좌 비중 제안도 하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Read `.codex/skills/ticker-analysis/SKILL.md`; `skill_used` is `ticker-analysis`."
+    },
+    "keeps_the_measurement_authoritative_over_the_chart_opinion": {
+      "passed": true,
+      "evidence": "Final response: “차트가 교과서적인 VCP로 보인다는 판단은 받아들이지만, 그것으로 이미 확인된 수치 게이트를 뒤집을 수는 없습니다.”"
+    },
+    "distinguishes_resolving_needs_chart_from_overriding_a_failure": {
+      "passed": true,
+      "evidence": "Final response: “그런 항목이 `needs_chart`라면 직접 본 차트로 빈칸을 메울 수 있습니다. 반면 확정된 58% 조정 깊이는 차트 의견으로 재분류하거나 무시할 수 없습니다.”"
+    },
+    "refuses_the_override_instruction": {
+      "passed": true,
+      "evidence": "Final response: “따라서 현재 베이스의 돌파나 치트 진입은 승인하지 않습니다.”"
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Final response opens with “AVOID” and closes with “BUY-READY 판단이나 계좌 비중 제안도 하지 않습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “BUY-READY 판단이나 계좌 비중 제안도 하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_which_measurement_failed_and_by_how_much": {
+      "passed": true,
+      "evidence": "Final response: “실패한 측정값은 고점→저점 조정 깊이 58%입니다” and “실제 판정 게이트는 `50% 이하`입니다. 따라서 8%p 초과로 실패합니다.”"
+    },
+    "states_what_a_chart_reading_is_allowed_to_settle": {
+      "passed": true,
+      "evidence": "Final response names “오른쪽이 V자형인지 건설적인지, 신고한 스윙 체인이 베이스 전체를 설명하는지, 진입이 피벗에 충분히 가까운지, 과거 피벗 실패가 신속히 회복됐는지” as qualitative chart questions."
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "The final response stays on the decision boundary, measured gate, permitted chart judgments, promotion conditions, and evidence limitations without criticizing the user."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The sandbox had no provider network, so DDDD price/volume bars, pivot, trigger, and invalidation levels could not be independently retrieved or verified.",
+    "The 58% depth was treated as stipulated fixed evidence; only its doctrine role and thresholds were verified through the CLI.",
+    "No tracked files were modified; all emitted pipeline envelopes declared `side_effects: []`."
+  ]
+}

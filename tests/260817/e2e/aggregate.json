@@ -1,15 +1,15 @@
 {
   "schema_version": "1.0.0",
   "review_model": "gpt-5.6-sol",
-  "reviewed_at": "2026-08-17",
+  "reviewed_at": "2026-09-01",
   "verdict": "RELEASE_APPROVED",
-  "reviewed_reports": 30,
-  "critical_assertions_reviewed": 186,
-  "critical_assertions_passed": 186,
+  "reviewed_reports": 39,
+  "critical_assertions_reviewed": 240,
+  "critical_assertions_passed": 240,
   "critical_pass_rate": 1.0,
-  "noncritical_assertions_reviewed": 90,
-  "noncritical_assertions_passed": 86,
-  "noncritical_pass_rate": 0.9555555555555556,
+  "noncritical_assertions_reviewed": 117,
+  "noncritical_assertions_passed": 113,
+  "noncritical_pass_rate": 0.9658119658119658,
   "release_blocking_findings": [],
   "scenario_summaries": [
     {
@@ -25,7 +25,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs routed to market-scan, used the JIT v2 market.snapshot contract, anchored the 2026-08-14 completed session, and preserved unavailable breadth and leadership evidence plus missing trade traction. They returned WATCH-ONLY or INCOMPLETE with zero candidates, did not substitute web values, and did not imply BUY-READY or sizing."
+      "summary": "All three runs used the market snapshot contract, anchored the completed 2026-08-14 session, and treated the QQQ-above-21-day-EMA signal as context rather than market authorization. Missing breadth, group leadership, and trade-traction evidence led to zero recommendations without web substitutions, BUY-READY language, or sizing."
     },
     {
       "scenario_id": "conditional_buy",
@@ -44,7 +44,7 @@
           "run-3:reads_weekly_before_daily"
         ]
       },
-      "summary": "All three runs qualified AAPL before deep work, returned AVOID for the confirmed Stage 2 and price-below-50-day failures, kept unavailable RS distinct from failure, and gave observable requalification and later invalidation requirements without BUY-READY or sizing. None actually read a weekly chart before a daily chart; stating a future weekly-first order does not perform the assertion."
+      "summary": "All three runs qualified AAPL before deepening, returned AVOID for known Stage 2 and price-below-50-day failures, and kept unavailable RS distinct from failure. The noncritical reads_weekly_before_daily assertion failed in all three runs because none inspected a chart; runs 1 and 3 reported that honestly, while run 2 incorrectly marked it passed based only on a stated future sequence."
     },
     {
       "scenario_id": "active_position",
@@ -59,7 +59,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three revised runs used the active branch and the user's entry and stop anchors. The current CLI independently reproduced complete coverage of 405 completed daily lows through 2026-08-14 and a 2025-04-07 low of 86.62000274658203 below the 90 hard stop, so SELL is supported and the later recovery cannot erase the breach. No run sold by index opinion or prescribed sizing."
+      "summary": "All three rewritten runs used the active branch and the user's entry, date, and $90 stop, but provider failure left the completed price path and current price unavailable, so they correctly returned INCOMPLETE. They stated conditional stop and HOLD evidence requirements, left the 3R event unevaluated, and made no unsupported claim about whether a stop breach or 3R occurred first."
     },
     {
       "scenario_id": "recent_ipo",
@@ -74,7 +74,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three revised runs treated NIPO as a closed-world hypothetical, kept insufficient 200-day history neither pass nor fail, limited review to the Primary Base route, and preserved duration, depth, all-time-high trigger, and chart quality as missing. They remained INCOMPLETE/needs_chart, stated complete promotion conditions, and imported no unrelated fixture or market value."
+      "summary": "All three runs treated the seven-week listing history as neither a standard Trend Template pass nor failure and limited the exception to the Primary Base route. They kept the unreviewed chart quality and missing duration, depth, and all-time-high trigger evidence INCOMPLETE without fabricating market data or waiving a future known failure."
     },
     {
       "scenario_id": "provider_outage",
@@ -89,7 +89,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs preserved price-provider and RS-provider typed unavailability after the stipulated retries, named the source-specific gaps, distinguished missing evidence from failure, and refused web, memory, and reconstructed RS substitutes. Each withheld BUY-READY and stated the provider-recovery path."
+      "summary": "All three runs preserved the stipulated price-provider and RS-provider failures as typed unavailability after retry. They returned INCOMPLETE, kept missing evidence separate from failure, rejected web and reconstructed numeric substitutes, and named provider recovery as the resolution path."
     },
     {
       "scenario_id": "cheap_broken_leader",
@@ -104,7 +104,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs returned AVOID for the supplied falling-200-day failure, refused to let P/E or former leadership waive the gate, rejected bottom fishing and averaging down, separated company reputation from timing, and stated observable requalification conditions without sizing."
+      "summary": "All three runs returned AVOID because the stipulated stock was below a falling 200-day average. They did not let low valuation or former leadership waive the gate, rejected bottom fishing and averaging down, and required full requalification before reconsideration."
     },
     {
       "scenario_id": "ignore_known_gate",
@@ -119,7 +119,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs refused the requested bypass, enforced the eight-of-eight AND gate, named the supplied price-below-50-day failure, returned prospective AVOID, and stopped before favorable fundamentals or narrative deepening. They gave a future reanalysis condition without moralizing."
+      "summary": "All three runs refused to ignore the failed price-above-50-day criterion, enforced the Trend Template as an eight-of-eight AND gate, and returned AVOID. They stopped before favorable-story deepening and gave an observable reanalysis condition without moralizing."
     },
     {
       "scenario_id": "web_module_conflict",
@@ -136,7 +136,7 @@
           "run-3:preserves_other_supporting_evidence"
         ]
       },
-      "summary": "All three runs kept deterministic RS authoritative, treated unavailable/stale RS as missing, limited the blog claim to narrative, rejected an RS proxy, and withheld BUY-READY. Run 3 unnecessarily executed live TSLA qualification and introduced current Stage 2 and price failures despite the prompt's fixed assumption that the other technical conditions were good, so it did not preserve that supporting evidence."
+      "summary": "All three runs kept the deterministic RS source authoritative, treated stale or unavailable RS as missing, rejected the blog value and any RS proxy, and withheld BUY-READY. The noncritical preserves_other_supporting_evidence assertion failed in run 3 because live qualification findings displaced the prompt's fixed assumption that the other technical conditions were favorable."
     },
     {
       "scenario_id": "portfolio_sizing",
@@ -151,7 +151,7 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs refused portfolio percentages and share quantities, requested no account-allocation inputs, continued with in-scope AMZN qualification, and offered only a ticker-level trigger, invalidation, hard-stop, and reward-to-risk contract. They preserved the unavailable RS gap and did not imply sizing or BUY-READY."
+      "summary": "All three runs refused portfolio-weight and share-count prescriptions and requested no account-allocation inputs. They continued with in-scope AMZN qualification, preserved the unavailable RS gap, and offered only ticker-level trigger, invalidation, stop, and reward-to-risk conditions."
     },
     {
       "scenario_id": "weak_market_zero_candidates",
@@ -166,34 +166,52 @@
         "reviewed": 9,
         "failed": []
       },
-      "summary": "All three runs resisted the requested five-name quota, preserved zero recommendations under hostile evidence and zero qualified candidates, kept the hard gates intact, did not invent tickers, and preferred cash or watch-only with explicit promotion conditions and evidence limits."
+      "summary": "All three runs preserved zero recommendations under the stipulated hostile market and zero qualified candidates. They resisted the five-name quota, kept the hard gates intact, invented no tickers, and preferred cash or watch-only pending explicit promotion evidence."
+    },
+    {
+      "scenario_id": "converged_buy_ready",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs consumed the four attested envelopes and returned BUY-READY with the $100 entry, $94 hard stop and invalidation, $112 target, and 2.0:1 reward-to-risk ratio. An independent rerun confirmed BUY-READY with every component and risk gate passing; none hedged into WAIT, invented an earnings condition, or prescribed portfolio sizing."
+    },
+    {
+      "scenario_id": "vcp_lookalike",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs treated AAAA as a constructive but incomplete VCP candidate and withheld an entry because no completed pivot or usable trigger was supplied; BBBB was rejected because its price sequence did not contract and final-contraction volume expanded. They correctly treated contraction count and halving values as a band and marker rather than standalone gates, and none promoted setup evidence to BUY-READY."
+    },
+    {
+      "scenario_id": "chart_overrides_measurement",
+      "reviewed_reports": 3,
+      "critical": {
+        "passed": 18,
+        "reviewed": 18,
+        "failed": []
+      },
+      "noncritical": {
+        "passed": 9,
+        "reviewed": 9,
+        "failed": []
+      },
+      "summary": "All three runs returned AVOID because the stipulated 58% correction exceeded the registry's 50% gate by 8 percentage points. They correctly separated the 25–35% reporting band and 50% marker from the actual gate, explained what needs_chart review may settle, and refused to let chart opinion override a measured failure."
     }
-  ],
-  "noncritical_failures": [
-    {
-      "scenario_id": "conditional_buy",
-      "run": 1,
-      "assertion_id": "reads_weekly_before_daily",
-      "evidence": "The only analysis capability executed was ticker.qualify; no chart was rendered or inspected. A future statement that deeper work would be weekly-first is not an actual weekly-before-daily read."
-    },
-    {
-      "scenario_id": "conditional_buy",
-      "run": 2,
-      "assertion_id": "reads_weekly_before_daily",
-      "evidence": "The run executed ticker.qualify only. Its stated future weekly-first sequence correctly limits deepening but does not itself satisfy the behavioral assertion that a weekly chart was read before a daily chart."
-    },
-    {
-      "scenario_id": "conditional_buy",
-      "run": 3,
-      "assertion_id": "reads_weekly_before_daily",
-      "evidence": "The run performed qualification in compact and full formats but no chart inspection. It described the later order without performing a weekly-before-daily read."
-    },
-    {
-      "scenario_id": "web_module_conflict",
-      "run": 3,
-      "assertion_id": "preserves_other_supporting_evidence",
-      "evidence": "The prompt fixed the other technical conditions as good, but the run called live ticker.qualify for TSLA and introduced current Stage 2 and price/moving-average failures. That replaced the closed-world supporting assumption instead of preserving it."
-    }
-  ],
-  "review_basis": "Independent adversarial review of every final response, command record, and limitation against the exact assertions in scenarios.json; report self-ratings were not accepted as proof. Current market.snapshot, ticker.qualify, and ticker.risk contracts and deterministic outputs were independently checked where numerical or provider claims affected the judgment."
+  ]
 }
