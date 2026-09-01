@@ -69,11 +69,27 @@ def compile_measurement_spec() -> dict[str, Any]:
         "volume_baseline_sessions": int(doctrine.threshold(_DRYUP, "volume_baseline_sessions")),
         "breakout_volume_baseline_sessions": (swing, position),
         # The one of these that is a conversion rather than a window. The sources bound a base
-        # in weeks and the bars arrive as sessions, and the registry holds that number because
-        # it decides verdicts -- the same base reads differently against the 3-to-60 and the
-        # 5-to-26 week bands when it changes.
-        "sessions_per_trading_week": int(doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week")),
+        # in weeks and the bars arrive as sessions, so the same base sits differently against the
+        # 3-to-60 and 5-to-26 week bands when this changes. Both of those are bands, so what moves
+        # here is where a measurement is reported, not whether the setup passes -- the parameter
+        # decides a verdict on the Power Play surface, where a week limit is a gate, and not here.
+        "sessions_per_trading_week": _sessions_per_week(),
     }
+
+
+def _sessions_per_week() -> int:
+    """The registered week, refused rather than divided by when it is not a count of sessions.
+
+    A denominator is the one place a registry value cannot be taken on trust: zero raises out of
+    the reducer as an internal error where the envelope is the contract, and a negative publishes
+    a base of minus thirty-three weeks against a band. `validate()` refuses such a registry, but
+    nothing calls it at request time, so the read site checks what it is about to divide by.
+    """
+
+    weeks = doctrine.parameter(_TRADING_WEEK, "sessions_per_trading_week")
+    if isinstance(weeks, bool) or not isinstance(weeks, int) or weeks < 1:
+        raise ValueError(f"{_TRADING_WEEK}.sessions_per_trading_week is {weeks!r}; a week is a positive count of sessions")
+    return weeks
 
 
 def _summary(claim_id: str) -> str:

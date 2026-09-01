@@ -627,6 +627,14 @@ def validate(registry: Mapping[str, Any] | None = None) -> dict[str, Any]:
                 errors.append(f"{label}.parameters.{name} must carry a number or a list of numbers")
             if not isinstance(specification.get("unit"), str):
                 errors.append(f"{label}.parameters.{name} must name its unit")
+            # A count of sessions is a count. Zero divides a measurement by nothing, a negative
+            # publishes a base of minus thirty-three weeks against a band, and a fraction of a
+            # session is not a session -- and every one of those passed here while `int()` at
+            # the read site turned it into a crash or a number nobody could have meant.
+            if specification.get("unit") == "sessions" and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+            ):
+                errors.append(f"{label}.parameters.{name} is measured in sessions and must be a positive whole number")
             if not isinstance(specification.get("affects_verdict"), bool):
                 errors.append(f"{label}.parameters.{name} must say whether it affects the verdict")
             elif specification.get("affects_verdict") and not _binds(record):
