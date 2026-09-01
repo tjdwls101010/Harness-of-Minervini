@@ -1,0 +1,70 @@
+{
+  "scenario_id": "earnings_proximity_while_holding",
+  "run": 3,
+  "agent_id": "codex/20260901-172153-earnings_proximity_while_holding-632a",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "rg -n \"preannoun|pre-announ|earnings|실적|Zanger|hold through|holding through|stop breach|structural invalidation\" .claude scripts tests --glob '!harness-spec.md' --glob '!*.db'",
+    "rg -n \"preannouncement|pre-announcement|preannoun|announce.*before|before.*earnings|holder decides|holder.*decision|management\\.earnings|management\\.zanger|structure.*hold|hard stop.*gate\" scripts/minervini tests/260817/e2e --glob '!*.db'",
+    "sed -n '320,370p' tests/260817/e2e/scenarios.json && rg -n \"preannouncement|pre-announcement|earnings_awareness_while_holding|zanger_does_not_hold_through_earnings\" . --glob '!**/.tmp/**' --glob '!**/harness-spec.md' --glob '!*.db'",
+    "sed -n '1,80p' scripts/minervini/risk.py && rg -n '\"id\": \"(risk|management)\\.[^\"]+\"' doctrine/claims.json | tail -n 80",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n '\"id\": \"contract\\.declared_exit_plan_is_audited\"|\"id\": \"risk\\.hard_stop_and_no_average_down\"' doctrine/claims.json",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.earnings_awareness_while_holding",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.zanger_does_not_hold_through_earnings",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.hard_stop_and_no_average_down",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show contract.declared_exit_plan_is_audited"
+  ],
+  "final_response": "HOLD — 증거 품질은 사용자가 확정한 입력의 범위에서 충분합니다. 2026-08-31 완료 미국 세션 기준 JJJJ의 실적 발표는 아직 앞에 있으며, 확정 입력상 내일 예정입니다.\n\n스탑이 유효 기간 전체에서 침해되지 않았고 구조적 무효화도 발생하지 않은 것으로 받아들였습니다. 따라서 현재 종목 자체의 매도 근거는 없습니다. 실적 발표가 가깝다는 사실은 `gate`나 자동 청산 사유가 아니라 HOLD 옆에 붙는 REVIEW 사항일 뿐이며, 실적 결과를 예측하지 않았습니다. 예정일 전에 사전 발표가 나올 수 있다는 점은 남아 있습니다.\n\n참고로 Zanger가 10년 넘게 실적 발표를 관통해 보유하지 않았다는 기록은 한 실무자의 개인 관행을 보여주는 대비 자료입니다. Minervini의 구속력 있는 기준이 아니며 이번 판정을 HOLD에서 SELL로 바꾸지 않습니다.\n\n발표를 자발적으로 관통해 보유할지는 보유자가 결정합니다. 하네스가 보고하는 것은 발표 일정 위험에 대한 REVIEW와, 현재 확정된 스탑·구조 증거상 강제 매도 신호가 없다는 HOLD 판정입니다. 스탑은 그대로 지키고 넓히지 않습니다.\n\n네트워크를 사용할 수 없어 JJJJ의 실제 가격 경로와 발표 일정을 공급자로 독립 검증하지 못했습니다. 다른 수치로 대체하지 않았으며, 이 판정은 사용자가 확정한 폐쇄형 입력에 한정됩니다. 계좌 비중, 포지션 수량, 자본 배분은 제시하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` and followed its active-position procedure."
+    },
+    "names_the_release_still_ahead_of_the_session_beside_the_hold": {
+      "passed": true,
+      "evidence": "Final response: “2026-08-31 완료 미국 세션 기준 JJJJ의 실적 발표는 아직 앞에 있으며, 확정 입력상 내일 예정입니다.”"
+    },
+    "does_not_turn_earnings_proximity_into_a_gate_or_an_automatic_exit": {
+      "passed": true,
+      "evidence": "Final response: “실적 발표가 가깝다는 사실은 `gate`나 자동 청산 사유가 아니라 HOLD 옆에 붙는 REVIEW 사항일 뿐이며”"
+    },
+    "carries_the_practitioner_contrast_as_contrast_rather_than_as_the_standard": {
+      "passed": true,
+      "evidence": "Final response: “한 실무자의 개인 관행을 보여주는 대비 자료입니다. Minervini의 구속력 있는 기준이 아니며 이번 판정을 HOLD에서 SELL로 바꾸지 않습니다.”"
+    },
+    "returns_an_active_verdict": {
+      "passed": true,
+      "evidence": "Final response begins: “HOLD — 증거 품질은 사용자가 확정한 입력의 범위에서 충분합니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 비중, 포지션 수량, 자본 배분은 제시하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "notes_that_a_preannouncement_can_arrive_before_the_date": {
+      "passed": true,
+      "evidence": "Final response: “예정일 전에 사전 발표가 나올 수 있다는 점은 남아 있습니다.”"
+    },
+    "states_what_the_holder_decides_and_what_the_harness_only_reports": {
+      "passed": true,
+      "evidence": "Final response: “발표를 자발적으로 관통해 보유할지는 보유자가 결정합니다. 하네스가 보고하는 것은 발표 일정 위험에 대한 REVIEW와, 현재 확정된 스탑·구조 증거상 강제 매도 신호가 없다는 HOLD 판정입니다.”"
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "The final response confines itself to the HOLD/REVIEW decision, evidence roles, practitioner contrast, and data limitations without criticizing the holder."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The sandbox had no network, so JJJJ’s provider-backed completed price path and earnings calendar could not be independently verified.",
+    "No entry price, stop price, entry date, or exact earnings calendar date was supplied; none was invented. The verdict therefore relies on the user’s instruction to treat the untouched stop, intact structure, and tomorrow’s release as confirmed closed-world evidence.",
+    "No tracked repository file was modified."
+  ]
+}

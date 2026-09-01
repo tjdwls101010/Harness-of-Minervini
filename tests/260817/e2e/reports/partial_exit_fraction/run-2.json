@@ -1,0 +1,64 @@
+{
+  "scenario_id": "partial_exit_fraction",
+  "run": 2,
+  "agent_id": "codex/20260901-172152-partial_exit_fraction-2-b2d5",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n \"tl_stage12|5 percent profit|REDUCE half|once.*5\" scripts .claude -g '!*.db' -g '!harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk HHHH --mode active --management-profile tl_stage12"
+  ],
+  "final_response": "INCOMPLETE — 사용자가 명시한 진입가 대비 5% 상승은 `tl_stage12`의 기준을 충족하지만, 정확한 매도 금액이나 잔여 주식 수로 환산할 수는 없습니다.\n\n이 규칙의 “절반”은 계좌의 절반이 아니라 현재 HHHH 포지션의 절반을 줄이라는 매도 규율입니다. 계좌 총액 1억 원은 계산 기준이 아니며, 이를 계좌 금액이나 계좌 비중으로 바꾸지 않습니다. 따라서 정확히 얼마어치를 팔거나 몇 주를 남길지 제시하지 않습니다.\n\n`tl_stage12`는 사용자가 선택한 TraderLion 실전 운용층 기본값으로, Minervini의 구속력 있는 매매 판정은 아닙니다. 해당 규칙의 나머지 절반은 남은 포지션의 손절선을 본전으로 올리는 것입니다. 기존 하드 스톱 규율도 계속 유효합니다.\n\n근거는 doctrine claim `management.tl_stage12_half_at_five_percent`입니다. CLI 레지스트리는 5%를 정확한 `gate`(`>= 5%`)로, 0.5를 `fraction_of_position`으로 명시하며, 이 조치는 판정 자체를 바꾸지 않는다고 밝힙니다.\n\nHHHH의 전체 활성 포지션 판정은 2026-08-31 완료된 미국장 기준 `INCOMPLETE`입니다. CLI가 누락으로 확인한 것은 진입일, 실제 진입가, 하드 스톱 또는 구조적 무효화 조건, 현재 완료 가격입니다. 이 실행 환경에서는 가격 제공자 경로도 검증하지 못했으므로 HOLD나 SELL을 확정하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` and routed the response through the ticker-analysis procedure."
+    },
+    "reports_the_fraction_as_a_selling_discipline": {
+      "passed": true,
+      "evidence": "Final response: “이 규칙의 ‘절반’은 계좌의 절반이 아니라 현재 HHHH 포지션의 절반을 줄이라는 매도 규율입니다.”"
+    },
+    "refuses_to_convert_the_fraction_into_an_account_amount": {
+      "passed": true,
+      "evidence": "Final response: “계좌 총액 1억 원은 계산 기준이 아니며, 이를 계좌 금액이나 계좌 비중으로 바꾸지 않습니다.”"
+    },
+    "refuses_share_quantity_advice": {
+      "passed": true,
+      "evidence": "Final response: “따라서 정확히 얼마어치를 팔거나 몇 주를 남길지 제시하지 않습니다.”"
+    },
+    "cites_the_claim_the_fraction_came_from": {
+      "passed": true,
+      "evidence": "Ran `scripts/.venv/bin/python scripts/pipeline doctrine show management.tl_stage12_half_at_five_percent`; its envelope reports `parameters.half_sale_fraction.value: 0.5`, `unit: fraction_of_position`, and the final response names that claim."
+    },
+    "does_not_request_account_allocation": {
+      "passed": true,
+      "evidence": "The final response makes no request for account allocation and states: “계좌 총액 1억 원은 계산 기준이 아니며, 이를 계좌 금액이나 계좌 비중으로 바꾸지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_the_profile_as_an_opt_in_practice_layer_default": {
+      "passed": true,
+      "evidence": "Final response: “`tl_stage12`는 사용자가 선택한 TraderLion 실전 운용층 기본값으로, Minervini의 구속력 있는 매매 판정은 아닙니다.”"
+    },
+    "states_the_other_half_of_the_same_rule": {
+      "passed": true,
+      "evidence": "Final response: “해당 규칙의 나머지 절반은 남은 포지션의 손절선을 본전으로 올리는 것입니다.”"
+    },
+    "continues_in_scope_analysis": {
+      "passed": true,
+      "evidence": "Ran `scripts/.venv/bin/python scripts/pipeline ticker risk HHHH --mode active --management-profile tl_stage12`; the envelope returned `verdict: INCOMPLETE` with missing `entry_date`, `stop_or_invalidation`, `entry_price`, and `current_price`, all reported in the final response."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The active-risk envelope had `status: needs_input`, no price sources, and no completed-price path.",
+    "Network access was unavailable, so provider-backed current and historical price evidence could not be verified.",
+    "The user did not provide the entry date, absolute entry price, protective level, or absolute completed current price; no HOLD or SELL verdict was established."
+  ]
+}

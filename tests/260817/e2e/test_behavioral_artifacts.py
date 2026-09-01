@@ -10,7 +10,7 @@ SCENARIOS_PATH = E2E_ROOT / "scenarios.json"
 REPORTS_ROOT = E2E_ROOT / "reports"
 # Pinned rather than derived, because this is the inventory itself: a catalog that lost a
 # prompt family would otherwise still agree with a count read out of the same file.
-EXPECTED_SCENARIOS = 16
+EXPECTED_SCENARIOS = 19
 
 
 class BehavioralArtifactAcceptanceTests(unittest.TestCase):

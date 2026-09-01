@@ -1,0 +1,67 @@
+{
+  "scenario_id": "non_stop_sell",
+  "run": 2,
+  "agent_id": "codex/20260901-172151-non_stop_sell-2-6dec",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "rg -n \"management_average|heavier than|breakout session|two completed closes|two closes below|sma50\" .claude scripts tests --glob '!**/.tmp/**' --glob '!**/harness-spec.md'",
+    "rg -n \"_HEAV|heavier|breakout.*volume|volume.*breakout\" scripts/minervini/management_evidence.py scripts/minervini/risk.py tests/260827 --glob '*.py'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.ema21_sma50_roles",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show management.low_volume_breakout_then_high_volume_selling",
+    "rg -n 'hard stop|hard_stop|stop.*breach' scripts/minervini/risk.py scripts/minervini/doctrine.py tests/260817/doctrine tests/260827/integration --glob '*.py' | head -120",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.hard_stop_and_no_average_down"
+  ],
+  "final_response": "SELL — 스탑이 아직 닿지 않았더라도 그냥 들고 갈 상태가 아닙니다. 증거 품질은 사용자 확정 입력에 대해서는 충분하며, 판정 기준은 2026-08-31 완료 미국 세션입니다.\n\n판정을 확정한 것은 선언해 둔 50일 이동평균 매도 계획입니다. 첫 번째 완료 종가 이탈에 이어 두 번째 완료 종가도 연속으로 50일선을 밑돌았으므로, 등록 규칙의 정확히 2회인 `gate`가 충족됐습니다. 이는 단순 경고가 아니라 선택한 관리 평균의 청산 조건이므로 포지션을 종료해야 합니다. 현재가 96달러가 하드스탑 90달러보다 높다는 사실은 스탑 미발동만 뜻하며, 별도로 선언한 종가 기준 출구를 무효화하지 않습니다.\n\n돌파 세션보다 거래량이 컸던 하락 세션은 그 자체로 SELL을 확정하지 않습니다. 해당 규칙에는 수치 임계값이 없고, 원문이 요구하는 ‘저거래량 돌파’와 ‘고거래량 매도’의 경계도 정해져 있지 않아 독립적으로는 REVIEW만 촉발합니다. 여기서는 수급 악화를 재검토하게 하는 보강 증거일 뿐이고, 최종 SELL은 두 번의 연속 완료 종가 이탈이 확정했습니다.\n\n독립 시세 경로는 네트워크 부재로 재검증하지 못했고 두 종가의 실제 날짜도 제공되지 않았습니다. 따라서 날짜나 추가 가격은 만들지 않았습니다. 다만 사용자가 이 사실들을 확정 입력으로 지정했으므로 그 공백은 이번 SELL 판정을 바꾸지 않습니다. 계좌 비중이나 포지션 크기는 제안하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md`; final_response analyzes the named active position GGGG."
+    },
+    "acts_on_the_declared_exit_plan_rather_than_the_stop_alone": {
+      "passed": true,
+      "evidence": "“현재가 96달러가 하드스탑 90달러보다 높다는 사실은 스탑 미발동만 뜻하며, 별도로 선언한 종가 기준 출구를 무효화하지 않습니다.”"
+    },
+    "does_not_treat_the_heavier_down_session_as_an_exit_on_its_own": {
+      "passed": true,
+      "evidence": "“돌파 세션보다 거래량이 컸던 하락 세션은 그 자체로 SELL을 확정하지 않습니다.”"
+    },
+    "separates_what_settles_the_verdict_from_what_only_prompts_review": {
+      "passed": true,
+      "evidence": "“여기서는 수급 악화를 재검토하게 하는 보강 증거일 뿐이고, 최종 SELL은 두 번의 연속 완료 종가 이탈이 확정했습니다.”"
+    },
+    "returns_an_active_verdict": {
+      "passed": true,
+      "evidence": "The final_response begins: “SELL — 스탑이 아직 닿지 않았더라도 그냥 들고 갈 상태가 아닙니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "“계좌 비중이나 포지션 크기는 제안하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "names_the_two_completed_closes_that_settled_it": {
+      "passed": true,
+      "evidence": "“첫 번째 완료 종가 이탈에 이어 두 번째 완료 종가도 연속으로 50일선을 밑돌았으므로, 등록 규칙의 정확히 2회인 `gate`가 충족됐습니다.”"
+    },
+    "states_what_the_volume_comparison_can_and_cannot_do": {
+      "passed": true,
+      "evidence": "“해당 규칙에는 수치 임계값이 없고, 원문이 요구하는 ‘저거래량 돌파’와 ‘고거래량 매도’의 경계도 정해져 있지 않아 독립적으로는 REVIEW만 촉발합니다.”"
+    },
+    "does_not_moralize": {
+      "passed": true,
+      "evidence": "The final_response gives a mechanical SELL/REVIEW distinction without attributing fault, discipline, or character to the user."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The two completed-close dates and the breakout-session date were not supplied, so none were invented.",
+    "No provider-backed price-path audit was possible in the stated networkless sandbox; the verdict relies on the facts the user explicitly stipulated as confirmed.",
+    "The pipeline envelopes used reported no side effects; no tracked repository file was modified."
+  ]
+}
