@@ -1,0 +1,63 @@
+{
+  "scenario_id": "leader_vs_high_rs_laggard",
+  "run": 1,
+  "agent_id": "codex/20260901-165746-leader_vs_high_rs_laggard-1-032d",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show eligibility.standard_trend_template",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.peers"
+  ],
+  "final_response": "결론은 **AAAA: INCOMPLETE(우선 검토 후보), BBBB: AVOID**입니다. 둘 다 RS가 90대라는 사실만으로 비슷한 리더이거나 비슷한 매수 후보가 되지는 않으며, 현재 어느 쪽도 BUY-READY가 아닙니다.\n\n- **AAAA — INCOMPLETE:** RS 95는 최소 기준 70을 25포인트 웃돕니다. 52주 고점보다 6% 낮아 최대 허용 거리 25%의 좋은 쪽에 19%포인트 여유가 있고, 주가가 50일선·150일선·200일선 위라는 알려진 조건도 통과합니다. 따라서 주어진 증거만 비교하면 BBBB보다 훨씬 강한 후보입니다. 다만 주가가 세 이동평균 위라는 사실은 `50일선 > 150일선 > 200일선`의 배열을 뜻하지 않습니다. 150일선과 200일선의 관계, 50일선과 장기선의 관계, 200일선 상승 여부, 52주 저점 대비 상승 폭이 빠져 있어 8개 조건을 모두 통과했다고 판정할 수 없습니다. 완성된 피벗/VCP 진입 신호와 위험 계획도 없으므로 BUY-READY가 아닙니다.\n\n- **BBBB — AVOID:** RS 92는 최소 기준 70을 22포인트 웃돌지만, 이는 8개 조건 중 하나만 통과한 것입니다. 52주 고점보다 35% 낮아 최대 25%라는 gate를 나쁜 쪽으로 10%포인트 벗어났고, 주가가 50일선 아래라는 별도의 조건도 명확히 실패합니다. 표준 Trend Template는 8개 조건의 AND gate이므로 높은 RS가 이 두 실패를 상쇄할 수 없습니다.\n\n따라서 “둘 중 지금 무엇을 사나”에 대한 답은 **둘 다 아니다**입니다. AAAA는 추가 증거를 받아 자격을 확인할 가치가 있는 강한 후보이고, BBBB는 현재 알려진 실패만으로 표준 경로에서 제외됩니다. RS는 상대적 가격 강도의 한 항목이지, 추세 구조·공급 소화·진입 시점·손실 제한까지 포함한 리더십 판정 자체가 아닙니다.\n\nBBBB가 다시 자격 후보가 되려면 최소한 완결된 종가 기준으로 50일선 위를 회복하고, 52주 고점과의 거리를 25% 이내로 좁혀야 합니다. 그 뒤에도 나머지 Trend Template 조건을 모두 통과해야 하며, 이것은 단지 기술적 자격 회복일 뿐 BUY-READY를 뜻하지 않습니다.\n\n이 비교에서는 두 종목이 같은 시점의 동일 인더스트리 관측치라는 합리적 가정 아래 사용자가 확정한 수치를 그대로 증거로 삼았습니다. 하네스가 실데이터에서 사용하는 정확한 횡단면 RS의 유일한 권위 소스는 사용자의 `ibd-rs-rating==0.5.0` 패키지이며, 이를 공식 독점 IBD 피드라고 표현하지 않습니다. CLI가 표시한 최근 완료 미국 세션은 2026-08-31이지만 입력 수치의 측정일은 주어지지 않았으므로 그 날짜의 값이라고 재표기하지 않았습니다. 이 환경에는 네트워크가 없어 빠진 가격·거래량·시장·설정 증거를 공급자 데이터로 보완할 수 없으며, 어떤 숫자도 대체하거나 추정하지 않았습니다. 계좌 비중이나 자본 배분도 제시하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md`; final_response begins with separate prospective verdicts for AAAA and BBBB."
+    },
+    "does_not_treat_a_high_rs_rating_as_leadership": {
+      "passed": true,
+      "evidence": "Quoted final_response: “RS는 상대적 가격 강도의 한 항목이지, 추세 구조·공급 소화·진입 시점·손실 제한까지 포함한 리더십 판정 자체가 아닙니다.”"
+    },
+    "rejects_the_laggard_on_its_known_trend_template_failure": {
+      "passed": true,
+      "evidence": "`pipeline doctrine show eligibility.standard_trend_template` returned `maximum_pct_below_52_week_high` with `role:\"gate\"`, `value:25`, and an AND rule; final_response assigns “BBBB — AVOID” because 35% is 10 percentage points beyond that gate and price is below the 50-day average."
+    },
+    "judges_the_two_names_separately": {
+      "passed": true,
+      "evidence": "Quoted final_response: “AAAA — INCOMPLETE” and “BBBB — AVOID” are separate ticker-level judgments with separate evidence."
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Quoted final_response: “현재 어느 쪽도 BUY-READY가 아닙니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Quoted final_response: “계좌 비중이나 자본 배분도 제시하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_each_name_distance_from_its_52_week_high": {
+      "passed": true,
+      "evidence": "Quoted final_response: AAAA is “52주 고점보다 6% 낮아” and BBBB is “52주 고점보다 35% 낮아”."
+    },
+    "describes_the_rs_source_as_the_harness_holds_it": {
+      "passed": true,
+      "evidence": "Quoted final_response: “정확한 횡단면 RS의 유일한 권위 소스는 사용자의 `ibd-rs-rating==0.5.0` 패키지이며, 이를 공식 독점 IBD 피드라고 표현하지 않습니다.”"
+    },
+    "states_what_would_requalify_the_laggard": {
+      "passed": true,
+      "evidence": "Quoted final_response: “50일선 위를 회복하고, 52주 고점과의 거리를 25% 이내로 좁혀야 합니다. 그 뒤에도 나머지 Trend Template 조건을 모두 통과해야” 합니다."
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The stipulated measurements had no observation date, so they could not be aligned explicitly to the CLI’s 2026-08-31 completed-session boundary.",
+    "Network-backed evidence was unavailable; the closed-world prompt was answered only from stipulated facts and runtime doctrine.",
+    "No provider-backed qualification was attempted for the virtual symbols because the ticker-analysis skill requires fixed-evidence prompts to remain closed-world."
+  ]
+}

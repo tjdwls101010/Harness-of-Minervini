@@ -1,0 +1,63 @@
+{
+  "scenario_id": "leader_vs_high_rs_laggard",
+  "run": 2,
+  "agent_id": "codex/20260901-165747-leader_vs_high_rs_laggard-2-c36d",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "cat .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.qualify",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show eligibility.standard_trend_template"
+  ],
+  "final_response": "결론: **AAAA는 INCOMPLETE, BBBB는 AVOID**입니다. 제한된 확정 입력만 비교하면 AAAA가 명백히 우위지만, 어느 종목도 BUY-READY는 아닙니다.\n\n- **AAAA — INCOMPLETE:** RS 95는 최소 70인 RS 관문을 통과합니다. 52주 고점 대비 6% 아래라는 값도 허용 한계인 25% 이내이며, 현재 가격이 50일선·150일선·200일선 위라는 조건도 충족합니다. 다만 표준 추세 템플릿은 여덟 조건의 AND 관문입니다. 150일선이 200일선 위인지, 200일선이 최소 1개월 상승 중인지, 50일선이 150일선과 200일선 위인지, 가격이 52주 저점보다 최소 30% 높은지는 주어지지 않았습니다. 따라서 현재 증거는 유망한 후보임을 보여줄 뿐 완전한 적격이나 매수 시점을 확정하지 못합니다. 완성된 피벗 또는 VCP 기반 진입점, 수급 수축, 시장 정렬, 손절 및 최소 2:1 보상·위험도 별도로 필요합니다.\n\n- **BBBB — AVOID:** RS 92는 RS 관문을 통과하지만, 52주 고점 대비 35% 아래라서 최대 25% 이내라는 관문을 실패합니다. 현재 가격이 50일선 아래인 것도 여덟 조건 중 별도의 실패입니다. 하나의 알려진 실패만으로도 표준 경로는 탈락하므로 높은 RS가 이 실패들을 상쇄하지 못합니다.\n\n따라서 “둘 다 RS가 90대이니 비슷한 리더”라고 볼 수 없습니다. RS는 추세 템플릿 여덟 조건 중 하나일 뿐이며, 높은 RS 자체가 리더십이나 매수 준비 상태를 확정하지 않습니다. AAAA는 고점에 가깝고 주요 이동평균 위에 있지만, BBBB는 고점에서 훨씬 멀고 50일선 아래라 가격 구조가 뚜렷하게 열세입니다.\n\nBBBB가 다시 표준 적격 후보가 되려면 먼저 52주 고점 대비 25% 이내로 회복하고 종가가 50일선 위로 올라와야 하며, 그 시점에 나머지 여섯 조건까지 모두 충족해야 합니다. 그래도 이는 적격 회복일 뿐 BUY-READY가 아니며, 이후 진입 구조와 위험 계획을 별도로 확인해야 합니다.\n\nCLI 교리 레지스트리에서 RS 70, 고점 대비 최대 25%, 저점 대비 최소 30%, 200일선 최소 1개월 상승은 모두 단순 참고값이 아니라 `gate`로 확인했습니다. 기준 메타데이터는 2026-08-31 완료 미국장입니다. 다만 이번 RS 95·92와 가격 관계는 측정일이 없는 사용자 확정 입력이므로 그 세션의 공급자 측정값으로 재해석하지 않았습니다. 하네스가 실제 횡단면 RS에 사용하는 유일한 출처는 사용자의 `ibd-rs-rating==0.5.0` 패키지이며, 공식 독점 IBD 피드로 간주하지 않습니다. 이번 값들은 해당 패키지로 재계산한 값이 아니라 사용자가 확정한 입력입니다.\n\n네트워크가 없는 환경이라 누락된 공급자 데이터는 보완하거나 웹 수치로 대체하지 않았습니다. 계좌 비중이나 자본배분도 계산하지 않았습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `cat .codex/skills/ticker-analysis/SKILL.md` before the analytical CLI commands."
+    },
+    "does_not_treat_a_high_rs_rating_as_leadership": {
+      "passed": true,
+      "evidence": "Final response states: “RS는 추세 템플릿 여덟 조건 중 하나일 뿐이며, 높은 RS 자체가 리더십이나 매수 준비 상태를 확정하지 않습니다.”"
+    },
+    "rejects_the_laggard_on_its_known_trend_template_failure": {
+      "passed": true,
+      "evidence": "Final response states: “BBBB — AVOID: RS 92는 RS 관문을 통과하지만, 52주 고점 대비 35% 아래라서 최대 25% 이내라는 관문을 실패합니다. 현재 가격이 50일선 아래인 것도 여덟 조건 중 별도의 실패입니다.”"
+    },
+    "judges_the_two_names_separately": {
+      "passed": true,
+      "evidence": "Final response assigns separate states: “AAAA는 INCOMPLETE, BBBB는 AVOID입니다.”"
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Final response states: “어느 종목도 BUY-READY는 아닙니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response states: “계좌 비중이나 자본배분도 계산하지 않았습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reports_each_name_distance_from_its_52_week_high": {
+      "passed": true,
+      "evidence": "Final response reports AAAA as “52주 고점 대비 6% 아래” and BBBB as “52주 고점 대비 35% 아래”."
+    },
+    "describes_the_rs_source_as_the_harness_holds_it": {
+      "passed": true,
+      "evidence": "Final response states: “하네스가 실제 횡단면 RS에 사용하는 유일한 출처는 사용자의 `ibd-rs-rating==0.5.0` 패키지이며, 공식 독점 IBD 피드로 간주하지 않습니다.”"
+    },
+    "states_what_would_requalify_the_laggard": {
+      "passed": true,
+      "evidence": "Final response states: “BBBB가 다시 표준 적격 후보가 되려면 먼저 52주 고점 대비 25% 이내로 회복하고 종가가 50일선 위로 올라와야 하며, 그 시점에 나머지 여섯 조건까지 모두 충족해야 합니다.”"
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The sandbox had no network, so provider-backed measurements could not be fetched to fill missing Trend Template, setup, market, or risk evidence.",
+    "The stipulated facts had no measurement date; they were accepted as fixed inputs and were not relabeled as measurements from the CLI’s 2026-08-31 completed session.",
+    "No provider-backed ticker command was attempted because the skill requires a virtual fixed-evidence prompt to remain a closed world; no unrelated fixture or live value was substituted.",
+    "No tracked repository file was modified. The executed CLI envelopes declared empty `side_effects`."
+  ]
+}

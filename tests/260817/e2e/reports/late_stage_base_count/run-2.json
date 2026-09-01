@@ -1,0 +1,69 @@
+{
+  "scenario_id": "late_stage_base_count",
+  "run": 2,
+  "agent_id": "codex/20260901-170332-late_stage_base_count-2-ebc5",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "rg --files tests/260817/fixtures/e2e/converged",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.risk",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk --help",
+    "scripts/.venv/bin/python scripts/pipeline ticker risk TEST --entry-price 100 --stop-price 94 --upside-price 112 --average-gain-pct 24 --base-count 6 --as-of 2025-12-31 --evidence tests/260817/fixtures/e2e/converged/qualify.json --evidence tests/260817/fixtures/e2e/converged/fundamentals.json --evidence tests/260817/fixtures/e2e/converged/market.json --evidence tests/260817/fixtures/e2e/converged/setup.json",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show basecount.typical_top_after_3_to_5_bases --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show basecount.role_and_disclaimer --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.initial_stop_and_reward --as-of 2025-12-31",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show risk.profit_protection_at_3r --as-of 2025-12-31",
+    "git status --short"
+  ],
+  "final_response": "BUY-READY — 제공된 고정 증거 안에서는 6번째 베이스라는 이유만으로 건너뛰거나 매도할 근거가 없습니다. 진입일과 보유 중 가격 경로가 없고 네 봉투가 신규 진입 수렴용이므로, 2025-12-31 기준 신규 진입 판단으로 해석했습니다.\n\n베이스 수는 6개로, 출처가 제시한 3~5개 밴드의 상단 5를 1개 넘어섰습니다. 좋은 방향이 낮은 쪽인 밴드이므로 추세가 성숙했고 후기 베이스의 실패 위험이 커졌다는 경고입니다. 하지만 이것은 `band`이지 매수·매도 `gate`가 아닙니다. 원문 원칙도 “베이스 수는 추세의 성숙도를 보는 관점일 뿐, 그 자체로 천장 형성 여부를 말할 수 없다”고 명시합니다. 따라서 성숙도 경고와 무효화 신호를 구분해야 합니다. 6번째 베이스는 전자이고, 94달러 하드스탑 침해 같은 가격 증거가 후자입니다.\n\n위험 조건은 통과했습니다. 100달러 진입에서 94달러 스탑은 6% 위험으로, 출처의 통상 손실 6~7% 밴드 안에서도 더 유리한 하단 6%에 정확히 놓입니다. 실현 평균 수익 24%의 절반인 12% 제한과 절대 상한 10%보다도 좁습니다. 목표 112달러는 12% 보상이라 위험 6% 대비 정확히 2:1로 최소 `gate`를 충족하지만, 선호 참고값 3:1에는 못 미칩니다.\n\n네 봉투는 시장 우호적, Stage 2 자격 충족, 셋업 준비 완료, 펀더멘털 수렴 지지로 모두 인정됐고, 감축기의 최종 판정은 `BUY-READY`였습니다. 그러므로 신규 진입이라면 계획한 100/94/112 조건은 허용되지만, 후기 베이스라는 점 때문에 94달러를 넓히거나 베이스 횟수만 보고 선제 매도해서는 안 됩니다. 이미 보유 중이라는 뜻이었다면 베이스 수만으로는 `SELL`이 아니며, 진입일 이후 완료된 일봉의 저가 경로가 없어 현재 `HOLD` 또는 `SELL`을 확정할 수 없습니다.\n\n기준 시점은 완료된 미국 세션 2025-12-31입니다. 근거는 해당 날짜의 `fixture-prices` 네 봉투와 원칙 레지스트리입니다. 네 봉투는 최소 상태만 담은 고정 증거이며 실제 가격·거래량 이력은 없고, 베이스 횟수 문맥도 가격·거래량을 읽지 않았습니다. 네트워크와 실시간 제공자 검증도 불가능한 환경이므로 현재 차트나 돌파 후 행동은 추가 확인하지 못했습니다. 계좌 비중이나 자본 배분 수치는 제시하지 않습니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` and routed `skill_used` to `ticker-analysis`."
+    },
+    "reports_the_base_count_against_the_three_to_five_band": {
+      "passed": true,
+      "evidence": "The ticker.risk envelope returned `base_count_context.base_count: 6`, `source_range: [3,5]`, and `state: \"above_source_range\"`; final_response says “베이스 수는 6개로, 출처가 제시한 3~5개 밴드의 상단 5를 1개 넘어섰습니다.”"
+    },
+    "carries_the_sources_own_disclaimer_that_a_count_cannot_call_a_top": {
+      "passed": true,
+      "evidence": "The envelope returned `disclaimer: \"Counting bases gives perspective on maturity; by itself it cannot say a stock has topped.\"`; final_response carries this as “베이스 수는 추세의 성숙도를 보는 관점일 뿐, 그 자체로 천장 형성 여부를 말할 수 없다”."
+    },
+    "does_not_turn_the_count_into_a_gate_or_a_sell": {
+      "passed": true,
+      "evidence": "The risk envelope returned `verdict: \"BUY-READY\"`, `failed: []`, and the count threshold had `role: \"band\"`; final_response says “하지만 이것은 `band`이지 매수·매도 `gate`가 아닙니다.”"
+    },
+    "reports_the_verdict_the_envelope_reached": {
+      "passed": true,
+      "evidence": "The ticker.risk envelope returned `data.verdict: \"BUY-READY\"`; final_response opens with “BUY-READY” and later says “감축기의 최종 판정은 `BUY-READY`였습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final_response explicitly says “계좌 비중이나 자본 배분 수치는 제시하지 않습니다.” and contains no allocation recommendation."
+    }
+  },
+  "noncritical_assertions": {
+    "names_which_edge_of_the_band_the_count_passed": {
+      "passed": true,
+      "evidence": "Final_response says “3~5개 밴드의 상단 5를 1개 넘어섰습니다.”"
+    },
+    "distinguishes_maturity_from_invalidation": {
+      "passed": true,
+      "evidence": "Final_response says “성숙도 경고와 무효화 신호를 구분해야 합니다. 6번째 베이스는 전자이고, 94달러 하드스탑 침해 같은 가격 증거가 후자입니다.”"
+    },
+    "states_as_of_and_sources": {
+      "passed": true,
+      "evidence": "Final_response says “기준 시점은 완료된 미국 세션 2025-12-31입니다. 근거는 해당 날짜의 `fixture-prices` 네 봉투와 원칙 레지스트리입니다.”"
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The sandbox had no network/provider access, so no live chart, current provider data, or post-breakout price behavior could be verified.",
+    "The supplied fixtures contained minimal plane states rather than raw price and volume history.",
+    "`git status --short` showed concurrent batch changes under `tests/260817/e2e/`; all commands in this run were read-only apart from any ignored cache behavior allowed by the pipeline."
+  ]
+}

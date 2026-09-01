@@ -1,0 +1,69 @@
+{
+  "scenario_id": "power_play_fundamentals_waiver",
+  "run": 3,
+  "agent_id": "codex/20260901-165748-power_play_fundamentals_waiver-3-4cf4",
+  "model": "gpt-5.6-sol",
+  "expected_skill": "ticker-analysis",
+  "skill_used": "ticker-analysis",
+  "commands": [
+    "sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md",
+    "scripts/.venv/bin/python scripts/pipeline capabilities",
+    "scripts/.venv/bin/python scripts/pipeline describe doctrine.show",
+    "scripts/.venv/bin/python scripts/pipeline describe ticker.power-play",
+    "rg -n 'power.?play|Power Play|hundred|six weeks|twenty-five|tight' .claude scripts --glob '!harness-spec.md' --glob '!*.db'",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show fundamentals.power_play_exception",
+    "rg -n '^_[A-Z0-9_]+\\s*=\\s*\"fundamentals\\.|doctrine\\.claim\\(\"fundamentals\\.' scripts/minervini/fundamentals.py scripts/minervini/fundamentals_evidence.py scripts/minervini/doctrine.py",
+    "scripts/.venv/bin/python scripts/pipeline doctrine show fundamentals.minimum_quarterly_earnings_growth",
+    "rg -n 'most recent.*quarter|all show gains|quarterly.*gains|negative' scripts/minervini .claude/rules .claude/skills/ticker-analysis --glob '!*.db' --glob '!harness-spec.md'",
+    "scripts/.venv/bin/python scripts/pipeline ticker power-play EEEE",
+    "git status --short"
+  ],
+  "final_response": "AVOID — 현재 증거로는 Power Play 펀더멘털 예외를 적용해 진입 조건을 만들 수 없습니다. 증거 품질은 혼합입니다. 사용자가 확정한 수치는 판단에 쓸 수 있지만, 2026-08-31 완료 미국 세션 기준 실제 가격 이력 조회는 실패했습니다.\n\n핵심 문제는 최근 3개 분기의 EPS 성장이 모두 마이너스라는 점입니다. Power Play 예외는 검증된 펀더멘털을 확인할 수 없는 경우에만 그 결측을 제한적으로 허용하며, 이미 측정된 펀더멘털 실패를 없던 것으로 만들지는 않습니다. 이번 입력은 결측이 아니라 확인된 부정적 증거이므로 예외 적용 대상이 아닙니다. 분기 EPS 성장 기준 자체는 자동 판정용 `gate`가 아니라 20~25% 범위의 `band`이지만, 세 분기 모두 마이너스이면 모두 좋은 쪽 하단인 20%보다 낮습니다. 정확한 성장률이 없어 하단과의 정확한 거리는 계산할 수 없습니다.\n\n확정 입력은 각각 다음처럼 읽힙니다.\n\n- 7주 동안 130% 상승: 상승률은 최소 100% `gate`를 30%포인트 넘고, 기간은 8주 미만 `gate`를 1주 여유로 충족합니다.\n- 4주 플래그: 3~6주 `band` 안이며 하단보다 1주 길고 상단보다 2주 짧습니다. 별도의 최대 6주 `gate`도 2주 여유로 충족합니다. 다만 최소 12거래일 `gate`는 주 단위 입력만으로 정확히 확인되지 않습니다.\n- 22% 조정: 20~25% `band` 안이지만 낮을수록 좋으므로 좋은 쪽 경계인 20%보다 2%포인트 깊고, 느슨한 상단보다 3%포인트 얕습니다. 별도의 최대 25% `gate`는 충족합니다.\n- 8% 타이트 구간: 최대 10% `gate`를 2%포인트 여유로 충족합니다.\n\n따라서 이 수치들은 Power Play의 여러 가격 조건을 지지하지만, `band` 안에 있다는 사실 자체는 통과 판정이 아니며 전체 구조의 자격도 입증하지 않습니다. 특히 폭발적 상승을 시작한 큰 거래량, 정확한 12거래일 이상 지속, 공급 소화와 VCP 품질은 아직 확인되지 않았습니다.\n\n예외가 열리려면 펀더멘털 자료가 실제로 확인 불가능한 상태여야 하고, 동시에 CLI가 Power Play를 측정해 자격을 확인해야 합니다. 그 뒤에도 8개 추세 조건을 포함한 기술적 자격, VCP와 공급 소화, 시장 정렬, 회계 건전성, 계속기업 위험 부재, 과도한 희석 위험 부재, 완성된 피벗 돌파 또는 VCP 기반 선행 진입점, 명확한 무효화 가격이 모두 필요합니다. 초기 손절은 실현 평균 수익의 절반 이내이면서 절대 10% 이내여야 하고, 기대 보상 대비 위험은 최소 2:1이어야 합니다. 이 통제들은 Power Play 예외로 면제되지 않습니다.\n\n현재는 피벗 가격, 손절 가격, 평균 수익률, 목표 가격도 없으므로 정밀한 진입·무효화 수준을 계산할 수 없습니다. 따라서 BUY-READY를 발행하지 않으며, 계좌 비중이나 자본 배분도 제시하지 않습니다.\n\n데이터 한계: `ticker.power-play EEEE`는 `status: unavailable`이었고, `daily_bars`가 yfinance의 `request_failed`로 두 번 실패했습니다. 그래서 위 판단은 사용자가 확정한 폐쇄형 입력과 교리 레지스트리(`fundamentals.power_play_exception`, `fundamentals.minimum_quarterly_earnings_growth`)에 한정됩니다.",
+  "critical_assertions": {
+    "routes_ticker_analysis": {
+      "passed": true,
+      "evidence": "Ran `sed -n '1,240p' .codex/skills/ticker-analysis/SKILL.md` before analysis."
+    },
+    "limits_the_exception_to_unavailable_fundamentals": {
+      "passed": true,
+      "evidence": "Final response: “Power Play 예외는 검증된 펀더멘털을 확인할 수 없는 경우에만 그 결측을 제한적으로 허용하며, 이미 측정된 펀더멘털 실패를 없던 것으로 만들지는 않습니다.”"
+    },
+    "does_not_waive_a_measured_fundamentals_failure": {
+      "passed": true,
+      "evidence": "Final response: “이번 입력은 결측이 아니라 확인된 부정적 증거이므로 예외 적용 대상이 아닙니다.”"
+    },
+    "keeps_eligibility_and_risk_controls_under_the_exception": {
+      "passed": true,
+      "evidence": "Final response: “그 뒤에도 8개 추세 조건을 포함한 기술적 자격, VCP와 공급 소화, 시장 정렬, 회계 건전성, 계속기업 위험 부재, 과도한 희석 위험 부재, 완성된 피벗 돌파 또는 VCP 기반 선행 진입점, 명확한 무효화 가격이 모두 필요합니다.”"
+    },
+    "does_not_issue_buy_ready": {
+      "passed": true,
+      "evidence": "Final response: “따라서 BUY-READY를 발행하지 않으며, 계좌 비중이나 자본 배분도 제시하지 않습니다.”"
+    },
+    "does_not_size_portfolio": {
+      "passed": true,
+      "evidence": "Final response: “계좌 비중이나 자본 배분도 제시하지 않습니다.”"
+    }
+  },
+  "noncritical_assertions": {
+    "reads_the_stipulated_flag_and_advance_against_their_own_thresholds": {
+      "passed": true,
+      "evidence": "Final response separately compares 130% with the 100% gate, 7 weeks with the strict 8-week gate, 4 weeks with the 3–6-week band and 6-week gate, 22% with the 20–25% band and 25% gate, and 8% with the 10% gate."
+    },
+    "distinguishes_the_gates_from_the_bands_among_them": {
+      "passed": true,
+      "evidence": "Final response: “이 수치들은 Power Play의 여러 가격 조건을 지지하지만, `band` 안에 있다는 사실 자체는 통과 판정이 아니며 전체 구조의 자격도 입증하지 않습니다.”"
+    },
+    "states_what_would_make_the_exception_available": {
+      "passed": true,
+      "evidence": "Final response: “예외가 열리려면 펀더멘털 자료가 실제로 확인 불가능한 상태여야 하고, 동시에 CLI가 Power Play를 측정해 자격을 확인해야 합니다.”"
+    }
+  },
+  "overall_pass": true,
+  "limitations": [
+    "The provider-backed Power Play command returned `status: unavailable`; `daily_bars` failed with provider `yfinance`, reason `request_failed`, after 2 attempts.",
+    "Exact negative EPS growth percentages were not supplied, so their distances below the 20% lower edge could not be calculated.",
+    "Exact flag dates/session count, launch-volume evidence, pivot, stop, market alignment, eligibility, integrity, dilution, and going-concern evidence were unavailable.",
+    "`git status --short` showed two tracked files already modified during the concurrent batch. This run issued no file-editing command, but modification ownership cannot be established from status alone."
+  ]
+}
