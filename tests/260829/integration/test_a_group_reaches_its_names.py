@@ -8,17 +8,22 @@ was never read rather than attach today's taxonomy to it.
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 
+from scripts.minervini import doctrine
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.windows import DAYS_IN_A_WEEK
 
 
 TODAY = resolve_as_of().date
+LOOKBACK_WEEKS = doctrine.parameter("convention.group_member_reading", "new_high_growth_lookback_weeks")
+# Bars, for placing the fixture dip. The reading itself steps back on the calendar, and
+# these fixtures trade every session, so the two land on the same bar.
 LOOKBACK = 20
 WINDOW = 260
 
@@ -111,7 +116,15 @@ class GroupMembershipTests(unittest.TestCase):
         self.assertEqual(industries["Semiconductors"]["member_sample"]["ranked_leaders_in_group"], ["BREAK", "HELD"])
         reading = next(item for item in industries["Semiconductors"]["signal_vector"] if item["metric"] == "new_highs")
         self.assertEqual(reading["state"], "supports")
-        self.assertEqual(reading["value"]["measured"], {"now": 2, "earlier": 1, "of_names_read": 2, "lookback_sessions": LOOKBACK})
+        measured = reading["value"]["measured"]
+
+        self.assertEqual({key: measured[key] for key in ("now", "earlier", "of_names_read")}, {"now": 2, "earlier": 1, "of_names_read": 2})
+        # The two moments the counts were taken at, four weeks of calendar time apart.
+        self.assertEqual(measured["lookback_weeks"], LOOKBACK_WEEKS)
+        self.assertEqual(
+            date.fromisoformat(measured["read_at"]) - date.fromisoformat(measured["compared_with"]),
+            timedelta(days=LOOKBACK_WEEKS * DAYS_IN_A_WEEK),
+        )
         self.assertEqual(industries["Chemicals"]["member_sample"]["reason"], "no_ranked_leader_in_this_group")
 
     def test_the_group_summary_counts_the_advancing_groups_against_the_source_range(self) -> None:

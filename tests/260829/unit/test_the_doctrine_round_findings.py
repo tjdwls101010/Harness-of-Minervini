@@ -5,6 +5,7 @@ Each test is one finding, named by what the code was doing that the source does 
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 import pandas as pd
@@ -38,6 +39,23 @@ def _bars(values: list[float], lows: list[float] | None = None) -> list[dict[str
     ]
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def _evidence(*, leader_rows, leader_history, leader_groups=None, sector_rows=None, industry_rows=None):
     return build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -48,6 +66,7 @@ def _evidence(*, leader_rows, leader_history, leader_groups=None, sector_rows=No
         trade_traction={"state": "supports"},
         leader_history=leader_history,
         leader_groups=leader_groups,
+        as_of=_reading_date(leader_history),
     )
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import json
 from pathlib import Path
 import unittest
@@ -9,6 +10,9 @@ from scripts.minervini.market_evidence import build_market_evidence
 
 
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "market_evidence"
+# The session these fixtures were taken at. No leader history is handed in here, so it
+# reaches nothing but the group growth window, which has no names to count.
+READING_DATE = date(2026, 8, 14)
 
 
 class MarketEvidenceTests(unittest.TestCase):
@@ -24,6 +28,7 @@ class MarketEvidenceTests(unittest.TestCase):
             industry_rows=[],
             leader_rows=[],
             trade_traction={"state": "positive"},
+            as_of=READING_DATE,
         )
 
         snapshot = evaluate_market_snapshot(evidence)
@@ -44,6 +49,7 @@ class MarketEvidenceTests(unittest.TestCase):
             industry_rows=[],
             leader_rows=[],
             trade_traction={"state": "positive"},
+            as_of=READING_DATE,
         )
 
         sections = evidence["breadth"]["sections"]
@@ -62,6 +68,7 @@ class MarketEvidenceTests(unittest.TestCase):
             industry_rows=[],
             leader_rows=[],
             trade_traction={"state": "positive"},
+            as_of=READING_DATE,
         )
 
         sections = evidence["breadth"]["sections"]
@@ -79,6 +86,7 @@ class MarketEvidenceTests(unittest.TestCase):
             industry_rows=[],
             leader_rows=[],
             trade_traction={"state": "positive"},
+            as_of=READING_DATE,
         )
 
         sections = evidence["breadth"]["sections"]
@@ -96,6 +104,7 @@ class MarketEvidenceTests(unittest.TestCase):
             industry_rows=self.rs_rows["industries"],
             leader_rows=self.rs_rows["leaders"],
             trade_traction={"state": "constructive"},
+            as_of=READING_DATE,
         )
 
         technology = evidence["sectors"][0]

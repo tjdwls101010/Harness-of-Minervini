@@ -18,10 +18,14 @@ from datetime import timedelta
 from typing import Any
 
 
-# The 52 is the sources' own word -- "52-week high", "the 52-week-low list". Seven days a
-# week is the calendar's, and not a convention this harness could have registered otherwise:
-# 52 weeks is 364 days, one short of a year, and that is the duration the phrase names.
-DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * 7
+# Seven days a week is the calendar's, and not a convention this harness could have
+# registered otherwise. `convention.trading_week` registers the other conversion -- five
+# sessions -- and the two are not interchangeable: a week of a stock's own bars is what
+# bounds a flag or a base, and a week of days is what separates two dates.
+DAYS_IN_A_WEEK = 7
+# The 52 is the sources' own word -- "52-week high", "the 52-week-low list". 52 weeks is
+# 364 days, one short of a year, and that is the duration the phrase names.
+DAYS_IN_THE_YEAR_THE_SOURCES_NAME = 52 * DAYS_IN_A_WEEK
 
 
 def year_window_start(moments: Sequence[Any], end: int) -> int | None:
@@ -53,5 +57,34 @@ def year_window_start(moments: Sequence[Any], end: int) -> int | None:
         return None
     for index in range(end + 1):
         if moments[index] >= boundary:
+            return index
+    return None
+
+
+def session_at_or_before(moments: Sequence[Any], target: Any) -> int | None:
+    """Index of the latest moment at or before ``target``, or nothing.
+
+    What a name answers with when it is asked about a date. Several names read at one date
+    is the only way their counts add up to anything: a window stated in weeks addresses a
+    moment they share, and stepping each of them back a fixed number of its own bars walks
+    them to different moments -- 28 days for a name that trades every session, 60 for one
+    whose sessions were thinned.
+
+    At or before, because a completed-bar harness cannot read a session that had not closed.
+    A date the history does not reach is nothing rather than its earliest bar, for the same
+    reason the year window refuses a short history: the reading would be taken somewhere
+    other than where it says it was.
+
+    Ordered oldest to newest is the caller's guarantee; out of order, this returns nothing.
+    """
+
+    if not moments:
+        return None
+    if any(moments[index] > moments[index + 1] for index in range(len(moments) - 1)):
+        return None
+    if moments[0] > target:
+        return None
+    for index in range(len(moments) - 1, -1, -1):
+        if moments[index] <= target:
             return index
     return None

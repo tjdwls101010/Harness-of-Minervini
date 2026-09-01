@@ -85,8 +85,16 @@ class SnapshotCitationTests(unittest.TestCase):
         )
 
     def test_the_convention_that_sized_the_growth_window_is_cited_beside_the_count(self) -> None:
+        """One convention sizes it now, and the trading week is not it.
+
+        The growth window is four weeks of calendar time rather than four weeks of a stock's
+        own sessions, so `convention.trading_week` no longer converts anything here. The
+        registry never expected the citation either: its consumers are `ticker.power-play`,
+        so a snapshot naming it was already citing a claim it was not registered for.
+        """
+
         self.assertIn("convention.group_member_reading", self.payload["doctrine_ids"])
-        self.assertIn("convention.trading_week", self.payload["doctrine_ids"])
+        self.assertNotIn("convention.trading_week", self.payload["doctrine_ids"])
 
     def test_every_cited_claim_resolves_in_the_registry(self) -> None:
         for claim_id in self.payload["doctrine_ids"]:

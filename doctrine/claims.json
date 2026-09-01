@@ -12289,13 +12289,15 @@
         "rs_group_ranking",
         "rs_market_leaders",
         "current_classification",
-        "price_history"
+        "price_history",
+        "as_of_date"
       ],
       "rule": {
-        "summary": "The RS source ranks groups by an average and publishes no membership, so the only names the harness can place inside a group are the market-wide ranked leaders it already read. Every group reading is therefore taken over that sample and says so; it is not a census of the group. The source says a growing number of names making new highs signals a group advance and names no window to measure the growth over, so the harness compares the count now with the count one leader-confirmation window earlier -- the low end of the 4-to-8-week window the same corpus gives for a new bull market's leaders to reveal themselves.",
+        "summary": "The RS source ranks groups by an average and publishes no membership, so the only names the harness can place inside a group are the market-wide ranked leaders it already read. Every group reading is therefore taken over that sample and says so; it is not a census of the group. The source says a growing number of names making new highs signals a group advance and names no window to measure the growth over, so the harness compares the count at the reading's as-of date with the count one leader-confirmation window of calendar time earlier, each name answering with the last session it had on or before each date -- the low end of the 4-to-8-week window the same corpus gives for a new bull market's leaders to reveal themselves.",
         "constraints": [
           "read group membership only from a current classification snapshot",
-          "name the sample the count was taken over alongside the count"
+          "name the sample the count was taken over alongside the count",
+          "take both ends of the growth count at one pair of dates rather than at an offset into each name's own bars"
         ]
       },
       "thresholds": {},
@@ -12304,7 +12306,7 @@
           "value": 4,
           "unit": "weeks",
           "affects_verdict": true,
-          "note": "The low end of market.new_bull_leaders_first_weeks, converted to sessions through convention.trading_week. It decides which earlier count 'growing' is measured against, and a different length would move that comparison, so it is registered rather than written into the module."
+          "note": "The low end of market.new_bull_leaders_first_weeks, measured on the calendar as that many times seven days back from the reading's own as-of date. It decides which earlier count 'growing' is measured against, and a different length would move that comparison, so it is registered rather than written into the module. It is deliberately not routed through convention.trading_week: that conversion turns a source's weeks into a stock's own completed sessions, which is what bounds a flag or a base, and this window instead addresses a moment several names have to answer for at once. A fixed count of sessions walks a name whose sessions were thinned much further back than a liquid one, and the two counts stop being comparable."
         }
       },
       "failure": {

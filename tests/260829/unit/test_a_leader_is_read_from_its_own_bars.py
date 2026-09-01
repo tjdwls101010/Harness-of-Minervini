@@ -12,6 +12,7 @@ how deep its correction from the last peak has run.
 
 from __future__ import annotations
 
+from datetime import date
 import unittest
 
 from scripts.minervini.market_evidence import build_market_evidence
@@ -33,6 +34,23 @@ def bars(closes: list[float], *, start: str = "2025-01-02") -> list[dict]:
     ]
 
 
+
+def _reading_date(history: dict[str, list[dict[str, object]]]) -> date:
+    """The last session the fixture carries -- the date the group reading is taken at.
+
+    A fixture with no dated session has no group reading to take, so any date will do there.
+    """
+
+    dated = []
+    for rows in history.values():
+        for row in rows:
+            try:
+                dated.append(date.fromisoformat(str(row.get("date"))))
+            except (TypeError, ValueError):
+                # A fixture that deliberately carries a broken date has no reading to take.
+                continue
+    return max(dated) if dated else date(2026, 1, 2)
+
 def evidence(history: dict[str, list[dict]], rows: list[dict] | None = None) -> dict:
     return build_market_evidence(
         qqq_daily_ohlcv=None,
@@ -42,6 +60,7 @@ def evidence(history: dict[str, list[dict]], rows: list[dict] | None = None) -> 
         leader_rows=rows if rows is not None else [{"ticker": ticker, "rs_rating": 99} for ticker in history],
         leader_history=history,
         trade_traction=None,
+        as_of=_reading_date(history),
     )
 
 
