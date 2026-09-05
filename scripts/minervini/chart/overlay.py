@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any
 import pandas as pd
 
-from . import _SPAN_LANDMARK_DATES
-
 
 # Timeframes whose bars are sessions. The Power Play panel is a daily chart of one span, so
 # everything that turns on "is a bar one session" answers the same for both.
@@ -96,126 +94,6 @@ def _draw_anchors(price_axis: Any, bars: pd.DataFrame, segmentation: dict[str, A
     if pivot_drawn:
         price_axis.axhline(float(anchors[-1]["price"]), color="#0b5cad", linewidth=0.8, linestyle="--", alpha=0.7, label="pivot")
     return drawn, pivot_drawn
-
-
-def _draw_power_play(
-    price_axis: Any,
-    volume_axis: Any,
-    bars: pd.DataFrame,
-    power_play: dict[str, Any] | None,
-    timeframe: str,
-) -> dict[str, list[str]]:
-    """Put the spans being asked about on the picture the volume clause is judged from.
-
-    Three things each question needs and the chart did not have. The advance: where it started
-    and the peak it ended on, because "commences" is a claim about a place in a move. The
-    baseline: the quiet window the ratio was divided by, shaded under the volume bars so the
-    comparison is one a person can make with their eyes instead of taking on faith. And the
-    heaviest session of the advance, marked on the volume panel rather than the price one --
-    the clause is about that bar's volume, and the price panel is not where anybody judges it.
-
-    Every span the capability has an open question about is drawn, because a chain of tops is
-    asked about one at a time and a reader answering the third one needs to see the third one.
-    Drawn by landmark rather than by span, though: a chain is usually one advance read to
-    several tops, so the anchor, the baseline and the heaviest session are the same bar in
-    every reading. Per span, the picture stacked identical marks on identical pixels and the
-    legend said the same sentence twice with a different date after it.
-    """
-    spans = (power_play or {}).get("spans") or []
-    # One list per landmark, so a landmark the question never carried is an empty list rather
-    # than an absence a reader has to guess the cause of.
-    drawn: dict[str, list[str]] = {name: [] for name in _SPAN_LANDMARK_DATES}
-    if not spans:
-        return drawn
-
-    drawn.update(_shade_baselines(volume_axis, bars, spans, timeframe))
-
-    # A landmark earns a date in its label only when the readings disagree about where it is.
-    marks = _marks(spans, bars, timeframe, "advance_anchor_date")
-    for stamp, days, _readings in marks:
-        # Where the advance began is a date, not a price, and a marker sitting at that bar's
-        # low is a tick lost among three years of candles -- on a real chart it was invisible,
-        # which is the one landmark "commences on huge volume" is a claim about. A rule down
-        # the whole panel reads at any scale, and with the star at the other end the move is
-        # bracketed rather than dotted.
-        #
-        # Named for what the anchor is rather than for what the rule looks like it means. The
-        # measurement reads the advance from the session *after* this one -- the anchor is by
-        # construction the last quiet bar -- so a rule labelled "advance begins" put the start
-        # of the move one session early, on exactly the judgment the reader is here to make.
-        #
-        # And "this session" only where the bars are sessions. A weekly bar is five of them, so
-        # the rule stands on the week that holds the anchor rather than on the anchor: on a real
-        # EDRY render the anchor was 2026-07-01 and the rule sat on the bar labelled 2026-07-03,
-        # telling a reader the move commenced two sessions after it did. The ratio already
-        # declines to state a multiple here for the same reason; the label had not caught up.
-        price_axis.axvline(
-            stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8,
-            label=(
-                f"advance begins after this session{_names(marks, days)}"
-                if timeframe in _BY_SESSION
-                else f"advance begins after {', '.join(days)}, inside this week"
-            ),
-        )
-        drawn["advance_anchor_date"].extend(days)
-
-    # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
-    # is a detected swing high -- on MRNA the two were the same bar at the same price -- and a
-    # filled marker drawn afterwards covered the blue one completely while the manifest went on
-    # reporting that the anchor had been drawn.
-    for date_field, price_field, marker, label, edge in (
-        ("peak_date", "peak_high", "*", "advance peak", max),
-        ("flag_low_date", "flag_low", "x", "flag low", min),
-    ):
-        marks = _marks(spans, bars, timeframe, date_field)
-        for stamp, days, readings in marks:
-            # One mark for the bar, so it goes where that bar's readings reached: the highest of
-            # the tops merged into it, the lowest of the flag lows. Any other choice draws a
-            # star under a candle whose high is one of the very readings it stands for.
-            levels = [float(span[price_field]) for span in readings if span.get(price_field) is not None]
-            level = edge(levels) if levels else float(bars.loc[stamp, "Low"])
-            price_axis.plot(
-                [stamp], [level], marker=marker, color="#7a5af5", markersize=13, linestyle="none",
-                markerfacecolor="none", markeredgewidth=1.6, zorder=1.5,
-                label=f"{label}{_names(marks, days)}",
-            )
-            drawn[date_field].extend(days)
-
-    marks = _marks(spans, bars, timeframe, "advance_peak_volume_date")
-    for stamp, days, readings in marks:
-        # The ratio and the window it was divided by, together. The multiple is a claim about a
-        # division, so agreeing on the answer is not enough: two readings that used different
-        # quiet windows can land on the same number, and printing it beside a mark that stands
-        # for both puts two shades under one arithmetic the reader is invited to check.
-        divisions = {
-            (
-                span["advance_peak_volume_ratio"],
-                span.get("baseline_first_session"),
-                span.get("baseline_last_session"),
-            )
-            for span in readings
-            if span.get("advance_peak_volume_ratio") is not None
-        }
-        # The ratio belongs on the daily picture and only there. It divides one session's
-        # volume by a session baseline, and a weekly bar is a sum of five -- printing "6.0x"
-        # beside a weekly bar that towers over the ones after it invites the reader to check
-        # the arithmetic against bars it was never computed from. The week is still marked,
-        # because the weekly is read first and knowing which week holds the event is what sends
-        # a reader to the right place on the daily. And readings that divided by different
-        # baselines print no ratio either: one number beside a mark that stands for two of them
-        # names neither.
-        if timeframe in _BY_SESSION and len(divisions) == 1:
-            # "x baseline" reads as the shade, and the shade is not what it divided by. The
-            # median is, and it is now drawn, so the label names the line rather than the window.
-            label = f"heaviest advance session ({_multiple(divisions.pop()[0])}x baseline median)"
-        else:
-            label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
-        volume_axis.plot(
-            [stamp], [float(bars.loc[stamp, "Volume"])], marker="v", color="#7a5af5",
-            markersize=9, linestyle="none", label=f"{label}{_names(marks, days)}",
-        )
-        drawn["advance_peak_volume_date"].extend(days)
-    return drawn
 
 
 def _multiple(ratio: float) -> str:

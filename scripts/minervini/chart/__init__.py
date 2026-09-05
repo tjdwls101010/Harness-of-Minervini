@@ -296,9 +296,235 @@ def _power_play_spans(daily: pd.DataFrame, input_sha256: str) -> dict[str, Any]:
     }
 
 
+def _place_clear_of_the_marks(axis: Any, *, also: Sequence[Any] = ()) -> None:
+    """Put the legend somewhere it does not cover the landmarks it names.
+
+    A legend is the only thing carrying a mark back to the question it belongs to, so one
+    sitting on the mark costs the reader both. Ordinary bars and candles are a different matter:
+    seven hundred of them fill the panel and a legend sits over some wherever it goes. `also` is
+    for the ones that are not marks and still may not be covered -- the tallest bar of the
+    volume panel, which is what the eye reaches for when checking a multiple.
+
+    Tried rather than computed, because where a legend fits depends on how large it is, and it
+    is not measurable until it has been drawn somewhere. Falling through every corner it goes
+    above the panel, which is clear of the marks by construction -- and is measured too, because
+    a legend wider than the panel runs off the side of the page there, taking its own last entry
+    and the axis labels with it. A picture that cannot be read at the edge is no better than one
+    whose mark is covered, so the last resort is back inside, in the corner it fits in.
+    """
+
+    marks = [line for line in axis.lines if line.get_marker() not in (None, "None", "none", "")]
+    marks.extend(also)
+    figure = axis.get_figure()
+    for corner in _LEGEND_CORNERS:
+        legend = axis.legend(loc=corner, fontsize=8, framealpha=0.85)
+        figure.canvas.draw()
+        box = legend.get_window_extent()
+        if not any(box.overlaps(mark.get_window_extent()) for mark in marks):
+            return
+    # Anchored from the right, because the left is where the axis writes its own scale -- the
+    # `1e7` above a volume panel -- and a legend starting there covers the exponent that says
+    # what every bar under it is worth.
+    for columns, size in ((2, 8), (1, 8), (1, 7)):
+        legend = axis.legend(
+            loc="lower right", bbox_to_anchor=(1, 1.01), fontsize=size,
+            framealpha=0.85, ncol=columns,
+        )
+        figure.canvas.draw()
+        scale = axis.get_yaxis().get_offset_text()
+        clear_of_the_scale = not (
+            scale.get_text() and legend.get_window_extent().overlaps(scale.get_window_extent())
+        )
+        if _inside(legend.get_window_extent(), figure.bbox) and clear_of_the_scale:
+            return
+    # Nothing fits and something has to be drawn: a legend the reader must scroll past is worse
+    # than one they must look around, so the last resort is back inside at the smallest size.
+    axis.legend(loc="upper left", fontsize=7, framealpha=0.85)
+
+def _render_png(bars: pd.DataFrame, path: Path, ticker: str, timeframe: str, as_of: date, segmentation: dict[str, Any] | None = None, power_play: dict[str, Any] | None = None) -> tuple[list[str], bool, dict[str, list[str]]]:
+    figure, (price_axis, volume_axis) = plt.subplots(
+        2,
+        1,
+        figsize=(12, 7),
+        sharex=True,
+        gridspec_kw={"height_ratios": (3, 1)},
+        layout="constrained",
+    )
+    try:
+        dates = mdates.date2num(bars.index.to_pydatetime())
+        width = _bar_width(timeframe)
+        colors = np.where(bars["Close"].to_numpy() >= bars["Open"].to_numpy(), "#18794e", "#b42318")
+        for position, (_, row), color in zip(dates, bars.iterrows(), colors, strict=True):
+            price_axis.vlines(position, row["Low"], row["High"], color=color, linewidth=0.8)
+            body_low = min(row["Open"], row["Close"])
+            # A floor in dollars is a floor at a different size on every stock. On a five-cent
+            # name it drew a body a fifth taller than the session's whole range, and the axis
+            # stretched to fit a candle that never traded -- on the picture a person approves a
+            # base's tightness from. The floor is a fraction of the bar's own range instead, so
+            # a doji stays a doji at any price.
+            body_height = max(abs(row["Close"] - row["Open"]), (row["High"] - row["Low"]) * 0.03)
+            # And kept inside the session it belongs to. A doji whose open and close sit at the
+            # high got its minimum body drawn upward from there, three percent of the range
+            # above a price the stock never traded -- on the picture a person approves a base's
+            # tightness from, where the highs are exactly what they are reading.
+            body_low = min(body_low, row["High"] - body_height)
+            price_axis.add_patch(Rectangle((position - width / 2, body_low), width, body_height, facecolor=color, edgecolor=color, linewidth=0.6))
+        for label, values in _price_overlays(bars["Close"], timeframe).items():
+            if values.notna().any():
+                price_axis.plot(bars.index, values, linewidth=0.9, label=label)
+        drawn, pivot_drawn = _draw_anchors(price_axis, bars, segmentation, timeframe)
+        volume_axis.bar(bars.index, bars["Volume"], width=width, color=colors, alpha=0.8)
+        span_drawn = _draw_power_play(price_axis, volume_axis, bars, power_play, timeframe)
+        price_axis.set_title(f"{ticker} {_PANEL_TITLES[timeframe]} — as of {as_of.isoformat()}")
+        price_axis.set_ylabel("Price")
+        volume_axis.set_ylabel("Volume")
+        # Headroom above the tallest bar, because the mark for the heaviest advance session
+        # sits on top of it. Left to autoscale, the axis stops at that bar and the triangle is
+        # cut in half by the border -- and it is cut on exactly the session the panel is asking
+        # about, since the heaviest session is the tallest bar whenever the baseline is quiet.
+        top = float(bars["Volume"].max()) if len(bars) else 0.0
+        if top > 0:
+            volume_axis.set_ylim(0, top * 1.12)
+        price_axis.grid(axis="y", alpha=0.25)
+        volume_axis.grid(axis="y", alpha=0.25)
+        # Both legends here rather than where their marks are drawn, because placing one means
+        # measuring it against a figure that exists, and only this function has one.
+        for axis, also in (
+            (price_axis, ()),
+            (volume_axis, _the_volume_being_judged(volume_axis, bars, power_play["spans"])),
+        ):
+            if axis.get_legend_handles_labels()[0]:
+                _place_clear_of_the_marks(axis, also=also)
+        volume_axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+        figure.autofmt_xdate(rotation=30, ha="right")
+        _atomic_figure(figure, path)
+        return drawn, pivot_drawn, span_drawn
+    finally:
+        plt.close(figure)
+
+def _draw_power_play(
+    price_axis: Any,
+    volume_axis: Any,
+    bars: pd.DataFrame,
+    power_play: dict[str, Any] | None,
+    timeframe: str,
+) -> dict[str, list[str]]:
+    """Put the spans being asked about on the picture the volume clause is judged from.
+
+    Three things each question needs and the chart did not have. The advance: where it started
+    and the peak it ended on, because "commences" is a claim about a place in a move. The
+    baseline: the quiet window the ratio was divided by, shaded under the volume bars so the
+    comparison is one a person can make with their eyes instead of taking on faith. And the
+    heaviest session of the advance, marked on the volume panel rather than the price one --
+    the clause is about that bar's volume, and the price panel is not where anybody judges it.
+
+    Every span the capability has an open question about is drawn, because a chain of tops is
+    asked about one at a time and a reader answering the third one needs to see the third one.
+    Drawn by landmark rather than by span, though: a chain is usually one advance read to
+    several tops, so the anchor, the baseline and the heaviest session are the same bar in
+    every reading. Per span, the picture stacked identical marks on identical pixels and the
+    legend said the same sentence twice with a different date after it.
+    """
+    spans = (power_play or {}).get("spans") or []
+    # One list per landmark, so a landmark the question never carried is an empty list rather
+    # than an absence a reader has to guess the cause of.
+    drawn: dict[str, list[str]] = {name: [] for name in _SPAN_LANDMARK_DATES}
+    if not spans:
+        return drawn
+
+    drawn.update(_shade_baselines(volume_axis, bars, spans, timeframe))
+
+    # A landmark earns a date in its label only when the readings disagree about where it is.
+    marks = _marks(spans, bars, timeframe, "advance_anchor_date")
+    for stamp, days, _readings in marks:
+        # Where the advance began is a date, not a price, and a marker sitting at that bar's
+        # low is a tick lost among three years of candles -- on a real chart it was invisible,
+        # which is the one landmark "commences on huge volume" is a claim about. A rule down
+        # the whole panel reads at any scale, and with the star at the other end the move is
+        # bracketed rather than dotted.
+        #
+        # Named for what the anchor is rather than for what the rule looks like it means. The
+        # measurement reads the advance from the session *after* this one -- the anchor is by
+        # construction the last quiet bar -- so a rule labelled "advance begins" put the start
+        # of the move one session early, on exactly the judgment the reader is here to make.
+        #
+        # And "this session" only where the bars are sessions. A weekly bar is five of them, so
+        # the rule stands on the week that holds the anchor rather than on the anchor: on a real
+        # EDRY render the anchor was 2026-07-01 and the rule sat on the bar labelled 2026-07-03,
+        # telling a reader the move commenced two sessions after it did. The ratio already
+        # declines to state a multiple here for the same reason; the label had not caught up.
+        price_axis.axvline(
+            stamp, color="#7a5af5", linewidth=1.1, linestyle="--", alpha=0.8,
+            label=(
+                f"advance begins after this session{_names(marks, days)}"
+                if timeframe in _BY_SESSION
+                else f"advance begins after {', '.join(days)}, inside this week"
+            ),
+        )
+        drawn["advance_anchor_date"].extend(days)
+
+    # Hollow, and behind the swing anchors rather than on top of them. A Power Play peak often
+    # is a detected swing high -- on MRNA the two were the same bar at the same price -- and a
+    # filled marker drawn afterwards covered the blue one completely while the manifest went on
+    # reporting that the anchor had been drawn.
+    for date_field, price_field, marker, label, edge in (
+        ("peak_date", "peak_high", "*", "advance peak", max),
+        ("flag_low_date", "flag_low", "x", "flag low", min),
+    ):
+        marks = _marks(spans, bars, timeframe, date_field)
+        for stamp, days, readings in marks:
+            # One mark for the bar, so it goes where that bar's readings reached: the highest of
+            # the tops merged into it, the lowest of the flag lows. Any other choice draws a
+            # star under a candle whose high is one of the very readings it stands for.
+            levels = [float(span[price_field]) for span in readings if span.get(price_field) is not None]
+            level = edge(levels) if levels else float(bars.loc[stamp, "Low"])
+            price_axis.plot(
+                [stamp], [level], marker=marker, color="#7a5af5", markersize=13, linestyle="none",
+                markerfacecolor="none", markeredgewidth=1.6, zorder=1.5,
+                label=f"{label}{_names(marks, days)}",
+            )
+            drawn[date_field].extend(days)
+
+    marks = _marks(spans, bars, timeframe, "advance_peak_volume_date")
+    for stamp, days, readings in marks:
+        # The ratio and the window it was divided by, together. The multiple is a claim about a
+        # division, so agreeing on the answer is not enough: two readings that used different
+        # quiet windows can land on the same number, and printing it beside a mark that stands
+        # for both puts two shades under one arithmetic the reader is invited to check.
+        divisions = {
+            (
+                span["advance_peak_volume_ratio"],
+                span.get("baseline_first_session"),
+                span.get("baseline_last_session"),
+            )
+            for span in readings
+            if span.get("advance_peak_volume_ratio") is not None
+        }
+        # The ratio belongs on the daily picture and only there. It divides one session's
+        # volume by a session baseline, and a weekly bar is a sum of five -- printing "6.0x"
+        # beside a weekly bar that towers over the ones after it invites the reader to check
+        # the arithmetic against bars it was never computed from. The week is still marked,
+        # because the weekly is read first and knowing which week holds the event is what sends
+        # a reader to the right place on the daily. And readings that divided by different
+        # baselines print no ratio either: one number beside a mark that stands for two of them
+        # names neither.
+        if timeframe in _BY_SESSION and len(divisions) == 1:
+            # "x baseline" reads as the shade, and the shade is not what it divided by. The
+            # median is, and it is now drawn, so the label names the line rather than the window.
+            label = f"heaviest advance session ({_multiple(divisions.pop()[0])}x baseline median)"
+        else:
+            label = "week of the heaviest advance session" if timeframe == "weekly" else "heaviest advance session"
+        volume_axis.plot(
+            [stamp], [float(bars.loc[stamp, "Volume"])], marker="v", color="#7a5af5",
+            markersize=9, linestyle="none", label=f"{label}{_names(marks, days)}",
+        )
+        drawn["advance_peak_volume_date"].extend(days)
+    return drawn
+
+
 from .manifest import ArtifactNameTaken, RENDERER_VERSION, UnrenderableHistory, UnusableOutputDirectory, _PANEL_TITLES, _UNUSABLE, _atomic_json, _inside, _leave_only_this_render_under_the_name, _refuse_a_taken_name, _release, _reserve_the_name, _still_holding, _take_back
-from .overlay import _BY_SESSION, _SPAN_CONTEXT_SESSIONS, _bar_width, _containing_bar, _draw_anchors, _draw_power_play, _marks, _multiple, _names, _price_overlays, _shade_baselines, _span_window
-from .render import _LEGEND_CORNERS, _REQUIRED_COLUMNS, _TICKER_PATTERN, _as_of_date, _atomic_figure, _completed_daily, _place_clear_of_the_marks, _render_png, _the_volume_being_judged, _ticker, _week_in_progress, _weekly_bars
+from .overlay import _BY_SESSION, _SPAN_CONTEXT_SESSIONS, _bar_width, _containing_bar, _draw_anchors, _marks, _multiple, _names, _price_overlays, _shade_baselines, _span_window
+from .render import _LEGEND_CORNERS, _REQUIRED_COLUMNS, _TICKER_PATTERN, _as_of_date, _atomic_figure, _completed_daily, _the_volume_being_judged, _ticker, _week_in_progress, _weekly_bars
 
 
 __all__ = ["RENDERER_VERSION", "UnrenderableHistory", "render_chart_artifacts"]
