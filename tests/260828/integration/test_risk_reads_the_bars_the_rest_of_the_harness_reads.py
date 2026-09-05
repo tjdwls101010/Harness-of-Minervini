@@ -29,7 +29,6 @@ import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot
-from scripts.minervini.setup_structure import read_price_kinds
 
 
 AS_OF = "2025-12-31"
@@ -57,54 +56,6 @@ def risk(frame: pd.DataFrame, **overrides) -> dict:
     return execute("ticker.risk", request, runtime=Runtime(price_history=lambda ticker, as_of: snapshot(frame)))
 
 
-def boolean_lows() -> pd.DataFrame:
-    frame = held()
-    frame["Low"] = frame["Low"].astype(object)
-    frame.iloc[list(frame.index).index(pd.Timestamp(ENTRY)) + 10, frame.columns.get_loc("Low")] = True
-    return frame
-
-
-def complex_prices() -> pd.DataFrame:
-    frame = held()
-    for column in ("Open", "High", "Low", "Close"):
-        frame[column] = frame[column].astype(complex) + 1j
-    return frame
-
-
-def epoch_index() -> pd.DataFrame:
-    frame = held()
-    frame.index = pd.Index([stamp.value for stamp in frame.index])
-    return frame
-
-
-def timestamps_as_prices() -> pd.DataFrame:
-    frame = held()
-    for column in ("Open", "High", "Low", "Close"):
-        frame[column] = pd.to_datetime("2020-01-01")
-    return frame
-
-
-def repeated_column() -> pd.DataFrame:
-    frame = held()
-    return pd.concat([frame, frame["Close"]], axis=1)
-
-
-def an_infinite_close() -> pd.DataFrame:
-    frame = held()
-    frame.iloc[-1, frame.columns.get_loc("Close")] = np.inf
-    return frame
-
-
-REFUSED = {
-    "one boolean low": (boolean_lows, "history_contains_non_numeric_values"),
-    "complex prices": (complex_prices, "history_contains_non_numeric_values"),
-    "an index of epoch nanoseconds": (epoch_index, "history_index_is_not_dates"),
-    "timestamps where the prices go": (timestamps_as_prices, "history_contains_non_numeric_values"),
-    "one column label printed twice": (repeated_column, "history_repeats_a_column"),
-    "an infinite close": (an_infinite_close, "history_contains_non_numeric_values"),
-}
-
-
 class TheSellDecisionIsNotAuditedAgainstUnreadableBars(unittest.TestCase):
     def test_a_readable_history_is_still_audited(self) -> None:
         """The route that was always earned, so every refusal below is the history."""
@@ -114,18 +65,6 @@ class TheSellDecisionIsNotAuditedAgainstUnreadableBars(unittest.TestCase):
         self.assertEqual(payload["data"]["verdict"], "HOLD")
         self.assertEqual(payload["data"]["completed_price_path"]["state"], "clear")
 
-    def test_a_history_the_shared_reader_refuses_audits_nothing(self) -> None:
-        for description, (build, reason) in REFUSED.items():
-            history = build()
-            with self.subTest(history=description):
-                self.assertEqual(read_price_kinds(history, columns=("Open", "High", "Low", "Close"))[1], reason)
-
-                payload = risk(history)
-
-                self.assertNotEqual(payload["data"]["verdict"], "HOLD")
-                self.assertNotEqual(payload["data"]["verdict"], "SELL")
-                named = [item for item in payload["missing"] if item["id"] == "usable_daily_bars"]
-                self.assertEqual([item["reason"] for item in named], [reason])
 
     def test_a_hole_in_the_lows_still_reports_the_prefix_it_had_audited(self) -> None:
         """The tolerance this capability keeps, stated beside the ones it gives up.

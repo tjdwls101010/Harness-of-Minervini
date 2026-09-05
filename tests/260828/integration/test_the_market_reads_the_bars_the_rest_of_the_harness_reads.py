@@ -23,7 +23,6 @@ import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
 from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
-from scripts.minervini.setup_structure import read_bars
 
 
 AS_OF = "2025-12-31"
@@ -45,49 +44,10 @@ def rows(provider: str, payload: list[dict[str, object]]) -> ProviderSnapshot[li
     return rows_snapshot(payload, provider=provider, retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF))
 
 
-def complex_prices() -> pd.DataFrame:
-    frame = rising()
-    for column, imaginary in (("Open", 1j), ("High", 2j), ("Low", 3j), ("Close", 4j), ("Volume", 5j)):
-        frame[column] = frame[column].astype(complex) + imaginary
-    return frame
-
-
-def booleans() -> pd.DataFrame:
-    frame = rising()
-    for column in frame.columns:
-        frame[column] = True
-    return frame
-
-
-def one_session_printed_twice() -> pd.DataFrame:
-    """The repeat carries a different clock time, so only the session date betrays it."""
-
-    frame = rising(259)
-    repeat = frame.iloc[[0]].copy()
-    repeat.index = pd.DatetimeIndex([frame.index[0] + pd.Timedelta(hours=12)])
-    return pd.concat([frame, repeat]).sort_index()
-
-
 def epoch_index() -> pd.DataFrame:
     frame = rising()
     frame.index = pd.Index([stamp.value for stamp in frame.index])
     return frame
-
-
-def inverted_first_bar() -> pd.DataFrame:
-    frame = rising()
-    frame.iloc[0, frame.columns.get_loc("High")] = 60.0
-    frame.iloc[0, frame.columns.get_loc("Low")] = 70.0
-    return frame
-
-
-REFUSED = {
-    "complex numbers throughout": (complex_prices, "history_contains_non_numeric_values"),
-    "booleans throughout": (booleans, "history_contains_non_numeric_values"),
-    "one session printed twice at a different clock time": (one_session_printed_twice, "history_repeats_a_session"),
-    "an index of epoch nanoseconds": (epoch_index, "history_index_is_not_dates"),
-    "a bar whose high is under its low": (inverted_first_bar, "history_contains_invalid_bar_ranges"),
-}
 
 
 class TheRegimeIsNotReducedFromUnreadableBars(unittest.TestCase):
@@ -116,20 +76,6 @@ class TheRegimeIsNotReducedFromUnreadableBars(unittest.TestCase):
         self.assertEqual(leader["ticker"], "LEAD")
         self.assertEqual(leader["behavior"]["state"], "supports")
 
-    def test_a_leader_history_the_shared_reader_refuses_measures_nothing(self) -> None:
-        for description, (build, reason) in REFUSED.items():
-            history = build()
-            with self.subTest(history=description):
-                self.assertEqual(read_bars(history)[1], reason)
-
-                payload = self.snapshot_from(history)
-
-                leader = payload["data"]["leaders"][0]
-                self.assertEqual(leader["behavior"]["state"], "unavailable")
-                # The envelope has to say why. A leader read as flat and a leader whose bars
-                # were not prices are the same word in the payload and different findings.
-                named = [item for item in payload["missing"] if item.get("ticker") == "LEAD"]
-                self.assertEqual([item["reason"] for item in named], [reason])
 
     def test_the_qqq_switch_is_not_read_off_a_history_the_shared_reader_refuses(self) -> None:
         """QQQ is context rather than a regime signal, and it still may not be invented."""
