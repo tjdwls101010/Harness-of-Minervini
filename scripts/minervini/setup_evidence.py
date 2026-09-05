@@ -20,6 +20,7 @@ from typing import Any
 
 import pandas as pd
 
+from .numbers import reported_deep as _reported
 from . import doctrine
 from .setup_measurements import measure
 from .setup_structure import completed_bars, resolve_structure
@@ -94,21 +95,6 @@ def _sessions_per_week() -> int:
 
 def _summary(claim_id: str) -> str:
     return str(doctrine.claim(claim_id)["rule"]["summary"])
-
-
-_REPORTED_PRECISION = 10
-
-
-def _reported(value: Any) -> Any:
-    """Round for the reader only; every comparison above ran on the measurement itself."""
-
-    if isinstance(value, float):
-        return round(value, _REPORTED_PRECISION)
-    if isinstance(value, list):
-        return [_reported(item) for item in value]
-    if isinstance(value, Mapping):
-        return {key: _reported(item) for key, item in value.items()}
-    return value
 
 
 def _observation(claim_id: str, state: str, measured: Any) -> dict[str, Any]:

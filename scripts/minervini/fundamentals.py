@@ -10,6 +10,8 @@ from datetime import date, timedelta
 import math
 from typing import Any, Mapping
 
+from .dates import parse_iso
+from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
 from . import doctrine
 
 
@@ -56,7 +58,6 @@ _ROE_VIEWS = (
     "practitioners.fundamentals.ritchie_never_roe_margins_secondary",
 )
 MARKET_REGIMES = ("bull", "neutral", "bear")
-_REPORTED_PRECISION = 10
 _QUARTERS_PER_YEAR = 4
 _STALE_HEADLINE = "latest_filed_quarter_has_no_year_over_year_pair"
 _FOUR_FILED_QUARTERS = "four_consecutive_filed_quarters"
@@ -182,12 +183,10 @@ def _require_source(evidence: Mapping[str, Any], expected: str, label: str) -> N
 
 
 def _parse_date(value: Any, field: str) -> date:
-    if not isinstance(value, str):
+    result = parse_iso(value)
+    if result is None:
         raise ValueError(f"{field} must be an ISO date.")
-    try:
-        return date.fromisoformat(value)
-    except ValueError as error:
-        raise ValueError(f"{field} must be an ISO date.") from error
+    return result
 
 
 def _eligible_filings(value: Any, as_of: date) -> list[dict[str, Any]]:

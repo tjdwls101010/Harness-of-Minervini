@@ -17,16 +17,12 @@ from __future__ import annotations
 import math
 
 from collections.abc import Mapping
-from copy import deepcopy
 from typing import Any
 
+from .states import SETUP_STATES, mapping as _mapping, state
 from . import doctrine
 
 
-_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete"}
-_FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid"}
-_WAIT = {"wait", "pending", "watch", "not_triggered"}
-_MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"}
 # Reported evidence carries no verdict by design: a band says where a measurement sat, a
 # marker says how far it is from a value the source declined to bound.
 _REPORTED = {"reported", "within_source_range", "beyond_source_range", "short_of_source_range"}
@@ -122,9 +118,9 @@ def _tactic_declarations(
         # A stated verdict goes by that word and by nothing else. Reading an ungradeable one as
         # the good outcome is what let "state: not observed" arrive as a pass.
         state = _state(stated, default="")
-        if state in _FAIL or state in _WAIT:
+        if state in SETUP_STATES["fail"] or state in SETUP_STATES["wait"]:
             denied.append(condition)
-        elif state not in _PASS:
+        elif state not in SETUP_STATES["pass"]:
             owed.append(condition)
     return owed, denied, declared
 
@@ -160,27 +156,8 @@ def _tactic_conditions(tactic: str) -> tuple[str, ...]:
     )
 
 
-def _mapping(value: Any) -> dict[str, Any]:
-    return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
-
-
 def _state(value: Any, default: str = "unavailable") -> str:
-    if isinstance(value, bool):
-        return "pass" if value else "fail"
-    if isinstance(value, Mapping):
-        value = value.get("state", value.get("status"))
-    if value is None:
-        return default
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized in _PASS:
-        return "pass"
-    if normalized in _FAIL:
-        return "fail"
-    if normalized in _WAIT:
-        return "wait"
-    if normalized in _MISSING:
-        return "unavailable"
-    return default
+    return state(value, default, vocabulary=SETUP_STATES)
 
 
 def _precise_level(value: Any) -> dict[str, Any] | None:
@@ -352,11 +329,11 @@ def evaluate_setup(evidence: Mapping[str, Any]) -> dict[str, Any]:
             missing.append(claim_id)
             continue
         state = str(item.get("state", ""))
-        if state in _PASS:
+        if state in SETUP_STATES["pass"]:
             continue
-        if state in _FAIL:
+        if state in SETUP_STATES["fail"]:
             (failed if _rejects(claim_id) else unsatisfied).append(claim_id)
-        elif state in _MISSING:
+        elif state in SETUP_STATES["unavailable"]:
             missing.append(claim_id)
         else:
             unsatisfied.append(claim_id)

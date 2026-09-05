@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from .dates import parse_iso
 from .providers.nasdaq import SecurityRecord
 from .setup_structure import read_bars
 
@@ -79,12 +80,10 @@ def collect_same_industry_peer_rows(
 
 
 def _as_date(value: str) -> date:
-    if not isinstance(value, str):
-        raise ValueError("as_of must be an ISO date")
-    try:
-        return date.fromisoformat(value)
-    except ValueError as error:
-        raise ValueError("as_of must be an ISO date") from error
+    result = parse_iso(value)
+    if result is None:
+        raise ValueError(f"as_of must be an ISO date")
+    return result
 
 
 def _required_text(row: Mapping[str, Any], field: str) -> str:

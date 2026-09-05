@@ -10,10 +10,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
-import math
 import re
 from typing import Any
 
+from .dates import parse_iso
+from .numbers import finite_or_none
+from .numbers import reported as _reported
 from . import doctrine
 from .windows import DAYS_IN_A_WEEK, session_at_or_before, year_window_start
 
@@ -254,13 +256,7 @@ def _qqq_21ema_switch(bars: Iterable[Mapping[str, Any]] | None) -> dict[str, Any
 
 
 def _finite_number(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
+    return None if isinstance(value, bool) else finite_or_none(value)
 
 
 def _group_evidence(
@@ -704,7 +700,7 @@ def _session_date(value: Any) -> date | None:
     if isinstance(value, date):
         return value
     try:
-        return date.fromisoformat(str(value)[:10])
+        return parse_iso(str(value)[:10])
     except (ValueError, TypeError):
         return None
 
@@ -740,10 +736,6 @@ def _correction_depth(opens: list[float | None], highs: list[float], lows: list[
             deepest = max(deepest, (anchor - low) / anchor * 100)
         peak = high if peak is None else max(peak, high)
     return _reported(deepest)
-
-
-def _reported(value: float | None) -> float | None:
-    return None if value is None or not math.isfinite(value) else round(value, 10)
 
 
 def _basis(row: Mapping[str, Any]) -> dict[str, Any]:

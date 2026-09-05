@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from datetime import date
-import math
 from typing import Any
+
+from .numbers import finite as _number
 
 
 _US_EXCHANGES = frozenset({"NASDAQ", "NYSE", "NYSEAMERICAN", "NYSE ARCA", "CBOE", "IEX", "MEMX"})
@@ -226,24 +227,6 @@ def _same_instrument(row: Mapping[str, Any], target_id: str) -> bool:
 
 def _text(value: Any) -> str | None:
     return value if isinstance(value, str) and value and value == value.strip() else None
-
-
-def _number(value: Any) -> bool:
-    """A number a comparison can be made against, which `inf` and `nan` are not.
-
-    This is the layer that checks what the collector handed over, and it let an infinite
-    three-month return through to be ranked first and then to break the envelope's own
-    serialisation. A quantity that is not finite was not measured.
-    """
-
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return False
-    try:
-        return math.isfinite(value)
-    except OverflowError:
-        # An int too large to become a float. It is not finite in any sense this comparison
-        # needs, and raising here would trade a wrong number for no envelope at all.
-        return False
 
 
 __all__ = ["compare_same_industry_peers"]

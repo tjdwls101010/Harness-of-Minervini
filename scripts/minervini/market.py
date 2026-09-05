@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 import math
 from typing import Any
 
+from .states import MARKET_STATES as _SIGNAL_STATES
 from . import doctrine
 
 
@@ -20,18 +21,6 @@ _LEADER_MAJORITY = "market.bottoming_signal_checklist"
 # order both lists are published in.
 _VERDICT_SIGNALS = ("leader_traction", "trade_traction")
 _CONTEXT_SIGNALS = ("qqq_21ema_switch", "market_breadth")
-_SIGNAL_STATES = frozenset(
-    {
-        "supports",
-        "contradicts",
-        "mixed",
-        "observed",
-        "unavailable",
-        "needs_input",
-        "needs_chart",
-        "not_applicable",
-    }
-)
 _POSITIVE = frozenset({"on", "positive", "constructive", "favorable", "pass", "passed", "supports"})
 _NEGATIVE = frozenset({"off", "negative", "destructive", "unfavorable", "fail", "failed", "contradicts"})
 _GROUP_READINGS = ("new_highs", "striking_distance_names")
