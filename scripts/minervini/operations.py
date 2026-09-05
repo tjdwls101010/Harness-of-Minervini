@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sys
 import math
+from dataclasses import dataclass
 from datetime import date, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -237,45 +238,69 @@ def _doctrine_show(request: Mapping[str, Any]) -> dict[str, Any]:
     )
 
 
-def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
-    ticker = _ticker(request.get("ticker"))
-    clock = _clock(request.get("as_of"))
-    requested_as_of = clock.date.isoformat()
+@dataclass(frozen=True)
+class PriceRead:
+    capability: str
+    stub: Mapping[str, Any] | None = None
+    next_capabilities: list[str] | None = None
+    partial_extra: Callable[[SnapshotMeta], Mapping[str, Any]] | None = None
+
+
+def _price_read(
+    runtime: Runtime, request: Mapping[str, Any], clock: AnalysisClock, ticker: str, spec: PriceRead
+) -> tuple[ProviderSnapshot[Any] | None, dict[str, Any] | None, list[dict[str, Any]]]:
     try:
         prices = _cached_provider(
             runtime,
             request,
             clock,
-            capability="ticker.qualify",
+            capability=spec.capability,
             provider="yfinance",
             operation="daily_bars",
             params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, requested_as_of),
+            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
         )
     except ProviderUnavailable as error:
-        return envelope(
-            "ticker.qualify",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="unavailable",
-            data={"ticker": ticker, "eligibility_state": "incomplete"},
-            missing=[_missing_provider(error)],
-            next_capabilities=[],
-        )
+        if spec.stub is None:
+            raise
+        gap = _missing_provider(error)
+        prices = None
+        sources = []
+    else:
+        sources = [_source(prices.meta)]
+        if spec.stub is None:
+            return prices, None, sources
+        gap = _stale_price_gap(prices.meta)
+        if gap is None:
+            return prices, None, sources
+    data = {"ticker": ticker, **spec.stub}
+    kwargs = {}
+    if prices is not None:
+        kwargs["sources"] = sources
+        if spec.partial_extra is not None:
+            data.update(spec.partial_extra(prices.meta))
+    if spec.next_capabilities is not None:
+        kwargs["next_capabilities"] = spec.next_capabilities
+    return prices, envelope(
+        spec.capability,
+        request=_clean_request({**request, "ticker": ticker}),
+        as_of=_as_of(clock),
+        status="partial" if prices is not None else "unavailable",
+        data=data,
+        missing=[gap],
+        **kwargs,
+    ), sources
 
-    sources = [_source(prices.meta)]
-    stale_price = _stale_price_gap(prices.meta)
-    if stale_price is not None:
-        return envelope(
-            "ticker.qualify",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="partial",
-            data={"ticker": ticker, "eligibility_state": "incomplete", "price_as_of": prices.meta.as_of.isoformat() if prices.meta.as_of else None},
-            missing=[stale_price],
-            sources=sources,
-            next_capabilities=[],
-        )
+
+def _qualify(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
+    ticker = _ticker(request.get("ticker"))
+    clock = _clock(request.get("as_of"))
+    requested_as_of = clock.date.isoformat()
+    prices, gap, sources = _price_read(
+        runtime, request, clock, ticker, PriceRead("ticker.qualify", {"eligibility_state": "incomplete"}, next_capabilities=[], partial_extra=lambda meta: {"price_as_of": meta.as_of.isoformat() if meta.as_of else None})
+    )
+    if gap is not None:
+        return gap
     # Through the reader that owns what a usable history is, so the hard gate measures the same
     # bars the chart renders and the setup re-cuts. Its own reading coerced the closes and
     # dropped what would not coerce, which is the laundering that reading exists to stop: a
@@ -474,37 +499,11 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         "the overlay was drawn from",
         "the digest the overlay was computed from",
     )
-    try:
-        prices = _cached_provider(
-            runtime,
-            request,
-            clock,
-            capability="ticker.power-play",
-            provider="yfinance",
-            operation="daily_bars",
-            params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-        )
-    except ProviderUnavailable as error:
-        return envelope(
-            "ticker.power-play",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="unavailable",
-            data={"ticker": ticker, "power_play_state": "incomplete"},
-            missing=[_missing_provider(error)],
-        )
-    stale_price = _stale_price_gap(prices.meta)
-    if stale_price is not None:
-        return envelope(
-            "ticker.power-play",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="partial",
-            data={"ticker": ticker, "power_play_state": "incomplete"},
-            missing=[stale_price],
-            sources=[_source(prices.meta)],
-        )
+    prices, gap, _ = _price_read(
+        runtime, request, clock, ticker, PriceRead("ticker.power-play", {"power_play_state": "incomplete"})
+    )
+    if gap is not None:
+        return gap
     evidence = build_power_play_evidence(
         prices.data, chart_readings=readings, drawn_bars=drawn_bars, measured_bars=measured_bars
     )
@@ -714,37 +713,11 @@ def _power_play(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
 def _swings(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     ticker = _ticker(request.get("ticker"))
     clock = _clock(request.get("as_of"))
-    try:
-        prices = _cached_provider(
-            runtime,
-            request,
-            clock,
-            capability="ticker.swings",
-            provider="yfinance",
-            operation="daily_bars",
-            params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-        )
-    except ProviderUnavailable as error:
-        return envelope(
-            "ticker.swings",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="unavailable",
-            data={"ticker": ticker, "state": "unavailable", "anchors": []},
-            missing=[_missing_provider(error)],
-        )
-    stale_price = _stale_price_gap(prices.meta)
-    if stale_price is not None:
-        return envelope(
-            "ticker.swings",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="partial",
-            data={"ticker": ticker, "state": "unavailable", "anchors": []},
-            missing=[stale_price],
-            sources=[_source(prices.meta)],
-        )
+    prices, gap, _ = _price_read(
+        runtime, request, clock, ticker, PriceRead("ticker.swings", {"state": "unavailable", "anchors": []})
+    )
+    if gap is not None:
+        return gap
     chain = canonical_chain(prices.data)
     resolved = chain["state"] == "resolved"
     return envelope(
@@ -791,37 +764,11 @@ def _setup(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     # Before the provider, not after: a malformed request that reaches the network comes back as
     # a provider outage when the fault was the caller's, and pays for a fetch nobody can use.
     _refuse_unusable_setup_request(request)
-    try:
-        prices = _cached_provider(
-            runtime,
-            request,
-            clock,
-            capability="ticker.setup",
-            provider="yfinance",
-            operation="daily_bars",
-            params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-        )
-    except ProviderUnavailable as error:
-        return envelope(
-            "ticker.setup",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="unavailable",
-            data={"ticker": ticker, "setup_state": "incomplete"},
-            missing=[_missing_provider(error)],
-        )
-    stale_price = _stale_price_gap(prices.meta)
-    if stale_price is not None:
-        return envelope(
-            "ticker.setup",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="partial",
-            data={"ticker": ticker, "setup_state": "incomplete"},
-            missing=[stale_price],
-            sources=[_source(prices.meta)],
-        )
+    prices, gap, _ = _price_read(
+        runtime, request, clock, ticker, PriceRead("ticker.setup", {"setup_state": "incomplete"})
+    )
+    if gap is not None:
+        return gap
     swings = request.get("swing")
     entry = request.get("entry")
     evidence = build_setup_evidence(
@@ -1139,16 +1086,7 @@ def _fundamentals(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any
     provider_missing: list[dict[str, Any]] = []
     closes: dict[str, float | None] = {"last_close": None, "breakout_close": None}
     try:
-        prices = _cached_provider(
-            runtime,
-            request,
-            clock,
-            capability="ticker.fundamentals",
-            provider="yfinance",
-            operation="daily_bars",
-            params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-        )
+        prices, _, _ = _price_read(runtime, request, clock, ticker, PriceRead("ticker.fundamentals"))
     except ProviderUnavailable as error:
         provider_missing.append({**_missing_provider(error), "required": False})
     else:
@@ -1351,16 +1289,7 @@ def _peers(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
     completed_prices: dict[str, Any] = {}
     for symbol in symbols:
         try:
-            prices = _cached_provider(
-                runtime,
-                request,
-                clock,
-                capability="ticker.peers",
-                provider="yfinance",
-                operation="daily_bars",
-                params={"ticker": symbol},
-                fetch=lambda symbol=symbol: runtime.price_history(symbol, clock.date.isoformat()),
-            )
+            prices, _, _ = _price_read(runtime, request, clock, symbol, PriceRead("ticker.peers"))
         except ProviderUnavailable as error:
             missing = _missing_provider(error, required=symbol == ticker)
             missing["ticker"] = symbol
@@ -2647,16 +2576,7 @@ def _risk(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         }
     if mode == "active" and has_position_anchors and not supplied_price_path(evidence):
         try:
-            prices = _cached_provider(
-                runtime,
-                request,
-                clock,
-                capability="ticker.risk",
-                provider="yfinance",
-                operation="daily_bars",
-                params={"ticker": ticker},
-                fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-            )
+            prices, _, _ = _price_read(runtime, request, clock, ticker, PriceRead("ticker.risk"))
         except ProviderUnavailable as error:
             provider_missing.append({**_missing_provider(error), "required": not settled})
             # The blocks still travel with a verdict the request settled on its own, and they
@@ -2909,37 +2829,11 @@ def _chart(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
                 }
             ],
         )
-    try:
-        prices = _cached_provider(
-            runtime,
-            request,
-            clock,
-            capability="ticker.chart",
-            provider="yfinance",
-            operation="daily_bars",
-            params={"ticker": ticker},
-            fetch=lambda: runtime.price_history(ticker, clock.date.isoformat()),
-        )
-    except ProviderUnavailable as error:
-        return envelope(
-            "ticker.chart",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="unavailable",
-            data={"ticker": ticker},
-            missing=[_missing_provider(error)],
-        )
-    stale_price = _stale_price_gap(prices.meta)
-    if stale_price is not None:
-        return envelope(
-            "ticker.chart",
-            request=_clean_request({**request, "ticker": ticker}),
-            as_of=_as_of(clock),
-            status="partial",
-            data={"ticker": ticker},
-            missing=[stale_price],
-            sources=[_source(prices.meta)],
-        )
+    prices, gap, _ = _price_read(
+        runtime, request, clock, ticker, PriceRead("ticker.chart", {})
+    )
+    if gap is not None:
+        return gap
     output_dir = request.get("output_dir")
     if output_dir is not None and (not isinstance(output_dir, str) or not output_dir.strip()):
         raise RequestError("output_dir must be a non-empty path", "output_dir")
