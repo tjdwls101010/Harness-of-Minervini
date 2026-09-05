@@ -4,7 +4,7 @@
 
 This is the maintainers' design record for the v2 Harness of Minervini. It explains where behavior lives, why the runtime is shaped this way, and how to change it without duplicating contracts. It is not runtime market doctrine and must not be loaded during an analysis session.
 
-The approved implementation plan is `docs/plans/260817/harness-v2-greenfield-plan.md`. That plan is the decision-complete build record; this spec records the resulting architecture and maintenance invariants.
+This spec records the current architecture and maintenance invariants. Previous implementation plans and release histories remain in Git history; the retired `docs/` tree is not part of the maintained project.
 
 The product objective is an evidence-disciplined Minervini SEPA analyst for US-listed common stocks and ADRs that can assess the market, rank sector and industry leadership, discover candidates, analyze named tickers, and state conditional entry or active-position exit evidence. Portfolio allocation, position-size prescriptions, shorts, intraday trading, crypto, and non-US listings are outside scope.
 
@@ -29,7 +29,7 @@ The quality criterion is not imitation by prose volume. The harness must preserv
 | Capability names, summaries, arguments, defaults, limitations, status semantics, side effects, examples | `scripts/minervini/capabilities.py` and `scripts/minervini/cli.py` | Generate or expose through `capabilities`, `describe`, schema, and detailed leaf `--help`; do not mirror the catalog in Markdown. |
 | Executable doctrine claims, precedence, required inputs, failure and missing semantics, provenance | `doctrine/claims.json` through `scripts/minervini/doctrine.py` | Runtime skills use doctrine IDs and embodied principles; source attribution stays in the registry for audit rather than consuming analyst context. |
 | Envelope and provider contracts | `scripts/minervini/contracts.py` and `scripts/minervini/providers/` | Schemas and tests must agree with code; prose summarizes only the invariant. |
-| Detailed v2 decisions, migration order, and acceptance plan | `docs/plans/260817/harness-v2-greenfield-plan.md` | Do not convert the plan into runtime instructions. |
+| Current architecture and maintenance invariants; historical build decisions | `.claude/harness-spec.md`; Git history | Keep current design here and recover past plans from Git; neither is runtime doctrine. |
 | Historical source corpora and prototypes | `.tmp/` | Build-time material only; ignored, edit-denied, and forbidden at runtime. |
 
 The runtime skills deliberately do not cite books or maintain human-facing bibliographies. Their job is to make the analyst apply the normalized doctrine. Provenance remains machine-auditable in the doctrine registry, where it can support maintenance without bloating every analysis session.
@@ -111,17 +111,18 @@ The default ledger is `.state/research-ledger.sqlite3`, overridable by `MINERVIN
 | `scripts/minervini/cache.py` | Session-scoped atomic provider cache | Implemented and corruption/TTL/no-cache tested. |
 | `scripts/minervini/technical.py`, `eligibility.py` | Trend Template evidence and eligibility routing | Implemented with standard and recent-IPO fixtures. |
 | `scripts/minervini/setup_evidence.py`, `setup.py` | Deterministic observations plus explicit qualitative setup judgment | Implemented; absent chart judgment remains `needs_chart`. |
-| `scripts/minervini/fundamentals.py` | Filed-as-of growth, integrity, leadership, and Power Play handling | Implemented with original/amendment cutoff fixtures. |
+| `scripts/minervini/fundamentals/` | Filed-as-of growth, integrity, leadership, and Power Play handling | Implemented with original/amendment cutoff fixtures. |
 | `scripts/minervini/market_evidence.py`, `market.py` | Breadth, environmental context, group vectors, trade traction, and candidate scope | Implemented without a bullish weighted score. |
 | `scripts/minervini/peer_collection.py`, `peers.py` | Stable-identity same-industry evidence | Implemented for current taxonomy with exact RS/date and completed-price checks. |
+| `scripts/minervini/management_evidence/` | Structure, time, stop observations, and shared readings | Responsibilities split behind the existing public interface. |
 | `scripts/minervini/risk.py` | Final prospective and active-position reducers | Implemented with full completed stop-path, effective-date, recovered-breach, and missing-coverage tests. |
-| `scripts/minervini/chart.py` | Auditable chart artifact generation | Implemented with input hash and manifest verification. |
+| `scripts/minervini/chart/` | Auditable chart artifact generation | Implemented with input hash and manifest verification. |
 | `scripts/minervini/ledger.py` | Explicit research-state persistence | Implemented with non-creating reads and export tests. |
 | `scripts/minervini/runtime.py` | Replaceable provider dependencies and readiness probes | Extracted without changing runtime defaults. |
 | `scripts/minervini/stop_audit.py` | Completed stop-path audit and component attestation | Shares session-label handling with price readers. |
 | `scripts/minervini/numbers.py`, `dates.py`, `states.py` | Shared readings with distinct numeric, date, and state policies | Existing caller contracts preserved. |
 | `scripts/minervini/doctrine.py` | Indexed claim access, runtime discovery, and doctrine validation | `doctrine.list` exposes computability, roles, and consumers. |
-| `scripts/minervini/operations.py` | Provider/evaluator composition and envelope data | Implemented with cache and operation integration tests. |
+| `scripts/minervini/operations/` | Provider/evaluator composition and envelope data | Implemented with cache and operation integration tests. |
 | `scripts/minervini/contracts.py`, `capabilities.py`, `cli.py`, `schema_sync.py` | Public interface, help, metadata, schemas, and output envelope | Implemented and parity-tested. |
 
 ## Verification strategy
@@ -132,7 +133,7 @@ Required deterministic gates are: doctrine registry validation; all reducer unit
 
 Behavioral acceptance uses independent Codex runs over market, sector/industry, ticker qualification, setup, Power Play, same-industry comparison, active stop, missing evidence, point-in-time refusal, scope boundary, and side-effect prompts. Critical assertions require three independent passes, with an adversarial final synthesis checking for false BUY-READY, fabricated data, hidden portfolio sizing, and rail-driven overcalling.
 
-The final v2 suite contains 167 passing tests. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
+The initial v2 release contained 167 passing tests; the 2026-09-05 refactor finishes with 2,090. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
 
 Live smoke testing is limited to safe read-only provider and CLI paths. It verifies current integration but cannot replace frozen point-in-time contract tests. Network absence or source unavailability is reported honestly and is not treated as a deterministic failure of the doctrine engine.
 
@@ -156,6 +157,8 @@ Obsolete v1 runtime and design documents are removed after the v1 tag and releas
 
 When adding or changing a capability, first define or update the public test seam under the module’s directory in `tests/{unit,integration,contracts,doctrine}/`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
 
+Tests belong in module directories, never date directories. One file should change for one responsibility; the size contract warns above 1,000 runtime lines or 500 test lines. Split only when responsibilities differ, and record any retained exception with its reason in `tests/contracts/size/test_one_file_one_responsibility.py` (`risk.py` is the single current exception). Shared test inputs belong in the existing `tests` helpers.
+
 When changing doctrine, edit the normalized registry and its doctrine tests before changing a reducer. Preserve provenance and precedence in the registry. Add text to `CLAUDE.md` only if it is an always-on invariant; add text to a skill only if it changes task-specific judgment; put syntax and defaults in the interface.
 
 When adding a provider, declare present and historical support separately, use an injected or frozen raw fixture, retain source metadata and content hash, enforce the common as-of boundary, retry once, and represent unsupported reconstruction as typed unavailability. Never silently substitute one provider or formula for another.
@@ -166,4 +169,11 @@ Before accepting a harness change, run the focused RED/GREEN test, the complete 
 
 ## Change history
 
-Past entries live in [the change history archive](../docs/history/harness-spec-change-history.md). Add new entries here and move them to the archive at each release.
+Previous entries are retained in Git history. Keep the current change record here; no separate documentation archive is maintained.
+
+
+### 2026-09-05 — Responsibility and test topology refactor
+
+Shared runtime/provider preparation and numeric/date/state readings now have single owners; operations, fundamentals, management evidence, and charts retain their public interfaces behind responsibility-based packages. Session labels preserve the supplied calendar date when removing a timezone. `doctrine.list` makes existing claims discoverable without changing their content. The capability count is 22 and the schema directory contains 24 files.
+
+The suite increased from 1,998 to 2,090 tests, including 88 malformed-input surface cases replacing four loops. Tests now live under module directories with no date directories, and the plan’s shared helper modules are imported by 162 of 248 test files (65.32%). Existing envelope and help contracts remain unchanged except for the declared discovery addition. Generated Graphify artifacts are local and ignored; tracked content shrank from 15.714 MB to approximately 4.43 MB. The obsolete `docs/` tree was removed at the maintainer’s request; its contents remain recoverable from Git history.
