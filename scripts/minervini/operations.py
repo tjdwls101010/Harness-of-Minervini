@@ -19,7 +19,7 @@ from .cache import ProviderCache
 from .capabilities import CAPABILITIES
 from .clock import AnalysisClock, resolve_as_of
 from .contracts import RequestError, envelope
-from .doctrine import get_claim, has_claim, validate as validate_doctrine
+from .doctrine import get_claim, has_claim, list as list_doctrine, validate as validate_doctrine
 from .eligibility import EligibilityEvidence, evaluate_eligibility
 from .fundamentals import ACCOUNTING_INTEGRITY_WORDS as FUNDAMENTALS_ACCOUNTING_INTEGRITY, GOING_CONCERN_WORDS as FUNDAMENTALS_GOING_CONCERN, LEADER_CATEGORIES as FUNDAMENTALS_LEADER_CATEGORIES, MARKET_REGIMES as FUNDAMENTALS_MARKET_REGIMES, evaluate_fundamentals
 from .market import build_market_candidates, evaluate_market_snapshot, evidence_quality
@@ -218,6 +218,32 @@ def _health(request: Mapping[str, Any], runtime: Runtime) -> dict[str, Any]:
         status="ok" if ready else "partial",
         data=data,
         missing=missing,
+    )
+
+
+def _doctrine_list(request: Mapping[str, Any]) -> dict[str, Any]:
+    for name in ("context", "family", "layer"):
+        value = request.get(name)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise RequestError(f"{name} must be a non-empty string", name)
+    clock = _clock(request.get("as_of"))
+    rows = []
+    for result in list_doctrine(context=request.get("context")):
+        record = result["claim"]
+        if request.get("family") is not None and not record["id"].startswith(request["family"]):
+            continue
+        if request.get("layer") is not None and record["layer"] != request["layer"]:
+            continue
+        row = {key: record[key] for key in ("id", "title", "kind", "layer", "computability", "consumers")}
+        row["roles"] = sorted({threshold["role"] for threshold in record.get("thresholds", {}).values()})
+        rows.append(row)
+    return envelope(
+        "doctrine.list",
+        request=_clean_request(request),
+        as_of=_as_of(clock),
+        data={"claims": sorted(rows, key=lambda row: row["id"])},
+        sources=[{"provider": "doctrine_registry", "path": "doctrine/claims.json"}],
+        next_capabilities=["doctrine.show"] if rows else [],
     )
 
 
@@ -2473,6 +2499,8 @@ def execute(operation: str, request: Mapping[str, Any], *, runtime: Runtime | No
         return envelope(operation, data={"capabilities": [CAPABILITIES[name].listing() for name in sorted(CAPABILITIES)]})
     if operation == "describe":
         return _describe(request)
+    if operation == "doctrine.list":
+        return _doctrine_list(request)
     runtime = runtime if runtime is not None else Runtime(cache=ProviderCache())
     if operation == "clock":
         return _clock_operation(request)

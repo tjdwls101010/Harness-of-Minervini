@@ -181,6 +181,21 @@ CAPABILITIES = {
             data_core=("date", "mode"),
         ),
         _capability(
+            "doctrine.list",
+            "Discover runtime doctrine claims and how each is read or measured.",
+            inputs=_inputs({
+                "context": _field("string", "Exact analysis context, such as prospective_entry, active_position, setup, or market_analysis."),
+                "family": _field("string", "Claim ID prefix, such as risk. or setup."),
+                "layer": _field("string", "Exact doctrine layer: canonical, practice, or harness."),
+            }),
+            output="Runtime claim rows with id, title, kind, layer, computability, registered threshold roles, and consumers. Use doctrine show with a returned ID for its full rule and source quotations.",
+            limitations=["Filters intersect; an unknown context, prefix, or layer returns an empty complete list.", "Quarantined and out-of-scope records are excluded; doctrine show remains the audit accessor for a known ID.", "Computability distinguishes deterministic measurements from claims requiring analyst judgment; inclusion is not an investment verdict.", "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time."],
+            status_meanings={"ok": "Matching runtime claims, or a legitimate empty list, were returned.", "needs_input": "A filter is not a non-empty string or the as-of session is invalid."},
+            examples=["scripts/.venv/bin/python scripts/pipeline doctrine list", "scripts/.venv/bin/python scripts/pipeline doctrine list --context prospective_entry --family risk. --layer canonical"],
+            data_keys=("claims",),
+            data_core=("claims",),
+        ),
+        _capability(
             "doctrine.show",
             "Inspect one normalized doctrine claim, whether the harness applies it or holds it for audit.",
             inputs=_inputs({"claim_id": _field("string", "Exact doctrine claim ID.", required=True)}),

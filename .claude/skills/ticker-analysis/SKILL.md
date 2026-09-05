@@ -8,6 +8,7 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 
 ## Orient through the interface
 
+- Use `doctrine list --context <ctx>` to discover the claims an analysis context rests on, then `doctrine show <id>` to read one.
 - Work from the repository root; the root constitution holds the bootstrap and capability-catalog commands. Before invoking a capability for the first time, read only its `describe` output or that leaf command's `--help`.
 - Decide whether the request is prospective, active-position, re-entry, or comparison. Collect only evidence that can change that decision.
 - Treat a virtual or fixed-evidence prompt as a closed world: use only its supplied evidence, never an unrelated fixture, live ticker, or web number. If a Primary Base duration, depth, or all-time-high trigger is not supplied, keep it missing; do not infer it.

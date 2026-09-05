@@ -48,11 +48,11 @@ One hook exists: a `SessionStart` readiness notice. It is not an analytical guar
 
 The canonical entry point is `scripts/.venv/bin/python scripts/pipeline`. `scripts/pipeline/__main__.py` delegates to `scripts.minervini.cli`; the public analyst interface never calls legacy `scripts/modules` commands.
 
-The registry exposes 18 composable capabilities: discovery and self-description (`capabilities`, `describe`, `health`, `clock`, `doctrine.show`), market work (`market.snapshot`, `market.candidates`), ticker work (`ticker.qualify`, `ticker.setup`, `ticker.fundamentals`, `ticker.peers`, `ticker.chart`, `ticker.risk`), and explicit research state (`watchlist.show`, `watchlist.history`, `watchlist.record`, `watchlist.annotate`, `watchlist.export`). The count and names are contractual and tested.
+The registry exposes 22 composable capabilities: discovery and self-description (`capabilities`, `describe`, `health`, `clock`, `doctrine.list`, `doctrine.show`), market work (`market.snapshot`, `market.candidates`), ticker work (`ticker.qualify`, `ticker.swings`, `ticker.power-play`, `ticker.setup`, `ticker.fundamentals`, `ticker.cik`, `ticker.peers`, `ticker.chart`, `ticker.risk`), and explicit research state (`watchlist.show`, `watchlist.history`, `watchlist.record`, `watchlist.annotate`, `watchlist.export`). The count and names are contractual and tested.
 
 Every non-help invocation emits exactly one v2 JSON envelope with `schema_version`, `operation`, `request`, `as_of`, `status`, `data`, `signals`, `missing`, `sources`, `doctrine_ids`, `next_capabilities`, and `side_effects`. Status is one of `ok`, `partial`, `unavailable`, or `needs_input`; it describes contract completeness, not an investment recommendation.
 
-`scripts/minervini/capabilities.py` is the metadata source for listing and description. `scripts/minervini/schema_sync.py` projects that registry into the 18 immutable-ID schemas under `schemas/v2/`. `scripts/minervini/cli.py` builds detailed offline help from the same meanings. Tests reject metadata, help, schema, and envelope drift.
+`scripts/minervini/capabilities.py` is the metadata source for listing and description. `scripts/minervini/schema_sync.py` projects that registry into the 22 immutable-ID schemas under `schemas/v2/`. `scripts/minervini/cli.py` builds detailed offline help from the same meanings. Tests reject metadata, help, schema, and envelope drift.
 
 Help is deliberately detailed at the point of use. Root and group help orient the caller; every leaf help explains purpose, required and optional inputs, defaults, as-of behavior, provider or historical limits, status meanings, side effects, and examples. Markdown teaches how to discover help but does not restate all flags.
 
@@ -117,6 +117,10 @@ The default ledger is `.state/research-ledger.sqlite3`, overridable by `MINERVIN
 | `scripts/minervini/risk.py` | Final prospective and active-position reducers | Implemented with full completed stop-path, effective-date, recovered-breach, and missing-coverage tests. |
 | `scripts/minervini/chart.py` | Auditable chart artifact generation | Implemented with input hash and manifest verification. |
 | `scripts/minervini/ledger.py` | Explicit research-state persistence | Implemented with non-creating reads and export tests. |
+| `scripts/minervini/runtime.py` | Replaceable provider dependencies and readiness probes | Extracted without changing runtime defaults. |
+| `scripts/minervini/stop_audit.py` | Completed stop-path audit and component attestation | Shares session-label handling with price readers. |
+| `scripts/minervini/numbers.py`, `dates.py`, `states.py` | Shared readings with distinct numeric, date, and state policies | Existing caller contracts preserved. |
+| `scripts/minervini/doctrine.py` | Indexed claim access, runtime discovery, and doctrine validation | `doctrine.list` exposes computability, roles, and consumers. |
 | `scripts/minervini/operations.py` | Provider/evaluator composition and envelope data | Implemented with cache and operation integration tests. |
 | `scripts/minervini/contracts.py`, `capabilities.py`, `cli.py`, `schema_sync.py` | Public interface, help, metadata, schemas, and output envelope | Implemented and parity-tested. |
 

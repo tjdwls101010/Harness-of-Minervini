@@ -8,6 +8,7 @@ allowed-tools: Bash(${CLAUDE_PROJECT_DIR}/scripts/.venv/bin/python ${CLAUDE_PROJ
 
 ## Orient through the interface
 
+- Use `doctrine list --context <ctx>` to discover the claims an analysis context rests on, then `doctrine show <id>` to read one.
 - Work from the repository root; the root constitution holds the bootstrap and capability-catalog commands. Before invoking a capability for the first time, read only its `describe` output or that leaf command's `--help`.
 - Compose calls around unresolved evidence. Do not execute every capability, preload all help, or force a fixed screening rail.
 

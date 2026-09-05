@@ -91,7 +91,7 @@ flowchart LR
     E --> J[Model judgment]
 ```
 
-The always-loaded constitution holds scope, immutable gates, risk discipline, data integrity, and response standards. The two compact skills contain task judgment without duplicating flags. The capability registry drives listing, description, detailed help, and 21 versioned schemas. Providers and pure reducers stay separate so transport failure, missing facts, deterministic failure, and qualitative ambiguity cannot collapse into one vague score.
+The always-loaded constitution holds scope, immutable gates, risk discipline, data integrity, and response standards. The two compact skills contain task judgment without duplicating flags. The capability registry drives listing, description, detailed help, and 22 versioned schemas. Providers and pure reducers stay separate so transport failure, missing facts, deterministic failure, and qualitative ambiguity cannot collapse into one vague score.
 
 Daily evidence defaults to the last completed US session. SEC facts must have been filed by the requested as-of boundary. Current mutable Nasdaq and Yahoo classification data is never relabeled as historical. The user's `ibd-rs-rating==0.5.0` package is the only cross-sectional RS source; the harness does not reproduce its formula or represent it as an official proprietary IBD feed.
 
