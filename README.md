@@ -99,7 +99,7 @@ Normal analysis is read-only apart from an ignored provider cache. Research stat
 
 ## Development
 
-All v2 tests exercise public seams under `tests/{unit,integration,contracts,doctrine}/<module>/`, with shared fixtures, behavioral E2E artifacts, and baseline evidence under `tests/{fixtures,e2e,baselines}/`. The implementation plan records the full architecture and acceptance rationale at [docs/plans/260817/harness-v2-greenfield-plan.md](docs/plans/260817/harness-v2-greenfield-plan.md); the maintainers' non-runtime design record is `.claude/harness-spec.md`.
+All v2 tests exercise public seams under `tests/{unit,integration,contracts,doctrine}/<module>/`, with shared fixtures, behavioral E2E artifacts, and baseline evidence under `tests/{fixtures,e2e,baselines}/`. The maintainers' non-runtime architecture and maintenance record is [.claude/harness-spec.md](.claude/harness-spec.md); previous plans remain in Git history.
 
 ```bash
 bash scripts/bootstrap.sh

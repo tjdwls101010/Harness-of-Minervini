@@ -61,7 +61,7 @@ class V1RuntimeRetirementTests(unittest.TestCase):
         self.assertEqual(manifest["baseline"]["tag_candidate"], "harness-v1-final")
         self.assertEqual(manifest["baseline"]["tag_status"], "created_pushed_and_released")
         self.assertTrue(manifest["baseline"]["release_url"].endswith("/harness-v1-final"))
-        self.assertTrue((ROOT / "docs/plans/260817/harness-v2-greenfield-plan.md").is_file())
+        self.assertFalse((ROOT / "docs").exists())
         self.assertIn(".tmp/", (ROOT / ".gitignore").read_text(encoding="utf-8"))
 
 
