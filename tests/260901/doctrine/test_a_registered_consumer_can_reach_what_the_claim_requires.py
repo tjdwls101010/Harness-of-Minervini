@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import collections
 import json
-import pathlib
 import unittest
 
 from scripts.minervini.capabilities import CAPABILITIES
