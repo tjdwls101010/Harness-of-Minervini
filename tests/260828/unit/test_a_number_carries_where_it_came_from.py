@@ -13,6 +13,8 @@ had been computed.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, filing as shared_filing
+
 import json
 import math
 import unittest
@@ -22,11 +24,11 @@ from scripts.minervini.providers.sec import normalize_filed_facts
 
 
 def evidence(filings: list[dict]) -> dict:
-    return {"source": "sec_filed_facts", "filings": filings}
+    return shared_evidence(filings=filings)
 
 
 def filing(filed_at: str, form: str, basis: str, quarterly: list[dict] | None = None, annual: list[dict] | None = None) -> dict:
-    return {"filed_at": filed_at, "form": form, "accounting_basis": basis, "quarterly": quarterly or [], "annual": annual or []}
+    return shared_filing(filed_at=filed_at, form=form, basis=basis, quarterly=quarterly or [], years=annual or [])
 
 
 class EachNumberSaysWhichFilingItCameFrom(unittest.TestCase):

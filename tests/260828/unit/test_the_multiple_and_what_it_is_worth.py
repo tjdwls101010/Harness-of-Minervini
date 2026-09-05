@@ -12,13 +12,15 @@ dates, and both of them measured rather than assumed.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, eps: float, filed_at: str) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0, "filed_at": filed_at}
+    return shared_quarter(period, end, eps, filed_at=filed_at)
 
 
 FILINGS = [
@@ -39,7 +41,7 @@ def evidence() -> dict:
          "quarterly": [{"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0} for period, end, eps in rows]}
         for filed_at, rows in FILINGS
     ]
-    return {"source": "sec_filed_facts", "filings": filings}
+    return shared_evidence(filings=filings)
 
 
 def valuation(**declared) -> dict:

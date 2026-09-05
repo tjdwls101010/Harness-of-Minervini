@@ -8,18 +8,11 @@ registry then described the same claim two ways, and `doctrine show` printed bot
 
 from __future__ import annotations
 
-import json
-import pathlib
+from tests.paths import registry
+
 import unittest
 
 from scripts.minervini import doctrine
-
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
-
-
-def registry() -> dict:
-    return json.loads(REGISTRY.read_text(encoding="utf-8"))
 
 
 class FailureEffectMatchesRoleTests(unittest.TestCase):

@@ -11,24 +11,18 @@ than about the stock, so matching the highest top's answer is not agreement with
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from tests.series import power_play_series
 
 
 def snapshot(frame):
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
 
 
 class TheChartDebtItUsedToManufacture(unittest.TestCase):

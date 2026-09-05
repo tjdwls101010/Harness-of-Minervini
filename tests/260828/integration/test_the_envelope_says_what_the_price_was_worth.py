@@ -12,13 +12,14 @@ breakout date had been supplied.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 from scripts.minervini.providers.sec import normalize_filed_facts
 
 from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, company_facts, submissions
@@ -30,12 +31,12 @@ def bars(end: str, close: float = 100.0) -> pd.DataFrame:
 
 
 def snapshot(frame: pd.DataFrame, as_of: str, stale: bool = False) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(frame, SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True}, stale=stale))
+    return rows_snapshot(frame, provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True}, stale=stale)
 
 
 def run(price_history=None, **request) -> dict:
     normalized = normalize_filed_facts(company_facts(), submissions(), as_of=AS_OF)
-    filings = ProviderSnapshot(normalized, SnapshotMeta(provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True}))
+    filings = rows_snapshot(normalized, provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True})
     prices = price_history or (lambda ticker, as_of: snapshot(bars(AS_OF), AS_OF))
     runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: filings, price_history=prices)
     return execute("ticker.fundamentals", {"ticker": "TEST", "cik": CIK, "as_of": AS_OF, **request}, runtime=runtime)

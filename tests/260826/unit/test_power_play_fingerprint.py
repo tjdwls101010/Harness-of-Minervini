@@ -9,6 +9,8 @@ An approval bound to that digest would not be bound to the evidence the verdict 
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 
 from scripts.minervini.power_play_evidence import power_play_fingerprint
@@ -90,15 +92,7 @@ class TheDigestTravelsWithTheAnswer(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = power_play_series()
-        prices = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True, "corporate_actions": True, "distributions": True},
-            ),
-        )
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True, "corporate_actions": True, "distributions": True})
         payload = execute(
             "ticker.power-play",
             {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "no_cache": True},

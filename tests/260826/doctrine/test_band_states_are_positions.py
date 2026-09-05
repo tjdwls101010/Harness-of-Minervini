@@ -14,15 +14,16 @@ outside is the favourable outcome here.
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY
+
 import json
 import math
-import pathlib
+
 import unittest
 import unittest.mock
 
 from scripts.minervini import doctrine
 
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 
 DEPTH = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct")
 GROWTH = ("fundamentals.minimum_quarterly_earnings_growth", "minimum_yoy_earnings_growth_percent")

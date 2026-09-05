@@ -11,6 +11,8 @@ running it looks like it brought the directory up to date.
 
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import contextlib
 import json
 import pathlib
@@ -21,7 +23,7 @@ from scripts.minervini.capabilities import CAPABILITIES
 from scripts.minervini.schema_sync import synchronize
 
 
-PUBLISHED = pathlib.Path(__file__).resolve().parents[3] / "schemas" / "v2"
+PUBLISHED = ROOT / "schemas" / "v2"
 
 
 @contextlib.contextmanager

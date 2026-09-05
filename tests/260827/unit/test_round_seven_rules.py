@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.harness import held as shared_held
+
 from datetime import date
 import unittest
 from unittest import mock
@@ -30,16 +32,7 @@ def frame(closes: list[float], *, end: str = "2025-12-26", volumes: list[float] 
 
 def held(**extra: object) -> dict:
     stop = float(extra.pop("stop_price", 90.0))
-    return {
-        "mode": "active",
-        "as_of": AS_OF,
-        "entry_price": 100.0,
-        "entry_date": "2026-08-10",
-        "stop_price": stop,
-        "current_price": float(extra.pop("current_price", 104.0)),
-        "completed_price_path": {"state": "clear", "checked_level": stop, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
-        **extra,
-    }
+    return shared_held(**{"stop_price": stop, "current_price": float(extra.pop("current_price", 104.0)), "completed_price_path": {"state": "clear", "checked_level": stop, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9}, **extra})
 
 
 class ATighterStopHasToBePlaceable(unittest.TestCase):

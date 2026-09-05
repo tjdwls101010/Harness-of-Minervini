@@ -12,18 +12,18 @@ for records this harness may act on, and everything a verdict passes through ask
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY, ROOT
+
 import contextlib
 import copy
 import json
-import pathlib
 import unittest
 
 from scripts.minervini import doctrine
 from scripts.minervini.setup_evidence import _observation
 
 
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
-RUNTIME = pathlib.Path(__file__).resolve().parents[3] / "scripts" / "minervini"
+RUNTIME = ROOT / "scripts" / "minervini"
 
 GATE = "eligibility.standard_trend_template"
 OBSERVED = "setup.demand_supply_volume_asymmetry"

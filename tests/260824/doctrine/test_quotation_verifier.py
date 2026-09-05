@@ -6,22 +6,16 @@ words. They exist because an adversarial review walked straight through two of t
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY, ROOT, registry
+
 import copy
 import json
-import pathlib
 import sys
 import unittest
 
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "scripts"))
+sys.path.insert(0, str(ROOT / "scripts"))
 import verify_doctrine_quotations as verifier
-
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
-
-
-def registry() -> dict:
-    return json.loads(REGISTRY.read_text(encoding="utf-8"))
 
 
 def one_claim(text: str, **extra: object) -> dict:

@@ -1,11 +1,9 @@
-from pathlib import Path
+from tests.paths import ROOT
+
 import re
 import unittest
 
 from scripts.minervini.capabilities import CAPABILITIES
-
-
-ROOT = Path(__file__).resolve().parents[3]
 
 
 class DocumentsDescribeThePublishedInterface(unittest.TestCase):

@@ -12,13 +12,14 @@ with the template when the template is the thing that moved.
 
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import importlib.util
 import json
-import pathlib
 import unittest
 
 
-_E2E = pathlib.Path(__file__).resolve().parents[3] / "tests/260817/e2e"
+_E2E = ROOT / "tests/260817/e2e"
 _TOOLING = _E2E / "tooling"
 
 

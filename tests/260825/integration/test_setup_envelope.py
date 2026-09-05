@@ -8,6 +8,8 @@ that list, because its state words mean something no verdict vocabulary contains
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import tempfile
 import unittest
@@ -26,13 +28,8 @@ from tests.series import anchor_dates, base_series, distribution_only_in_the_tai
 
 def snapshot(**kwargs) -> tuple[ProviderSnapshot, list[str]]:
     frame, anchors = base_series(**kwargs)
-    meta = SnapshotMeta(
-        provider="fixture-prices",
-        retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        as_of=frame.index[-1].date(),
-        coverage={"completed_only": True},
-    )
-    return ProviderSnapshot(frame, meta), anchor_dates(frame, anchors)
+
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True}), anchor_dates(frame, anchors)
 
 
 def run(*, swings=None, as_of=None, approved_bars=None, chain_completeness="complete", **kwargs) -> dict:
@@ -131,7 +128,7 @@ class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
         frame, whole, suffix = distribution_only_in_the_tail_series()
         meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
                             as_of=frame.index[-1].date(), coverage={"completed_only": True})
-        prices = ProviderSnapshot(frame, meta)
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         runtime = Runtime(price_history=lambda ticker, requested: prices)
 
         def run_with(chain):
@@ -173,7 +170,7 @@ class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
         frame, _, suffix = distribution_only_in_the_tail_series()
         meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
                             as_of=frame.index[-1].date(), coverage={"completed_only": True})
-        prices = ProviderSnapshot(frame, meta)
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         runtime = Runtime(price_history=lambda ticker, requested: prices)
 
         for label, extra in (
@@ -207,7 +204,7 @@ class TheRenderersRefusalSurvivesToTheEnvelopeTests(unittest.TestCase):
         frame.index = [pd.NaT, *frame.index[1:]]
         meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
                             as_of=date(2026, 6, 25), coverage={"completed_only": True})
-        runtime = Runtime(price_history=lambda ticker, requested: ProviderSnapshot(frame, meta))
+        runtime = Runtime(price_history=lambda ticker, requested: rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True}))
 
         with tempfile.TemporaryDirectory() as directory:
             payload = execute("ticker.chart", {
@@ -229,7 +226,7 @@ class TheRenderersRefusalSurvivesToTheEnvelopeTests(unittest.TestCase):
         frame, _ = base_series()
         meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
                             as_of=frame.index[-1].date(), coverage={"completed_only": True})
-        runtime = Runtime(price_history=lambda ticker, requested: ProviderSnapshot(frame, meta))
+        runtime = Runtime(price_history=lambda ticker, requested: rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True}))
 
         with mock.patch("scripts.minervini.chart._render_png", side_effect=ValueError("boom")):
             with tempfile.TemporaryDirectory() as directory:

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 from importlib.metadata import version
-from pathlib import Path
+
 import unittest
-
-
-ROOT = Path(__file__).resolve().parents[3]
 
 
 class RuntimeDependencyContractTests(unittest.TestCase):

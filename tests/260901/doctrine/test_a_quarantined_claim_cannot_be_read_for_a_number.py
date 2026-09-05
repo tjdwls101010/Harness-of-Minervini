@@ -12,16 +12,15 @@ impossible to notice missing. These tests quarantine live claims in a copied reg
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY
+
 import contextlib
 import copy
 import json
-import pathlib
 import unittest
 
 from scripts.minervini import doctrine
 
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 
 GATE = ("eligibility.standard_trend_template", "sma_200_rising_minimum_months")
 BAND = ("eligibility.recent_ipo_primary_base", "three_to_five_week_base_depth_pct")

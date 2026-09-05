@@ -12,6 +12,8 @@ reading on either side of it.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
@@ -49,15 +51,7 @@ class TheUnreadTopKeepsItsVote(unittest.TestCase):
         from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = a_top_the_history_ends_before_series()
-        prices = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True, "corporate_actions": True, "distributions": True},
-            ),
-        )
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True, "corporate_actions": True, "distributions": True})
         runtime = Runtime(price_history=lambda ticker, requested: prices)
         request = {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "no_cache": True}
         first = execute("ticker.power-play", request, runtime=runtime)
@@ -94,15 +88,7 @@ class TheGapsUnderOneUnreadTopEachNameTheirOwnCause(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = a_top_the_history_ends_before_series(flag_depth_pct=40.0)
-        prices = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         payload = execute(
             "ticker.power-play",
             {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "no_cache": True},

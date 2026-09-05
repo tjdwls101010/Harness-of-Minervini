@@ -9,17 +9,15 @@ their own words rather than in a paraphrase attributed to them.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
-def quarter(period: str, end: str, eps: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0}
-
-
 def evidence(quarters: list[dict]) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": []}]}
+    return shared_evidence(quarters=quarters, years=[])
 
 
 def two_years(recent: list[float]) -> list[dict]:

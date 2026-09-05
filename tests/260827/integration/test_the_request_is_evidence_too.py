@@ -8,9 +8,10 @@ its Close would otherwise answer one question two ways.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
@@ -38,11 +39,11 @@ def run(overrides=None, *, splits=None, split_column=None, start="2025-10-01", e
     for session, row in (extra_rows or {}).items():
         data.loc[pd.Timestamp(session)] = [*row, 1_000_000, 0.0]
     data = data.sort_index()
-    snapshot = ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    snapshot = rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
     return execute("ticker.risk", {**POSITION, **request}, runtime=Runtime(price_history=lambda ticker, as_of: snapshot))
 
 
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta  # noqa: E402
+  # noqa: E402
 
 
 class APriceFieldHoldsAPrice(unittest.TestCase):

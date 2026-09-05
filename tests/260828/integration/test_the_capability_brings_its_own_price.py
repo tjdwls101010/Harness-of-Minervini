@@ -10,13 +10,14 @@ multiple is not filed evidence, so its absence is reported where the multiple wo
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderUnavailable
 from scripts.minervini.providers.sec import normalize_filed_facts
 
 from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, bars, company_facts, submissions
@@ -24,8 +25,8 @@ from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, bars, company_fact
 
 def run(price_history=None, **request) -> dict:
     normalized = normalize_filed_facts(company_facts(), submissions(), as_of=AS_OF)
-    filings = ProviderSnapshot(normalized, SnapshotMeta(provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True}))
-    prices = price_history or (lambda ticker, as_of: ProviderSnapshot(bars("2024-01-02", AS_OF, 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})))
+    filings = rows_snapshot(normalized, provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True})
+    prices = price_history or (lambda ticker, as_of: rows_snapshot(bars("2024-01-02", AS_OF, 100.0), provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
     runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: filings, price_history=prices)
     return execute("ticker.fundamentals", {"ticker": "TEST", "cik": CIK, "as_of": AS_OF, **request}, runtime=runtime)
 
@@ -66,7 +67,7 @@ class ThePriceComesFromTheBars(unittest.TestCase):
         # A provider that hands back more than was asked for does not move the point-in-time
         # answer. The multiple is priced at the last session `as_of` reached, and the later
         # bars are simply not read.
-        beyond = lambda ticker, as_of: ProviderSnapshot(bars("2024-01-02", "2026-06-30", 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+        beyond = lambda ticker, as_of: rows_snapshot(bars("2024-01-02", "2026-06-30", 100.0), provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
         payload = run(price_history=beyond)
 
         reading = payload["data"]["valuation"]["price_earnings_ratio"]

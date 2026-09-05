@@ -12,13 +12,15 @@ missing evidence about a ticker, which is what it becomes when it is counted per
 
 from __future__ import annotations
 
+from tests.filings import quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, eps: float, revenue: float, net_income: float, shares: float = 100.0) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": revenue, "net_income": net_income, "diluted_shares": shares}
+    return shared_quarter(period, end, eps, revenue=revenue, net_income=net_income, diluted_shares=shares)
 
 
 # Eight quarters of year-over-year acceleration in earnings, sales and margin, and three

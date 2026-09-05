@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 from datetime import date
 import json
-from pathlib import Path
 import unittest
 
 from scripts.minervini.market import evaluate_market_snapshot
 from scripts.minervini.market_evidence import build_market_evidence
 
 
-FIXTURES = Path(__file__).parents[1] / "fixtures" / "market_evidence"
+FIXTURES = SHARED_FIXTURES / "market_evidence"
 # The session these fixtures were taken at. No leader history is handed in here, so it
 # reaches nothing but the group growth window, which has no names to count.
 READING_DATE = date(2026, 8, 14)

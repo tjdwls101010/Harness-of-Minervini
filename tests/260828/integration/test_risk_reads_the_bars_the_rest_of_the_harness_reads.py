@@ -20,14 +20,15 @@ agrees exists.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 from scripts.minervini.setup_structure import read_price_kinds
 
 
@@ -47,10 +48,7 @@ def held(sessions: int = 120) -> pd.DataFrame:
 
 
 def snapshot(frame: pd.DataFrame, *, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True}),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True})
 
 
 def risk(frame: pd.DataFrame, **overrides) -> dict:

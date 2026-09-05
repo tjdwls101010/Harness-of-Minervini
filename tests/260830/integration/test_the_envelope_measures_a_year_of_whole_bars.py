@@ -8,14 +8,14 @@ route all at once, and none of those are observable from the evidence builder al
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
 
 AS_OF = "2026-08-27"
@@ -24,15 +24,7 @@ NEAR_HIGH = "trend_template.price_near_52_week_high"
 
 
 def _snapshot(payload, provider: str):
-    return ProviderSnapshot(
-        payload,
-        SnapshotMeta(
-            provider=provider,
-            retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(payload, provider=provider, retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def qualify(history: pd.DataFrame, **request) -> dict:

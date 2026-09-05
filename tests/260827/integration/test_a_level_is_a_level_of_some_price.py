@@ -10,14 +10,15 @@ from is the one that has to be published beside it.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 AS_OF = "2025-12-31"
@@ -30,7 +31,7 @@ def snapshot(index: pd.DatetimeIndex, rows: list[tuple[float, float, float, floa
     data["Stock Splits"] = np.zeros(len(data))
     for session, factor in (splits or {}).items():
         data.loc[pd.Timestamp(session), "Stock Splits"] = factor
-    return ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    return rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def run(overrides: dict[str, tuple[float, float, float, float]], *, start: str = "2025-11-03", end: str = AS_OF, splits: dict[str, float] | None = None, **request) -> dict:

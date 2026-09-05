@@ -7,21 +7,19 @@ this file is the sweep's report turned into the assertions that were missing.
 
 from __future__ import annotations
 
+from tests.filings import evidence, quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, eps: float, *, revenue: float = 100.0, net_income: float | None = None) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": revenue, "net_income": eps * 10 if net_income is None else net_income, "diluted_shares": 100.0}
+    return shared_quarter(period, end, eps, revenue=revenue, net_income=eps * 10 if net_income is None else net_income)
 
 
 def annual(year: int, eps: float) -> dict:
     return {"period": str(year), "end": f"{year}-12-31", "eps": eps, "revenue": 100.0, "diluted_shares": 100.0}
-
-
-def evidence(quarters: list[dict], years: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": years or []}]}
 
 
 def read(quarters: list[dict], years: list[dict] | None = None, **declared) -> dict:

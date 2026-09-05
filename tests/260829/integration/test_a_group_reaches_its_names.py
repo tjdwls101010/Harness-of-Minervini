@@ -7,6 +7,8 @@ was never read rather than attach today's taxonomy to it.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 from datetime import date, datetime, timedelta, timezone
 
@@ -16,7 +18,7 @@ import pandas as pd
 from scripts.minervini import doctrine
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 from scripts.minervini.windows import DAYS_IN_A_WEEK
 
 
@@ -50,22 +52,11 @@ def _held_its_high() -> np.ndarray:
 
 
 def _price(frame: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime.now(timezone.utc),
-            as_of=TODAY,
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True})
 
 
 def _rows(rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(
-        rows,
-        SnapshotMeta(provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY),
-    )
+    return rows_snapshot(rows, provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY)
 
 
 def _classification(symbol: str) -> ProviderSnapshot[dict[str, str]]:
@@ -75,15 +66,7 @@ def _classification(symbol: str) -> ProviderSnapshot[dict[str, str]]:
     }
     if symbol not in groups:
         raise ProviderUnavailable("yfinance", "classification_missing", operation="current_classification")
-    return ProviderSnapshot(
-        groups[symbol],
-        SnapshotMeta(
-            provider="yfinance",
-            retrieved_at=datetime.now(timezone.utc),
-            as_of=TODAY,
-            coverage={"kind": "current_classification_only", "historical": False},
-        ),
-    )
+    return rows_snapshot(groups[symbol], provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"kind": "current_classification_only", "historical": False})
 
 
 def _runtime() -> Runtime:

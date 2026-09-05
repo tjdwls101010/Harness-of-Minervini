@@ -80,17 +80,17 @@ def bars(start: str, end: str, close: float) -> pd.DataFrame:
     return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": [close + n * 0.01 for n in range(len(index))], "Volume": 1_000_000}, index=index)
 
 
-def quarter(period: str, end: str, eps: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0}
+def quarter(period: str, end: str, eps: float, **overrides) -> dict:
+    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": overrides["net_income"] if "net_income" in overrides else eps * 10, "diluted_shares": 100.0, **overrides}
 
 
 def annual(year: int, eps: float, **extra) -> dict:
     return {"period": str(year), "end": f"{year}-12-31", "eps": eps, "revenue": 400.0, "diluted_shares": 100.0, **extra}
 
 
-def filing(form: str = "10-K", quarterly: list[dict] | None = None, years: list[dict] | None = None) -> dict:
-    return {"filed_at": "2026-02-19", "form": form, "accounting_basis": "US-GAAP", "quarterly": quarterly or [], "annual": years or []}
+def filing(form: str = "10-K", quarterly: list[dict] | None = None, years: list[dict] | None = None, *, filed_at: str = "2026-02-19", basis: str = "US-GAAP") -> dict:
+    return {"filed_at": filed_at, "form": form, "accounting_basis": basis, "quarterly": quarterly or [], "annual": years or []}
 
 
-def evidence(quarters: list[dict], years: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": years or []}]}
+def evidence(quarters: list[dict] | None = None, years: list[dict] | None = None, *, filed_at: str = "2026-02-19", form: str = "10-K", basis: str = "US-GAAP", filings: list[dict] | None = None) -> dict:
+    return {"source": "sec_filed_facts", "filings": [{"filed_at": filed_at, "form": form, "accounting_basis": basis, "quarterly": quarters, "annual": years or []}] if filings is None else filings}

@@ -8,16 +8,19 @@ leader forever.
 
 from __future__ import annotations
 
+from tests.paths import ROOT
+from tests.providers import rows_snapshot
+
 import unittest
 from datetime import date, datetime, timezone
-from pathlib import Path
+
 
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 AS_OF = "2025-12-31"
@@ -27,7 +30,7 @@ def _classification(symbol: str) -> ProviderSnapshot[dict[str, str]]:
     """The market snapshot reads membership; every fixture runtime must answer for it."""
 
     raise ProviderUnavailable("yfinance", "fixture_withholds_classification", operation="current_classification")
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURE = ROOT / 'tests' / '260829' / "fixtures"
 
 
 def _frame(values: np.ndarray, *, as_of: str = AS_OF) -> pd.DataFrame:
@@ -47,26 +50,11 @@ def _frame(values: np.ndarray, *, as_of: str = AS_OF) -> pd.DataFrame:
 
 
 def _snapshot(frame: pd.DataFrame, *, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(as_of),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True})
 
 
 def _rows(provider: str, rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(
-        rows,
-        SnapshotMeta(
-            provider=provider,
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
-        ),
-    )
+    return rows_snapshot(rows, provider=provider, retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF))
 
 
 class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
@@ -136,16 +124,7 @@ class LeaderHistoryReachesTheSnapshotTests(unittest.TestCase):
 
         def prices(ticker: str, as_of: str) -> ProviderSnapshot[pd.DataFrame]:
             if ticker == "BROKEN":
-                return ProviderSnapshot(
-                    behind,
-                    SnapshotMeta(
-                        provider="fixture-prices",
-                        retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                        as_of=date(2025, 12, 30),
-                        coverage={"completed_only": True, "requested_session": AS_OF, "last_completed_bar": "2025-12-30"},
-                        stale=True,
-                    ),
-                )
+                return rows_snapshot(behind, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date(2025, 12, 30), coverage={"completed_only": True, "requested_session": AS_OF, "last_completed_bar": "2025-12-30"}, stale=True)
             return _snapshot(rising)
 
         payload = execute(

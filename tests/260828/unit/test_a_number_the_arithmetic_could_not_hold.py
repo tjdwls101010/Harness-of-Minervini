@@ -9,13 +9,15 @@ turnaround nobody could measure.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def filing(quarterly: list[dict] | None = None, years: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-01", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarterly or [], "annual": years or []}]}
+    return shared_evidence(filed_at="2026-02-01", quarters=quarterly or [], years=years or [])
 
 
 _ENDS = {1: "03-31", 2: "06-30", 3: "09-30", 4: "12-31"}

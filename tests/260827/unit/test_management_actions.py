@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
+from tests.harness import held
+
 import unittest
 
 from scripts.minervini.risk import reduce_risk
 
 
 AS_OF = "2026-08-21"
-
-
-def held(**overrides: object) -> dict:
-    payload = {
-        "mode": "active",
-        "as_of": AS_OF,
-        "entry_price": 100.0,
-        "entry_date": "2026-08-10",
-        "stop_price": 94.0,
-        "current_price": 110.0,
-        "completed_price_path": {"state": "clear", "checked_level": 94.0, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
-    }
-    payload.update(overrides)
-    return payload
 
 
 class ThreeRProtectionIsAnAction(unittest.TestCase):

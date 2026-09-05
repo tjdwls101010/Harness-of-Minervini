@@ -10,6 +10,8 @@ comparable pair on file reported a count of zero and an answer of no.
 
 from __future__ import annotations
 
+from tests.filings import evidence
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -18,10 +20,6 @@ from scripts.minervini.fundamentals import evaluate_fundamentals
 def quarter(period: str, end: str, eps: float | None, *, revenue: float = 100.0) -> dict:
     fact = {"period": period, "end": end, "revenue": revenue, "net_income": 10.0, "diluted_shares": 100.0}
     return fact if eps is None else {**fact, "eps": eps}
-
-
-def evidence(quarters: list[dict], years: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": years or []}]}
 
 
 def read(quarters: list[dict], **declared) -> dict:

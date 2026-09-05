@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import hashlib
 import json
 import pathlib
 import tempfile
 import unittest
-
 import pandas as pd
 
 from scripts.minervini.chart import render_chart_artifacts
 
 
-FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "chart"
+FIXTURES = SHARED_FIXTURES / "chart"
 
 
 def completed_daily_ohlcv() -> pd.DataFrame:

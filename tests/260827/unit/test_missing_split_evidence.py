@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.management_evidence import build_management_evidence
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
 
 AS_OF = "2025-12-12"
@@ -29,7 +29,7 @@ def frame(closes: list[float], *, splits: dict[int, float] | None = None, events
 
 
 def run(bars: pd.DataFrame, **evidence: object) -> dict:
-    snapshot = ProviderSnapshot(bars, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    snapshot = rows_snapshot(bars, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
     request = {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": "2025-11-03", "stop_price": 94.0, **evidence}
     return execute("ticker.risk", request, runtime=Runtime(price_history=lambda ticker, as_of: snapshot))
 

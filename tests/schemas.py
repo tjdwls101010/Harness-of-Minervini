@@ -9,14 +9,15 @@ from agrees with itself. `jsonschema` is a test-only dependency for exactly that
 from __future__ import annotations
 
 import json
-import pathlib
 from typing import Any
 
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
+from tests.paths import ROOT
 
-SCHEMAS = pathlib.Path(__file__).resolve().parents[1] / "schemas" / "v2"
+
+SCHEMAS = ROOT / "schemas" / "v2"
 
 
 def _published() -> list[dict[str, Any]]:

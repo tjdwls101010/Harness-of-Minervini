@@ -23,14 +23,15 @@ INCOMPLETE, never a guessed pass or fail.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from scripts.minervini.setup_structure import read_bars
 
 
@@ -49,10 +50,7 @@ def rising(sessions: int = 300) -> pd.DataFrame:
 
 
 def _snapshot(payload, provider: str):
-    return ProviderSnapshot(
-        payload,
-        SnapshotMeta(provider=provider, retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}),
-    )
+    return rows_snapshot(payload, provider=provider, retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def qualify(history: pd.DataFrame) -> dict:

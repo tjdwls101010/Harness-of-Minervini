@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.harness import held as shared_held
+
 import unittest
 
 from scripts.minervini.risk import reduce_risk
@@ -16,16 +18,7 @@ BASE_COUNT = "basecount.typical_top_after_3_to_5_bases"
 
 def held(**extra: object) -> dict:
     stop = float(extra.pop("stop_price", 90.0))
-    return {
-        "mode": "active",
-        "as_of": AS_OF,
-        "entry_price": 100.0,
-        "entry_date": "2026-08-10",
-        "stop_price": stop,
-        "current_price": 104.0,
-        "completed_price_path": {"state": "clear", "checked_level": stop, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
-        **extra,
-    }
+    return shared_held(**{"stop_price": stop, "current_price": 104.0, "completed_price_path": {"state": "clear", "checked_level": stop, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9}, **extra})
 
 
 def actions(result: dict) -> list[tuple[str, str]]:

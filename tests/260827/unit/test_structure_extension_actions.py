@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.harness import held as shared_held
+
 import unittest
 
 from scripts.minervini.risk import reduce_risk
@@ -14,19 +16,8 @@ KEY_REVERSAL = "management.tl_key_reversal_criteria"
 
 
 def held(management: dict) -> dict:
-    return {
-        "mode": "active",
-        "as_of": AS_OF,
-        "entry_price": 100.0,
-        "entry_date": "2026-08-10",
-        "breakout_date": "2026-08-10",
-        "stop_price": 94.0,
-        # Below 3R on purpose: profit protection has its own tests, and these assert the
-        # whole action list so a stray RAISE_STOP would hide which rule fired.
-        "current_price": 112.0,
-        "completed_price_path": {"state": "clear", "checked_level": 94.0, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
-        "management": management,
-    }
+    # Below 3R so profit protection cannot hide the action under test.
+    return shared_held(breakout_date="2026-08-10", current_price=112.0, management=management)
 
 
 def band(state: str) -> dict:

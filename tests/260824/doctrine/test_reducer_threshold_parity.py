@@ -7,21 +7,18 @@ reading it, which is the difference between a single source of truth and a copy.
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY
+
 import contextlib
 import copy
 import json
-import pathlib
 import unittest
-
 import pandas as pd
 
 from scripts.minervini import doctrine
 from scripts.minervini.risk import reduce_risk
 from scripts.minervini.technical import build_eligibility_evidence
 from tests.attestations import planes
-
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 
 
 @contextlib.contextmanager

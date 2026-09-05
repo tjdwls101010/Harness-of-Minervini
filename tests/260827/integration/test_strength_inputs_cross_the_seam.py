@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 AS_OF = "2025-12-31"
@@ -23,7 +24,7 @@ def frame(rows: list[tuple[float, float, float, float, int]]) -> pd.DataFrame:
 
 
 def snapshot(bars: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(bars, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    return rows_snapshot(bars, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def flat(sessions: int, close: float = 100.0, volume: int = 1_000_000) -> list[tuple[float, float, float, float, int]]:

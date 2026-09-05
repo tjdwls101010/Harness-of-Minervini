@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.harness import held as shared_held
+
 import unittest
 
 from scripts.minervini.risk import reduce_risk
@@ -13,17 +15,7 @@ STRENGTH = "management.tl_sell_into_strength_at_average_gain_and_r_multiples"
 
 
 def held(**overrides: object) -> dict:
-    payload = {
-        "mode": "active",
-        "as_of": AS_OF,
-        "entry_price": 100.0,
-        "entry_date": "2026-08-10",
-        "stop_price": 94.0,
-        "current_price": 103.0,
-        "completed_price_path": {"state": "clear", "checked_level": 94.0, "from": "2026-08-10", "through": AS_OF, "bars_checked": 9},
-    }
-    payload.update(overrides)
-    return payload
+    return shared_held(**{"current_price": 103.0, **overrides})
 
 
 def raised(**overrides: object) -> dict:

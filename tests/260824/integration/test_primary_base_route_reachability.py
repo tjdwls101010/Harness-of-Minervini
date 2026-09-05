@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 AS_OF = "2025-12-31"
@@ -40,29 +41,13 @@ def recent_ipo_history(*, trough: float, last: float) -> ProviderSnapshot[pd.Dat
         },
         index=index,
     )
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def qualify(*, trough: float, last: float, **judgments: str) -> dict:
     runtime = Runtime(
         price_history=lambda ticker, as_of: recent_ipo_history(trough=trough, last=last),
-        rs_rating=lambda ticker, as_of: ProviderSnapshot(
-            {"rating": 88, "rating_date": AS_OF},
-            SnapshotMeta(
-                provider="ibd-rs-rating",
-                retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                as_of=date.fromisoformat(AS_OF),
-                coverage={"completed_only": True},
-            ),
-        ),
+        rs_rating=lambda ticker, as_of: rows_snapshot({"rating": 88, "rating_date": AS_OF}, provider="ibd-rs-rating", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}),
     )
     return execute("ticker.qualify", {"ticker": "IPOX", "as_of": AS_OF, **judgments}, runtime=runtime)
 

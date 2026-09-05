@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import unittest
+from tests.frames import frame
 
+import unittest
 import pandas as pd
 
 from scripts.minervini.management_evidence import build_management_evidence
-
-
-def frame(rows: list[tuple[float, float, float, float, int]], *, end: str = "2025-12-26") -> pd.DataFrame:
-    index = pd.bdate_range(end=end, periods=len(rows))
-    return pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=index)
 
 
 def flat(sessions: int, close: float = 100.0, volume: int = 1_000_000) -> list[tuple[float, float, float, float, int]]:

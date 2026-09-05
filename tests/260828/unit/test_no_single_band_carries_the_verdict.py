@@ -12,6 +12,8 @@ is the default when any of them prompts review, because marginal evidence never 
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -20,7 +22,7 @@ from scripts.minervini.fundamentals import evaluate_fundamentals
 def quarter(period: str, eps: float, revenue: float = 100.0, net_income: float = 10.0) -> dict:
     ends = {"Q1": "03-31", "Q2": "06-30", "Q3": "09-30", "Q4": "12-31"}
     year, label = period.split("-")
-    return {"period": period, "end": f"{year}-{ends[label]}", "eps": eps, "revenue": revenue, "net_income": net_income, "diluted_shares": 100.0}
+    return shared_quarter(period, f"{year}-{ends[label]}", eps, revenue=revenue, net_income=net_income)
 
 
 def year(period: str, eps: float, revenue: float) -> dict:
@@ -28,7 +30,7 @@ def year(period: str, eps: float, revenue: float) -> dict:
 
 
 def evidence(quarters: list[dict], annual: list[dict]) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-20", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": annual}]}
+    return shared_evidence(filed_at="2026-02-20", quarters=quarters, years=annual)
 
 
 def eight(latest_growth_pct: float) -> list[dict]:

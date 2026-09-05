@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import json
-import pathlib
 import unittest
 
 from scripts.minervini.risk import reduce_risk
 
 
-FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "setup_risk"
+FIXTURES = SHARED_FIXTURES / "setup_risk"
 
 
 def fixture(name: str) -> dict:

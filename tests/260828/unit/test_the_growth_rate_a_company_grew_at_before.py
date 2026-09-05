@@ -12,6 +12,8 @@ reported EPS here for an adjusted one.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -22,7 +24,7 @@ def annual(year: int, eps: float, revenue: float) -> dict:
 
 
 def evidence(years: list[dict]) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": [], "annual": years}]}
+    return shared_evidence(quarters=[], years=years)
 
 
 class TheCompanysOwnPace(unittest.TestCase):

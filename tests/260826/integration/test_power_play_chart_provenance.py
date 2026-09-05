@@ -12,6 +12,8 @@ chain was approved from, and the two capabilities report that digest in the same
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timezone
 import pathlib
 import tempfile
@@ -20,7 +22,7 @@ import unittest
 from scripts.minervini.cache import ProviderCache
 from scripts.minervini.contracts import RequestError
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from scripts.minervini.power_play_evidence import (
     build_power_play_evidence,
     power_play_fingerprint,
@@ -30,15 +32,7 @@ from tests.series import power_play_series
 
 
 def snapshot(frame):
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
 
 
 class TheAnswerNamesThePictureItCameFrom(unittest.TestCase):
