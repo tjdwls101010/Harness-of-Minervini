@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
 from . import doctrine
 from .eligibility import TREND_TEMPLATE_CRITERIA
 from .windows import year_window_start
@@ -19,9 +20,6 @@ DOCTRINE_IPO = "eligibility.recent_ipo_primary_base"
 # Completed US sessions in a calendar month, used only to read a source duration the
 # book states in months into the bar count this module actually counts.
 _SESSIONS_PER_MONTH = 21
-# Enough places to strip binary-float noise from a reported figure and far too many
-# to soften any limit the registry states.
-_REPORTED_PRECISION = 10
 # The three prices the 52-week criteria need. Close decides every other criterion; High and Low
 # are what the year's extremes are taken from.
 _EXTREME_COLUMNS = ("Close", "High", "Low")

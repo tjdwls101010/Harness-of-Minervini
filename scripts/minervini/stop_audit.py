@@ -8,38 +8,16 @@ from typing import Any, Mapping
 
 import pandas as pd
 
+from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
+from .numbers import positive
 from .contracts import RequestError, envelope
 from .management_evidence import SPLIT_COLUMN as _SPLIT_COLUMN, impossible_bar_relations, split_sized_discontinuities
 from .risk import AUDIT_BASIS as _AUDIT_BASIS, is_non_passing
 
 
-_REPORTED_PRECISION = 10
-
-
 def _positive(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    if not (value > 0 and math.isfinite(value)):
-        return None
-    return float(value) if round(float(value), _REPORTED_PRECISION) > 0 else None
-
-
-def _request_date(value: Any, field: str) -> date:
-    """A calendar date the caller wrote as ``YYYY-MM-DD``, or a refusal naming the field.
-
-    The extended form only. ``date.fromisoformat`` also reads the basic form and a full
-    timestamp, and the reducer's own reader takes neither -- so a request written either way
-    parses here, is written back in a shape the reducer answers "missing" to, and the two
-    halves of the harness disagree about whether the field was supplied at all. A number is
-    refused for the same reason: ``20251201`` is not a date the reducer can read.
-    """
-
-    if not isinstance(value, str) or len(value) != 10 or value[4] != "-" or value[7] != "-":
-        raise RequestError(f"{field} must be an ISO date written YYYY-MM-DD", field)
-    try:
-        return date.fromisoformat(value)
-    except ValueError as error:
-        raise RequestError(f"{field} must be an ISO date written YYYY-MM-DD", field) from error
+    number = positive(value)
+    return number if number is not None and round(number, _REPORTED_PRECISION) > 0 else None
 
 
 # What each state-bearing field the caller may hand in is allowed to say. A word outside its

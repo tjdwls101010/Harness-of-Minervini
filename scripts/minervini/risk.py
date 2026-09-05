@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
-from copy import deepcopy
 from datetime import date, timedelta
 from typing import Any
 
+from .dates import parse_iso as _iso_date
+from .states import mapping as _mapping, state as _state, status_word as _status_word
+from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
+from .numbers import reported as _reported
+from .numbers import positive as _number
 from . import doctrine
 
 
-# Enough places to strip binary-float noise from a reported figure and far too many
-# to soften any limit the registry states.
-_REPORTED_PRECISION = 10
 _ENTRY_RISK = "risk.initial_stop_and_reward"
 _PROFIT_PROTECTION = "risk.profit_protection_at_3r"
 _TL_HALF_AT_FIVE = "management.tl_stage12_half_at_five_percent"
@@ -70,42 +70,6 @@ _PLANE_ALIAS = {
     "fundamentals": "fundamentals_state",
 }
 
-_PASS = {"pass", "ready", "confirmed", "eligible", "supports", "observed", "complete", "favorable", "supports_convergence"}
-_FAIL = {"fail", "failed", "avoid", "contradicts", "broken", "invalid", "does_not_support_convergence"}
-_WAIT = {"wait", "pending", "watch", "not_triggered", "cautious", "defensive"}
-_MISSING = {"unavailable", "needs_input", "needs_chart", "incomplete", "unknown"}
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return deepcopy(dict(value)) if isinstance(value, Mapping) else {}
-
-
-def _state(value: Any, default: str = "unavailable", alias: str | None = None) -> str:
-    if isinstance(value, bool):
-        return "pass" if value else "fail"
-    if isinstance(value, Mapping):
-        # A plane's own capability names its verdict after the plane -- `setup_state`,
-        # `eligibility_state` -- so a caller pasting that payload in is understood. The alias
-        # is per plane rather than shared: read for every object, `setup_state` spoke for the
-        # risk plane too, and `{"state": "fail", "setup_state": "ready"}` turned a declared
-        # risk failure into a pass.
-        aliased = value.get(alias) if alias else None
-        if aliased is not None:
-            value = aliased
-        else:
-            value = value.get("state", value.get("status"))
-    if value is None:
-        return default
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized in _PASS:
-        return "pass"
-    if normalized in _FAIL:
-        return "fail"
-    if normalized in _WAIT:
-        return "wait"
-    if normalized in _MISSING:
-        return "unavailable"
-    return default
 
 
 def is_non_passing(value: Any) -> bool:
@@ -145,14 +109,6 @@ def _attests(value: Any, plane: str, ticker: Any, as_of: Any) -> bool:
     if plane == "market":
         return reference.get("ticker") is None
     return bool(ticker) and reference.get("ticker") == ticker
-
-
-def _number(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)) and value > 0 and math.isfinite(value):
-        return float(value)
-    return None
 
 
 def _risk_value(payload: Mapping[str, Any], name: str) -> Any:
@@ -289,18 +245,6 @@ def _prospective(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _reported(value: float | None) -> float | None:
-    """Round for the reader only; every comparison ran on the measurement itself.
-
-    A figure that is not finite is not a measurement, whatever arithmetic produced it, and
-    an infinity on the page is worse than the absence it stands for: it reads as a quantity.
-    """
-
-    if value is None or not math.isfinite(value):
-        return None
-    return round(value, _REPORTED_PRECISION)
-
-
 def _reported_beside_gate(value: float, claim_id: str, name: str) -> float:
     """Round for the reader unless rounding would move the figure across the gate.
 
@@ -315,25 +259,8 @@ def _reported_beside_gate(value: float, claim_id: str, name: str) -> float:
     return rounded
 
 
-def _status_word(value: Any) -> str:
-    """The one way this module reads a state, so two readers cannot disagree."""
-
-    if not isinstance(value, Mapping):
-        return ""
-    return str(value.get("state", value.get("status", ""))).strip().lower()
-
-
 def _triggered(value: Any) -> bool:
     return _status_word(value) in {"triggered", "breached"}
-
-
-def _iso_date(value: Any) -> date | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def _audit_records(path: Mapping[str, Any], path_state: str) -> list[dict[str, Any]]:

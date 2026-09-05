@@ -23,6 +23,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
+from .numbers import finite_or_none as _finite
 from . import doctrine
 
 
@@ -64,9 +66,6 @@ _DISCONTINUITY = "convention.unexplained_price_discontinuity"
 # own claim and their own non-binding stamp: the baseline length and the low/high ratios
 # are TraderLion's, not Minervini's, and a reader must be able to see whose they are.
 _VOLUME_CONVENTION = {"doctrine_id": _VOLUME_STATE, "binds": False, "source": "[TL]"}
-# Enough places to strip binary-float noise from a reported figure and far too many to
-# soften any limit the registry states.
-_REPORTED_PRECISION = 10
 AVERAGES = ("ema21", "sma50")
 
 
@@ -88,14 +87,6 @@ def _unread_claim_inputs(claim_ids: tuple[str, ...], consumed: tuple[str, ...]) 
 
 def _reported(value: float | None) -> float | None:
     return None if value is None else round(value, _REPORTED_PRECISION)
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 def _completed(frame: Any, as_of: date) -> pd.DataFrame | None:

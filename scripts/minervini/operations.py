@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping
 
 import pandas as pd
 
+from .dates import request_date as _request_date
 from .cache import ProviderCache
 from .capabilities import CAPABILITIES
 from .clock import AnalysisClock, resolve_as_of
@@ -37,7 +38,7 @@ from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
 from .setup_structure import read_bars, read_price_kinds
-from .stop_audit import _positive, _request_date, _check_declared_shapes, _UNCROSSABLE_REASONS, _COVERAGE_FIELDS, _combine_audits, _max_high_since, _completed_stop_path, _attest_components, _AUDITED_COLUMNS
+from .stop_audit import _positive, _check_declared_shapes, _UNCROSSABLE_REASONS, _COVERAGE_FIELDS, _combine_audits, _max_high_since, _completed_stop_path, _attest_components, _AUDITED_COLUMNS
 from .technical import build_eligibility_evidence
 
 

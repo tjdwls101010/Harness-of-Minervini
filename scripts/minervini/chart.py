@@ -22,6 +22,7 @@ from matplotlib.patches import Rectangle
 import numpy as np
 import pandas as pd
 
+from .dates import parse_iso
 from .setup_structure import bars_fingerprint, read_bars
 from .power_play_evidence import build_power_play_evidence, power_play_fingerprint
 from .swings import canonical_chain
@@ -649,10 +650,10 @@ def _ticker(value: str) -> str:
 def _as_of_date(value: str | date) -> date:
     if isinstance(value, date):
         return value
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError("as_of must be an ISO date") from error
+    result = parse_iso(value)
+    if result is None:
+        raise ValueError("as_of must be an ISO date")
+    return result
 
 
 def _completed_daily(daily_ohlcv: pd.DataFrame, as_of: date) -> pd.DataFrame:
