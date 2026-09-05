@@ -25,6 +25,7 @@ import pandas as pd
 
 from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
 from .numbers import finite_or_none as _finite
+from .setup_structure import session_index
 from . import doctrine
 
 
@@ -97,12 +98,7 @@ def _completed(frame: Any, as_of: date) -> pd.DataFrame | None:
     timestamps = pd.to_datetime(frame.index, errors="coerce")
     if timestamps.isna().any():
         return None
-    if timestamps.tz is not None:
-        # The zone is dropped and the wall clock kept, which is what `setup_structure.read_bars`
-        # does and therefore what every session date in this harness means. Converting instead
-        # renamed a UTC-stamped session to the day before, and a breach was recorded against a
-        # session nothing else agrees exists.
-        timestamps = timestamps.tz_localize(None)
+    timestamps = session_index(timestamps)
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()
