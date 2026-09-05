@@ -98,6 +98,13 @@ def _result(record: dict[str, Any]) -> dict[str, Any]:
     return {"claim": _runtime_claim(record), "provenance": record["provenance"]}
 
 
+def _claim_index() -> dict[str, dict[str, Any]]:
+    registry = _load_registry()
+    if "_claim_index" not in registry:
+        registry["_claim_index"] = {record["id"]: record for record in registry["claims"]}
+    return registry["_claim_index"]
+
+
 def has_claim(claim_id: str) -> bool:
     """Whether the registry holds this claim.
 
@@ -105,7 +112,7 @@ def has_claim(claim_id: str) -> bool:
     leading a reader nowhere, and evidence arriving from a caller can name anything.
     """
 
-    return any(record["id"] == claim_id for record in _load_registry()["claims"])
+    return claim_id in _claim_index()
 
 
 def get_claim(claim_id: str) -> dict[str, Any]:
@@ -114,10 +121,10 @@ def get_claim(claim_id: str) -> dict[str, Any]:
     Raises:
         KeyError: If ``claim_id`` is not registered.
     """
-    for record in _load_registry()["claims"]:
-        if record["id"] == claim_id:
-            return _result(record)
-    raise KeyError(f"unknown doctrine claim: {claim_id}")
+    record = _claim_index().get(claim_id)
+    if record is None:
+        raise KeyError(f"unknown doctrine claim: {claim_id}")
+    return _result(record)
 
 
 def claim(claim_id: str) -> dict[str, Any]:

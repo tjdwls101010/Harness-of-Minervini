@@ -192,6 +192,7 @@ EXTRA_CASES: list[tuple[str, str, dict[str, object]]] = [
 # answer; the rest are asked twice, once with every boundary refusing and once with fixture
 # bars, so both the incomplete branch and a measured one are read back.
 REQUESTS: dict[str, dict[str, object]] = {
+    "doctrine.list": {"as_of": AS_OF},
     "capabilities": {},
     "describe": {"capability": "ticker.risk"},
     "clock": {"as_of": AS_OF},

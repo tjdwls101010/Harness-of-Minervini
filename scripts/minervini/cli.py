@@ -149,6 +149,11 @@ def build_parser() -> JsonArgumentParser:
 
     doctrine = _group_parser(sub, "doctrine", summary="Inspect executable doctrine claims.", details="Doctrine is a normalized runtime registry. It is intentionally smaller and more operational than the source corpus.")
     doctrine_sub = doctrine.add_subparsers(dest="doctrine_command", required=True, metavar="COMMAND")
+    doctrine_list = _capability_parser(doctrine_sub, "list", "doctrine.list")
+    doctrine_list.add_argument("--context", help=_input_help("doctrine.list", "context"))
+    doctrine_list.add_argument("--family", help=_input_help("doctrine.list", "family"))
+    doctrine_list.add_argument("--layer", help=_input_help("doctrine.list", "layer"))
+    _common(doctrine_list, "doctrine.list")
     doctrine_show = _capability_parser(doctrine_sub, "show", "doctrine.show")
     doctrine_show.add_argument("claim_id", help=_input_help("doctrine.show", "claim_id"))
     _common(doctrine_show, "doctrine.show")

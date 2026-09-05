@@ -1,0 +1,108 @@
+{
+  "$id": "https://harness.minervini.dev/schemas/v2/doctrine.list.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    },
+    {
+      "properties": {
+        "data": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "error": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "claims": {}
+              },
+              "required": [
+                "claims"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "operation": {
+          "const": "doctrine.list"
+        }
+      },
+      "required": [
+        "operation"
+      ]
+    }
+  ],
+  "title": "Harness of Minervini v2 doctrine.list response",
+  "x-capability-contract": {
+    "errors": [
+      "invalid_request",
+      "provider_unavailable",
+      "internal_error"
+    ],
+    "examples": [
+      "scripts/.venv/bin/python scripts/pipeline doctrine list",
+      "scripts/.venv/bin/python scripts/pipeline doctrine list --context prospective_entry --family risk. --layer canonical"
+    ],
+    "exit_codes": {
+      "0": "A valid domain envelope was emitted; its status may still be partial, unavailable, or needs_input.",
+      "2": "The request or arguments were invalid; stdout contains a needs_input error envelope.",
+      "3": "An unexpected internal contract failure occurred; stdout contains an unavailable error envelope."
+    },
+    "inputs": {
+      "as_of": {
+        "description": "Completed US trading session in YYYY-MM-DD form; defaults to the latest completed regular session.",
+        "required": false,
+        "type": "date"
+      },
+      "context": {
+        "description": "Exact analysis context, such as prospective_entry, active_position, setup, or market_analysis.",
+        "required": false,
+        "type": "string"
+      },
+      "family": {
+        "description": "Claim ID prefix, such as risk. or setup.",
+        "required": false,
+        "type": "string"
+      },
+      "format": {
+        "choices": [
+          "compact",
+          "full"
+        ],
+        "default": "full",
+        "description": "Output detail only; compact preserves verdict, signals, and missing evidence while omitting verbose basis rows.",
+        "required": false,
+        "type": "enum"
+      },
+      "layer": {
+        "description": "Exact doctrine layer: canonical, practice, or harness.",
+        "required": false,
+        "type": "string"
+      }
+    },
+    "limitations": [
+      "Filters intersect; an unknown context, prefix, or layer returns an empty complete list.",
+      "Quarantined and out-of-scope records are excluded; doctrine show remains the audit accessor for a known ID.",
+      "Computability distinguishes deterministic measurements from claims requiring analyst judgment; inclusion is not an investment verdict.",
+      "--as-of stamps the envelope; doctrine content is versioned with the repository rather than market time."
+    ],
+    "output": "Runtime claim rows with id, title, kind, layer, computability, registered threshold roles, and consumers. Use doctrine show with a returned ID for its full rule and source quotations.",
+    "prerequisites": [],
+    "side_effects": [],
+    "status_meanings": {
+      "needs_input": "A filter is not a non-empty string or the as-of session is invalid.",
+      "ok": "Matching runtime claims, or a legitimate empty list, were returned."
+    },
+    "summary": "Discover runtime doctrine claims and how each is read or measured."
+  }
+}

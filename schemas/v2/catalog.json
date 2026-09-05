@@ -12,6 +12,10 @@
       "schema_file": "describe.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/describe.schema.json"
     },
+    "doctrine.list": {
+      "schema_file": "doctrine.list.schema.json",
+      "schema_id": "https://harness.minervini.dev/schemas/v2/doctrine.list.schema.json"
+    },
     "doctrine.show": {
       "schema_file": "doctrine.show.schema.json",
       "schema_id": "https://harness.minervini.dev/schemas/v2/doctrine.show.schema.json"
