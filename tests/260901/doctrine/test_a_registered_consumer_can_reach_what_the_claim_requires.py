@@ -38,7 +38,7 @@ import unittest
 from scripts.minervini.capabilities import CAPABILITIES
 
 
-REGISTRY = pathlib.Path("doctrine/claims.json")
+from tests.paths import REGISTRY
 # Kinds whose citation is a measurement compared against a standard. The other two -- a
 # constitution's restraint and a tactic's disclosure -- name inputs the citer never receives.
 MEASURED = {"interpretation", "default", "hard_gate", "exception"}
