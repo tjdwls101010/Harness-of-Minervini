@@ -175,7 +175,7 @@ def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS
     lands in a year the position did not exist in.
 
     Every reason here is one of `read_bars`'s own, and
-    `tests/260828/unit/test_two_readers_one_vocabulary.py` holds the two to that: what this
+    `tests/unit/setup_structure/test_two_readers_one_vocabulary.py` holds the two to that: what this
     accepts, that one accepts or refuses for a rule this deliberately does not have.
     """
 

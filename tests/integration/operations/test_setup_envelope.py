@@ -1,0 +1,318 @@
+"""Behavior checks for setup envelope."""
+
+from __future__ import annotations
+
+from tests.providers import rows_snapshot
+from datetime import datetime, timezone
+import unittest
+from scripts.minervini.contracts import RequestError
+from scripts.minervini.cli import format_payload
+from scripts.minervini.operations import Runtime, execute
+from scripts.minervini.providers import ProviderUnavailable, SnapshotMeta
+from scripts.minervini.setup_structure import bars_fingerprint
+from tests.series import distribution_only_in_the_tail_series
+from tests.integration.operations._setup_envelope_fixtures import run, snapshot
+
+
+class AGapTheEngineKnowsAboutOutranksTheCallersTests(unittest.TestCase):
+    def test_a_caller_admitting_a_gap_does_not_cover_the_one_the_detector_found(self) -> None:
+        """Two different absences, and the caller's answered first.
+
+        Declaring the chain partial returned `fail` -- a verdict about the reading -- and with a
+        verdict there the envelope came back ok, wait, and pointing at ticker.risk, with the
+        segmentation the detector refused to vouch for nowhere in it.
+        """
+
+        payload = run(daily_range_pct=0.5, hidden_bounce=True, chain_completeness="partial")
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "segmentation_unstable")
+        # Outranking the caller's admission is not the same as losing it: the signal that took
+        # precedence carries the reading it took precedence over.
+        completeness = next(item for item in payload["signals"] if item["id"] == "setup.declared_chain_completeness")
+        self.assertEqual(completeness["measured"]["reading"], "partial")
+
+
+class RefusedBeforeAnythingIsFetchedTests(unittest.TestCase):
+    def test_a_request_no_history_could_rescue_never_reaches_the_provider(self) -> None:
+        """Validating after the fetch reports the caller's fault as a provider outage.
+
+        It also pays for a fetch whose result cannot be used, and on a provider that happens to
+        be down the caller is told to retry something that was never going to work.
+        """
+
+        calls = []
+
+        def provider(ticker, requested):
+            calls.append(ticker)
+            raise ProviderUnavailable("down")
+
+        runtime = Runtime(price_history=provider)
+
+        with self.assertRaises(RequestError) as raised:
+            execute("ticker.setup", {
+                "ticker": "TEST", "as_of": "2026-06-25", "swing": [],
+                "chain_completeness": "complete", "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(raised.exception.field, "approved_bars")
+        self.assertEqual(calls, [])
+
+    def test_every_shape_the_request_can_fail_on_is_checked_there_too(self) -> None:
+        """One field moved ahead of the fetch and the rest stayed behind it."""
+
+        calls = []
+
+        def provider(ticker, requested):
+            calls.append(ticker)
+            raise ProviderUnavailable("down")
+
+        runtime = Runtime(price_history=provider)
+
+        with self.assertRaises(RequestError) as raised:
+            execute("ticker.setup", {
+                "ticker": "TEST", "as_of": "2026-06-25", "swing": "not-a-list", "no_cache": True,
+            }, runtime=runtime)
+
+        self.assertEqual(raised.exception.field, "swing")
+        self.assertEqual(calls, [])
+
+
+class AVerdictIsAboutTheBaseOrItIsNotAVerdictTests(unittest.TestCase):
+    def test_a_gate_failing_on_a_chain_the_detector_did_not_produce_is_not_avoid(self) -> None:
+        """The measurement was of another span, so what it found is not about this stock.
+
+        The uncorroborated rule was applied only where the segmentation itself was unstable, so
+        a declared chain the detector had rejected still published its hard-gate failure: an
+        up/down volume ratio read off the last five anchors, where the base's own passed.
+        """
+
+        frame, whole, suffix = distribution_only_in_the_tail_series()
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        def run_with(chain):
+            return execute("ticker.setup", {
+                "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain,
+                "right_side_development": "constructive", "chain_completeness": "complete",
+                "approved_bars": bars_fingerprint(frame), "entry_proximity": "at_pivot",
+                "no_cache": True,
+            }, runtime=runtime)
+
+        honest, misdeclared = run_with(whole), run_with(suffix)
+
+        self.assertEqual(honest["data"]["setup_state"], "ready")
+        self.assertEqual(misdeclared["data"]["setup_state"], "incomplete")
+        self.assertEqual(misdeclared["data"]["uncorroborated_verdict"], "avoid")
+        reasons = {item["id"]: item["reason"] for item in misdeclared["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "declared_chain_is_not_the_detected_one")
+        # The caller can act on this one -- declare the chain ticker.swings proposed.
+        self.assertEqual(misdeclared["status"], "needs_input")
+        # And the machine channel carries nothing a reducer could read as a finding: the gate
+        # that failed was measured off the wrong span, so only the signal explaining why
+        # anything counts is published there. The evidence itself stays in the payload.
+        published = {item["id"] for item in misdeclared["signals"]}
+        self.assertEqual(published, {"setup.declared_chain_completeness"})
+        self.assertIn(
+            "setup.demand_supply_volume_asymmetry",
+            {item["id"] for item in misdeclared["data"]["signals"]},
+        )
+
+    def test_the_chain_is_compared_however_the_reading_and_the_approval_came_out(self) -> None:
+        """Absence of a mismatch is not agreement when two earlier returns skip the comparison.
+
+        Corroboration was read off the completeness signal's basis, which only carries the
+        difference when the comparison was reached. Declaring the chain partial, or approving it
+        from another vintage of the bars, returns before that -- so the same wrong chain came
+        back corroborated, and its hard-gate failure was published as AVOID.
+        """
+
+        frame, _, suffix = distribution_only_in_the_tail_series()
+        meta = SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
+                            as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        for label, extra in (
+            ("partial", {"chain_completeness": "partial"}),
+            ("stale approval", {"chain_completeness": "complete", "approved_bars": "0" * 64}),
+        ):
+            with self.subTest(reading=label):
+                payload = execute("ticker.setup", {
+                    "ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": suffix,
+                    "right_side_development": "constructive", "entry_proximity": "at_pivot",
+                    "no_cache": True, **extra,
+                }, runtime=runtime)
+
+                self.assertEqual(payload["data"]["setup_state"], "incomplete")
+                self.assertEqual(payload["data"]["uncorroborated_verdict"], "avoid")
+                self.assertEqual(
+                    {item["id"] for item in payload["signals"]},
+                    {"setup.declared_chain_completeness"},
+                )
+
+
+class WhatDecidedItIsNamedTests(unittest.TestCase):
+    """`doctrine_ids` is where a reader finds the sentences a verdict rests on."""
+
+    def test_the_segmentation_convention_is_named_because_it_decided_the_chain(self) -> None:
+        """The detector's own rules answered a required condition, so they are cited.
+
+        Deriving the list from the signals alone left the one convention that is the harness's
+        rather than the source's out of the answer -- the reader could see that completeness
+        passed and not what the chain it passed against was produced by.
+        """
+
+        payload = run()
+
+        self.assertIn("setup.swing_segmentation_convention", payload["doctrine_ids"])
+
+    def test_a_chain_nothing_will_vouch_for_says_so_rather_than_asking_for_a_reading(self) -> None:
+        """Two different absences reached the caller under one word.
+
+        A completeness reading nobody declared is fixed by declaring one. A completeness
+        reading the detector refuses to corroborate is not fixed by anything the caller types,
+        and telling them "evidence required" sends them to look for an argument.
+        """
+
+        payload = run(daily_range_pct=0.5, hidden_bounce=True)
+
+        self.assertEqual(payload["data"]["segmentation"]["state"], "unstable")
+        reasons = {item["id"]: item["reason"] for item in payload["missing"]}
+        self.assertEqual(reasons.get("setup.declared_chain_completeness"), "segmentation_unstable")
+
+
+class EnvelopeTests(unittest.TestCase):
+    def test_a_fully_read_setup_corroborated_by_the_harnesss_own_segmentation_is_ready(self) -> None:
+        payload = run()
+
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["data"]["setup_state"], "ready")
+        self.assertEqual(payload["data"]["measurements"]["contraction_count"], 3)
+        self.assertEqual(payload["data"]["segmentation"]["state"], "resolved")
+
+    def test_no_signal_in_the_envelope_carries_a_state_or_a_flag_the_verdict_must_ignore(self) -> None:
+        """Not that every signal was required -- most report -- but that none of them is contrast."""
+
+        payload = run()
+
+        for signal in payload["signals"]:
+            with self.subTest(signal=signal["id"]):
+                self.assertNotIn(signal["state"], {"contrast_pass", "contrast_fail"})
+                self.assertIsNot(signal.get("binds"), False)
+
+    def test_contrast_evidence_rides_in_the_payload_and_names_whose_standard_it_is(self) -> None:
+        payload = run()
+
+        attributed = {item.get("attributed_to") for item in payload["data"]["contrast"]}
+        self.assertTrue({"Ryan", "Zanger"}.issubset(attributed), attributed)
+        self.assertNotIn("contrast", {signal["id"] for signal in payload["signals"]})
+
+    def test_the_doctrine_ids_are_the_claims_the_signals_actually_cite(self) -> None:
+        payload = run()
+
+        self.assertIn("setup.demand_supply_volume_asymmetry", payload["doctrine_ids"])
+        self.assertNotIn("setup.vcp_supply_contraction", payload["doctrine_ids"])
+
+    def test_a_base_nobody_declared_is_needs_input_rather_than_an_unobjectionable_pass(self) -> None:
+        payload = run(swings=[])
+
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertEqual(payload["data"]["setup_state"], "incomplete")
+        self.assertIn("base_structure", {item["id"] for item in payload["missing"]})
+
+    def test_a_chain_the_bars_contradict_is_needs_input_with_the_offending_date(self) -> None:
+        prices, chain = snapshot()
+        broken = list(chain)
+        broken[1] = "2026-04-07"
+
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+        payload = execute(
+            "ticker.setup",
+            {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": broken, "no_cache": True},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["status"], "needs_input")
+        self.assertTrue(any("2026-04-07" in problem for problem in payload["data"]["structure"]["problems"]))
+
+    def test_a_distributing_base_is_avoid_and_names_the_gate_it_failed(self) -> None:
+        payload = run(volume_profile="distribution")
+
+        self.assertEqual(payload["data"]["setup_state"], "avoid")
+        self.assertIn("setup.demand_supply_volume_asymmetry", payload["data"]["failed"])
+
+    def test_a_swing_list_that_is_not_a_list_is_a_request_error(self) -> None:
+        prices, _ = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        with self.assertRaises(RequestError):
+            execute(
+                "ticker.setup",
+                {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": "2026-04-06", "no_cache": True},
+                runtime=runtime,
+            )
+
+
+class DeclaredReadingsAreVisibleTests(unittest.TestCase):
+    def test_the_envelope_says_which_evidence_came_from_a_person_rather_than_the_bars(self) -> None:
+        """Three of the required conditions are readings, and a reader should see that.
+
+        Everything else in the verdict is measured and cannot be declared away. These three
+        cover only what completed bars genuinely cannot settle, so the honest thing is to
+        name them rather than let them blend into the measurements beside them.
+        """
+
+        payload = run()
+
+        declared = payload["data"]["declared_readings"]
+        self.assertEqual(
+            declared,
+            {"right_side_development": "constructive", "chain_completeness": "complete", "entry_proximity": "at_pivot"},
+        )
+
+    def test_a_setup_with_no_readings_names_the_three_it_is_waiting_on(self) -> None:
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+
+        payload = execute(
+            "ticker.setup",
+            {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "swing": chain, "no_cache": True},
+            runtime=runtime,
+        )
+
+        self.assertEqual(payload["data"]["declared_readings"], {})
+        missing = {item["id"] for item in payload["missing"]}
+        self.assertTrue({"setup.time_compression_hazard", "setup.declared_chain_completeness", "setup.chase_limit_above_pivot"}.issubset(missing))
+
+
+class CompactFormatTests(unittest.TestCase):
+    def test_compact_drops_the_measurement_detail_and_keeps_every_decision_surface(self) -> None:
+        """Compact changes detail, never meaning: the signals carry the values that decided."""
+
+        prices, chain = snapshot()
+        runtime = Runtime(price_history=lambda ticker, requested: prices)
+        request = {
+            "ticker": "TEST",
+            "as_of": prices.meta.as_of.isoformat(),
+            "swing": chain,
+            "right_side_development": "constructive",
+            "chain_completeness": "complete",
+            "approved_bars": bars_fingerprint(prices.data),
+            "entry_proximity": "at_pivot",
+            "entry_price": float(prices.data["Close"].iloc[-1]),
+            "no_cache": True,
+        }
+
+        full = execute("ticker.setup", request, runtime=runtime)
+        compact = format_payload(execute("ticker.setup", request, runtime=runtime), "compact")
+
+        self.assertEqual(compact["data"]["setup_state"], full["data"]["setup_state"])
+        self.assertEqual(compact["signals"], full["signals"])
+        self.assertEqual(compact["missing"], full["missing"])
+        self.assertNotIn("measurements", compact["data"])
+        self.assertIn("problems", compact["data"]["structure"])

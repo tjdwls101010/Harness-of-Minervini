@@ -7,7 +7,7 @@ from collections.abc import Sequence
 import numpy as np
 import pandas as pd
 
-from .base import _leg
+from tests.series.base import _leg
 
 
 def power_play_series(

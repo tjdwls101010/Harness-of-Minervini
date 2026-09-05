@@ -57,8 +57,8 @@
         "verdict reducer"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Re-mining searched both corpora and found no passage on deterministic modules, retry-once policy, or unavailable-evidence reporting; none should exist since this is harness/system design, not book doctrine."
@@ -122,8 +122,8 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -323,8 +323,8 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "The full-criteria block quote is an OCR transcription of an image table rather than flowing prose; it reads as a faithful copy of the book's own numbered list and is internally consistent with prose elsewhere in the chapter (e.g. '99 percent... traded above 200-day').",
@@ -479,8 +479,8 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Re-mining found no book sentence stating 'at least two months of trading history' or any specific session/day count for minimum trading history — that figure was the harness's own invention in the prior registry version and has been dropped as a standalone condition; the 40-session threshold that replaces it is explicitly marked exact:false for the same reason. | Second confirmed case of mined_existing.json's unsupported_parts being wrong rather than the harness inventing something; treated its other unsupported_parts as leads, re-checked against quote text, found no further errors. | The two session thresholds are the source's own weeks converted at convention.trading_week's five sessions and recorded here as sessions: three weeks or longer is fifteen, and the year-long exception's five weeks is twenty-five. Both are exact:false because the conversion is this harness's and the source counted weeks.",
@@ -563,8 +563,8 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Minervini"
@@ -737,10 +737,10 @@
         "verdict reducer"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py",
-        "tests/260826/unit/test_power_play_criterion_boundaries.py",
-        "tests/260826/unit/test_power_play_missing_event_columns.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py",
+        "tests/unit/power_play_evidence/test_power_play_criterion_boundaries.py",
+        "tests/unit/power_play_evidence/test_power_play_missing_event_columns.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Minervini"
@@ -863,8 +863,8 @@
         "verdict reducer"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -936,8 +936,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -1013,8 +1013,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -1082,8 +1082,8 @@
         "verdict reducer"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Re-mining found neither corpus uses the words 'opt-in', 'confirmation debt', or 'elevated false-positive risk' — TraderLion presents these tactics matter-of-factly as normal toolkit entries with their own stop rules, and Minervini's closest analogue (the 3C/cheat area) is presented as a standard entry point, not an opt-in one. Keep the underlying facts, but the framing is the harness's own synthesis."
@@ -1174,10 +1174,10 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260817/doctrine/test_registry.py",
-        "tests/260824/doctrine/test_registry_sourcing.py",
-        "tests/260827/unit/test_management_evidence.py",
-        "tests/260827/unit/test_structure_deterioration_actions.py"
+        "tests/doctrine/registry/test_registry.py",
+        "tests/doctrine/registry/test_registry_sourcing.py",
+        "tests/unit/management_evidence/test_management_evidence.py",
+        "tests/unit/risk/test_structure_deterioration_actions.py"
       ],
       "computability": "deterministic"
     },
@@ -1234,7 +1234,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Minervini"
@@ -1292,7 +1292,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Minervini"
@@ -1362,7 +1362,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is a constitutional stance, not a numeric gate — it motivates the 52-week-high proximity criterion above but is broader (also concerns not predicting a bottom).",
@@ -1421,7 +1421,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -1501,7 +1501,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -1565,7 +1565,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Quote reconstructed by joining numbered list items 248-277; wording unchanged. This list overlaps heavily with Trend Template criteria 1-3 but is framed as a transition confirmation checklist rather than the formal 8-criterion gate.",
@@ -1635,7 +1635,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Distinct from the formal Trend Template criterion 6 (>=30% above 52-week low, exact, a hard gate). This is a softer narrative heuristic ('25 to 30 percent') used earlier in the same chapter to describe when a stage-2 call is credible — do not silently merge the two into one number.",
@@ -1697,7 +1697,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Quote reconstructed by joining the Stage 2 Characteristics bullet list; wording unchanged.",
@@ -1775,7 +1775,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Minervini"
@@ -1835,7 +1835,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Quote reconstructed by joining the Stage 4 Characteristics bullet list; wording unchanged.",
@@ -1905,7 +1905,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is a historical/statistical claim about the book's own backtest population, not itself a per-ticker gate — it is the empirical justification underlying the moving-average criteria above, not an additional threshold to enforce.",
@@ -1966,7 +1966,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -2046,7 +2046,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -2133,7 +2133,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "'5 to 26 weeks' is stated as 'most commonly' (exact:true on the numbers themselves, but it is a typical range, not a hard bound). The wider 'four or five weeks up to a year or more' sentence immediately before it describes the broader universe of pullbacks/basing waves within stage 2, not specifically 'base patterns' — kept as separate softer thresholds ('a year or more' rendered as ~52 weeks low-confidence, exact:false) so a reducer doesn't collapse two different framings into one number. See also setup.consolidation_footprint_3_to_60_weeks for a third, still different range given elsewhere in the book for general consolidation footprints.",
@@ -2203,8 +2203,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/doctrine/registry/test_registry_sourcing.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "computability": "chart_assisted",
       "note": "This 3-60 week range (Chapter 10, general VCP/consolidation discussion) does NOT match the '5 to 26 weeks' figure given for stage-2 base patterns in Chapter 5 (basecount.typical_base_duration_5_to_26_weeks). Both are verbatim and both are hedged ('as many as', 'most commonly'); they appear to describe overlapping but not identical things (general consolidation footprint vs. stage-2 base patterns specifically) — a reducer author should decide which applies to which check rather than assuming one supersedes the other.",
@@ -2269,7 +2269,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -2339,7 +2339,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "Hedged twice ('Generally', 'for example') — treat as descriptive context, not a hard age cutoff. The same passage notes some superperformers were long-established private companies before their IPO.",
@@ -2397,7 +2397,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -2464,8 +2464,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py",
-        "tests/260825/unit/test_setup_measurements.py"
+        "tests/doctrine/registry/test_registry_sourcing.py",
+        "tests/unit/setup_measurements/test_setup_measurements.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -2538,7 +2538,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -2620,7 +2620,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Quotes preserve the source's PDF-extraction artifact where inline icon glyphs ('ipo', 'sma') were extracted as their own tokens, splitting the surrounding word (e.g. 'ipo...s' = 'IPOs', 'sma' trailing '200-day' = '200-day SMA'). Wording is otherwise unchanged per the verbatim requirement; meaning is unambiguous from context. This is a TraderLion practice-layer default describing one of three 'opportunity zones', not a Minervini book claim and not a hard gate."
@@ -2722,7 +2722,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Quote text is transcribed from an embedded screenshot's OCR'd filter list, not narrative prose. The %-off-52wk-high (25) and %-above-52wk-low (30) filters match the book's own criteria 6 and 7 exactly; the RS filter (69) differs from the book's stated 'no less than 70' — flag this discrepancy explicitly rather than picking one number, since this is TraderLion's own tool implementation, not a restatement of Minervini's rule. Do not treat 69 as replacing the book's 70; treat it as a documented TL-layer variant."
@@ -2793,7 +2793,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "This is the single most load-bearing number in the leadership chapter — a reducer should treat it as the primary window for flagging 'early leader' candidates after a confirmed market low.",
@@ -2864,7 +2864,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -2939,7 +2939,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -3025,7 +3025,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Second item of the four-part bottoming checklist in market.bottoming_signal_checklist; broken out because it carries its own numeric thresholds.",
@@ -3112,8 +3112,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/doctrine/registry/test_registry_sourcing.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "computability": "deterministic",
       "note": "Two distinct thresholds share the value 50: one is the ceiling for a survivable severe-bear-market correction ('as much as 50 percent'), the other is the point past which the source calls the correction 'generally too much' ('more than 50 percent'). Keep both — they frame the same number from opposite sides.",
@@ -3184,7 +3184,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Companion rule to concentrating on the new-52-week-high list itself during early-bull-market stages.",
@@ -3244,7 +3244,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Stated as an unconditional 'stay away' — pairs directly with concentrating on the new-high list as the opposite-polarity screen.",
@@ -3310,7 +3310,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -3378,7 +3378,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -3469,7 +3469,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -3538,7 +3538,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "Stated as a floor ('more than 90 percent'). Supports doing preparatory watch-list work during declines rather than waiting for confirmed strength.",
@@ -3603,7 +3603,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -3678,7 +3678,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "The source's actual wording is compound ('3 or 4' at the low end, 'as many as 8 to 10' at the high end) — [3,10] is a simplification for the schema; a reducer author should preserve the compound phrasing rather than treat 3-10 as one clean uniform range.",
@@ -3748,7 +3748,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is activity-focus language (which sectors to hunt in), not a position-sizing instruction — keep it framed that way if it reaches prose output, per the harness's ban on prescribing portfolio percentages.",
@@ -3807,7 +3807,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -3888,7 +3888,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "Also underlies the 'when the leader sneezes, the group can get a cold' warning — the top 2-3 names are both the buy focus and the group's early-warning sensor.",
@@ -3954,7 +3954,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is a historical base-rate, not a per-ticker computable check — pair with market.single_stock_can_lead_without_group so a reducer doesn't over-read the ~40% minority as disqualifying.",
@@ -4037,7 +4037,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "note": "This directly answers the 'can a single stock lead without group confirmation' question the harness needs: yes, explicitly and by design — missing group confirmation is context, not an automatic rejection. This should anchor that clause in the harness constitution.",
@@ -4099,7 +4099,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is the book's explicit stance on acting on individual-stock evidence over index-level opinion. Note this does not override the harness's separate rule against authorizing longs below a falling 200-day average — this claim is about not waiting for the index to confirm before acting on an individual leader's own evidence, not about ignoring a stock's own trend-template failure.",
@@ -4185,7 +4185,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Book explicitly frames this as ONE illustrative example system built around QQQ and the 21 EMA for swing traders, not a universal rule — the third quote is the book's own disclaimer. Do not promote this to a hard gate; it is an opt-in tactic, and the book itself says criteria should be picked per-trader."
@@ -4277,7 +4277,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Day-count is relative to whatever cycle-start definition is in use (e.g. traderlion.market_cycle_swing_system_example's 21-EMA rule), not an absolute calendar rule. 'Stress test' here is a TraderLion-specific term, distinct from IBD-style 'follow-through day' — this source does not define or quantify a follow-through day or distribution day anywhere in the text (searched both terms; zero and only chart-caption hits respectively), so no claim is offered for those."
@@ -4346,7 +4346,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -4434,7 +4434,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -4516,7 +4516,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -4582,7 +4582,7 @@
         "market.candidates"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "This is an epigraph attributed to William O'Neil, quoted verbatim inside the TraderLion.db text (Chapter 8's opening quote), not TraderLion's own original claim — included because it appears in this corpus and frames the entire market-cycles chapter. Not a computable threshold; use as a constitutional weight-of-evidence statement (market regime governs setup selection, per the harness's existing doctrine precedence order) rather than a literal 50% score."
@@ -4661,7 +4661,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -4733,7 +4733,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "'Or more' is explicitly open-ended — this is a step up from the 20-25% minimum default, not a ceiling.",
@@ -4814,7 +4814,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Conditioned explicitly on market regime — the book ties the threshold itself to bull-market conditions, not just candidate quality.",
@@ -4882,7 +4882,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -4950,7 +4950,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5027,7 +5027,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5096,7 +5096,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "'5 percent or more' applies symmetrically to upward and downward revisions of current-quarter and current-fiscal-year estimates.",
@@ -5167,7 +5167,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5248,7 +5248,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5328,7 +5328,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "These specific numbers (12%, then 40%, then 100%) are a single illustrative example, not a general-purpose threshold — do not generalize them into a rule that any 12%-grower accelerating to 40% qualifies.",
@@ -5386,7 +5386,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -5459,7 +5459,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Unit is years, not quarters. Companion tactic: 'life is not perfect' — one off-quarter within this window is tolerated if the overall trend still improves.",
@@ -5525,7 +5525,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5597,7 +5597,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -5694,7 +5694,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "The two chapters disagree on the exact quarter window (2-3 vs. 1-2) while agreeing on the 100%-or-more figure — a reducer author should treat the window as approximate ('most recent quarter or two') rather than reconciling it into a single false-precise number.",
@@ -5760,7 +5760,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -5852,7 +5852,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "'A good balance sheet, expanding margins, high return on equity, and reasonable debt' are also named as signs of good management for this category, but no ROE number or peer-relative threshold is stated anywhere in the book — that concept must stay in refuses_to_quantify.",
@@ -5910,7 +5910,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -5985,7 +5985,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6047,7 +6047,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6109,7 +6109,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "Worked example: Wild Oats (low P/E, weak earnings growth) underperformed Whole Foods (higher P/E, strong earnings growth) despite Wild Oats being 'popularly perceived' as the cheaper play.",
@@ -6166,7 +6166,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "note": "Reasoning given: standard P/E reflects historical results, not the future; a forward P/E depends on estimates that are frequently wrong. Companion claim: 'Buying a cheap stock is like a trap hand in poker... The cheaper it gets, the more attractive it becomes based on the it's cheap rationale. This is the type of thinking that gets investors in big trouble.'",
@@ -6236,7 +6236,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Book adds that in times when growth stocks are in favor, the premium can be even higher; even out of favor, a significant premium to the market can persist.",
@@ -6304,7 +6304,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Explicitly framed as descriptive ('many... traded at more than'), not prescriptive — not a minimum P/E requirement for buying.",
@@ -6402,7 +6402,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "note": "Book gives an explicit sell-discipline application: buy at P/E of 20 at breakout, multiply by 2-3 to estimate a target zone of 40-60; 'pay extra attention once the P/E nears 2 and especially around 2.5 to 3 or greater. It could top soon afterward.' This is presented as a probabilistic late-stage warning, not a hard sell trigger — the book pairs it with watching for deceleration/price weakness before acting.",
@@ -6477,7 +6477,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -6557,7 +6557,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -6619,7 +6619,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6679,7 +6679,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6747,7 +6747,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6809,7 +6809,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "unquantified": [
@@ -6871,7 +6871,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -6940,7 +6940,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -7011,7 +7011,7 @@
         "doctrine audit"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -7075,7 +7075,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ritchie II",
@@ -7135,7 +7135,7 @@
         "ticker.qualify"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Zanger",
@@ -7207,7 +7207,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Ryan",
@@ -7280,7 +7280,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -7343,7 +7343,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -7403,7 +7403,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Zanger",
@@ -7462,7 +7462,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ritchie II",
@@ -7530,7 +7530,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -7623,7 +7623,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -7693,7 +7693,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Zanger",
@@ -7754,7 +7754,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ritchie II",
@@ -7826,7 +7826,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -7908,7 +7908,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -7969,7 +7969,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Zanger",
@@ -8032,7 +8032,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ritchie II",
@@ -8108,7 +8108,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -8170,7 +8170,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ryan",
@@ -8227,7 +8227,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Zanger",
@@ -8290,7 +8290,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ritchie II",
@@ -8354,7 +8354,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Minervini",
@@ -8415,7 +8415,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ritchie II",
@@ -8491,7 +8491,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -8565,7 +8565,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Zanger",
@@ -8622,7 +8622,7 @@
         "ticker.fundamentals"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Ritchie II",
@@ -8702,7 +8702,7 @@
         "doctrine audit"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Zanger",
@@ -8765,7 +8765,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Minervini",
@@ -8825,7 +8825,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ritchie II",
@@ -8886,7 +8886,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "judgment_only",
       "attributed_to": "Minervini",
@@ -8960,7 +8960,7 @@
         "doctrine audit"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Ryan",
@@ -9027,7 +9027,7 @@
         "doctrine audit"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Zanger",
@@ -9109,7 +9109,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -9178,7 +9178,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Zanger",
@@ -9239,9 +9239,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.vcp_contraction_count",
       "title": "A VCP shows two to six contractions, most commonly two to four",
@@ -9312,9 +9312,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.successive_contraction_halving",
       "title": "Each successive contraction runs about half the previous one, with the tolerance left undefined",
@@ -9371,9 +9371,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.contractions_must_contract",
       "title": "Contractions narrow from left to right as supply is absorbed",
@@ -9432,9 +9432,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.demand_supply_volume_asymmetry",
       "title": "Volume must be much bigger on up days than on down days",
@@ -9517,9 +9517,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.final_contraction_volume_dryup",
       "title": "Volume on the final contraction runs below the 50-day average with one or two extremely low days",
@@ -9579,9 +9579,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.pivot_volume_contraction",
       "title": "Every correct pivot point develops with a contraction in volume",
@@ -9639,9 +9639,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.time_compression_hazard",
       "title": "A right side that develops too fast is time compression and is hazardous",
@@ -9699,9 +9699,9 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.structural_pivot_and_trigger",
       "title": "The pivot is the high of the completed pause, and the trigger is price above it on expanding volume",
@@ -9773,9 +9773,9 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.closing_range_formula",
       "title": "Closing range places the close within the bar's range",
@@ -9867,9 +9867,9 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_measurements.py",
-        "tests/260825/unit/test_setup_reducer.py",
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup_measurements/test_setup_measurements.py",
+        "tests/unit/setup/test_setup_reducer.py",
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "id": "setup.volume_state_convention",
       "title": "Volume is above or below average by roughly a quarter, against a horizon-specific window",
@@ -9949,7 +9949,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_reducer.py"
+        "tests/unit/setup/test_setup_reducer.py"
       ],
       "provenance": {
         "quotations": [
@@ -10007,7 +10007,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_gaming.py"
+        "tests/unit/setup/test_setup_gaming.py"
       ],
       "provenance": {
         "quotations": [
@@ -10064,7 +10064,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_round_two.py"
+        "tests/unit/setup/test_setup_round_two.py"
       ],
       "provenance": {
         "quotations": [
@@ -10125,7 +10125,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/unit/test_setup_round_three.py"
+        "tests/unit/setup/test_setup_round_three.py"
       ],
       "provenance": {
         "resolution": "the harness's own rule, with no book behind it: the source describes swing segmentation as chart work and says nothing about a caller declaring one to a program. Skipping an unfavourable contraction produces a chain whose every anchor is genuinely its span's extreme, so no measurement of the chain alone separates it from an honest one. A second segmentation does, so the detector runs inside the setup, over the same bars, at parameters no request reaches. Two earlier versions trusted something the caller could write instead -- the name of an independent supplier, then the other segmentation handed in as an argument -- and neither is provenance."
@@ -10199,8 +10199,8 @@
         "ticker.swings"
       ],
       "tests": [
-        "tests/260825/unit/test_swings.py",
-        "tests/260825/doctrine/test_parameters.py"
+        "tests/unit/swings/test_swings.py",
+        "tests/doctrine/roles/test_parameters.py"
       ],
       "provenance": {
         "resolution": "the harness's own rule, with no book behind it. The source describes swing reading as chart work and never names a retracement, so the numbers here are conventions rather than doctrine. They are recorded as parameters instead of thresholds because they select what gets computed rather than being compared with anything, and marked as affecting the verdict because the chain they produce answers a required condition. The one part of it that is not the harness's own is the base's left boundary: three price-only rules for it failed, because on price alone a rally above an earlier rally top inside a correction and a fresh consolidation under an old peak are the same picture at different magnitudes, and the source supplies no magnitude. It supplies the other half of the observation instead -- the buy point is price moving above the pivot on expanding volume -- so leaving a structure is read as a breakout out of it, per setup.structural_pivot_and_trigger. Which of those breakouts ended a structure is still a reading rather than a measurement -- holding either admits a pivot failure that reset or it does not, and the source says such a failure can recover -- so the edge is read every way and vouched for only where the readings agree. Every rule that picked one of them reached ready on a chain the detector had edited: bounding at an interior high deleted the contraction that widened, and not bounding at all let a structure the stock had left lend a contraction to the one above it."
@@ -10260,7 +10260,7 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260825/doctrine/test_power_play_spec.py"
+        "tests/doctrine/consumers/test_power_play_spec.py"
       ],
       "computability": "deterministic",
       "rule": {
@@ -10320,13 +10320,13 @@
         "ticker.power-play"
       ],
       "tests": [
-        "tests/260825/doctrine/test_power_play_spec.py",
-        "tests/260826/unit/test_power_play_candidates.py",
-        "tests/260826/unit/test_power_play_candidate_sensitivity.py",
-        "tests/260826/unit/test_power_play_segmentation_domain.py",
-        "tests/260826/unit/test_power_play_unconfirmed_peak.py",
-        "tests/260826/unit/test_power_play_walked_past_bars.py",
-        "tests/260826/unit/test_power_play_equal_highs_in_the_chain.py"
+        "tests/doctrine/consumers/test_power_play_spec.py",
+        "tests/unit/power_play/test_power_play_candidates.py",
+        "tests/unit/power_play_evidence/test_power_play_candidate_sensitivity.py",
+        "tests/unit/power_play_evidence/test_power_play_segmentation_domain.py",
+        "tests/unit/power_play_evidence/test_power_play_unconfirmed_peak.py",
+        "tests/unit/power_play/test_power_play_walked_past_bars.py",
+        "tests/unit/power_play/test_power_play_equal_highs_in_the_chain.py"
       ],
       "computability": "deterministic",
       "rule": {
@@ -10382,18 +10382,18 @@
         "ticker.power-play"
       ],
       "tests": [
-        "tests/260826/unit/test_power_play_chart_reading.py",
-        "tests/260826/unit/test_power_play_fingerprint.py",
-        "tests/260826/unit/test_power_play_abstention.py",
-        "tests/260826/unit/test_power_play_unread_tops.py",
-        "tests/260826/unit/test_power_play_composite_rejection.py",
-        "tests/260826/unit/test_power_play_chart_reading_cli.py",
-        "tests/260826/integration/test_power_play_chart_approval.py",
-        "tests/260826/integration/test_power_play_chart_provenance.py",
-        "tests/260826/unit/test_power_play_question_vintage.py",
-        "tests/260826/integration/test_power_play_unreadable_contesting_top.py",
-        "tests/260826/integration/test_power_play_gaps_name_answerable_things.py",
-        "tests/260826/unit/test_power_play_payout_confirmed_peak.py"
+        "tests/unit/power_play_evidence/test_power_play_chart_reading.py",
+        "tests/unit/power_play_evidence/test_power_play_fingerprint.py",
+        "tests/unit/power_play_evidence/test_power_play_abstention.py",
+        "tests/unit/power_play_evidence/test_power_play_unread_tops.py",
+        "tests/unit/power_play_evidence/test_power_play_composite_rejection.py",
+        "tests/contracts/cli/test_power_play_chart_reading_cli.py",
+        "tests/integration/operations/test_power_play_chart_approval.py",
+        "tests/integration/operations/test_power_play_chart_provenance.py",
+        "tests/unit/power_play_evidence/test_power_play_question_vintage.py",
+        "tests/integration/operations/test_power_play_unreadable_contesting_top.py",
+        "tests/integration/operations/test_power_play_gaps_name_answerable_things.py",
+        "tests/unit/power_play_evidence/test_power_play_payout_confirmed_peak.py"
       ],
       "computability": "chart_assisted",
       "rule": {
@@ -10508,8 +10508,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260826/doctrine/test_tl_entry_tactics.py",
-        "tests/260826/unit/test_entry_tactics.py"
+        "tests/doctrine/registry/test_tl_entry_tactics.py",
+        "tests/unit/setup/test_entry_tactics.py"
       ],
       "computability": "chart_assisted"
     },
@@ -10614,8 +10614,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260826/doctrine/test_tl_entry_tactics.py",
-        "tests/260826/unit/test_entry_tactics.py"
+        "tests/doctrine/registry/test_tl_entry_tactics.py",
+        "tests/unit/setup/test_entry_tactics.py"
       ],
       "computability": "chart_assisted"
     },
@@ -10702,8 +10702,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260826/doctrine/test_tl_entry_tactics.py",
-        "tests/260826/unit/test_entry_tactics.py"
+        "tests/doctrine/registry/test_tl_entry_tactics.py",
+        "tests/unit/setup/test_entry_tactics.py"
       ],
       "computability": "chart_assisted",
       "note": "The source gives no stop band for this tactic in its own sentence, unlike the reclaim and the consolidation pivot. Its risk level is stated qualitatively -- just below the moving average and the higher low -- and this registry does not lend it the other tactics' numbers."
@@ -10796,8 +10796,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260826/doctrine/test_tl_entry_tactics.py",
-        "tests/260826/unit/test_entry_tactics.py"
+        "tests/doctrine/registry/test_tl_entry_tactics.py",
+        "tests/unit/setup/test_entry_tactics.py"
       ],
       "computability": "chart_assisted",
       "note": "The source calls this a very short-term pattern that can sit inside the other tactics, and states no failure sentence of its own the way the reclaim does. Its invalidation here is the risk level the source names, not an inferred rule."
@@ -10884,8 +10884,8 @@
         "ticker.setup"
       ],
       "tests": [
-        "tests/260826/doctrine/test_tl_entry_tactics.py",
-        "tests/260826/unit/test_entry_tactics.py"
+        "tests/doctrine/registry/test_tl_entry_tactics.py",
+        "tests/unit/setup/test_entry_tactics.py"
       ],
       "computability": "chart_assisted"
     },
@@ -10971,8 +10971,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_stop_and_r_rules.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/unit/risk/test_stop_and_r_rules.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic"
     },
@@ -11032,8 +11032,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_stop_and_r_rules.py",
-        "tests/260824/doctrine/test_registry_sourcing.py"
+        "tests/unit/risk/test_stop_and_r_rules.py",
+        "tests/doctrine/registry/test_registry_sourcing.py"
       ],
       "computability": "deterministic",
       "unquantified": [
@@ -11108,8 +11108,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_management_evidence.py",
-        "tests/260827/unit/test_structure_deterioration_actions.py"
+        "tests/unit/management_evidence/test_management_evidence.py",
+        "tests/unit/risk/test_structure_deterioration_actions.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -11173,8 +11173,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_management_evidence.py",
-        "tests/260827/unit/test_structure_deterioration_actions.py"
+        "tests/unit/management_evidence/test_management_evidence.py",
+        "tests/unit/risk/test_structure_deterioration_actions.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Minervini",
@@ -11254,9 +11254,9 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py",
-        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py",
+        "tests/integration/operations/test_strength_inputs_cross_the_seam.py"
       ],
       "computability": "deterministic"
     },
@@ -11321,8 +11321,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -11389,8 +11389,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -11458,8 +11458,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py"
       ],
       "computability": "chart_assisted",
       "unquantified": [
@@ -11525,8 +11525,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py"
       ],
       "computability": "chart_assisted",
       "attributed_to": "Minervini",
@@ -11587,9 +11587,9 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py",
-        "tests/260827/integration/test_strength_inputs_cross_the_seam.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py",
+        "tests/integration/operations/test_strength_inputs_cross_the_seam.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini",
@@ -11649,8 +11649,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_structure_extension_evidence.py",
-        "tests/260827/unit/test_structure_extension_actions.py"
+        "tests/unit/management_evidence/test_structure_extension_evidence.py",
+        "tests/unit/risk/test_structure_extension_actions.py"
       ],
       "computability": "deterministic"
     },
@@ -11718,8 +11718,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_missing_columns_and_ties.py",
-        "tests/260827/unit/test_structure_extension_evidence.py"
+        "tests/unit/management_evidence/test_missing_columns_and_ties.py",
+        "tests/unit/management_evidence/test_structure_extension_evidence.py"
       ],
       "computability": "deterministic"
     },
@@ -11801,7 +11801,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_actions.py"
+        "tests/unit/risk/test_context_actions.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -11857,7 +11857,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_actions.py"
+        "tests/unit/risk/test_context_actions.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -11913,7 +11913,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_actions.py"
+        "tests/unit/risk/test_context_actions.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Zanger"
@@ -11970,7 +11970,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_evidence.py"
+        "tests/unit/management_evidence/test_context_evidence.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Zanger",
@@ -12047,7 +12047,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_evidence.py"
+        "tests/unit/management_evidence/test_context_evidence.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -12104,7 +12104,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_evidence.py"
+        "tests/unit/management_evidence/test_context_evidence.py"
       ],
       "computability": "deterministic",
       "attributed_to": "Minervini"
@@ -12167,7 +12167,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_context_evidence.py"
+        "tests/unit/management_evidence/test_context_evidence.py"
       ],
       "computability": "deterministic"
     },
@@ -12216,8 +12216,8 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_management_actions.py",
-        "tests/260827/integration/test_stop_untouched_structure_deteriorating.py"
+        "tests/unit/risk/test_management_actions.py",
+        "tests/integration/operations/test_stop_untouched_structure_deteriorating.py"
       ],
       "computability": "deterministic"
     },
@@ -12273,7 +12273,7 @@
         "ticker.risk"
       ],
       "tests": [
-        "tests/260827/unit/test_missing_split_evidence.py"
+        "tests/unit/management_evidence/test_missing_split_evidence.py"
       ],
       "computability": "deterministic"
     },
@@ -12337,7 +12337,7 @@
         "market.snapshot"
       ],
       "tests": [
-        "tests/260829/unit/test_a_group_is_read_from_the_names_it_holds.py"
+        "tests/unit/market_evidence/test_a_group_is_read_from_the_names_it_holds.py"
       ],
       "computability": "deterministic"
     }
