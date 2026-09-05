@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format is based on 
 
 ### Added
 
-- **Composable v2 interface.** Eighteen capabilities expose market, ticker, doctrine, clock, health, chart, and explicit watchlist operations through one versioned JSON envelope, machine-readable `describe`, immutable-ID schemas, and detailed offline leaf help.
+- **Composable v2 interface.** 21 capabilities expose market, ticker, doctrine, clock, health, chart, and explicit watchlist operations through one versioned JSON envelope, machine-readable `describe`, immutable-ID schemas, and detailed offline leaf help.
 - **Point-in-time provider layer.** Completed Yahoo bars, exact-date `ibd-rs-rating==0.5.0`, filed-as-of SEC facts, current Nasdaq security identity, current Yahoo classification, and captured Finviz breadth now retain typed availability, coverage, retrieval time, version, and content hashes.
 - **Doctrine-aware decision engines.** Standard Stage 2 and eight-of-eight qualification, bounded recent-IPO Primary Base eligibility, setup and VCP supply evidence, filed fundamentals and the narrow Power Play exception, current same-industry peers, market vectors, and prospective or active-position risk remain separate auditable axes.
 - **Explicit local research state.** A non-creating SQLite ledger records or annotates research only through explicit watchlist write capabilities; the provider cache and chart artifacts use ignored paths and disclose their side effects.
