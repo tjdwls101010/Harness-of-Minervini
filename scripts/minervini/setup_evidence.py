@@ -263,15 +263,6 @@ def _chain_matches_detector(structure: Mapping[str, Any], detected: Mapping[str,
     return declared == found
 
 
-def _iso_day(value: Any) -> str:
-    """One date spelling for both sides, so a detector's Timestamps compare with ISO strings."""
-
-    try:
-        return pd.Timestamp(value).normalize().date().isoformat()
-    except (TypeError, ValueError):
-        return str(value)
-
-
 def _proximity_state(measurements: Mapping[str, Any], reading: str | None) -> str:
     """The source states the limit and withholds the number, so the reader supplies the call.
 

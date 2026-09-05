@@ -337,17 +337,6 @@ def _state(value: Any) -> str:
     return "observed"
 
 
-def _aggregate_states(states: list[str]) -> str:
-    non_missing = [state for state in states if state != "unavailable"]
-    if not non_missing:
-        return "unavailable"
-    if all(state == "supports" for state in non_missing):
-        return "supports"
-    if all(state == "contradicts" for state in non_missing):
-        return "contradicts"
-    return "mixed"
-
-
 def _group_rank_key(group: Mapping[str, Any]) -> tuple[Any, ...]:
     order = {"supports": 0, "observed": 1, "mixed": 2, "not_applicable": 3, "needs_chart": 4, "unavailable": 5, "needs_input": 6, "contradicts": 7}
     states = tuple(order[item["state"]] for item in group["signal_vector"])
