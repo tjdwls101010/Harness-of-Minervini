@@ -125,7 +125,7 @@ def _group_parser(subparsers: Any, command: str, *, summary: str, details: str) 
 
 def _common(parser: argparse.ArgumentParser, capability: str) -> None:
     parser.add_argument("--as-of", metavar="YYYY-MM-DD", help=_input_help(capability, "as_of"))
-    parser.add_argument("--format", choices=("compact", "full"), default="full", help=_input_help(capability, "format"))
+    parser.add_argument("--format", choices=CAPABILITIES[capability].inputs["format"]["choices"], default="full", help=_input_help(capability, "format"))
     if "no_cache" in CAPABILITIES[capability].inputs:
         parser.add_argument("--no-cache", action="store_true", help=_input_help(capability, "no_cache"))
 
@@ -156,7 +156,7 @@ def build_parser() -> JsonArgumentParser:
     market = _group_parser(sub, "market", summary="Inspect regime, groups, leadership, and the candidate universe.", details="Use snapshot for environment and leadership evidence, then candidates for paginated US common-stock and ADR discovery. Neither command prescribes portfolio allocation.")
     market_sub = market.add_subparsers(dest="market_command", required=True, metavar="COMMAND")
     snapshot = _capability_parser(market_sub, "snapshot", "market.snapshot")
-    snapshot.add_argument("--trade-traction", choices=("supports", "contradicts", "mixed", "needs_input"), help=_input_help("market.snapshot", "trade_traction"))
+    snapshot.add_argument("--trade-traction", choices=CAPABILITIES["market.snapshot"].inputs["trade_traction"]["choices"], help=_input_help("market.snapshot", "trade_traction"))
     snapshot.add_argument("--leader-limit", type=int, default=20, metavar="N", help=_input_help("market.snapshot", "leader_limit"))
     _common(snapshot, "market.snapshot")
     candidates = _capability_parser(market_sub, "candidates", "market.candidates")
@@ -168,9 +168,9 @@ def build_parser() -> JsonArgumentParser:
     ticker_sub = ticker.add_subparsers(dest="ticker_command", required=True, metavar="COMMAND")
     qualify = _capability_parser(ticker_sub, "qualify", "ticker.qualify")
     qualify.add_argument("ticker", help=_input_help("ticker.qualify", "ticker"))
-    qualify.add_argument("--primary-base-quality", choices=("supports", "contradicts", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_quality"))
-    qualify.add_argument("--primary-base-emergence", choices=("near_high_consolidation", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_emergence"))
-    qualify.add_argument("--primary-base-long-correction", choices=("confirmed", "not_confirmed", "needs_chart"), help=_input_help("ticker.qualify", "primary_base_long_correction"))
+    qualify.add_argument("--primary-base-quality", choices=CAPABILITIES["ticker.qualify"].inputs["primary_base_quality"]["choices"], help=_input_help("ticker.qualify", "primary_base_quality"))
+    qualify.add_argument("--primary-base-emergence", choices=CAPABILITIES["ticker.qualify"].inputs["primary_base_emergence"]["choices"], help=_input_help("ticker.qualify", "primary_base_emergence"))
+    qualify.add_argument("--primary-base-long-correction", choices=CAPABILITIES["ticker.qualify"].inputs["primary_base_long_correction"]["choices"], help=_input_help("ticker.qualify", "primary_base_long_correction"))
     _common(qualify, "ticker.qualify")
 
     swings = _capability_parser(ticker_sub, "swings", "ticker.swings")
@@ -183,23 +183,15 @@ def build_parser() -> JsonArgumentParser:
     # An argument that only takes these names says what the tactics are wherever it is read.
     setup.add_argument(
         "--entry-kind",
-        choices=(
-            "completed_pivot",
-            "vcp_cheat",
-            "key_support_level_reclaim",
-            "consolidation_pivot_breakout",
-            "key_moving_average_pullback",
-            "oops_reversal",
-            "key_support_level_pullback",
-        ),
+        choices=CAPABILITIES["ticker.setup"].inputs["entry_kind"]["choices"],
         help=_input_help("ticker.setup", "entry_kind"),
     )
-    setup.add_argument("--chain-completeness", choices=("complete", "partial", "needs_chart"), help=_input_help("ticker.setup", "chain_completeness"))
+    setup.add_argument("--chain-completeness", choices=CAPABILITIES["ticker.setup"].inputs["chain_completeness"]["choices"], help=_input_help("ticker.setup", "chain_completeness"))
     setup.add_argument("--approved-bars", help=_input_help("ticker.setup", "approved_bars"))
     setup.add_argument("--entry-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "entry_price"))
-    setup.add_argument("--pivot-reset", choices=("prompt_reset", "stale_reset", "needs_judgment"), help=_input_help("ticker.setup", "pivot_reset"))
-    setup.add_argument("--entry-proximity", choices=("at_pivot", "chased", "needs_judgment"), help=_input_help("ticker.setup", "entry_proximity"))
-    setup.add_argument("--right-side-development", choices=("constructive", "compressed", "needs_chart"), help=_input_help("ticker.setup", "right_side_development"))
+    setup.add_argument("--pivot-reset", choices=CAPABILITIES["ticker.setup"].inputs["pivot_reset"]["choices"], help=_input_help("ticker.setup", "pivot_reset"))
+    setup.add_argument("--entry-proximity", choices=CAPABILITIES["ticker.setup"].inputs["entry_proximity"]["choices"], help=_input_help("ticker.setup", "entry_proximity"))
+    setup.add_argument("--right-side-development", choices=CAPABILITIES["ticker.setup"].inputs["right_side_development"]["choices"], help=_input_help("ticker.setup", "right_side_development"))
     setup.add_argument("--invalidation-price", type=positive_number, metavar="PRICE", help=_input_help("ticker.setup", "invalidation_price"))
     setup.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.setup", "invalidation_condition"))
     setup.add_argument("--tactic-opt-in", action="store_true", help=_input_help("ticker.setup", "tactic_opt_in"))
@@ -247,11 +239,11 @@ def build_parser() -> JsonArgumentParser:
 
     risk = _capability_parser(ticker_sub, "risk", "ticker.risk")
     risk.add_argument("ticker", help=_input_help("ticker.risk", "ticker"))
-    risk.add_argument("--mode", choices=("prospective", "active"), default="prospective", help=_input_help("ticker.risk", "mode"))
+    risk.add_argument("--mode", choices=CAPABILITIES["ticker.risk"].inputs["mode"]["choices"], default="prospective", help=_input_help("ticker.risk", "mode"))
     for field in ("entry_price", "stop_price", "initial_stop_price", "upside_price", "current_price", "average_gain_pct", "invalidation_price", "base_top"):
         risk.add_argument(f"--{field.replace('_', '-')}", type=positive_number, metavar="NUMBER", help=_input_help("ticker.risk", field))
-    risk.add_argument("--management-profile", choices=("tl_stage12",), help=_input_help("ticker.risk", "management_profile"))
-    risk.add_argument("--management-average", choices=("ema21", "sma50"), help=_input_help("ticker.risk", "management_average"))
+    risk.add_argument("--management-profile", choices=CAPABILITIES["ticker.risk"].inputs["management_profile"]["choices"], help=_input_help("ticker.risk", "management_profile"))
+    risk.add_argument("--management-average", choices=CAPABILITIES["ticker.risk"].inputs["management_average"]["choices"], help=_input_help("ticker.risk", "management_average"))
     risk.add_argument("--stage2-start", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "stage2_start"))
     risk.add_argument("--breakout-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "breakout_date"))
     risk.add_argument("--earnings-date", metavar="YYYY-MM-DD", help=_input_help("ticker.risk", "earnings_date"))
@@ -262,10 +254,10 @@ def build_parser() -> JsonArgumentParser:
     # has: each component capability wrote one. `-` reads one of them from stdin, so a single
     # capability can be piped straight in without a temporary file.
     risk.add_argument("--evidence", action="append", default=[], metavar="FILE", help=_input_help("ticker.risk", "evidence"))
-    risk.add_argument("--market-state", choices=("favorable", "cautious", "defensive", "incomplete"), help=_input_help("ticker.risk", "market_state"))
-    risk.add_argument("--eligibility-state", choices=("eligible", "avoid", "incomplete"), help=_input_help("ticker.risk", "eligibility_state"))
-    risk.add_argument("--setup-state", choices=("ready", "wait", "avoid", "incomplete"), help=_input_help("ticker.risk", "setup_state"))
-    risk.add_argument("--fundamentals-state", choices=("supports_convergence", "does_not_support_convergence", "incomplete"), help=_input_help("ticker.risk", "fundamentals_state"))
+    risk.add_argument("--market-state", choices=CAPABILITIES["ticker.risk"].inputs["market_state"]["choices"], help=_input_help("ticker.risk", "market_state"))
+    risk.add_argument("--eligibility-state", choices=CAPABILITIES["ticker.risk"].inputs["eligibility_state"]["choices"], help=_input_help("ticker.risk", "eligibility_state"))
+    risk.add_argument("--setup-state", choices=CAPABILITIES["ticker.risk"].inputs["setup_state"]["choices"], help=_input_help("ticker.risk", "setup_state"))
+    risk.add_argument("--fundamentals-state", choices=CAPABILITIES["ticker.risk"].inputs["fundamentals_state"]["choices"], help=_input_help("ticker.risk", "fundamentals_state"))
     risk.add_argument("--invalidation-condition", metavar="TEXT", help=_input_help("ticker.risk", "invalidation_condition"))
     for field in ("completed_stop_breach", "live_stop_check", "live_stop_breach"):
         risk.add_argument(f"--{field.replace('_', '-')}", action="store_true", help=_input_help("ticker.risk", field))
