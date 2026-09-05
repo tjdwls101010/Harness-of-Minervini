@@ -115,13 +115,13 @@ class OnlyTheAuditSurfaceUsesTheAuditAccessor(unittest.TestCase):
     list short enough to read.
     """
 
-    PERMITTED = {"doctrine.py", "operations.py"}
+    PERMITTED = {"doctrine.py", "operations/discovery.py"}
 
     def test_no_reducer_reaches_past_the_guarded_accessor(self) -> None:
         offenders = [
-            f"{path.name}:{number}"
+            f"{path.relative_to(RUNTIME)}:{number}"
             for path in sorted(RUNTIME.rglob("*.py"))
-            if path.name not in self.PERMITTED
+            if path.relative_to(RUNTIME).as_posix() not in self.PERMITTED
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
             if "get_claim(" in line
         ]

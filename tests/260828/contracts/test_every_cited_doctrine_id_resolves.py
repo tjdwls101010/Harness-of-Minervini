@@ -16,6 +16,7 @@ silent ones, the envelope lists and `evaluate_*` calls no scenario ever reads ba
 from __future__ import annotations
 
 import ast
+import importlib
 import pathlib
 import unittest
 
@@ -120,9 +121,14 @@ class EveryCitedDoctrineIdResolves(unittest.TestCase):
     def test_no_reducer_cites_a_claim_the_registry_does_not_hold(self) -> None:
         dangling: list[str] = []
         total = 0
-        for path in sorted(_MODULE_DIR.glob("*.py")):
+        for path in sorted(_MODULE_DIR.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
-            constants = _module_constants(tree)
+            parts = path.relative_to(_MODULE_DIR).with_suffix("").parts
+            if parts[-1] == "__init__":
+                parts = parts[:-1]
+            module = importlib.import_module(".".join(("scripts", "minervini", *parts)))
+            # Imported string constants remain visible when a reducer moves into a package.
+            constants = {name: value for name, value in vars(module).items() if isinstance(value, str)}
             for node in _cited_nodes(tree):
                 claim_id = _resolve(node, constants)
                 if claim_id is None:
