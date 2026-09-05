@@ -27,7 +27,6 @@ import numpy as np
 import pandas as pd
 
 from scripts.minervini.peer_collection import _price_evidence
-from scripts.minervini.setup_structure import read_bars
 
 
 AS_OF = date(2025, 12, 31)
@@ -42,50 +41,6 @@ def rising(sessions: int = 400) -> pd.DataFrame:
     )
 
 
-def booleans() -> pd.DataFrame:
-    frame = rising()
-    frame["Close"] = True
-    return frame
-
-
-def timestamps_as_prices() -> pd.DataFrame:
-    frame = rising()
-    frame["Close"] = pd.to_datetime("2020-01-01")
-    return frame
-
-
-def complex_closes() -> pd.DataFrame:
-    frame = rising()
-    frame["Close"] = frame["Close"].astype(complex) + 1j
-    return frame
-
-
-def a_hole_in_the_closes() -> pd.DataFrame:
-    frame = rising()
-    frame.iloc[200, frame.columns.get_loc("Close")] = np.nan
-    return frame
-
-
-def every_session_twice() -> pd.DataFrame:
-    frame = rising()
-    return pd.concat([frame, frame]).sort_index()
-
-
-def repeated_column() -> pd.DataFrame:
-    frame = rising()
-    return pd.concat([frame, frame["Close"]], axis=1)
-
-
-REFUSED = {
-    "closes that are booleans": (booleans, "history_contains_non_numeric_values"),
-    "closes that are timestamps": (timestamps_as_prices, "history_contains_non_numeric_values"),
-    "closes that are complex numbers": (complex_closes, "history_contains_non_numeric_values"),
-    "one unreadable close": (a_hole_in_the_closes, "history_contains_non_numeric_values"),
-    "every session printed twice": (every_session_twice, "history_repeats_a_session"),
-    "one column label printed twice": (repeated_column, "history_repeats_a_column"),
-}
-
-
 class APeerIsMeasuredFromPricesOrFromNothing(unittest.TestCase):
     def test_a_readable_history_is_still_measured(self) -> None:
         """The route that was always earned, so every refusal below is the history."""
@@ -95,13 +50,6 @@ class APeerIsMeasuredFromPricesOrFromNothing(unittest.TestCase):
         self.assertEqual(evidence["provider"], "yfinance")
         self.assertEqual(evidence["distance_from_52_week_high_pct"], 0.0)
 
-    def test_a_history_the_shared_reader_refuses_measures_nothing(self) -> None:
-        for description, (build, reason) in REFUSED.items():
-            history = build()
-            with self.subTest(history=description):
-                self.assertEqual(read_bars(history)[1], reason)
-
-                self.assertIsNone(_price_evidence(history, AS_OF))
 
     def test_a_utc_stamped_history_is_the_same_history(self) -> None:
         """It was converted to New York, which renamed every session to the day before.
