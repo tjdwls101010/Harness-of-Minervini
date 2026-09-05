@@ -8,6 +8,8 @@ and none of the ones the numbers actually came from.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +20,7 @@ import pandas as pd
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.doctrine import get_claim
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 TODAY = resolve_as_of().date
@@ -33,29 +35,18 @@ def _frame(values: np.ndarray) -> pd.DataFrame:
 
 
 def _price(frame: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True}),
-    )
+    return rows_snapshot(frame, provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True})
 
 
 def _rs(rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(rows, SnapshotMeta(provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY))
+    return rows_snapshot(rows, provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY)
 
 
 def _runtime() -> Runtime:
     rising = np.array([100.0 + index * 0.2 for index in range(300)])
     return Runtime(
         price_history=lambda ticker, as_of: _price(_frame(rising)),
-        current_classification=lambda symbol: ProviderSnapshot(
-            {"symbol": symbol, "sector": "Technology", "industry": "Semiconductors"},
-            SnapshotMeta(
-                provider="yfinance",
-                retrieved_at=datetime.now(timezone.utc),
-                as_of=TODAY,
-                coverage={"kind": "current_classification_only", "historical": False},
-            ),
-        ),
+        current_classification=lambda symbol: rows_snapshot({"symbol": symbol, "sector": "Technology", "industry": "Semiconductors"}, provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"kind": "current_classification_only", "historical": False}),
         finviz_breadth=lambda as_of: (_ for _ in ()).throw(
             ProviderUnavailable("finviz", "fixture_withholds_breadth", operation="raw_snapshot")
         ),

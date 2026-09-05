@@ -11,18 +11,20 @@ compared against it. It decides how many quarters get reported, and no more.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, eps: float, revenue: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": revenue, "net_income": eps * 10, "diluted_shares": 100.0}
+    return shared_quarter(period, end, eps, revenue=revenue)
 
 
 def evidence(quarters: list[dict]) -> dict:
     annual = [{"period": "2024", "end": "2024-12-31", "eps": 4.00, "revenue": 400.0}, {"period": "2025", "end": "2025-12-31", "eps": 4.80, "revenue": 440.0}]
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": annual}]}
+    return shared_evidence(quarters=quarters, years=annual)
 
 
 def eight_quarters(growth_pct: list[float]) -> list[dict]:

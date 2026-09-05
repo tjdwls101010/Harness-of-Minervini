@@ -8,24 +8,21 @@ and the analyst declares back what they approved.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timezone
 import unittest
 
 from scripts.minervini.cli import format_payload
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from tests.series import anchor_dates, base_series
 
 
 def snapshot(**kwargs):
     frame, anchors = base_series(**kwargs)
-    meta = SnapshotMeta(
-        provider="fixture-prices",
-        retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-        as_of=frame.index[-1].date(),
-        coverage={"completed_only": True},
-    )
-    return ProviderSnapshot(frame, meta), anchor_dates(frame, anchors)
+
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True}), anchor_dates(frame, anchors)
 
 
 def run(**kwargs) -> dict:

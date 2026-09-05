@@ -10,8 +10,9 @@ produce that comparison, which means the standard route genuinely stops at wait.
 
 from __future__ import annotations
 
-import unittest
+from tests.providers import rows_snapshot
 
+import unittest
 import pandas as pd
 
 from scripts.minervini.capabilities import CAPABILITIES
@@ -218,15 +219,7 @@ def _snapshot(frame):
 
     from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
 
 
 

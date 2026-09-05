@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 AS_OF = "2025-12-31"
@@ -20,7 +21,7 @@ def bars(closes: list[float], *, end: str = AS_OF) -> ProviderSnapshot[pd.DataFr
     index = pd.bdate_range(end=end, periods=len(closes))
     close = pd.Series(closes, index=index, dtype=float)
     frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
-    return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(end), coverage={"completed_only": True}))
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(end), coverage={"completed_only": True})
 
 
 def a_run_to(peak: float, then_back_to: float, *, sessions: int = 90) -> list[float]:
@@ -108,7 +109,7 @@ class TheEntrySessionIsNotCreditedToThePosition(unittest.TestCase):
         entry_position = list(index.date).index(date.fromisoformat("2025-10-01"))
         high.iloc[entry_position] = 130.0
         frame = pd.DataFrame({"Open": close, "High": high, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
-        return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+        return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
     def test_a_spike_inside_the_entry_session_does_not_create_a_reached_gain(self) -> None:
         payload = execute("ticker.risk", POSITION, runtime=Runtime(price_history=lambda ticker, as_of: self.spiking_entry()))

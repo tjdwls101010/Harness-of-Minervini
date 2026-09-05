@@ -8,18 +8,16 @@ not read.
 
 from __future__ import annotations
 
+from tests.filings import annual, evidence as shared_evidence
+
 import unittest
 
 from scripts.minervini import doctrine
 from scripts.minervini.fundamentals import _PE_EXPANSION, evaluate_fundamentals
 
 
-def annual(year: int, eps: float, **extra) -> dict:
-    return {"period": str(year), "end": f"{year}-12-31", "eps": eps, "revenue": 400.0, "diluted_shares": 100.0, **extra}
-
-
 def evidence(years: list[dict], quarterly: list[dict] | None = None, basis: str = "US-GAAP", filed_at: str = "2026-02-20") -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": filed_at, "form": "10-K", "accounting_basis": basis, "quarterly": quarterly or [], "annual": years}]}
+    return shared_evidence(filed_at=filed_at, basis=basis, quarters=quarterly or [], years=years)
 
 
 class AStudysAverageIsNotThisTickersRange(unittest.TestCase):

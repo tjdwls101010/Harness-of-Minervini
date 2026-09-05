@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-import unittest
+from tests.paths import FIXTURES as SHARED_FIXTURES
 
+import json
+import unittest
 import pandas as pd
 
 from scripts.minervini.peer_collection import collect_same_industry_peer_rows
@@ -11,7 +11,7 @@ from scripts.minervini.peers import compare_same_industry_peers
 from scripts.minervini.providers.nasdaq import SecurityRecord
 
 
-FIXTURES = Path(__file__).parents[1] / "fixtures" / "peer_collection"
+FIXTURES = SHARED_FIXTURES / "peer_collection"
 
 
 def fixture(name: str) -> dict:

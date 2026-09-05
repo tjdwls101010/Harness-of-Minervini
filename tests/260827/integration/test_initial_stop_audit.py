@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 AS_OF = "2025-12-31"
@@ -21,7 +22,7 @@ def bars(rows: list[tuple[float, float, float, float]], *, index: pd.DatetimeInd
         index = pd.bdate_range(end=AS_OF, periods=len(rows))
     frame = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close"], index=index, dtype=float)
     frame["Volume"] = np.full(len(frame), 1_000_000)
-    return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def quiet(sessions: int, close: float = 101.0) -> list[tuple[float, float, float, float]]:

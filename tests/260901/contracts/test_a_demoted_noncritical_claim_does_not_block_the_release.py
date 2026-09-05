@@ -13,6 +13,8 @@ demotes an assertion in place would leave the committed reports and the aggregat
 
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import importlib.util
 import json
 import pathlib
@@ -20,7 +22,7 @@ import tempfile
 import unittest
 
 
-_TOOLING = pathlib.Path(__file__).resolve().parents[3] / "tests/260817/e2e/tooling"
+_TOOLING = ROOT / "tests/260817/e2e/tooling"
 
 
 def _aggregate_module():

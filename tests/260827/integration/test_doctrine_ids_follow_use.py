@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.doctrine import get_claim
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 from tests.attestations import envelopes
 
 
@@ -21,7 +22,7 @@ def bars(closes: list[float]) -> ProviderSnapshot[pd.DataFrame]:
     index = pd.bdate_range(end=AS_OF, periods=len(closes))
     close = pd.Series(closes, index=index, dtype=float)
     frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
-    return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 class ProspectiveCitesNoManagementClaims(unittest.TestCase):
@@ -163,7 +164,7 @@ class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
         measured = []
         for volume in (True, False):
             frame = pd.DataFrame({**columns, **({"Volume": np.full(224, 1_000_000)} if volume else {})}, index=index)
-            snapshot = ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+            snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
             payload = execute(
                 "ticker.risk",
                 {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[200].date().isoformat(), "stop_price": 90.0},
@@ -180,7 +181,7 @@ class TheStageThreeVectorNamesTheInputItNeverRead(unittest.TestCase):
         index = pd.bdate_range(end=AS_OF, periods=224)
         close = pd.Series([100.0] * 224, index=index, dtype=float)
         frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close}, index=index)
-        snapshot = ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
         payload = execute(
             "ticker.risk",
             {"ticker": "TEST", "mode": "active", "as_of": AS_OF, "entry_price": 100.0, "entry_date": index[200].date().isoformat(), "stop_price": 90.0},

@@ -7,20 +7,23 @@ and the defensive rule's second arm was dead.
 
 from __future__ import annotations
 
+from tests.paths import FIXTURES
+from tests.providers import rows_snapshot
+
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
+
 
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 TODAY = resolve_as_of().date
-FINVIZ = Path(__file__).resolve().parents[2] / "260817" / "fixtures" / "market_evidence" / "finviz_partial.html"
+FINVIZ = FIXTURES / "market_evidence" / "finviz_partial.html"
 
 
 def _frame(values: np.ndarray) -> pd.DataFrame:
@@ -42,35 +45,21 @@ def _broken() -> np.ndarray:
 
 
 def _price(frame: pd.DataFrame) -> ProviderSnapshot[pd.DataFrame]:
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True}),
-    )
+    return rows_snapshot(frame, provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True})
 
 
 def _rs(rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(rows, SnapshotMeta(provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY))
+    return rows_snapshot(rows, provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY)
 
 
 def _runtime(leader_values: np.ndarray, *, breadth: bool = True) -> Runtime:
     frames = {"QQQ": _advancing(), "LEAD": leader_values}
     return Runtime(
         price_history=lambda ticker, as_of: _price(_frame(frames[ticker])),
-        current_classification=lambda symbol: ProviderSnapshot(
-            {"symbol": symbol, "sector": "Technology", "industry": "Semiconductors"},
-            SnapshotMeta(
-                provider="yfinance",
-                retrieved_at=datetime.now(timezone.utc),
-                as_of=TODAY,
-                coverage={"kind": "current_classification_only", "historical": False},
-            ),
-        ),
+        current_classification=lambda symbol: rows_snapshot({"symbol": symbol, "sector": "Technology", "industry": "Semiconductors"}, provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"kind": "current_classification_only", "historical": False}),
         finviz_breadth=(
             (
-                lambda as_of: ProviderSnapshot(
-                    FINVIZ.read_text(encoding="utf-8"),
-                    SnapshotMeta(provider="finviz", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, content_sha256="fixture"),
-                )
+                lambda as_of: rows_snapshot(FINVIZ.read_text(encoding="utf-8"), provider="finviz", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, content_sha256="fixture")
             )
             if breadth
             else (lambda as_of: (_ for _ in ()).throw(ProviderUnavailable("finviz", "fixture_withholds_breadth", operation="raw_snapshot")))

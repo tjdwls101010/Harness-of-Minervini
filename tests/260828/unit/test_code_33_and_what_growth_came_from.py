@@ -11,17 +11,19 @@ pattern it points at: profits rising while sales do not.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, eps: float, revenue: float, net_income: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": revenue, "net_income": net_income, "diluted_shares": 100.0}
+    return shared_quarter(period, end, eps, revenue=revenue, net_income=net_income)
 
 
 def evidence(quarters: list[dict]) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": []}]}
+    return shared_evidence(quarters=quarters, years=[])
 
 
 def two_years(eps: list[float], revenue: list[float], net_income: list[float]) -> list[dict]:

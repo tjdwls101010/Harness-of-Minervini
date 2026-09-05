@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES, ROOT
+
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
-import pathlib
 import sys
 import time
 import unittest
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from minervini.fundamentals import evaluate_fundamentals
@@ -23,7 +23,7 @@ from minervini.providers.sec import (
 )
 
 
-FIXTURES = ROOT / "tests" / "260817" / "fixtures" / "providers" / "sec"
+FIXTURES = SHARED_FIXTURES / "providers" / "sec"
 USER_AGENT = "Acme Research contact@example.com"
 
 

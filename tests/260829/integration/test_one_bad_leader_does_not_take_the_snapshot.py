@@ -7,6 +7,8 @@ and no leader the harness failed to read may leave the envelope looking complete
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 from datetime import datetime, timezone
 
@@ -15,7 +17,7 @@ import pandas as pd
 
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 TODAY = resolve_as_of().date
@@ -30,14 +32,11 @@ def _frame() -> pd.DataFrame:
 
 
 def _snapshot(data: object, provider: str = "yfinance") -> ProviderSnapshot[object]:
-    return ProviderSnapshot(
-        data,
-        SnapshotMeta(provider=provider, retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True}),
-    )
+    return rows_snapshot(data, provider=provider, retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"completed_only": True})
 
 
 def _rs(rows: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(rows, SnapshotMeta(provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY))
+    return rows_snapshot(rows, provider="ibd-rs-rating", retrieved_at=datetime.now(timezone.utc), as_of=TODAY)
 
 
 def _runtime(price_history, *, leaders: list[dict[str, object]], classification=None) -> Runtime:

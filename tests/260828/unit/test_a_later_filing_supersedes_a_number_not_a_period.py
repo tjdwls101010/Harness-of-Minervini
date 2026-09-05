@@ -11,13 +11,15 @@ Later-filed wins per field. That is what a restatement is.
 
 from __future__ import annotations
 
+from tests.filings import filing as shared_filing
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def filing(filed_at: str, form: str, annual: list[dict]) -> dict:
-    return {"filed_at": filed_at, "form": form, "accounting_basis": "US-GAAP", "quarterly": [], "annual": annual}
+    return shared_filing(filed_at=filed_at, form=form, quarterly=[], years=annual)
 
 
 class ARestatementIsPerNumber(unittest.TestCase):

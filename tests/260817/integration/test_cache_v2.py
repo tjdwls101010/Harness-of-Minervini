@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES
+from tests.providers import rows_snapshot
+
 import json
 import tempfile
 import threading
@@ -22,14 +25,7 @@ class ProviderCacheIntegrationTests(unittest.TestCase):
 
             def fetch() -> ProviderSnapshot[dict[str, str]]:
                 calls.append("fetch")
-                return ProviderSnapshot(
-                    {"ticker": "AAPL"},
-                    SnapshotMeta(
-                        provider="fixture",
-                        retrieved_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
-                        as_of=date(2026, 8, 14),
-                    ),
-                )
+                return rows_snapshot({"ticker": "AAPL"}, provider="fixture", retrieved_at=datetime(2026, 8, 17, tzinfo=timezone.utc), as_of=date(2026, 8, 14))
 
             first = cache.call(
                 "fixture",
@@ -65,15 +61,7 @@ class ProviderCacheIntegrationTests(unittest.TestCase):
 
             def fetch() -> ProviderSnapshot[dict[str, str]]:
                 calls.append("fetch")
-                return ProviderSnapshot(
-                    {"ticker": "AAOI"},
-                    SnapshotMeta(
-                        provider="yfinance",
-                        retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
-                        as_of=date(2026, 8, 14),
-                        stale=True,
-                    ),
-                )
+                return rows_snapshot({"ticker": "AAOI"}, provider="yfinance", retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc), as_of=date(2026, 8, 14), stale=True)
 
             cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
             cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
@@ -88,10 +76,7 @@ class ProviderCacheIntegrationTests(unittest.TestCase):
 
             def fetch() -> ProviderSnapshot[dict[str, str]]:
                 calls.append("fetch")
-                return ProviderSnapshot(
-                    {"ticker": "AAOI"},
-                    SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc), as_of=date(2026, 8, 14)),
-                )
+                return rows_snapshot({"ticker": "AAOI"}, provider="yfinance", retrieved_at=datetime(2026, 8, 18, tzinfo=timezone.utc), as_of=date(2026, 8, 14))
 
             cache.call("yfinance", "ticker.qualify:daily_bars", {"ticker": "AAOI"}, "2026-08-17", fetch)
             entry = next(cache.path.glob("*.json"))
@@ -113,22 +98,12 @@ class ProviderCacheIntegrationTests(unittest.TestCase):
         )
 
     def test_call_restores_ohlcv_dataframe_and_snapshot_metadata(self) -> None:
-        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "cache" / "ohlcv.json"
+        fixture = FIXTURES / "cache" / "ohlcv.json"
         source = json.loads(fixture.read_text(encoding="utf-8"))
         frame = pd.DataFrame(source["rows"], columns=source["columns"])
         frame.index = pd.DatetimeIndex(source["index"])
         frame["Volume"] = frame["Volume"].astype("int64")
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 8, 17, 12, 30, tzinfo=timezone.utc),
-                as_of=date(2026, 8, 14),
-                provider_version="1.2.3",
-                coverage={"interval": "1d", "completed_only": True},
-                content_sha256="fixture-sha",
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 8, 17, 12, 30, tzinfo=timezone.utc), as_of=date(2026, 8, 14), provider_version="1.2.3", coverage={"interval": "1d", "completed_only": True}, content_sha256="fixture-sha")
 
         with tempfile.TemporaryDirectory() as directory:
             cache = ProviderCache(root=Path(directory))

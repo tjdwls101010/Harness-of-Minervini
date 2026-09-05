@@ -15,16 +15,16 @@ the registry actually holds today.
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY
+
 import contextlib
 import copy
 import json
-import pathlib
 import unittest
 
 from scripts.minervini import doctrine
 
 
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 IPO_AGE = ("eligibility.ipo_youthfulness_10yr_window", "typical_max_years_since_ipo")
 
 

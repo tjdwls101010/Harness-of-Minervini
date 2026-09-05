@@ -8,15 +8,15 @@ which of the session's own numbers it was missing.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.management_evidence import build_management_evidence
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
 
 AS_OF = "2025-12-31"
@@ -30,7 +30,7 @@ def run(overrides=None, **request) -> dict:
     data = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close"], index=index, dtype=float)
     data["Volume"] = np.full(len(data), 1_000_000)
     data["Stock Splits"] = np.zeros(len(data))
-    snapshot = ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    snapshot = rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
     def history(ticker: str, as_of: str):
         calls.append(ticker)

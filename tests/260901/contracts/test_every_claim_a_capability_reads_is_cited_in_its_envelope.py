@@ -18,6 +18,8 @@ as a claim this harness reads, and no registry holds it.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import builtins
 import contextlib
 import functools
@@ -31,7 +33,7 @@ from datetime import datetime, timezone
 
 from scripts.minervini import doctrine
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 
 from tests.series import power_play_series
 
@@ -134,15 +136,7 @@ def _envelopes():
     # keys are hashed under is read only when there is a question to key. A chart drawn over a
     # real advance is the ordinary case, not an edge one, and it was the case nothing ran.
     frame = power_play_series()
-    snapshot = ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
     with tempfile.TemporaryDirectory() as temporary:
         with recording() as read:
             payload = execute(

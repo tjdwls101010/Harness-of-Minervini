@@ -1,11 +1,9 @@
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import json
-from pathlib import Path
 import unittest
-
-
-ROOT = Path(__file__).resolve().parents[3]
 
 
 class V1RuntimeRetirementTests(unittest.TestCase):

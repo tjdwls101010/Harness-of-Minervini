@@ -214,3 +214,16 @@ REQUESTS: dict[str, dict[str, object]] = {
 
 # Keep the old test module's fixture imports compatible during relocation.
 __all__ = [name for name in globals() if not name.startswith("__")]
+
+
+def held(**overrides: object) -> dict:
+    return {
+        "mode": "active",
+        "as_of": "2026-08-21",
+        "entry_price": 100.0,
+        "entry_date": "2026-08-10",
+        "stop_price": 94.0,
+        "current_price": 110.0,
+        "completed_price_path": {"state": "clear", "checked_level": 94.0, "from": "2026-08-10", "through": "2026-08-21", "bars_checked": 9},
+        **overrides,
+    }

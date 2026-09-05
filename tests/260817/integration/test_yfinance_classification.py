@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import json
 from datetime import date, datetime, timezone
-from pathlib import Path
+
 import unittest
 
 from scripts.minervini.providers import ProviderUnavailable
 from scripts.minervini.providers.yfinance import current_classification_snapshot
 
 
-FIXTURES = Path(__file__).parents[1] / "fixtures" / "providers" / "yfinance"
+FIXTURES = SHARED_FIXTURES / "providers" / "yfinance"
 
 
 class RetryingInfoTicker:

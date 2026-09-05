@@ -12,13 +12,15 @@ company, because no source in this harness's corpus says a restatement is one.
 
 from __future__ import annotations
 
+from tests.filings import quarter as shared_quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
 
 
 def quarter(period: str, end: str, shares: float) -> dict:
-    return {"period": period, "end": end, "eps": 1.0, "revenue": 100.0, "net_income": 10.0, "diluted_shares": shares}
+    return shared_quarter(period, end, 1.0, net_income=10.0, diluted_shares=shares)
 
 
 def filings(*quarters: dict, amended: list[str] | None = None) -> dict:

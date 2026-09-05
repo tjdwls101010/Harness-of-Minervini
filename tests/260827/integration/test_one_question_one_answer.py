@@ -6,14 +6,15 @@ level proves about another. Whether a block that measured nothing may say it rep
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from scripts.minervini.management_evidence import build_management_evidence
 from scripts.minervini.risk import reduce_risk
 
@@ -30,7 +31,7 @@ def run(overrides=None, *, start="2025-10-01", splits=None, split_cells=None, **
     data["Stock Splits"] = np.zeros(len(data))
     for session, factor in {**(splits or {}), **(split_cells or {})}.items():
         data.loc[pd.Timestamp(session), "Stock Splits"] = factor
-    snapshot = ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    snapshot = rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
     return execute("ticker.risk", {**POSITION, **request}, runtime=Runtime(price_history=lambda ticker, as_of: snapshot))
 
 

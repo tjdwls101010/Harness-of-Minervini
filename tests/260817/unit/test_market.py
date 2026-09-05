@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import json
-from pathlib import Path
 import unittest
 
 from scripts.minervini.market import build_market_candidates, evaluate_market_snapshot
 
 
-FIXTURES = Path(__file__).parents[1] / "fixtures" / "market"
+FIXTURES = SHARED_FIXTURES / "market"
 
 
 class MarketSnapshotTests(unittest.TestCase):

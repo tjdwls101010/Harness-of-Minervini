@@ -8,14 +8,15 @@ needed them.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 AS_OF = "2025-12-31"
@@ -28,7 +29,7 @@ def frame(rows: dict[str, tuple[float, float, float, float]], *, start: str = "2
     data = pd.DataFrame(built, columns=["Open", "High", "Low", "Close"], index=index, dtype=float)
     data["Volume"] = np.full(len(data), 1_000_000)
     data["Stock Splits"] = np.zeros(len(data))
-    return ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(end), coverage={"completed_only": True}))
+    return rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(end), coverage={"completed_only": True})
 
 
 def run(rows: dict[str, tuple[float, float, float, float]], **request) -> dict:
@@ -114,7 +115,7 @@ class AnActionMustBePlaceableAndMeasured(unittest.TestCase):
             volumes[list(index).index(pd.Timestamp("2025-12-16"))] = 2_100_000.0
             data["Volume"] = volumes
             data["Stock Splits"] = np.zeros(len(data))
-            return ProviderSnapshot(data, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+            return rows_snapshot(data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
         payload = execute(
             "ticker.risk",

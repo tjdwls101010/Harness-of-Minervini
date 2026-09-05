@@ -13,26 +13,20 @@ sent, not whether the criterion is held.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from scripts.minervini.power_play_evidence import power_play_fingerprint
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import a_top_only_a_neighbour_confirms_series
 
 
 def snapshot(frame):
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
 
 
 class ATopTheBarsAlreadyThrewOut(unittest.TestCase):

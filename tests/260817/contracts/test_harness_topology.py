@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import json
 import os
 from pathlib import Path
@@ -8,7 +10,6 @@ import time
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[3]
 CLAUDE = ROOT / "CLAUDE.md"
 SKILLS = ROOT / ".claude" / "skills"
 

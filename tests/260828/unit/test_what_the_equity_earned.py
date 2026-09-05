@@ -12,6 +12,8 @@ that might turn up. It never will, and the gap should say which.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -23,7 +25,7 @@ def annual(year: int, **fields) -> dict:
 
 
 def evidence(years: list[dict], *, form: str = "10-K", quarterly: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": form, "accounting_basis": "US-GAAP", "quarterly": quarterly or [], "annual": years}]}
+    return shared_evidence(form=form, quarters=quarterly or [], years=years)
 
 
 class WhatTheEquityEarned(unittest.TestCase):

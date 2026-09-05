@@ -9,6 +9,8 @@ from whatever happened to be available.
 
 from __future__ import annotations
 
+from tests.filings import evidence as shared_evidence, quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -18,12 +20,8 @@ def annual(year: int, eps: float) -> dict:
     return {"period": str(year), "end": f"{year}-12-31", "eps": eps, "revenue": 100.0}
 
 
-def quarter(period: str, end: str, eps: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0}
-
-
 def evidence(years: list[dict], quarters: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters or [], "annual": years}]}
+    return shared_evidence(quarters=quarters or [], years=years)
 
 
 def read(category: str, years: list[dict], quarters: list[dict] | None = None) -> dict:

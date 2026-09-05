@@ -15,6 +15,8 @@ carries the same fifteen minutes.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timedelta, timezone
 import pathlib
 import tempfile
@@ -22,23 +24,14 @@ import unittest
 
 from scripts.minervini.cache import ProviderCache
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 
 
 PAST = "2025-08-14"
 
 
 def _snapshot(cik: str) -> ProviderSnapshot[dict[str, dict[str, str]]]:
-    return ProviderSnapshot(
-        {"AAPL": {"cik": cik, "title": "Apple Inc."}},
-        SnapshotMeta(
-            provider="sec",
-            retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
-            as_of=None,
-            coverage={"kind": "mutable_current_only"},
-            content_sha256=cik * 6,
-        ),
-    )
+    return rows_snapshot({"AAPL": {"cik": cik, "title": "Apple Inc."}}, provider="sec", retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc), as_of=None, coverage={"kind": "mutable_current_only"}, content_sha256=cik * 6)
 
 
 class ARefusalSaysWhatWorks(unittest.TestCase):

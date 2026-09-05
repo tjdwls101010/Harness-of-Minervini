@@ -20,11 +20,13 @@ it is; deciding that the identity held back then stays the analyst's assertion, 
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderUnavailable
 
 
 COMPANY_TICKERS = {
@@ -34,16 +36,7 @@ COMPANY_TICKERS = {
 
 
 def _snapshot(payload):
-    return ProviderSnapshot(
-        payload,
-        SnapshotMeta(
-            provider="sec",
-            retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc),
-            as_of=None,
-            coverage={"kind": "mutable_current_only", "documents": ["company_tickers"]},
-            content_sha256="0" * 64,
-        ),
-    )
+    return rows_snapshot(payload, provider="sec", retrieved_at=datetime(2026, 8, 28, tzinfo=timezone.utc), as_of=None, coverage={"kind": "mutable_current_only", "documents": ["company_tickers"]}, content_sha256="0" * 64)
 
 
 def runtime(*, fails: str | None = None) -> Runtime:

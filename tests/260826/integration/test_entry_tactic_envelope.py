@@ -7,26 +7,20 @@ from evidence they could have supplied, and fixed by a different action.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 from scripts.minervini.setup_structure import bars_fingerprint
 from tests.series import anchor_dates, base_series
 
 
 def run(entry_kind: str, **overrides) -> dict:
     frame, anchors = base_series()
-    prices = ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-            as_of=frame.index[-1].date(),
-            coverage={"completed_only": True},
-        ),
-    )
+    prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
     price = float(frame["Close"].iloc[-1])
     request = {
         "ticker": "TEST",

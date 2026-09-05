@@ -17,6 +17,8 @@ already carries every landmark with its date, so nothing here is recomputed or g
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import json
 import os
 import tempfile
@@ -269,15 +271,7 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
-        snapshot = ProviderSnapshot(
-            self.frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=self.frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(self.frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=self.frame.index[-1].date(), coverage={"completed_only": True})
         with tempfile.TemporaryDirectory() as directory:
             payload = execute(
                 "ticker.chart",
@@ -566,15 +560,7 @@ class TheOverlayNamesTheBarsItWasComputedFrom(unittest.TestCase):
         from scripts.minervini.operations import Runtime, execute
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         return execute(
             "ticker.chart",
             {
@@ -829,15 +815,7 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = power_play_series()
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         with tempfile.TemporaryDirectory() as directory:
             occupied = Path(directory) / "not-a-directory"
             occupied.write_text("", encoding="utf-8")
@@ -865,15 +843,7 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = power_play_series()
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         request = {
             "ticker": "TEST",
             "as_of": frame.index[-1].date().isoformat(),
@@ -902,15 +872,7 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = power_play_series()
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         request = {
             "ticker": "TEST",
             "as_of": frame.index[-1].date().isoformat(),
@@ -992,15 +954,7 @@ class ADestinationThatCannotHoldArtifacts(unittest.TestCase):
         from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
 
         frame = power_play_series()
-        snapshot = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        snapshot = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         real_open = chart_module.os.open
 
         def refuse_the_claim(path, *args, **kwargs):

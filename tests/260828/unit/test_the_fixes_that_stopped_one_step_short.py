@@ -8,9 +8,10 @@ already has its tests -- but that the rule now has one reader.
 
 from __future__ import annotations
 
+from tests.filings import filing as shared_filing, quarter as shared_quarter
+
 from datetime import datetime, timezone
 import unittest
-
 import pandas as pd
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -23,11 +24,11 @@ _ENDS = {1: "03-31", 2: "06-30", 3: "09-30", 4: "12-31"}
 
 
 def quarter(year: int, index: int, eps: float, *, revenue: float = 100.0, unit: str = "USD/shares") -> dict:
-    return {"period": f"{year}-Q{index}", "end": f"{year}-{_ENDS[index]}", "eps": eps, "revenue": revenue, "net_income": eps * 10, "diluted_shares": 100.0, "_units": {"eps": unit, "revenue": "USD", "net_income": "USD", "diluted_shares": "shares"}}
+    return shared_quarter(f"{year}-Q{index}", f"{year}-{_ENDS[index]}", eps, revenue=revenue, _units={"eps": unit, "revenue": "USD", "net_income": "USD", "diluted_shares": "shares"})
 
 
 def filing(quarterly: list[dict] | None = None, years: list[dict] | None = None, *, filed_at: str = "2026-05-01", basis: str = "US-GAAP") -> dict:
-    return {"filed_at": filed_at, "form": "10-Q", "accounting_basis": basis, "quarterly": quarterly or [], "annual": years or []}
+    return shared_filing(filed_at=filed_at, form="10-Q", basis=basis, quarterly=quarterly or [], years=years or [])
 
 
 class TheUnitReachesTheComparisonAndNotJustTheProvenance(unittest.TestCase):

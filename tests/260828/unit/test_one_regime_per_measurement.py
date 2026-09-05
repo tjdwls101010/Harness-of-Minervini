@@ -13,6 +13,8 @@ provenance rule could see them -- and return on equity came back as evidence nob
 
 from __future__ import annotations
 
+from tests.filings import filing as shared_filing, quarter
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -20,11 +22,7 @@ from scripts.minervini.providers.sec import normalize_filed_facts
 
 
 def filing(filed_at: str, basis: str, *, quarterly: list[dict] | None = None, annual: list[dict] | None = None) -> dict:
-    return {"filed_at": filed_at, "form": "10-K", "accounting_basis": basis, "quarterly": quarterly or [], "annual": annual or []}
-
-
-def quarter(period: str, end: str, eps: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0}
+    return shared_filing(filed_at=filed_at, basis=basis, quarterly=quarterly or [], years=annual or [])
 
 
 def read(filings: list[dict], **declared) -> dict:

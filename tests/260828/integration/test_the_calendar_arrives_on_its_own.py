@@ -11,14 +11,15 @@ than answering a March question with May's schedule.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timedelta, timezone
 import unittest
-
 import numpy as np
 import pandas as pd
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 
 
 TODAY = date.today()
@@ -32,15 +33,12 @@ def bars() -> ProviderSnapshot[pd.DataFrame]:
     index = SESSIONS
     close = pd.Series(np.linspace(80.0, 130.0, 200), index=index, dtype=float)
     frame = pd.DataFrame({"Open": close, "High": close * 1.01, "Low": close * 0.99, "Close": close, "Volume": np.full(len(close), 1_000_000)}, index=index)
-    return ProviderSnapshot(frame, SnapshotMeta(provider="fixture-prices", retrieved_at=datetime.now(timezone.utc), as_of=index[-1].date(), coverage={"completed_only": True}))
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime.now(timezone.utc), as_of=index[-1].date(), coverage={"completed_only": True})
 
 
 def calendar_snapshot(days_out: int, confirmation: str = "confirmed") -> ProviderSnapshot[dict]:
     when = (pd.Timestamp(TODAY) + pd.Timedelta(days=days_out)).date()
-    return ProviderSnapshot(
-        {"symbol": "TEST", "earnings_date": when.isoformat(), "confirmation": confirmation, "window": None if confirmation == "confirmed" else [when.isoformat(), (when + timedelta(days=4)).isoformat()]},
-        SnapshotMeta(provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"kind": "forward_looking_current_only", "historical": False}),
-    )
+    return rows_snapshot({"symbol": "TEST", "earnings_date": when.isoformat(), "confirmation": confirmation, "window": None if confirmation == "confirmed" else [when.isoformat(), (when + timedelta(days=4)).isoformat()]}, provider="yfinance", retrieved_at=datetime.now(timezone.utc), as_of=TODAY, coverage={"kind": "forward_looking_current_only", "historical": False})
 
 
 def run(calendar=None, **request) -> dict:

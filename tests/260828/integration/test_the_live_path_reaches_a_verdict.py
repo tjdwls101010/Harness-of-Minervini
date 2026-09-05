@@ -9,11 +9,13 @@ emitted, which is how a live path that always came back INCOMPLETE went unnotice
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot
 from scripts.minervini.providers.sec import normalize_filed_facts
 
 
@@ -21,12 +23,12 @@ from tests.filings import AS_OF, CIK, bars, company_facts, submissions
 
 
 def price_snapshot() -> ProviderSnapshot:
-    return ProviderSnapshot(bars("2024-01-02", AS_OF, 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    return rows_snapshot(bars("2024-01-02", AS_OF, 100.0), provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
 
 
 def run(**request) -> dict:
     normalized = normalize_filed_facts(company_facts(), submissions(), as_of=AS_OF)
-    snapshot = ProviderSnapshot(normalized, SnapshotMeta(provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True}))
+    snapshot = rows_snapshot(normalized, provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True})
     # The capability reads its own price now, so a fixture that leaves the hook undeclared
     # reaches the live provider -- a unit-speed test making a network call nobody asked for.
     runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: snapshot, price_history=lambda ticker, as_of: price_snapshot())

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import json
-import pathlib
 import unittest
 
 from scripts.minervini.eligibility import EligibilityEvidence, evaluate_eligibility
 
 
-FIXTURES = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "eligibility"
+FIXTURES = SHARED_FIXTURES / "eligibility"
 
 
 def evaluate_fixture(name: str) -> dict[str, object]:

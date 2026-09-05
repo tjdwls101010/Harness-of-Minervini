@@ -12,6 +12,8 @@ which is the thing that actually closes it.
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 import unittest
 
 from scripts.minervini.power_play import evaluate_power_play
@@ -90,15 +92,7 @@ class TheReaderIsSentSomewhereUseful(unittest.TestCase):
         from scripts.minervini.setup_structure import bars_fingerprint
 
         frame = two_tops_that_both_await_the_chart_series()
-        prices = ProviderSnapshot(
-            frame,
-            SnapshotMeta(
-                provider="fixture-prices",
-                retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc),
-                as_of=frame.index[-1].date(),
-                coverage={"completed_only": True},
-            ),
-        )
+        prices = rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 7, 1, tzinfo=timezone.utc), as_of=frame.index[-1].date(), coverage={"completed_only": True})
         runtime = Runtime(price_history=lambda ticker, requested: prices)
         request = {"ticker": "TEST", "as_of": prices.meta.as_of.isoformat(), "no_cache": True}
         first = execute("ticker.power-play", request, runtime=runtime)

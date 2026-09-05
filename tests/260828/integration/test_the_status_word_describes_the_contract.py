@@ -8,11 +8,13 @@ appear among the declarations the payload lists, or the two disagree about what 
 
 from __future__ import annotations
 
+from tests.providers import rows_snapshot
+
 from datetime import date, datetime, timezone
 import unittest
 
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, SnapshotMeta
+
 
 from .test_the_live_path_reaches_a_verdict import AS_OF, CIK, bars, company_facts, submissions
 from scripts.minervini.providers.sec import normalize_filed_facts
@@ -20,8 +22,8 @@ from scripts.minervini.providers.sec import normalize_filed_facts
 
 def run(evidence: dict | None = None, **request) -> dict:
     normalized = evidence if evidence is not None else normalize_filed_facts(company_facts(), submissions(), as_of=AS_OF)
-    filings = ProviderSnapshot(normalized, SnapshotMeta(provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True}))
-    prices = ProviderSnapshot(bars("2024-01-02", AS_OF, 100.0), SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True}))
+    filings = rows_snapshot(normalized, provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"filed_only": True})
+    prices = rows_snapshot(bars("2024-01-02", AS_OF, 100.0), provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), coverage={"completed_only": True})
     runtime = Runtime(fundamentals_evidence=lambda ticker, as_of, cik: filings, price_history=lambda ticker, as_of: prices)
     return execute("ticker.fundamentals", {"ticker": "TEST", "cik": CIK, "as_of": AS_OF, **request}, runtime=runtime)
 

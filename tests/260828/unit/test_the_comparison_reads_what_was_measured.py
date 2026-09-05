@@ -10,18 +10,12 @@ of a source's window in the cases where a fiscal quarter ends on the thirty-firs
 
 from __future__ import annotations
 
+from tests.filings import evidence, quarter
+
 from datetime import date
 import unittest
 
 from scripts.minervini.fundamentals import _completed_months, _trailing_twelve_months, evaluate_fundamentals
-
-
-def quarter(period: str, end: str, eps: float) -> dict:
-    return {"period": period, "end": end, "eps": eps, "revenue": 100.0, "net_income": eps * 10, "diluted_shares": 100.0}
-
-
-def evidence(quarters: list[dict], years: list[dict] | None = None) -> dict:
-    return {"source": "sec_filed_facts", "filings": [{"filed_at": "2026-02-19", "form": "10-K", "accounting_basis": "US-GAAP", "quarterly": quarters, "annual": years or []}]}
 
 
 def point(period: str, end: str, value: float) -> dict:

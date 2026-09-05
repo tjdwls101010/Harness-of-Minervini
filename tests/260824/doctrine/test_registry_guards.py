@@ -6,19 +6,11 @@ either crashed a reducer or produced a plausible false verdict.
 
 from __future__ import annotations
 
-import copy
-import json
-import pathlib
+from tests.paths import registry
+
 import unittest
 
 from scripts.minervini import doctrine
-
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
-
-
-def registry() -> dict:
-    return copy.deepcopy(json.loads(REGISTRY.read_text(encoding="utf-8")))
 
 
 def find(payload: dict, claim_id: str) -> dict:

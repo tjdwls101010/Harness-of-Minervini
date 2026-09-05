@@ -8,12 +8,11 @@ for, which is the shape a generic early entry already had.
 
 from __future__ import annotations
 
+from tests.paths import REGISTRY
+
 import json
-import pathlib
 import unittest
 
-
-REGISTRY = pathlib.Path(__file__).resolve().parents[3] / "doctrine" / "claims.json"
 
 # The five the source defines under "Launch-pad setup and base breakout". Its other three entry
 # tactics -- the opening range breakout, the intraday base and the high-volume-close pivot -- are

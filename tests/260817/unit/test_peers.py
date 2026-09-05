@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES as SHARED_FIXTURES
+
 import copy
 import json
-from pathlib import Path
 import unittest
 
 from scripts.minervini.peers import compare_same_industry_peers
 
 
-FIXTURES = Path(__file__).parents[1] / "fixtures" / "peers"
+FIXTURES = SHARED_FIXTURES / "peers"
 
 
 def load_fixture(name: str) -> dict:

@@ -10,6 +10,8 @@ the plan rather than pinned by a test that could only restate the code.
 
 from __future__ import annotations
 
+from tests.filings import annual, filing
+
 import unittest
 
 from scripts.minervini.fundamentals import evaluate_fundamentals
@@ -25,14 +27,6 @@ def quarter(year: int, index: int, eps: float | None, revenue: float = 100.0) ->
         fact["eps"] = eps
         fact["net_income"] = eps * 100
     return fact
-
-
-def annual(year: int, eps: float, **extra) -> dict:
-    return {"period": str(year), "end": f"{year}-12-31", "eps": eps, "revenue": 400.0, "diluted_shares": 100.0, **extra}
-
-
-def filing(form: str = "10-K", quarterly: list[dict] | None = None, years: list[dict] | None = None) -> dict:
-    return {"filed_at": "2026-02-19", "form": form, "accounting_basis": "US-GAAP", "quarterly": quarterly or [], "annual": years or []}
 
 
 def read(filings: list[dict], **declared) -> dict:

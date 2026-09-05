@@ -1,17 +1,17 @@
+from tests.paths import FIXTURES as SHARED_FIXTURES, ROOT
+
 import copy
 import json
-import pathlib
 import sys
 import unittest
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from minervini.fundamentals import evaluate_fundamentals
 
 
-FIXTURES = ROOT / "tests" / "260817" / "fixtures" / "fundamentals"
+FIXTURES = SHARED_FIXTURES / "fundamentals"
 
 
 def load_fixture(name: str) -> dict:

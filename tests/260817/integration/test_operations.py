@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from tests.paths import FIXTURES
+from tests.providers import rows_snapshot
+
 import hashlib
 import json
 import tempfile
@@ -14,7 +17,7 @@ from scripts.minervini.cache import ProviderCache
 from scripts.minervini.clock import resolve_as_of
 from scripts.minervini.ledger import Ledger
 from scripts.minervini.operations import Runtime, execute
-from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable, SnapshotMeta
+from scripts.minervini.providers import ProviderSnapshot, ProviderUnavailable
 from scripts.minervini.providers.nasdaq import SecurityRecord
 
 
@@ -35,72 +38,31 @@ def price_snapshot(*, rising: bool = True, as_of: str = AS_OF) -> ProviderSnapsh
         },
         index=index,
     )
-    return ProviderSnapshot(
-        frame,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(as_of),
-            coverage={"completed_only": True},
-        ),
-    )
+    return rows_snapshot(frame, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), coverage={"completed_only": True})
 
 
 def stale_price_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[pd.DataFrame]:
     """A history the provider could only complete through the session before as_of."""
 
     snapshot = price_snapshot(as_of="2025-12-30")
-    return ProviderSnapshot(
-        snapshot.data,
-        SnapshotMeta(
-            provider="fixture-prices",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date(2025, 12, 30),
-            coverage={"completed_only": True, "requested_session": as_of, "last_completed_bar": "2025-12-30"},
-            stale=True,
-        ),
-    )
+    return rows_snapshot(snapshot.data, provider="fixture-prices", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date(2025, 12, 30), coverage={"completed_only": True, "requested_session": as_of, "last_completed_bar": "2025-12-30"}, stale=True)
 
 
 def rs_snapshot(*, as_of: str = AS_OF) -> ProviderSnapshot[dict[str, object]]:
-    return ProviderSnapshot(
-        {"ticker": "TEST", "rating": 94, "rating_date": as_of},
-        SnapshotMeta(
-            provider="fixture-rs",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(as_of),
-            provider_version="0.5.0",
-        ),
-    )
+    return rows_snapshot({"ticker": "TEST", "rating": 94, "rating_date": as_of}, provider="fixture-rs", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(as_of), provider_version="0.5.0")
 
 
 def list_snapshot(provider: str, data: list[dict[str, object]]) -> ProviderSnapshot[list[dict[str, object]]]:
-    return ProviderSnapshot(
-        data,
-        SnapshotMeta(
-            provider=provider,
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date.fromisoformat(AS_OF),
-            provider_version="0.5.0" if provider == "ibd-rs-rating" else None,
-        ),
-    )
+    return rows_snapshot(data, provider=provider, retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), provider_version="0.5.0" if provider == "ibd-rs-rating" else None)
 
 
 def classification_snapshot() -> ProviderSnapshot[dict[str, str]]:
-    return ProviderSnapshot(
-        {
+    return rows_snapshot({
             "symbol": "TEST",
             "sector": "Technology",
             "industry": "Semiconductors",
             "industry_id": "yfinance:technology:semiconductors",
-        },
-        SnapshotMeta(
-            provider="yfinance",
-            retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-            as_of=date(2026, 1, 2),
-            coverage={"kind": "current_classification_only", "historical": False},
-        ),
-    )
+        }, provider="yfinance", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date(2026, 1, 2), coverage={"kind": "current_classification_only", "historical": False})
 
 
 class OperationCompositionTests(unittest.TestCase):
@@ -131,18 +93,10 @@ class OperationCompositionTests(unittest.TestCase):
             self.assertEqual(calls, {"price": 2, "rs": 2})
 
     def test_market_snapshot_composes_independent_sources_and_requires_trade_traction_for_regime(self) -> None:
-        finviz = Path(__file__).resolve().parents[1] / "fixtures" / "market_evidence" / "finviz_partial.html"
+        finviz = FIXTURES / "market_evidence" / "finviz_partial.html"
         runtime = Runtime(
             price_history=lambda ticker, as_of: price_snapshot(),
-            finviz_breadth=lambda as_of: ProviderSnapshot(
-                finviz.read_text(encoding="utf-8"),
-                SnapshotMeta(
-                    provider="finviz",
-                    retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                    as_of=date.fromisoformat(AS_OF),
-                    content_sha256="fixture",
-                ),
-            ),
+            finviz_breadth=lambda as_of: rows_snapshot(finviz.read_text(encoding="utf-8"), provider="finviz", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date.fromisoformat(AS_OF), content_sha256="fixture"),
             sector_ranking=lambda as_of: list_snapshot(
                 "ibd-rs-rating",
                 [
@@ -354,15 +308,7 @@ class OperationCompositionTests(unittest.TestCase):
             SecurityRecord("nasdaq:NASDAQ:GOOD", "GOOD", "NASDAQ", "Good Common Stock", "common_stock", False, True, None),
             SecurityRecord("nasdaq:NASDAQ:FUND", "FUND", "NASDAQ", "Fund ETF", "etf", False, False, "etf"),
         ]
-        snapshot = ProviderSnapshot(
-            records,
-            SnapshotMeta(
-                provider="nasdaq",
-                retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                as_of=date(2026, 1, 2),
-                content_sha256="frozen",
-            ),
-        )
+        snapshot = rows_snapshot(records, provider="nasdaq", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date(2026, 1, 2), content_sha256="frozen")
         runtime = Runtime(security_master=lambda as_of: snapshot)
 
         payload = execute("market.candidates", {"limit": 1}, runtime=runtime)
@@ -380,15 +326,7 @@ class OperationCompositionTests(unittest.TestCase):
             SecurityRecord("nasdaq-trader:NASDAQ:TEST", "TEST", "NASDAQ", "Test Common Stock", "common_stock", False, True, None),
             SecurityRecord("nasdaq-trader:NYSE:LEAD", "LEAD", "NYSE", "Lead Common Stock", "common_stock", False, True, None),
         ]
-        master = ProviderSnapshot(
-            records,
-            SnapshotMeta(
-                provider="nasdaq",
-                retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
-                as_of=date(2026, 1, 2),
-                coverage={"kind": "current_security_master_only", "historical": False},
-            ),
-        )
+        master = rows_snapshot(records, provider="nasdaq", retrieved_at=datetime(2026, 1, 2, tzinfo=timezone.utc), as_of=date(2026, 1, 2), coverage={"kind": "current_security_master_only", "historical": False})
         runtime = Runtime(
             current_classification=lambda ticker: classification_snapshot(),
             security_master=lambda as_of: master,
@@ -525,17 +463,9 @@ class OperationCompositionTests(unittest.TestCase):
         self.assertEqual(payload["data"]["completed_price_path"]["from"], "2025-11-03")
 
     def test_fundamentals_consumes_only_normalized_filed_sec_evidence(self) -> None:
-        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "fundamentals" / "filed_evidence.json"
+        fixture = FIXTURES / "fundamentals" / "filed_evidence.json"
         sec_evidence = json.loads(fixture.read_text(encoding="utf-8"))
-        snapshot = ProviderSnapshot(
-            sec_evidence,
-            SnapshotMeta(
-                provider="sec",
-                retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
-                as_of=date(2026, 5, 10),
-                coverage={"kind": "filed_facts"},
-            ),
-        )
+        snapshot = rows_snapshot(sec_evidence, provider="sec", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date(2026, 5, 10), coverage={"kind": "filed_facts"})
         # The capability reads its own price now. Leaving the hook undeclared sends this test
         # to the live provider, so it passes or fails on whether the machine has a network.
         prices = pd.DataFrame(
@@ -544,10 +474,7 @@ class OperationCompositionTests(unittest.TestCase):
         )
         runtime = Runtime(
             fundamentals_evidence=lambda ticker, as_of, cik: snapshot,
-            price_history=lambda ticker, as_of: ProviderSnapshot(
-                prices,
-                SnapshotMeta(provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date(2026, 5, 8), coverage={"completed_only": True}),
-            ),
+            price_history=lambda ticker, as_of: rows_snapshot(prices, provider="yfinance", retrieved_at=datetime(2026, 5, 11, tzinfo=timezone.utc), as_of=date(2026, 5, 8), coverage={"completed_only": True}),
         )
 
         payload = execute(

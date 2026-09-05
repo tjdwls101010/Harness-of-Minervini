@@ -13,14 +13,15 @@ before anything is built for them, because nothing is.
 
 from __future__ import annotations
 
+from tests.paths import ROOT
+
 import json
 import os
-from pathlib import Path
+
 import subprocess
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[3]
 PYTHON = ROOT / "scripts" / ".venv" / "bin" / "python"
 PIPELINE = ROOT / "scripts" / "pipeline"
 # A path whose user does not exist, so expanding it raises rather than returning a directory

@@ -1,12 +1,12 @@
+from tests.paths import ROOT
+
 import json
-import pathlib
 import unittest
 
 from scripts.minervini.capabilities import CAPABILITIES
 from scripts.minervini.schema_sync import capability_schema
 
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
 SCHEMAS = ROOT / "schemas" / "v2"
 SCHEMA_VERSION = "2.0.0"
 SCHEMA_BASE_ID = "https://harness.minervini.dev/schemas/v2/"
