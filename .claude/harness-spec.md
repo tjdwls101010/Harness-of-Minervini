@@ -126,19 +126,19 @@ The default ledger is `.state/research-ledger.sqlite3`, overridable by `MINERVIN
 
 ## Verification strategy
 
-All v2 tests live under `tests/260817`. The suite is layered into doctrine, unit, contract, integration, frozen provider fixtures, behavioral E2E, and v1 baseline evidence. Public seams were fixed before implementation and developed RED to GREEN under the repository's TDD contract.
+All v2 tests live under `tests/{unit,integration,contracts,doctrine}/<module>/`, with shared fixtures, behavioral E2E artifacts, and baseline evidence under `tests/{fixtures,e2e,baselines}/`. The suite is layered into doctrine, unit, contract, integration, frozen provider fixtures, behavioral E2E, and v1 baseline evidence. Public seams were fixed before implementation and developed RED to GREEN under the repository's TDD contract.
 
 Required deterministic gates are: doctrine registry validation; all reducer unit tests; provider, cache, ledger, chart, and operation integration tests; exact envelope and schema parity; detailed offline help coverage; harness topology; bootstrap; compile; dependency health; and the harness-creator validator.
 
 Behavioral acceptance uses independent Codex runs over market, sector/industry, ticker qualification, setup, Power Play, same-industry comparison, active stop, missing evidence, point-in-time refusal, scope boundary, and side-effect prompts. Critical assertions require three independent passes, with an adversarial final synthesis checking for false BUY-READY, fabricated data, hidden portfolio sizing, and rail-driven overcalling.
 
-The final v2 suite contains 167 passing tests. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/260817/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
+The final v2 suite contains 167 passing tests. The first behavioral synthesis blocked release at 182/186 critical assertions because three active-position runs used only the latest close and one hypothetical recent-IPO run imported an unrelated fixture. Those failures were preserved in `tests/e2e/round-1-findings.json`, fixed through public-seam TDD and closed-world skill guidance, and rerun by six fresh Codex agents. The final independent sol synthesis approved 186/186 critical and 86/90 noncritical assertions across 30 reports with zero release blockers.
 
 Live smoke testing is limited to safe read-only provider and CLI paths. It verifies current integration but cannot replace frozen point-in-time contract tests. Network absence or source unavailability is reported honestly and is not treated as a deterministic failure of the doctrine engine.
 
-The 2026-08-17 live report at `tests/260817/live/report.json` records healthy local dependencies, completed-session Yahoo prices, current market and security-master composition, representative large-cap, recent-IPO, ADR and excluded-instrument paths, active stop history, and honest Finviz/RS unavailability. It also records the candidate-response density regression and its reduction from a universe-wide exclusion dump to a 2,439-byte bounded summary.
+The 2026-08-17 live report, retained in Git history after removal from the current test tree, records healthy local dependencies, completed-session Yahoo prices, current market and security-master composition, representative large-cap, recent-IPO, ADR and excluded-instrument paths, active stop history, and honest Finviz/RS unavailability. It also records the candidate-response density regression and its reduction from a universe-wide exclusion dump to a 2,439-byte bounded summary.
 
-The v1 diagnostic baseline is `tests/260817/baselines/v1/manifest.json`. The final v1 commit is preserved through the `harness-v1-final` annotated tag and GitHub release so obsolete runtime files can be deleted from v2 without losing recoverability.
+The v1 diagnostic baseline is `tests/baselines/v1/manifest.json`. The final v1 commit is preserved through the `harness-v1-final` annotated tag and GitHub release so obsolete runtime files can be deleted from v2 without losing recoverability.
 
 ## Design rationale
 
@@ -154,7 +154,7 @@ Obsolete v1 runtime and design documents are removed after the v1 tag and releas
 
 ## Maintenance protocol
 
-When adding or changing a capability, first define or update the public test seam under the current dated suite directory in `tests/`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
+When adding or changing a capability, first define or update the public test seam under the module’s directory in `tests/{unit,integration,contracts,doctrine}/`, then change the registry, CLI parser/help, operation, schema projection, and contract tests together. A flag exists only when the implementation consumes it; decorative compatibility flags are prohibited.
 
 When changing doctrine, edit the normalized registry and its doctrine tests before changing a reducer. Preserve provenance and precedence in the registry. Add text to `CLAUDE.md` only if it is an always-on invariant; add text to a skill only if it changes task-specific judgment; put syntax and defaults in the interface.
 

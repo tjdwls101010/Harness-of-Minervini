@@ -8,7 +8,7 @@ longer holds.
 
 What a test says by using this is "these four planes were measured." A test about how an
 unmeasured plane is treated writes its own evidence -- see
-`tests/260828/unit/test_an_unattested_word_cannot_mint_a_buy_verdict.py`, which is the
+`tests/unit/risk/test_an_unattested_word_cannot_mint_a_buy_verdict.py`, which is the
 specification of this shape and deliberately does not import it.
 """
 

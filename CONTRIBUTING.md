@@ -22,7 +22,7 @@ Keep leaf help offline and detailed enough to explain purpose, inputs, defaults,
 
 ## Test-driven workflow
 
-Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under the current dated suite directory in `tests/`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
+Read the repository's TDD instructions before writing tests. Agree on a public seam, write the smallest failing test under the module’s directory in `tests/{unit,integration,contracts,doctrine}/`, observe the intended RED failure, implement the smallest production change, and refactor only after GREEN.
 
 ```bash
 bash scripts/bootstrap.sh

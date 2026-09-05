@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "doctrine" / "claims.json"
-FIXTURES = ROOT / "tests" / "260817" / "fixtures"
-E2E = ROOT / "tests" / "260817" / "e2e"
+FIXTURES = ROOT / "tests" / "fixtures"
+E2E = ROOT / "tests" / "e2e"
 
 
 def registry() -> dict:
