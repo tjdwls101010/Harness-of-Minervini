@@ -13,7 +13,6 @@ test is about which object the harvest reads and would go green again the moment
 
 from __future__ import annotations
 
-import importlib
 import pathlib
 import tempfile
 import unittest
@@ -21,7 +20,7 @@ import unittest
 from scripts.minervini.operations import execute
 
 
-_VOCABULARY = importlib.import_module("tests.260828.contracts.test_a_declared_vocabulary_matches_the_envelopes")
+from tests import harness as _VOCABULARY
 
 # Registered, resolvable, and nothing the capability under test reads: the shape a forgery
 # takes. One per capability, because a claim the reducer cites on its own proves nothing --

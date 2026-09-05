@@ -21,7 +21,6 @@ from __future__ import annotations
 import builtins
 import contextlib
 import functools
-import importlib
 import pathlib
 import sys
 import tempfile
@@ -40,7 +39,7 @@ from tests.series import power_play_series
 # The whole-capability driver already exists, with the request table and the two provider
 # runtimes. Imported by name because a test package under a date-named directory has no
 # dotted path an `import` statement can spell.
-_VOCABULARY = importlib.import_module("tests.260828.contracts.test_a_declared_vocabulary_matches_the_envelopes")
+from tests import harness as _VOCABULARY
 
 # Every accessor that hands back what a claim says, and takes the claim as its first argument.
 # `has_claim` is absent on purpose: asking whether the registry holds an id is a membership
