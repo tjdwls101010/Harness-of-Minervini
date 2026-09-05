@@ -37,7 +37,7 @@ from .runtime import Runtime, _local_configuration
 from .setup import evaluate_setup
 from .swings import canonical_chain
 from .setup_evidence import build_setup_evidence
-from .setup_structure import read_bars, read_price_kinds
+from .setup_structure import read_bars, read_price_kinds, session_index
 from .stop_audit import _positive, _check_declared_shapes, _UNCROSSABLE_REASONS, _COVERAGE_FIELDS, _combine_audits, _max_high_since, _completed_stop_path, _attest_components, _AUDITED_COLUMNS
 from .technical import build_eligibility_evidence
 
@@ -1165,8 +1165,7 @@ def _valuation_closes(frame: Any, *, as_of: date, breakout_date: date | None) ->
     timestamps = pd.to_datetime(frame.index, errors="coerce")
     if timestamps.isna().any():
         return closes
-    if timestamps.tz is not None:
-        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    timestamps = session_index(timestamps)
     ordered = frame.copy()
     ordered.index = timestamps
     # Stable, so that two prints of one session stay in the order the provider sent them and

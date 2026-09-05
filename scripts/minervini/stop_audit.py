@@ -12,6 +12,7 @@ from .numbers import REPORTED_PRECISION as _REPORTED_PRECISION
 from .numbers import positive
 from .contracts import RequestError, envelope
 from .management_evidence import SPLIT_COLUMN as _SPLIT_COLUMN, impossible_bar_relations, split_sized_discontinuities
+from .setup_structure import session_index
 from .risk import AUDIT_BASIS as _AUDIT_BASIS, is_non_passing
 
 
@@ -153,8 +154,7 @@ def _max_high_since(frame: Any, *, entry_date: date, as_of: date) -> dict[str, A
     timestamps = pd.to_datetime(frame.index, errors="coerce")
     if timestamps.isna().any():
         return {}
-    if timestamps.tz is not None:
-        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    timestamps = session_index(timestamps)
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()
@@ -243,8 +243,7 @@ def _completed_stop_path(frame: Any, *, effective_date: date, as_of: date, prote
     timestamps = pd.to_datetime(frame.index, errors="coerce")
     if timestamps.isna().any():
         return {"state": "unavailable", "reason": "invalid_completed_bar_date"}, None
-    if timestamps.tz is not None:
-        timestamps = timestamps.tz_convert("America/New_York").tz_localize(None)
+    timestamps = session_index(timestamps)
     ordered = frame.copy()
     ordered.index = timestamps
     ordered = ordered.sort_index()

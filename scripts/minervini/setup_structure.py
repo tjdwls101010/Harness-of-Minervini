@@ -61,6 +61,12 @@ def completed_bars(history: Any) -> pd.DataFrame | None:
     return read_bars(history)[0]
 
 
+def session_index(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    """Keep session wall-clock labels; callers own sorting and duplicate-session policy."""
+
+    return index.tz_localize(None) if index.tz is not None else index
+
+
 def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     """The completed bars, or nothing and the reason there are none.
 
@@ -141,8 +147,7 @@ def read_bars(history: Any) -> tuple[pd.DataFrame | None, str | None]:
     # The chart boundary already read it this way, so the two surfaces were normalising the same
     # bars differently -- one accepting what the other called a repeated session, and even where
     # both accepted, fingerprinting different dates.
-    if index.tz is not None:
-        index = index.tz_localize(None)
+    index = session_index(index)
     normalized = index.normalize()
     # Two intraday stamps on one date are not duplicates until the time is dropped, and dropping
     # it is what the rest of the engine reads. Checking only before normalising let that pair
@@ -227,8 +232,7 @@ def read_price_kinds(history: Any, *, columns: Sequence[str] = _REQUIRED_COLUMNS
     # session's date is the one the exchange traded it on. The stop audit converted to New York
     # instead, so a UTC-stamped history had every session renamed to the day before and a breach
     # was recorded against a session the rest of the harness says does not exist.
-    if index.tz is not None:
-        index = index.tz_localize(None)
+    index = session_index(index)
     # The clock time survives, where `read_bars` normalises it away. That reader refuses a
     # repeated session outright, so the time carries nothing for it; this one's callers resolve
     # a repeat by keeping the print that came later in the day, and dropping the time first
@@ -421,4 +425,4 @@ def resolve_structure(history: Any, anchors: Sequence[Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["bars_fingerprint", "completed_bars", "read_bars", "resolve_structure"]
+__all__ = ["bars_fingerprint", "completed_bars", "read_bars", "resolve_structure", "session_index"]
